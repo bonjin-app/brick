@@ -12,3 +12,4 @@ coverage/
 # 런타임 데이터 (설치 후 생성)
 /data/
 /uploads/
+*.tsbuildinfo

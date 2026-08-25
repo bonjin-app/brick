@@ -75,6 +75,10 @@ export class PluginLoaderService implements OnModuleInit {
     }
   }
 
+  isActive(name: string): boolean {
+    return this.instances.has(name);
+  }
+
   async discover(): Promise<PluginManifest[]> {
     const entries = await readdir(this.pluginsDir, { withFileTypes: true }).catch(() => []);
     const manifests: PluginManifest[] = [];
