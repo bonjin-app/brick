@@ -18,7 +18,7 @@
 ## 설치 (사용자)
 
 ```bash
-curl -O https://raw.githubusercontent.com/uulab/brick/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/bonjin-app/brick/main/docker-compose.yml
 docker compose up -d
 ```
 

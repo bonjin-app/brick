@@ -7,7 +7,7 @@ Brick은 MIT 라이선스 오픈소스입니다. 이슈, PR, 플러그인/테마
 요구사항: **Node.js 20.11+**, **pnpm 9**, **PostgreSQL 16+** (또는 Docker)
 
 ```bash
-git clone https://github.com/uulab/brick.git
+git clone https://github.com/bonjin-app/brick.git
 cd brick
 pnpm install
 cp .env.example .env        # DATABASE_URL 수정
