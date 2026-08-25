@@ -5,3 +5,7 @@ body { margin: 0; font-family: var(--font-body); color: var(--color-text); backg
 .brick-hero { text-align: center; padding: 80px 0; }
 .brick-footer { padding: 24px; text-align: center; color: #999; font-size: 13px; border-top: 1px solid #eee; }
 .brick-footer a { color: inherit; }
+.brick-header { display: flex; align-items: center; gap: 24px; }
+.brick-nav { display: flex; gap: 16px; }
+.brick-nav a { color: var(--color-text); text-decoration: none; font-size: 14px; }
+.brick-nav a:hover { color: var(--color-primary); }

@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { and, eq } from "drizzle-orm";
 import type { BrickDb } from "@brick/database";
-import { pages, siteSettings } from "@brick/database";
+import { menus, pages, siteSettings } from "@brick/database";
 import type { CacheProvider } from "@brick/core";
 import { PluginLoaderService } from "../plugins/plugin-loader.service.js";
 import { ThemesService } from "../themes/themes.service.js";
@@ -56,7 +56,7 @@ export class PageRenderService {
   }
 
   private async compute(path: string): Promise<RenderedPage> {
-    const site = { name: await this.siteName() };
+    const [site, nav] = await Promise.all([this.siteInfo(), this.menu("header")]);
     const [page] = await this.db
       .select()
       .from(pages)
@@ -66,11 +66,12 @@ export class PageRenderService {
     if (!page) {
       // 홈 페이지가 없으면 테마의 home 슬롯으로 폴백 (설치 직후 상태)
       if (path === "home") {
-        const html = await this.themes.render("home", { site, pageTitle: site.name, seo: {} });
+        const html = await this.themes.render("home", { site, menu: nav, pageTitle: site.name, seo: {} });
         return { html, status: 200 };
       }
       const html = await this.themes.render("page", {
         site,
+        menu: nav,
         pageTitle: `페이지를 찾을 수 없습니다 — ${site.name}`,
         title: "페이지를 찾을 수 없습니다",
         blocksHtml: `<p>요청하신 주소(/${escapeHtml(path)})에 해당하는 페이지가 없습니다.</p>`,
@@ -83,6 +84,7 @@ export class PageRenderService {
     const blocksHtml = await this.renderNodes((page.blocks ?? []) as BlockNode[]);
     const html = await this.themes.render("page", {
       site,
+      menu: nav,
       title: page.title,
       pageTitle: seo.title ?? `${page.title} — ${site.name}`,
       blocksHtml,
@@ -113,9 +115,19 @@ export class PageRenderService {
     return parts.join("\n");
   }
 
-  private async siteName(): Promise<string> {
-    const [row] = await this.db.select().from(siteSettings).where(eq(siteSettings.key, "site.name")).limit(1);
-    return (row?.value as string) ?? "Brick";
+  private async siteInfo(): Promise<{ name: string; description: string }> {
+    const rows = await this.db.select().from(siteSettings);
+    const map = new Map(rows.map((r) => [r.key, r.value]));
+    return {
+      name: (map.get("site.name") as string) ?? "Brick",
+      description: (map.get("site.description") as string) ?? "",
+    };
+  }
+
+  /** 테마 템플릿이 {{#each menu}}로 순회할 내비게이션 */
+  private async menu(location: string): Promise<Array<{ label: string; url: string }>> {
+    const [row] = await this.db.select().from(menus).where(eq(menus.location, location)).limit(1);
+    return (row?.items ?? []) as Array<{ label: string; url: string }>;
   }
 }
 

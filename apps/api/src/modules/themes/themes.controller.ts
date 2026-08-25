@@ -31,7 +31,7 @@ export class ThemesController {
   @Post("upload")
   @UseGuards(AdminGuard)
   async upload(@Req() req: FastifyRequest) {
-    const file = await (req as FastifyRequest & { file: () => Promise<{ toBuffer(): Promise<Buffer> } | undefined> }).file();
+    const file = await req.file();
     if (!file) throw new BadRequestException("multipart file required");
     return this.installer.installTheme(await file.toBuffer());
   }

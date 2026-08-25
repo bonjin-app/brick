@@ -47,8 +47,16 @@ pnpm build          # 전체 빌드 (타입 검사 포함)
 pnpm typecheck
 ```
 
-플러그인/렌더 파이프라인을 건드렸다면 로컬에서 최소 시나리오를 확인하세요:
-설치 마법사 → 로그인 → 플러그인 활성화 → 페이지 생성/발행 → 공개 렌더.
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 40개 항목을 검증합니다:
+
+```bash
+DATABASE_URL=postgresql://brick:brick@localhost:5432/brick bash scripts/smoke-test.sh
+```
+
+CI(GitHub Actions)가 PR마다 자동으로 실행합니다: 빌드 → 마이그레이션(멱등성 포함) →
+스모크 테스트 → `pnpm deploy` 번들 검증 → Docker 이미지 빌드.
+
+동작을 추가/변경했다면 `scripts/smoke-test.sh` 에 검증 항목을 추가해주세요.
 
 ## 커밋 / PR
 

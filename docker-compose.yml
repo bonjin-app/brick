@@ -1,25 +1,30 @@
 # Brick 설치 = 이 파일 + `docker compose up -d`
 # 접속: http://localhost:3000 → 설치 마법사
 #
-# 사용자 관점에서 이것이 "설치 프로그램"이다.
-# Redis/MinIO는 의도적으로 없다 — Brick Core는 PostgreSQL만으로 동작한다.
+# 업데이트 = `docker compose pull && docker compose up -d`
+#   (DB 마이그레이션은 컨테이너가 부팅할 때 스스로 적용한다)
+#
+# Redis/MinIO는 의도적으로 없다 — Brick Core는 PostgreSQL만으로 동작한다 (ADR-3).
 services:
   brick:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile
-    # 배포판에서는: image: ghcr.io/uulab/brick:latest
+    image: ghcr.io/bonjin-app/brick:latest
+    # 소스에서 직접 빌드하려면 위 image를 지우고 아래 주석을 해제:
+    # build:
+    #   context: .
+    #   dockerfile: docker/Dockerfile
     ports:
       - "3000:3000"
     environment:
       DATABASE_URL: postgresql://brick:${POSTGRES_PASSWORD:-brick}@db:5432/brick
-      BRICK_SECRET: ${BRICK_SECRET:-please-change-me}
-      BRICK_API_URL: http://localhost:3001
-      BRICK_PLUGINS_DIR: /app/plugins
-      BRICK_THEMES_DIR: /app/themes
-      BRICK_UPLOADS_DIR: /app/uploads
+      # 필수: openssl rand -base64 32 으로 생성해 .env에 넣으세요
+      BRICK_SECRET: ${BRICK_SECRET:?BRICK_SECRET is required — generate with "openssl rand -base64 32"}
+      NODE_ENV: production
+      # 리버스 프록시(Nginx/Traefik/Cloudflare) 뒤에 두면 true
+      BRICK_TRUST_PROXY: ${BRICK_TRUST_PROXY:-false}
+      BRICK_MAX_UPLOAD_MB: ${BRICK_MAX_UPLOAD_MB:-50}
     volumes:
-      # ZIP 업로드로 설치되는 확장은 볼륨에 남아 컨테이너 업데이트에도 유지된다
+      # ZIP 업로드로 설치되는 확장과 업로드 파일은 볼륨에 남아
+      # 컨테이너 이미지 업데이트에도 유지된다
       - brick_plugins:/app/plugins
       - brick_themes:/app/themes
       - brick_uploads:/app/uploads
@@ -34,10 +39,13 @@ services:
       POSTGRES_USER: brick
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-brick}
       POSTGRES_DB: brick
+      # 한국어 검색/정렬을 위해 UTF-8 로케일로 초기화
+      LANG: ko_KR.utf8
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C.UTF-8"
     volumes:
       - brick_db:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U brick"]
+      test: ["CMD-SHELL", "pg_isready -U brick -d brick"]
       interval: 5s
       timeout: 3s
       retries: 10

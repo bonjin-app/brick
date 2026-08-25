@@ -1,121 +1,246 @@
-# Brick
+<p align="center">
+  <img src=".github/assets/banner.svg" alt="Brick — 설치형 오픈소스 CMS" width="100%" />
+</p>
 
-> 설치형 오픈소스 CMS — Next.js + NestJS + PostgreSQL.
-> 그누보드/워드프레스의 **"설치·업데이트·확장이 쉽다"**를 현대 스택으로 재현한다.
+<p align="center">
+  <strong>설치는 그누보드처럼 쉽게, 속은 현대적으로.</strong><br />
+  Docker 한 번으로 설치하는 오픈소스 CMS · Next.js + NestJS + PostgreSQL
+</p>
 
-## 철학
+<p align="center">
+  <a href="https://bonjin-app.github.io/brick/">홈페이지</a> ·
+  <a href="docs/installation.md">설치</a> ·
+  <a href="docs/plugin-development.md">플러그인 개발</a> ·
+  <a href="docs/theme-development.md">테마 개발</a> ·
+  <a href="docs/architecture.md">아키텍처</a>
+</p>
 
-**"설치에 필요한 기술을 사용자에게 노출하지 않는다."**
+<p align="center">
+  <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT" />
+  <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
+  <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
+  <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
+</p>
 
-| | 그누보드/WordPress | Brick |
-|---|---|---|
-| 설치 | FTP 업로드 | `docker compose up -d` 한 번 |
-| 확장 | plugin.zip 업로드 | plugin.zip / theme.zip 업로드 (동일 UX) |
-| 업데이트 | 파일 교체 | `docker compose pull && up -d` |
-| DB | MySQL | PostgreSQL (JSONB, FTS, SKIP LOCKED) |
-| SEO | 서버 렌더 | Next.js SSR/ISR |
+---
 
-## 설치 (사용자)
+## 왜 Brick인가
+
+그누보드와 워드프레스가 오래 살아남은 이유는 PHP가 좋아서가 아니라 **파일을 올리면 그냥 돌아갔기** 때문입니다.
+현대 스택은 강력하지만 설치가 어려워졌습니다. Brick은 그 편의성을 되찾으면서 현대적인 기반을 갖추려는 프로젝트입니다.
+
+**철학: 설치에 필요한 기술을 사용자에게 노출하지 않는다.**
+
+| | 그누보드 / 제로보드 | WordPress | **Brick** |
+|---|---|---|---|
+| 언어 | PHP | PHP | **TypeScript** |
+| DB | MySQL | MySQL | **PostgreSQL** |
+| 설치 | FTP 업로드 | FTP 업로드 | **`docker compose up -d`** |
+| 업데이트 | 파일 수동 교체 | 관리자 클릭 | **`pull && up` (자동 마이그레이션)** |
+| 플러그인 | 제한적 | ZIP 업로드 | **ZIP 업로드** |
+| 테마 | 스킨(PHP) | 테마(PHP) | **런타임 템플릿 (빌드 없음)** |
+| 페이지 빌더 | 없음 | Gutenberg | **코어 기본 제공** |
+| SSR / SEO | 기본 | 기본 | **Next.js SSR + ISR** |
+| 타입 안전성 | 없음 | 없음 | **전 구간 strict** |
+
+> ⚠️ Brick은 일반 PHP 호스팅(FTP 전용)에서는 동작하지 않습니다. Node 런타임이 필요합니다.
+> Docker 또는 Node를 지원하는 환경을 공식 요구사항으로 합니다.
+
+---
+
+## 설치
 
 ```bash
+# 1. compose 파일 받기
 curl -O https://raw.githubusercontent.com/bonjin-app/brick/main/docker-compose.yml
+
+# 2. 시크릿 생성 (필수)
+echo "BRICK_SECRET=$(openssl rand -base64 32)" > .env
+
+# 3. 실행
 docker compose up -d
 ```
 
-`http://localhost:3000` 접속 → 설치 마법사에서 사이트명/관리자 계정만 입력하면 끝.
+`http://localhost:3000` 접속 → 설치 마법사에서 **사이트 이름과 관리자 계정만** 입력하면 끝입니다.
+DB 접속 정보는 묻지 않습니다 — compose가 이미 주입했습니다.
 
-## 아키텍처
+자세한 내용은 [설치 가이드](docs/installation.md)를 참고하세요.
 
-```
-                 사용자 / 검색엔진
-                        │  :3000 (유일한 공개 포트)
-                 ┌──────▼──────┐
-                 │   Next.js   │  SSR/ISR, /api/* → 내부 rewrite
-                 └──────┬──────┘
-                        │  :3001 (내부 전용)
-                 ┌──────▼──────┐
-                 │   NestJS    │  Brick Runtime
-                 │  ┌────────┐ │
-                 │  │ Core   │ │  HookBus · Provider · PluginLoader
-                 │  │ Plugins│ │  같은 프로세스에서 실행 (분리 금지)
-                 │  │ Themes │ │  빌드 없는 런타임 템플릿
-                 │  └────────┘ │
-                 └──────┬──────┘
-                        │
-                  PostgreSQL      ← 유일한 필수 의존성
-              (Redis/S3는 선택 — 없으면 PG 기반 기본 구현)
-```
-
-핵심 설계 결정은 [docs/architecture.md](docs/architecture.md) 참고.
-
-## 현재 구현된 것 (v0.0.x)
-
-- ✅ 설치 마법사 (사이트명 + 관리자 계정만 입력)
-- ✅ 세션 인증 (argon2, httpOnly 쿠키, DB에는 토큰 해시만 저장)
-- ✅ 관리자 셸 — 대시보드 / 페이지 / 플러그인 / 테마
-- ✅ **페이지 빌더** — 블록 트리 편집, propsSchema 기반 속성 UI, SEO 설정
-- ✅ 공개 사이트 SSR — 테마가 `<html>`부터 문서 전체 소유, 완성 HTML 응답
-- ✅ **플러그인 시스템** — ZIP 업로드 → 활성화 → 재시작 없이 라우트/블록 동작
-- ✅ **테마 시스템** — 빌드 없는 런타임 템플릿, ZIP 업로드 즉시 적용
-- ✅ 코어 블록 (제목/문단/HTML/이미지/다단/여백) + 플러그인 블록
-- ✅ 태그 기반 렌더 캐시 (PostgreSQL, Redis 불필요) — 페이지/테마/플러그인 변경 시 자동 무효화
-- ✅ 게시판 플러그인(brick-board) — 다중 게시판, 글/댓글/조회수/권한
-- 🚧 메뉴 편집, 미디어 라이브러리, 회원 가입, 검색, i18n
-
-## 문서
-
-- [아키텍처 결정 기록 (ADR)](docs/architecture.md)
-- [플러그인 개발 가이드](docs/plugin-development.md)
-- [테마 개발 가이드](docs/theme-development.md)
-- [기여 가이드](CONTRIBUTING.md)
-
-## 개발
-
-요구사항: Node.js 20.11+, pnpm 9, PostgreSQL 16+ (또는 Docker)
+### 업데이트
 
 ```bash
-pnpm install
-cp .env.example .env      # DATABASE_URL 설정
-pnpm build                # 패키지 빌드
-pnpm dev                  # web(:3000) + api(:3001) 동시 실행
+docker compose pull && docker compose up -d
 ```
 
-## 저장소 구조
+DB 마이그레이션은 컨테이너가 부팅할 때 스스로 적용합니다. 외울 명령이 없습니다.
+자세한 내용: [업그레이드 가이드](docs/upgrade.md)
+
+---
+
+## 구조
+
+사용자에게는 **앱 컨테이너 하나와 PostgreSQL 하나**로 보입니다.
 
 ```
-apps/
-  web/          Next.js — 공개 사이트 + 관리자 (유일한 공개 진입점)
-  api/          NestJS — Brick Runtime (내부 전용)
-packages/
-  core/         HookBus, PluginContext, Provider 인터페이스
-  database/     Drizzle 스키마 + 코어 마이그레이션
-  shared/       공통 타입, plugin/theme manifest 스키마
-  plugin-sdk/   플러그인 개발자 공개 표면 (definePlugin)
-  theme-sdk/    런타임 템플릿 엔진
-plugins/
-  brick-board/  게시판 플러그인 (레퍼런스 구현)
-themes/
-  default/      기본 테마 (빌드 없는 런타임 템플릿 레퍼런스)
-docker/         Dockerfile, entrypoint
+              사용자 / 검색엔진
+                     │  :3000  (유일한 공개 포트)
+              ┌──────▼──────┐
+              │   Next.js   │  SSR · ISR · 관리자 UI
+              └──────┬──────┘
+                     │  :3001  (내부 전용)
+              ┌──────▼──────────────────────┐
+              │      Brick Runtime          │
+              │   NestJS · 단일 프로세스     │
+              │  ┌───────────────────────┐  │
+              │  │ Core    HookBus       │  │
+              │  │ Plugins 동적 로드      │  │
+              │  │ Themes  런타임 템플릿  │  │
+              │  └───────────────────────┘  │
+              └──────┬──────────────────────┘
+                     │
+                PostgreSQL     ← 유일한 필수 의존성
+         (Redis · S3는 선택 — 없으면 PG 기반 기본 구현)
 ```
 
-## 확장 개발
+핵심 설계 결정 9건은 [docs/architecture.md](docs/architecture.md)에 ADR로 기록되어 있습니다.
 
-**플러그인** — 사전 빌드된 JS + manifest + 마이그레이션을 ZIP으로 배포:
+---
+
+## 기능
+
+### 동작하는 것
+
+- **설치 마법사** — 사이트명 + 관리자 계정만 입력
+- **인증** — argon2id, 세션(DB에는 토큰 해시만), 브루트포스 방어
+- **회원** — 가입 / 프로필 / 권한 관리(관리자·운영자·회원) / 계정 정지
+- **페이지 빌더** — 블록 트리 편집, 속성 UI 자동 생성, SEO 설정
+- **코어 블록** — 제목 · 문단 · HTML · 이미지 · 다단 레이아웃 · 여백
+- **미디어 라이브러리** — 업로드(확장자 화이트리스트) / 목록 / 삭제
+- **메뉴 편집** — 헤더 내비게이션, 테마에 자동 반영
+- **검색** — 페이지 전문 검색 (발췌문 포함)
+- **플러그인 시스템** — ZIP 업로드 → 활성화 → **재시작 없이** 라우트·블록 동작
+- **테마 시스템** — 빌드 없는 런타임 템플릿, ZIP 업로드 **즉시 적용**
+- **게시판 플러그인** — 다중 게시판 / 글 / 댓글 / 조회수 / 권한
+- **렌더 캐시** — 태그 기반 자동 무효화 (Redis 불필요)
+- **자동 마이그레이션** — 부팅 시 스키마 자동 최신화
+- **백업 / 복원 CLI** — pg_dump 기반
+- **헬스체크** — `/healthz` · `/readyz`
+
+### 예정
+
+i18n · OpenAPI 문서 · 2FA · 이메일 알림 / 비밀번호 재설정 · 감사 로그 · 플러그인 레지스트리 · 커머스
+
+---
+
+## 확장 만들기
+
+**플러그인** — 사전 빌드된 JS + manifest + SQL 마이그레이션을 ZIP으로 배포합니다. 서버는 빌드하지 않습니다.
 
 ```ts
 import { definePlugin } from "@brick/plugin-sdk";
 
 export default definePlugin((ctx) => {
-  ctx.registerRoute("GET", "/hello", async () => ({ hello: "brick" }));
-  ctx.registerBlock({ name: "greeting", displayName: "인사말",
-    render: async () => "<p>안녕하세요</p>" });
-  ctx.hooks.onAction("post.created", "my-plugin", async (post) => { /* ... */ });
+  // REST API → /api/plugins/my-plugin/items/:id
+  ctx.registerRoute("GET", "/items/:id", async (req) => ({ id: req.params.id }));
+
+  // 페이지 빌더 블록 (서버 렌더 → 검색엔진에 그대로 노출)
+  ctx.registerBlock({
+    name: "greeting",
+    displayName: "인사말",
+    propsSchema: { type: "object", properties: { name: { type: "string", title: "이름" } } },
+    render: async (props) => `<p>안녕하세요, ${props.name}님</p>`,
+  });
+
+  // 코어 이벤트 구독
+  ctx.hooks.onAction("board.post.created", "my-plugin", async (post) => { /* ... */ });
+
   return {};
 });
 ```
 
-**테마** — 빌드가 필요 없다. `templates/*.html` + `brick.theme.json`을 ZIP으로 업로드하면 즉시 적용된다.
+**테마** — 빌드가 필요 없습니다. 템플릿 문법은 4개뿐입니다.
+
+```html
+<!doctype html>
+<html lang="ko">
+<head>
+  <title>{{ pageTitle }}</title>
+  <style>{{{ themeTokens }}}</style>
+</head>
+<body>
+  <nav>{{#each menu}}<a href="{{ url }}">{{ label }}</a>{{/each}}</nav>
+  <main>{{{ content }}}</main>
+</body>
+</html>
+```
+
+가이드: [플러그인 개발](docs/plugin-development.md) · [테마 개발](docs/theme-development.md)
+
+---
+
+## 개발
+
+요구사항: Node.js 20.11+ · pnpm 9 · PostgreSQL 16+ (또는 Docker)
+
+```bash
+git clone https://github.com/bonjin-app/brick.git
+cd brick
+pnpm install
+cp .env.example .env      # DATABASE_URL, BRICK_SECRET 설정
+pnpm build
+pnpm dev                  # web(:3000) + api(:3001)
+```
+
+E2E 스모크 테스트 (실제 PostgreSQL과 실제 서버로 40개 항목 검증):
+
+```bash
+DATABASE_URL=postgresql://brick:brick@localhost:5432/brick bash scripts/smoke-test.sh
+```
+
+### 저장소 구조
+
+```
+apps/
+  web/            Next.js — 공개 사이트(Route Handler SSR) + 관리자(React)
+  api/            NestJS — Brick Runtime (내부 전용)
+packages/
+  core/           HookBus, PluginContext, Provider 인터페이스
+  database/       Drizzle 스키마 + 코어 마이그레이션
+  shared/         공통 타입, plugin/theme manifest 스키마
+  plugin-sdk/     플러그인 개발자 공개 표면
+  theme-sdk/      런타임 템플릿 엔진
+plugins/
+  brick-board/    게시판 (레퍼런스 구현)
+themes/
+  default/        기본 테마 (런타임 템플릿 레퍼런스)
+docs-site/        GitHub Pages 랜딩페이지
+scripts/          스모크 테스트
+docker/           Dockerfile, entrypoint
+```
+
+---
+
+## 문서
+
+| 문서 | 내용 |
+|---|---|
+| [설치 가이드](docs/installation.md) | Docker / Node 설치, 리버스 프록시, 환경변수, 문제 해결 |
+| [업그레이드 가이드](docs/upgrade.md) | 업데이트 절차, 자동 마이그레이션 원리, 롤백 |
+| [운영 가이드](docs/operations.md) | 백업, 모니터링, 성능, 한국어 검색, 스케일링 |
+| [보안](docs/security.md) | 구현된 방어, **신뢰 모델**, 배포 체크리스트 |
+| [아키텍처 (ADR)](docs/architecture.md) | 설계 결정 9건과 그 이유 |
+| [플러그인 개발](docs/plugin-development.md) | manifest, API, 마이그레이션, 배포 |
+| [테마 개발](docs/theme-development.md) | 템플릿 문법, 스코프, 배포 |
+| [기여 가이드](CONTRIBUTING.md) | 개발 환경, 구조 규칙, PR 규칙 |
+
+---
+
+## 상태
+
+**알파.** 기능은 동작하고 E2E로 검증되지만, 아직 실사용 검증이 부족합니다.
+프로덕션에 올리기 전 [보안 문서](docs/security.md)의 신뢰 모델과 체크리스트를 반드시 읽어주세요.
+
+이슈 · PR · 플러그인 제작 모두 환영합니다. → [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## 라이선스
 

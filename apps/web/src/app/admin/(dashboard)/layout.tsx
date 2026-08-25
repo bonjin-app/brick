@@ -34,8 +34,12 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         <nav>
           <a style={link} href="/admin">대시보드</a>
           <a style={link} href="/admin/pages">페이지</a>
+          <a style={link} href="/admin/media">미디어</a>
+          <a style={link} href="/admin/menus">메뉴</a>
+          <a style={link} href="/admin/users">회원</a>
           <a style={link} href="/admin/plugins">플러그인</a>
           <a style={link} href="/admin/themes">테마</a>
+          <a style={link} href="/admin/settings">설정</a>
         </nav>
         <div style={{ padding: 16, marginTop: 24, fontSize: 13, color: "#aaa" }}>
           {user.displayName}

@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320" width="1200" height="320" role="img" aria-label="Brick — 설치형 오픈소스 CMS">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1B1B2F"/>
+      <stop offset="55%" stop-color="#26263F"/>
+      <stop offset="100%" stop-color="#3A2430"/>
+    </linearGradient>
+    <linearGradient id="brick" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#F2725F"/>
+      <stop offset="100%" stop-color="#D0402C"/>
+    </linearGradient>
+    <linearGradient id="fade" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#F2725F" stop-opacity=".9"/>
+      <stop offset="100%" stop-color="#F2725F" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="320" fill="url(#sky)"/>
+
+  <!-- 배경: 쌓이는 벽돌 격자 (조립 가능한 구조) -->
+  <g opacity=".10" fill="#fff">
+    <g>
+      <rect x="700" y="40" width="86" height="30" rx="5"/><rect x="796" y="40" width="86" height="30" rx="5"/>
+      <rect x="892" y="40" width="86" height="30" rx="5"/><rect x="988" y="40" width="86" height="30" rx="5"/>
+      <rect x="652" y="80" width="86" height="30" rx="5"/><rect x="748" y="80" width="86" height="30" rx="5"/>
+      <rect x="844" y="80" width="86" height="30" rx="5"/><rect x="940" y="80" width="86" height="30" rx="5"/>
+      <rect x="1036" y="80" width="86" height="30" rx="5"/>
+      <rect x="700" y="120" width="86" height="30" rx="5"/><rect x="796" y="120" width="86" height="30" rx="5"/>
+      <rect x="892" y="120" width="86" height="30" rx="5"/><rect x="988" y="120" width="86" height="30" rx="5"/>
+      <rect x="652" y="160" width="86" height="30" rx="5"/><rect x="748" y="160" width="86" height="30" rx="5"/>
+      <rect x="844" y="160" width="86" height="30" rx="5"/><rect x="940" y="160" width="86" height="30" rx="5"/>
+      <rect x="1036" y="160" width="86" height="30" rx="5"/>
+      <rect x="700" y="200" width="86" height="30" rx="5"/><rect x="796" y="200" width="86" height="30" rx="5"/>
+      <rect x="892" y="200" width="86" height="30" rx="5"/><rect x="988" y="200" width="86" height="30" rx="5"/>
+      <rect x="652" y="240" width="86" height="30" rx="5"/><rect x="748" y="240" width="86" height="30" rx="5"/>
+      <rect x="844" y="240" width="86" height="30" rx="5"/><rect x="940" y="240" width="86" height="30" rx="5"/>
+    </g>
+  </g>
+
+  <!-- 로고 마크 -->
+  <g transform="translate(80,96)">
+    <rect width="112" height="112" rx="26" fill="url(#brick)"/>
+    <g fill="#fff" transform="translate(21,28)">
+      <rect x="0" y="0" width="31" height="16" rx="3.5"/>
+      <rect x="38" y="0" width="31" height="16" rx="3.5" opacity=".72"/>
+      <rect x="0" y="20" width="17" height="16" rx="3.5" opacity=".72"/>
+      <rect x="24" y="20" width="45" height="16" rx="3.5"/>
+      <rect x="0" y="40" width="45" height="16" rx="3.5"/>
+      <rect x="52" y="40" width="17" height="16" rx="3.5" opacity=".72"/>
+    </g>
+  </g>
+
+  <!-- 워드마크 -->
+  <text x="232" y="152" font-family="'Helvetica Neue',Helvetica,Arial,sans-serif" font-size="76" font-weight="700" fill="#fff" letter-spacing="-1.5">
+    Brick
+  </text>
+  <text x="236" y="196" font-family="'Helvetica Neue',Helvetica,Arial,sans-serif" font-size="24" fill="#C9C9DA">
+    설치형 오픈소스 CMS · Next.js + NestJS + PostgreSQL
+  </text>
+
+  <!-- 태그 -->
+  <g font-family="'Helvetica Neue',Helvetica,Arial,sans-serif" font-size="15" fill="#F2C7BF">
+    <g fill="none" stroke="#F2725F" stroke-opacity=".55">
+      <rect x="236" y="220" width="152" height="32" rx="16"/>
+      <rect x="398" y="220" width="176" height="32" rx="16"/>
+      <rect x="584" y="220" width="128" height="32" rx="16"/>
+    </g>
+    <text x="256" y="241">docker 한 번 설치</text>
+    <text x="418" y="241">ZIP 업로드로 확장</text>
+    <text x="604" y="241">SSR · SEO</text>
+  </g>
+
+  <rect x="0" y="316" width="1200" height="4" fill="url(#fade)"/>
+</svg>

@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: 빌드 및 스모크 테스트
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: brick
+          POSTGRES_PASSWORD: brick
+          POSTGRES_DB: brick
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U brick"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://brick:brick@localhost:5432/brick
+      BRICK_SECRET: ci-secret-not-for-production-use
+      BRICK_API_PORT: "3001"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: 빌드 (타입검사 포함)
+        run: pnpm build
+
+      - name: 마이그레이션
+        run: node apps/api/dist/migrate.js
+        env:
+          BRICK_MIGRATIONS_DIR: packages/database/migrations
+
+      - name: 마이그레이션 멱등성 확인 (2회 실행)
+        run: node apps/api/dist/migrate.js
+        env:
+          BRICK_MIGRATIONS_DIR: packages/database/migrations
+
+      - name: E2E 스모크 테스트
+        run: bash scripts/smoke-test.sh
+
+      - name: pnpm deploy 번들 검증 (Docker 런타임과 동일 경로)
+        run: |
+          pnpm deploy --filter=@brick/api --prod /tmp/deploy-api
+          test -f /tmp/deploy-api/dist/main.js
+
+  docker:
+    name: Docker 이미지 빌드
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: 이미지 빌드
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: false
+          tags: brick:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

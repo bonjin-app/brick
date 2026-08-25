@@ -26,9 +26,12 @@ export class PluginsController {
   @Post("plugins/upload")
   @UseGuards(AdminGuard)
   async upload(@Req() req: FastifyRequest) {
-    const file = await (req as FastifyRequest & { file: () => Promise<{ toBuffer(): Promise<Buffer> } | undefined> }).file();
+    const file = await req.file();
     if (!file) throw new BadRequestException("multipart file required");
-    return this.installer.installPlugin(await file.toBuffer());
+    const result = await this.installer.installPlugin(await file.toBuffer());
+    // 업데이트인 경우(이미 활성) 새 버전으로 자동 재적재 — 새 마이그레이션이 여기서 적용된다
+    await this.loader.reload(result.name);
+    return { ...result, reloaded: this.loader.isActive(result.name) };
   }
 
   @Post("plugins/:name/activate")

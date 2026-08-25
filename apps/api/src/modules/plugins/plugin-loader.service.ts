@@ -63,14 +63,24 @@ export class PluginLoaderService implements OnModuleInit {
     @Inject(STORAGE) private readonly storage: StorageProvider,
   ) {}
 
-  /** 부팅 시 active 플러그인 복원 */
+  /**
+   * 부팅 시 active 플러그인 복원.
+   * 파일이 사라진 플러그인(볼륨 미마운트, 수동 삭제 등)은 매 부팅 에러를 남기지 않고
+   * 자동으로 비활성화한다 — 관리자가 화면에서 상황을 확인하고 재설치할 수 있다.
+   */
   async onModuleInit(): Promise<void> {
     const actives = await this.db.select().from(installedPlugins).where(eq(installedPlugins.isActive, true));
     for (const p of actives) {
       try {
         await this.activate(p.name, { skipMigrations: false });
       } catch (err) {
-        this.logger.error(`plugin "${p.name}" failed to activate on boot`, err as Error);
+        const missing = (err as { code?: string })?.code === "ENOENT";
+        await this.db.update(installedPlugins).set({ isActive: false }).where(eq(installedPlugins.name, p.name));
+        if (missing) {
+          this.logger.warn(`plugin "${p.name}" files are missing — deactivated. 재설치하거나 삭제하세요.`);
+        } else {
+          this.logger.error(`plugin "${p.name}" failed to activate on boot — deactivated`, err as Error);
+        }
       }
     }
   }
@@ -121,6 +131,17 @@ export class PluginLoaderService implements OnModuleInit {
     await this.hooks.doAction("plugin.activated", { name, version: manifest.version });
     await this.cache.invalidateTag("pages"); // 블록 구성이 바뀌었으므로 렌더 캐시 무효화
     this.logger.log(`plugin "${name}@${manifest.version}" activated`);
+  }
+
+  /**
+   * 플러그인 재적재 — ZIP 업데이트 후 호출된다.
+   * 새 버전의 마이그레이션이 자동 적용되고, 활성 상태가 유지된다.
+   * (사용자는 "업로드"만 하면 되고 비활성화→활성화를 수동으로 오갈 필요가 없다)
+   */
+  async reload(name: string): Promise<void> {
+    const wasActive = this.instances.has(name);
+    if (wasActive) await this.deactivate(name);
+    if (wasActive) await this.activate(name);
   }
 
   async deactivate(name: string): Promise<void> {

@@ -13,6 +13,9 @@
 <body>
   <header class="brick-header">
     <a class="brick-logo" href="/">{{ site.name }}</a>
+    <nav class="brick-nav">
+      {{#each menu}}<a href="{{ url }}">{{ label }}</a>{{/each}}
+    </nav>
   </header>
   <main class="brick-main">
     {{{ content }}}

@@ -41,6 +41,11 @@ export class AuthService {
     await this.db.delete(sessions).where(eq(sessions.tokenHash, this.hash(token)));
   }
 
+  /** 특정 사용자의 모든 세션 무효화 (비밀번호 변경/계정 비활성화 시) */
+  async revokeAllSessions(userId: string): Promise<void> {
+    await this.db.delete(sessions).where(eq(sessions.userId, userId));
+  }
+
   async resolve(token: string): Promise<SessionUser | null> {
     if (!token) return null;
     const [row] = await this.db
