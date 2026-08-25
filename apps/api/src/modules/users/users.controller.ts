@@ -12,6 +12,7 @@ import type { HookBus } from "@brick/core";
 import { AdminGuard, AuthGuard } from "../auth/auth.guard.js";
 import { AuthService } from "../auth/auth.service.js";
 import { RateLimitService } from "../auth/rate-limit.service.js";
+import { AuditService } from "../audit/audit.service.js";
 import { DB, HOOKS } from "../../runtime.module.js";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -24,6 +25,7 @@ export class UsersController {
     @Inject(HOOKS) private readonly hooks: HookBus,
     private readonly auth: AuthService,
     private readonly rateLimit: RateLimitService,
+    private readonly audit: AuditService,
   ) {}
 
   /** 회원가입 — site.registration_open 설정으로 열고 닫을 수 있다 */
@@ -68,6 +70,7 @@ export class UsersController {
       throw err;
     }
     await this.hooks.doAction("user.registered", { userId: id, email });
+    await this.audit.record({ action: "user.register", targetType: "user", targetId: id, summary: email, ip: req.ip });
     return { id };
   }
 
@@ -141,9 +144,24 @@ export class UsersController {
     }
     if (body.isActive !== undefined) patch.isActive = body.isActive;
 
+    const [before] = await this.db
+      .select({ email: users.email, role: users.role, isActive: users.isActive })
+      .from(users).where(eq(users.id, id)).limit(1);
+
     await this.db.update(users).set(patch).where(eq(users.id, id));
     // 비활성화하면 즉시 로그아웃시킨다
     if (body.isActive === false) await this.auth.revokeAllSessions(id);
+
+    // 권한 변경과 계정 정지는 추적이 반드시 필요한 동작이다
+    const changes: string[] = [];
+    if (body.role !== undefined && before) changes.push(`권한 ${before.role} → ${body.role}`);
+    if (body.isActive !== undefined && before) changes.push(body.isActive ? "계정 활성화" : "계정 정지");
+    await this.audit.fromRequest(req as never, {
+      action: body.role !== undefined ? "user.role_change" : "user.status_change",
+      targetType: "user",
+      targetId: id,
+      summary: `${before?.email ?? id}: ${changes.join(", ")}`,
+    });
     return { ok: true };
   }
 

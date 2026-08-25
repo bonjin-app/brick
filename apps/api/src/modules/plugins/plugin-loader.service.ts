@@ -6,8 +6,8 @@ import { eq } from "drizzle-orm";
 import type { BrickDb } from "@brick/database";
 import { installedPlugins, siteSettings } from "@brick/database";
 import type { PluginManifest } from "@brick/shared";
-import type { PluginContext, PluginInstance, BlockDefinition, PluginRouteHandler, PluginDb, AdminResource, HookBus, CacheProvider, QueueProvider, StorageProvider } from "@brick/core";
-import { DB, HOOKS, CACHE, QUEUE, STORAGE } from "../../runtime.module.js";
+import type { PluginContext, PluginInstance, BlockDefinition, PluginRouteHandler, PluginDb, AdminResource, HookBus, CacheProvider, QueueProvider, StorageProvider, MailProvider } from "@brick/core";
+import { DB, HOOKS, CACHE, QUEUE, STORAGE, MAIL } from "../../runtime.module.js";
 
 /**
  * PluginLoader — Brick 런타임 아키텍처의 심장.
@@ -63,6 +63,7 @@ export class PluginLoaderService implements OnModuleInit {
     @Inject(CACHE) private readonly cache: CacheProvider,
     @Inject(QUEUE) private readonly queue: QueueProvider,
     @Inject(STORAGE) private readonly storage: StorageProvider,
+    @Inject(MAIL) private readonly mail: MailProvider,
   ) {}
 
   /**
@@ -176,6 +177,7 @@ export class PluginLoaderService implements OnModuleInit {
       cache: this.cache,
       queue: this.queue,
       storage: this.storage,
+      mail: this.mail,
       // Drizzle 핸들은 execute/transaction을 모두 제공하므로 PluginDb 계약을 충족한다
       db: this.db as unknown as PluginDb,
       settings: {

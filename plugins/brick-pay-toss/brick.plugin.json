@@ -1,0 +1,9 @@
+{
+  "name": "brick-pay-toss",
+  "version": "0.1.0",
+  "displayName": "토스페이먼츠 결제",
+  "description": "카드·계좌이체·간편결제. 관리자 → 결제 설정에서 시크릿 키를 입력하세요.",
+  "author": "Brick",
+  "brickVersion": ">=0.0.1",
+  "entry": "dist/index.js"
+}

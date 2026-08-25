@@ -1,12 +1,14 @@
 import {
-  BadRequestException, Body, Controller, Get, Inject, Param, Put, Query, UseGuards,
+  BadRequestException, Body, Controller, Get, Inject, Param, Put, Query, Req, UseGuards,
 } from "@nestjs/common";
+import type { FastifyRequest } from "fastify";
 import { and, eq, sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import type { BrickDb } from "@brick/database";
 import { menus, pages, siteSettings } from "@brick/database";
 import type { CacheProvider } from "@brick/core";
 import { AdminGuard } from "../auth/auth.guard.js";
+import { AuditService } from "../audit/audit.service.js";
 import { CACHE, DB } from "../../runtime.module.js";
 
 interface MenuItem {
@@ -27,6 +29,7 @@ export class SiteController {
   constructor(
     @Inject(DB) private readonly db: BrickDb,
     @Inject(CACHE) private readonly cache: CacheProvider,
+    private readonly audit: AuditService,
   ) {}
 
   // ── 사이트 설정 ────────────────────────────────────
@@ -44,7 +47,7 @@ export class SiteController {
 
   @Put("settings")
   @UseGuards(AdminGuard)
-  async putSettings(@Body() body: Record<string, unknown>) {
+  async putSettings(@Body() body: Record<string, unknown>, @Req() req: FastifyRequest) {
     for (const [key, value] of Object.entries(body ?? {})) {
       const type = EDITABLE_SETTINGS[key];
       if (!type) throw new BadRequestException(`수정할 수 없는 설정입니다: ${key}`);
@@ -56,6 +59,10 @@ export class SiteController {
         .onConflictDoUpdate({ target: siteSettings.key, set: { value: value as never, updatedAt: new Date() } });
     }
     await this.cache.invalidateTag("pages"); // 사이트명 등이 모든 페이지에 렌더된다
+    await this.audit.fromRequest(req as never, {
+      action: "settings.update", targetType: "settings",
+      summary: Object.keys(body ?? {}).join(", "),
+    });
     return { ok: true };
   }
 
@@ -68,7 +75,11 @@ export class SiteController {
 
   @Put("menus/:location")
   @UseGuards(AdminGuard)
-  async putMenu(@Param("location") location: string, @Body() body: { items: MenuItem[] }) {
+  async putMenu(
+    @Param("location") location: string,
+    @Body() body: { items: MenuItem[] },
+    @Req() req: FastifyRequest,
+  ) {
     const items = this.validateItems(body?.items ?? [], 0);
     const [existing] = await this.db.select().from(menus).where(eq(menus.location, location)).limit(1);
     if (existing) {
@@ -77,6 +88,10 @@ export class SiteController {
       await this.db.insert(menus).values({ id: uuidv7(), location, items: items as never });
     }
     await this.cache.invalidateTag("pages");
+    await this.audit.fromRequest(req as never, {
+      action: "menu.update", targetType: "menu", targetId: location,
+      summary: `${items.length}개 항목`,
+    });
     return { ok: true };
   }
 

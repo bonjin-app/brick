@@ -64,6 +64,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           <a style={link} href="/admin/plugins">플러그인</a>
           <a style={link} href="/admin/themes">테마</a>
           <a style={link} href="/admin/settings">설정</a>
+          <a style={link} href="/admin/audit">감사 로그</a>
         </nav>
         <div style={{ padding: 16, marginTop: 20, fontSize: 13, color: "#aaa", borderTop: "1px solid #2c2c40" }}>
           {user.displayName}

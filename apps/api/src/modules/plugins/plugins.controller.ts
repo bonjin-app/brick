@@ -7,6 +7,7 @@ import { PluginLoaderService } from "./plugin-loader.service.js";
 import { AdminGuard } from "../auth/auth.guard.js";
 import { AuthService } from "../auth/auth.service.js";
 import { ExtensionInstallerService } from "../extensions/extension-installer.service.js";
+import { AuditService } from "../audit/audit.service.js";
 
 @Controller("api")
 export class PluginsController {
@@ -14,6 +15,7 @@ export class PluginsController {
     private readonly loader: PluginLoaderService,
     private readonly auth: AuthService,
     private readonly installer: ExtensionInstallerService,
+    private readonly audit: AuditService,
   ) {}
 
   @Get("plugins")
@@ -31,20 +33,32 @@ export class PluginsController {
     const result = await this.installer.installPlugin(await file.toBuffer());
     // 업데이트인 경우(이미 활성) 새 버전으로 자동 재적재 — 새 마이그레이션이 여기서 적용된다
     await this.loader.reload(result.name);
+    await this.audit.fromRequest(req as never, {
+      action: "plugin.install",
+      targetType: "plugin",
+      targetId: result.name,
+      summary: `${result.name}@${result.version} 업로드 설치`,
+    });
     return { ...result, reloaded: this.loader.isActive(result.name) };
   }
 
   @Post("plugins/:name/activate")
   @UseGuards(AdminGuard)
-  async activate(@Param("name") name: string) {
+  async activate(@Param("name") name: string, @Req() req: FastifyRequest) {
     await this.loader.activate(name);
+    await this.audit.fromRequest(req as never, {
+      action: "plugin.activate", targetType: "plugin", targetId: name, summary: `${name} 활성화`,
+    });
     return { ok: true };
   }
 
   @Post("plugins/:name/deactivate")
   @UseGuards(AdminGuard)
-  async deactivate(@Param("name") name: string) {
+  async deactivate(@Param("name") name: string, @Req() req: FastifyRequest) {
     await this.loader.deactivate(name);
+    await this.audit.fromRequest(req as never, {
+      action: "plugin.deactivate", targetType: "plugin", targetId: name, summary: `${name} 비활성화`,
+    });
     return { ok: true };
   }
 

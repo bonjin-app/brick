@@ -1,6 +1,7 @@
 import type { CacheProvider } from "../providers/cache.js";
 import type { QueueProvider } from "../providers/queue.js";
 import type { StorageProvider } from "../providers/storage.js";
+import type { MailProvider } from "../providers/mail.js";
 import type { HookBus } from "../hooks/hook-bus.js";
 
 /**
@@ -18,6 +19,8 @@ export interface PluginContext {
   readonly cache: CacheProvider;
   readonly queue: QueueProvider;
   readonly storage: StorageProvider;
+  /** 메일 발송 (SMTP 미설정 시 콘솔 출력으로 폴백) */
+  readonly mail: MailProvider;
   /** 플러그인 전용 네임스페이스가 적용된 설정 저장소 */
   readonly settings: {
     get<T>(key: string): Promise<T | null>;

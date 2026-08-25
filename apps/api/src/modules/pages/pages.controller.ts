@@ -1,12 +1,14 @@
 import {
   BadRequestException, Body, ConflictException, Controller, Delete, Get, Inject,
-  NotFoundException, Param, Post, Put, Query, UseGuards,
+  NotFoundException, Param, Post, Put, Query, Req, UseGuards,
 } from "@nestjs/common";
+import type { FastifyRequest } from "fastify";
 import { desc, eq } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import type { BrickDb } from "@brick/database";
 import { pages } from "@brick/database";
 import { AdminGuard } from "../auth/auth.guard.js";
+import { AuditService } from "../audit/audit.service.js";
 import { PageRenderService, type BlockNode } from "./page-render.service.js";
 import { DB } from "../../runtime.module.js";
 
@@ -25,6 +27,7 @@ export class PagesController {
   constructor(
     @Inject(DB) private readonly db: BrickDb,
     private readonly renderer: PageRenderService,
+    private readonly audit: AuditService,
   ) {}
 
   /** 공개 렌더 파이프라인 — Next.js catch-all이 호출한다 */
@@ -53,7 +56,7 @@ export class PagesController {
 
   @Post("pages")
   @UseGuards(AdminGuard)
-  async create(@Body() dto: PageDto) {
+  async create(@Body() dto: PageDto, @Req() req: FastifyRequest) {
     this.validate(dto);
     const id = uuidv7();
     try {
@@ -72,12 +75,18 @@ export class PagesController {
       throw err;
     }
     await this.renderer.invalidate();
+    await this.audit.fromRequest(req as never, {
+      action: "page.create",
+      targetType: "page",
+      targetId: id,
+      summary: `${dto.title} (/${dto.slug}, ${dto.status ?? "draft"})`,
+    });
     return { id };
   }
 
   @Put("pages/:id")
   @UseGuards(AdminGuard)
-  async update(@Param("id") id: string, @Body() dto: PageDto) {
+  async update(@Param("id") id: string, @Body() dto: PageDto, @Req() req: FastifyRequest) {
     this.validate(dto);
     const [existing] = await this.db.select({ slug: pages.slug }).from(pages).where(eq(pages.id, id)).limit(1);
     if (!existing) throw new NotFoundException();
@@ -100,14 +109,31 @@ export class PagesController {
     }
     // 전체 무효화: slug 변경, 다른 페이지에 포함된 블록 갱신 등을 안전하게 커버
     await this.renderer.invalidate();
+    await this.audit.fromRequest(req as never, {
+      action: "page.update",
+      targetType: "page",
+      targetId: id,
+      summary:
+        existing.slug === dto.slug
+          ? `${dto.title} (/${dto.slug}, ${dto.status ?? "draft"})`
+          : `슬러그 변경: ${existing.slug} → ${dto.slug}`,
+    });
     return { ok: true };
   }
 
   @Delete("pages/:id")
   @UseGuards(AdminGuard)
-  async remove(@Param("id") id: string) {
+  async remove(@Param("id") id: string, @Req() req: FastifyRequest) {
+    const [target] = await this.db.select({ slug: pages.slug, title: pages.title })
+      .from(pages).where(eq(pages.id, id)).limit(1);
     await this.db.delete(pages).where(eq(pages.id, id));
     await this.renderer.invalidate();
+    await this.audit.fromRequest(req as never, {
+      action: "page.delete",
+      targetType: "page",
+      targetId: id,
+      summary: target ? `${target.title} (/${target.slug})` : id,
+    });
     return { ok: true };
   }
 

@@ -44,6 +44,8 @@ export default function LoginPage() {
       {error && <p style={{ color: "crimson" }}>{error}</p>}
       <p style={{ textAlign: "center", marginTop: 16, fontSize: 14 }}>
         계정이 없나요? <a href="/register">회원가입</a>
+        {" · "}
+        <a href="/forgot-password">비밀번호 찾기</a>
       </p>
     </main>
   );

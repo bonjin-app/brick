@@ -64,6 +64,9 @@ jobs:
       - name: E2E 스모크 테스트 (커머스)
         run: bash scripts/smoke-shop.sh
 
+      - name: E2E 스모크 테스트 (보안·결제)
+        run: bash scripts/smoke-security.sh
+
       - name: pnpm deploy 번들 검증 (Docker 런타임과 동일 경로)
         run: |
           pnpm deploy --filter=@brick/api --prod /tmp/deploy-api

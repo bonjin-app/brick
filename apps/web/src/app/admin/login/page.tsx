@@ -44,6 +44,9 @@ export default function AdminLoginPage() {
         </button>
       </form>
       {error && <p style={{ color: "crimson" }}>{error}</p>}
+      <p style={{ textAlign: "center", marginTop: 16, fontSize: 14 }}>
+        <a href="/forgot-password">비밀번호를 잊으셨나요?</a>
+      </p>
     </main>
   );
 }

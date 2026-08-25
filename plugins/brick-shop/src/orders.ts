@@ -39,10 +39,30 @@ export async function createOrder(
     userId?: string | null;
     guestToken?: string | null;
     settings: ShopSettings;
+    /** 클라이언트 재시도로 중복 주문이 생기는 것을 막는 키 (선택) */
+    idempotencyKey?: string | null;
   },
 ): Promise<{ id: string; orderNo: string; total: number; guestToken: string | null }> {
   const { orderer } = params;
   validateOrderer(orderer);
+
+  // 멱등성: 같은 키로 이미 주문이 만들어졌다면 새로 만들지 않고 기존 주문을 돌려준다.
+  // (결제 직전 네트워크 재시도로 주문이 두 번 생기면 재고가 이중 차감된다)
+  const idemKey = params.idempotencyKey?.trim() || null;
+  if (idemKey) {
+    if (idemKey.length > 100) throw new ShopError(400, "idempotencyKey가 너무 깁니다.");
+    const { rows } = await db.execute(sql`
+      SELECT id, order_no, total, guest_token FROM shop_orders WHERE idempotency_key = ${idemKey} LIMIT 1
+    `);
+    if (rows[0]) {
+      return {
+        id: String(rows[0].id),
+        orderNo: String(rows[0].order_no),
+        total: Number(rows[0].total),
+        guestToken: rows[0].guest_token ? String(rows[0].guest_token) : null,
+      };
+    }
+  }
 
   const method = orderer.paymentMethod ?? "bank_transfer";
   if (!PAYMENT_METHODS.includes(method)) {
@@ -99,7 +119,7 @@ export async function createOrder(
         payment_method, payment_status,
         orderer_name, orderer_phone, orderer_email,
         receiver_name, receiver_phone, postcode, address1, address2, delivery_memo,
-        guest_token
+        guest_token, idempotency_key
       ) VALUES (
         ${orderId}, ${orderNo}, ${params.userId ?? null}::uuid, 'pending',
         ${q.subtotal}, ${q.discount}, ${q.shippingFee}, ${q.total}, ${q.couponCode},
@@ -107,7 +127,7 @@ export async function createOrder(
         ${orderer.ordererName}, ${orderer.ordererPhone}, ${orderer.ordererEmail ?? null},
         ${orderer.receiverName || orderer.ordererName}, ${orderer.receiverPhone || orderer.ordererPhone},
         ${orderer.postcode}, ${orderer.address1}, ${orderer.address2 ?? null}, ${orderer.deliveryMemo ?? null},
-        ${guestToken}
+        ${guestToken}, ${idemKey}
       )
     `);
 

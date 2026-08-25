@@ -9,6 +9,7 @@ import { installedThemes, siteSettings } from "@brick/database";
 import { ThemesService } from "./themes.service.js";
 import { AdminGuard } from "../auth/auth.guard.js";
 import { ExtensionInstallerService } from "../extensions/extension-installer.service.js";
+import { AuditService } from "../audit/audit.service.js";
 import type { CacheProvider } from "@brick/core";
 import { CACHE, DB } from "../../runtime.module.js";
 
@@ -19,6 +20,7 @@ export class ThemesController {
     private readonly installer: ExtensionInstallerService,
     @Inject(DB) private readonly db: BrickDb,
     @Inject(CACHE) private readonly cache: CacheProvider,
+    private readonly audit: AuditService,
   ) {}
 
   @Get()
@@ -33,12 +35,17 @@ export class ThemesController {
   async upload(@Req() req: FastifyRequest) {
     const file = await req.file();
     if (!file) throw new BadRequestException("multipart file required");
-    return this.installer.installTheme(await file.toBuffer());
+    const result = await this.installer.installTheme(await file.toBuffer());
+    await this.audit.fromRequest(req as never, {
+      action: "theme.install", targetType: "theme", targetId: result.name,
+      summary: `${result.name}@${result.version} 업로드 설치`,
+    });
+    return result;
   }
 
   @Post(":name/activate")
   @UseGuards(AdminGuard)
-  async activate(@Param("name") name: string) {
+  async activate(@Param("name") name: string, @Req() req: FastifyRequest) {
     const themes = await this.themes.discover();
     const target = themes.find((t) => t.name === name);
     if (!target) throw new NotFoundException(`theme "${name}" not found`);
@@ -49,6 +56,9 @@ export class ThemesController {
     await this.db.update(installedThemes).set({ isActive: false });
     await this.db.update(installedThemes).set({ isActive: true }).where(eq(installedThemes.name, name));
     await this.cache.invalidateTag("pages"); // 모든 페이지가 새 테마로 다시 렌더되어야 한다
+    await this.audit.fromRequest(req as never, {
+      action: "theme.activate", targetType: "theme", targetId: name, summary: `테마 적용: ${name}`,
+    });
     return { ok: true, active: name };
   }
 

@@ -123,6 +123,9 @@ DB 마이그레이션은 컨테이너가 부팅할 때 스스로 적용합니다
 - **테마 시스템** — 빌드 없는 런타임 템플릿, ZIP 업로드 **즉시 적용**
 - **게시판 플러그인** — 다중 게시판 / 글 / 댓글 / 조회수 / 권한
 - **쇼핑몰 플러그인** — 상품·옵션·재고 / 장바구니(회원·비회원) / 주문·상태머신 / 쿠폰 / 배송비 / 매출 통계
+- **결제** — PG 추상화 + 토스페이먼츠 플러그인, 금액 위조·중복 승인 방어, 부분 환불
+- **비밀번호 재설정** — 메일 발송(SMTP), 단회성 토큰, 이메일 열거 방지
+- **감사 로그** — 관리 동작을 행위자·IP와 함께 기록 (180일 보관)
 - **플러그인 관리 화면 자동 생성** — 필드 스키마만 선언하면 코어가 CRUD UI를 만든다 (빌드 불필요)
 - **렌더 캐시** — 태그 기반 자동 무효화 (Redis 불필요)
 - **자동 마이그레이션** — 부팅 시 스키마 자동 최신화
@@ -131,8 +134,8 @@ DB 마이그레이션은 컨테이너가 부팅할 때 스스로 적용합니다
 
 ### 예정
 
-PG 결제 연동 · 상품 후기 / 문의 · 적립금 · 2FA · 이메일 알림 / 비밀번호 재설정 ·
-감사 로그 · OpenAPI 문서 · 플러그인 레지스트리 · i18n
+상품 후기 / 문의 · 적립금 · 정기결제 · 2FA · 이메일 인증 · 현금영수증 ·
+OpenAPI 문서 · 플러그인 레지스트리
 
 ---
 
@@ -195,7 +198,7 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 76개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 112개 항목):
 
 ```bash
 DATABASE_URL=postgresql://brick:brick@localhost:5432/brick bash scripts/smoke-test.sh
@@ -203,6 +206,10 @@ DATABASE_URL=postgresql://brick:brick@localhost:5432/brick bash scripts/smoke-te
 
 ```bash
 DATABASE_URL=postgresql://brick:brick@localhost:5432/brick bash scripts/smoke-shop.sh
+```
+
+```bash
+DATABASE_URL=postgresql://brick:brick@localhost:5432/brick bash scripts/smoke-security.sh
 ```
 
 ### 저장소 구조
@@ -220,6 +227,7 @@ packages/
 plugins/
   brick-board/    게시판 (레퍼런스 구현)
   brick-shop/     쇼핑몰 (관리자 리소스·트랜잭션·재고 동시성 레퍼런스)
+  brick-pay-toss/ 토스페이먼츠 (PG를 코어 수정 없이 붙이는 레퍼런스)
 themes/
   default/        기본 테마 (런타임 템플릿 레퍼런스)
 docs-site/        GitHub Pages 랜딩페이지
@@ -236,7 +244,8 @@ docker/           Dockerfile, entrypoint
 | [설치 가이드](docs/installation.md) | Docker / Node 설치, 리버스 프록시, 환경변수, 문제 해결 |
 | [업그레이드 가이드](docs/upgrade.md) | 업데이트 절차, 자동 마이그레이션 원리, 롤백 |
 | [운영 가이드](docs/operations.md) | 백업, 모니터링, 성능, 한국어 검색, 스케일링 |
-| [쇼핑몰](docs/commerce.md) | 상품·주문·재고·쿠폰, 커머스 설계 원칙, PG 연동 |
+| [쇼핑몰](docs/commerce.md) | 상품·주문·재고·쿠폰, 커머스 설계 원칙 |
+| [결제](docs/payments.md) | PG 설정, 결제 흐름, 위조·중복 방어, 새 PG 붙이기 |
 | [보안](docs/security.md) | 구현된 방어, **신뢰 모델**, 배포 체크리스트 |
 | [아키텍처 (ADR)](docs/architecture.md) | 설계 결정 9건과 그 이유 |
 | [플러그인 개발](docs/plugin-development.md) | manifest, API, 마이그레이션, 배포 |

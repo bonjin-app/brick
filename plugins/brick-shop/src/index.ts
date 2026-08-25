@@ -6,6 +6,7 @@ import { DEFAULT_SETTINGS, ShopError, STATUS_LABEL, escapeHtml, won,
 import { quote } from "./pricing.js";
 import { addToCart, clearCart, getCartItems, updateCartItem, type CartOwner } from "./cart.js";
 import { changeOrderStatus, createOrder } from "./orders.js";
+import { bankTransferGateway, confirmPayment, gateways, refundPayment, registerGateway } from "./payments.js";
 import { CATEGORY_RESOURCE, COUPON_RESOURCE, ORDER_RESOURCE, PRODUCT_RESOURCE } from "./admin-resources.js";
 import { registerStorefrontBlocks } from "./blocks.js";
 
@@ -150,6 +151,7 @@ export default definePlugin(async (ctx) => {
       items?: Array<{ productId: string; optionId?: string; quantity: number }>;
       couponCode?: string;
       guestToken?: string;
+      idempotencyKey?: string;
       orderer: Parameters<typeof createOrder>[1]["orderer"];
     };
     const own = req.user ? { userId: req.user.id } : { guestToken: body.guestToken ?? null };
@@ -163,6 +165,8 @@ export default definePlugin(async (ctx) => {
       userId: req.user?.id ?? null,
       guestToken: body.guestToken ?? null,
       settings: await settings(),
+      // 네트워크 재시도로 같은 주문이 두 번 생기는 것을 막는다
+      idempotencyKey: body.idempotencyKey ?? null,
     });
 
     // 주문한 상품을 장바구니에서 비운다 (직접 구매가 아니라 장바구니 주문일 때만)
@@ -222,13 +226,88 @@ export default definePlugin(async (ctx) => {
     return { ok: true };
   });
 
-  // ════════════════════════════════════════════════════
-  //  관리자 API (선언한 리소스의 백엔드)
-  // ════════════════════════════════════════════════════
   const requireAdmin = (req: { user: { role: string } | null }) => {
     if (req.user?.role !== "admin" && req.user?.role !== "manager") throw new ShopError(403, "권한이 없습니다.");
   };
 
+  // ════════════════════════════════════════════════════
+  //  결제
+  // ════════════════════════════════════════════════════
+
+  // 무통장입금은 기본 내장. PG는 별도 플러그인이 shop.payment.register 훅으로 등록한다.
+  registerGateway(bankTransferGateway);
+
+  /**
+   * PG 플러그인이 게이트웨이를 등록하는 통로.
+   * 별도 플러그인이 코어나 brick-shop을 수정하지 않고 결제수단을 추가할 수 있다.
+   */
+  ctx.hooks.onAction("shop.payment.register", "brick-shop", async (payload) => {
+    const gateway = (payload as { gateway?: unknown })?.gateway;
+    if (gateway && typeof gateway === "object" && "provider" in gateway && "confirm" in gateway) {
+      registerGateway(gateway as never);
+    }
+  });
+
+  /** 사용 가능한 결제수단 (주문서가 조회) */
+  ctx.registerRoute("GET", "/payment-methods", async () => {
+    const s = await settings();
+    return {
+      methods: [...gateways.values()].map((g) => ({ provider: g.provider, displayName: g.displayName })),
+      bankAccount: s.bankAccount,
+    };
+  });
+
+  /**
+   * 결제 승인.
+   * 클라이언트(PG 리다이렉트)와 웹훅 모두 이 경로를 쓴다.
+   * 금액 검증·중복 방어는 confirmPayment가 담당한다.
+   */
+  ctx.registerRoute("POST", "/payments/confirm", async (req) => {
+    const b = req.body as { orderNo?: string; provider?: string; providerTid?: string; amount?: number };
+    if (!b?.orderNo || !b?.provider || !b?.providerTid) {
+      throw new ShopError(400, "orderNo, provider, providerTid가 필요합니다.");
+    }
+    // 무통장입금은 관리자만 승인할 수 있다 (고객이 스스로 입금완료 처리하면 안 된다)
+    if (b.provider === "bank_transfer" && req.user?.role !== "admin" && req.user?.role !== "manager") {
+      throw new ShopError(403, "무통장입금 확인은 관리자만 할 수 있습니다.");
+    }
+    return confirmPayment(db, {
+      orderNo: b.orderNo,
+      provider: b.provider,
+      providerTid: b.providerTid,
+      claimedAmount: b.amount,
+      actorId: req.user?.id ?? null,
+    });
+  });
+
+  /** 환불 (관리자) — 부분 환불 지원 */
+  ctx.registerRoute("POST", "/admin/payments/refund", async (req) => {
+    requireAdmin(req);
+    const b = req.body as { orderNo?: string; amount?: number; reason?: string };
+    if (!b?.orderNo) throw new ShopError(400, "orderNo가 필요합니다.");
+    return refundPayment(db, {
+      orderNo: b.orderNo,
+      amount: b.amount,
+      reason: b.reason || "관리자 환불",
+      actorId: req.user?.id ?? null,
+    });
+  });
+
+  /** 주문의 결제 내역 (관리자) */
+  ctx.registerRoute("GET", "/admin/payments/:orderNo", async (req) => {
+    requireAdmin(req);
+    const { rows } = await db.execute(sql`
+      SELECT p.provider, p.provider_tid, p.status, p.amount, p.refunded_amount,
+             p.method, p.failure_reason, p.approved_at, p.created_at
+      FROM shop_payments p JOIN shop_orders o ON o.id = p.order_id
+      WHERE o.order_no = ${req.params.orderNo} ORDER BY p.created_at DESC
+    `);
+    return { items: rows };
+  });
+
+  // ════════════════════════════════════════════════════
+  //  관리자 API (선언한 리소스의 백엔드)
+  // ════════════════════════════════════════════════════
   // ── 상품 ────────────────────────────────────────────
   ctx.registerRoute("GET", "/admin/products", async (req) => {
     requireAdmin(req);

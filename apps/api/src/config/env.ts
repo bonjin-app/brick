@@ -14,6 +14,16 @@ export interface BrickEnv {
   isProduction: boolean;
   trustProxy: boolean;
   maxUploadMb: number;
+  /** 메일 링크에 쓰는 공개 주소. 예: https://example.com */
+  siteUrl: string;
+  smtp: {
+    host: string;
+    port: number;
+    secure: boolean;
+    user?: string;
+    pass?: string;
+    from: string;
+  } | null;
 }
 
 /**
@@ -53,6 +63,35 @@ export function loadEnv(): BrickEnv {
   const maxUploadMb = Number(process.env.BRICK_MAX_UPLOAD_MB ?? 50);
   if (!Number.isFinite(maxUploadMb) || maxUploadMb <= 0) errors.push("BRICK_MAX_UPLOAD_MB must be a positive number");
 
+  // 메일 안의 링크는 상대경로일 수 없다 — 공개 주소가 필요하다
+  const siteUrl = (process.env.BRICK_SITE_URL ?? "http://localhost:3000").replace(/\/+$/, "");
+  if (!/^https?:\/\//.test(siteUrl)) errors.push("BRICK_SITE_URL must start with http:// or https://");
+  if (isProduction && siteUrl.startsWith("http://") && !siteUrl.includes("localhost")) {
+    console.warn("[brick] BRICK_SITE_URL이 http:// 입니다 — 프로덕션에서는 https를 사용하세요");
+  }
+
+  // SMTP는 선택. 설정하면 전부 있어야 한다 (일부만 있으면 조용히 실패하므로 즉시 알린다)
+  let smtp: BrickEnv["smtp"] = null;
+  const smtpHost = process.env.SMTP_HOST;
+  if (smtpHost) {
+    const smtpPort = Number(process.env.SMTP_PORT ?? 587);
+    if (!Number.isInteger(smtpPort) || smtpPort < 1 || smtpPort > 65535) {
+      errors.push(`SMTP_PORT is not a valid port: ${process.env.SMTP_PORT}`);
+    }
+    const from = process.env.SMTP_FROM ?? "";
+    if (!from) errors.push("SMTP_FROM is required when SMTP_HOST is set (예: Brick <noreply@example.com>)");
+    if (process.env.SMTP_USER && !process.env.SMTP_PASS) errors.push("SMTP_PASS is required when SMTP_USER is set");
+    smtp = {
+      host: smtpHost,
+      port: smtpPort,
+      // 465는 암묵적 TLS, 그 외는 STARTTLS
+      secure: process.env.SMTP_SECURE ? process.env.SMTP_SECURE === "true" : smtpPort === 465,
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+      from,
+    };
+  }
+
   if (errors.length) {
     console.error("[brick] invalid configuration:\n" + errors.map((e) => `  - ${e}`).join("\n"));
     process.exit(1);
@@ -69,6 +108,8 @@ export function loadEnv(): BrickEnv {
     isProduction,
     trustProxy: process.env.BRICK_TRUST_PROXY === "true",
     maxUploadMb,
+    siteUrl,
+    smtp,
   };
 }
 
