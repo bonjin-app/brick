@@ -23,14 +23,14 @@ export class PluginsController {
     return { ok: true };
   }
 
-  /** 플러그인이 registerRoute로 등록한 라우트 디스패치 */
+  /** 플러그인이 registerRoute로 등록한 라우트 디스패치 (":param" 지원) */
   @All("plugins/:name/*")
   async dispatch(@Param("name") name: string, @Req() req: FastifyRequest, @Body() body: unknown) {
     const url = req.url.split("?")[0];
-    const handler = this.loader.routes.get(`${req.method} ${url}`);
-    if (!handler) throw new NotFoundException();
-    return handler({
-      params: req.params as Record<string, string>,
+    const match = this.loader.matchRoute(req.method, url);
+    if (!match) throw new NotFoundException();
+    return match.handler({
+      params: match.params,
       query: req.query as Record<string, string>,
       body,
       user: null, // TODO: 세션 미들웨어 연결
@@ -47,11 +47,11 @@ export class PluginsController {
     }));
   }
 
-  /** 블록 서버 렌더 (Next.js가 페이지 조립 시 호출) */
-  @Post("blocks/:name(.*)/render")
-  async renderBlock(@Param("name") name: string, @Body() body: { props?: Record<string, unknown> }) {
-    const block = this.loader.blocks.get(name);
-    if (!block) throw new NotFoundException(`unknown block: ${name}`);
+  /** 블록 서버 렌더 (Next.js가 페이지 조립 시 호출). 블록 이름에 "/"가 포함되므로 body로 받는다 */
+  @Post("blocks/render")
+  async renderBlock(@Body() body: { name: string; props?: Record<string, unknown> }) {
+    const block = this.loader.blocks.get(body?.name ?? "");
+    if (!block) throw new NotFoundException(`unknown block: ${body?.name}`);
     const html = await block.render(body?.props ?? {});
     return { html };
   }

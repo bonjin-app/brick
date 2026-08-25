@@ -27,8 +27,30 @@ export class PluginLoaderService implements OnModuleInit {
   private readonly logger = new Logger("PluginLoader");
   private readonly pluginsDir = resolve(process.env.BRICK_PLUGINS_DIR ?? "plugins");
   private instances = new Map<string, PluginInstance>();
-  /** 플러그인이 등록한 라우트: "GET /api/plugins/<name>/<path>" → handler */
-  readonly routes = new Map<string, PluginRouteHandler>();
+  /** 플러그인이 등록한 라우트 테이블. ":param" 세그먼트를 지원한다 */
+  readonly routes: Array<{
+    plugin: string;
+    method: string;
+    segments: string[]; // "/api/plugins/<plugin>/boards/:slug/posts" → 분해된 세그먼트
+    handler: PluginRouteHandler;
+  }> = [];
+
+  /** 디스패치: 메서드/경로를 라우트 테이블과 대조하고 :param을 추출한다 */
+  matchRoute(method: string, path: string): { handler: PluginRouteHandler; params: Record<string, string> } | null {
+    const parts = path.split("/").filter(Boolean);
+    for (const r of this.routes) {
+      if (r.method !== method || r.segments.length !== parts.length) continue;
+      const params: Record<string, string> = {};
+      let ok = true;
+      for (let i = 0; i < parts.length; i++) {
+        const seg = r.segments[i];
+        if (seg.startsWith(":")) params[seg.slice(1)] = decodeURIComponent(parts[i]);
+        else if (seg !== parts[i]) { ok = false; break; }
+      }
+      if (ok) return { handler: r.handler, params };
+    }
+    return null;
+  }
   /** 페이지 빌더 블록 레지스트리 */
   readonly blocks = new Map<string, BlockDefinition>();
   readonly adminMenus: Array<{ plugin: string; label: string; path: string; icon?: string }> = [];
@@ -84,10 +106,14 @@ export class PluginLoaderService implements OnModuleInit {
     const instance = (await activate(ctx)) ?? {};
     this.instances.set(name, instance);
 
+    // upsert: ZIP 설치를 거치지 않은 개발용 플러그인도 재부팅 시 복원되도록
     await this.db
-      .update(installedPlugins)
-      .set({ isActive: true, activatedAt: new Date() })
-      .where(eq(installedPlugins.name, name));
+      .insert(installedPlugins)
+      .values({ name, version: manifest.version, manifest: manifest as never, isActive: true, activatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: installedPlugins.name,
+        set: { version: manifest.version, manifest: manifest as never, isActive: true, activatedAt: new Date() },
+      });
     await this.hooks.doAction("plugin.activated", { name, version: manifest.version });
     this.logger.log(`plugin "${name}@${manifest.version}" activated`);
   }
@@ -97,8 +123,8 @@ export class PluginLoaderService implements OnModuleInit {
     if (instance?.deactivate) await instance.deactivate().catch(() => undefined);
     this.instances.delete(name);
     this.hooks.removePlugin(name);
-    for (const key of [...this.routes.keys()]) {
-      if (key.includes(`/api/plugins/${name}/`)) this.routes.delete(key);
+    for (let i = this.routes.length - 1; i >= 0; i--) {
+      if (this.routes[i].plugin === name) this.routes.splice(i, 1);
     }
     for (const [blockName, block] of [...this.blocks]) {
       if (blockName.startsWith(`${name}/`)) this.blocks.delete(blockName);
@@ -134,7 +160,12 @@ export class PluginLoaderService implements OnModuleInit {
       },
       registerRoute: (method, path, handler) => {
         const clean = path.startsWith("/") ? path : `/${path}`;
-        this.routes.set(`${method} /api/plugins/${pluginName}${clean}`, handler);
+        this.routes.push({
+          plugin: pluginName,
+          method,
+          segments: `/api/plugins/${pluginName}${clean}`.split("/").filter(Boolean),
+          handler,
+        });
       },
       registerBlock: (block) => {
         // 블록 이름은 "<plugin>/<block>" 네임스페이스 강제
