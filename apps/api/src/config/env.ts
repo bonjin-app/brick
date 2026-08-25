@@ -1,4 +1,7 @@
 import { randomBytes } from "node:crypto";
+import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export interface BrickEnv {
   databaseUrl: string;
@@ -62,9 +65,32 @@ export function loadEnv(): BrickEnv {
     pluginsDir: process.env.BRICK_PLUGINS_DIR ?? "plugins",
     themesDir: process.env.BRICK_THEMES_DIR ?? "themes",
     uploadsDir: process.env.BRICK_UPLOADS_DIR ?? "uploads",
-    migrationsDir: process.env.BRICK_MIGRATIONS_DIR ?? "migrations",
+    migrationsDir: process.env.BRICK_MIGRATIONS_DIR ?? findMigrationsDir(),
     isProduction,
     trustProxy: process.env.BRICK_TRUST_PROXY === "true",
     maxUploadMb,
   };
+}
+
+/**
+ * 마이그레이션 디렉터리 자동 탐색.
+ *
+ * BRICK_MIGRATIONS_DIR을 설정하지 않아도 배포 형태에 맞게 알아서 찾는다:
+ *  - Docker:   /app/api/migrations  (dist 기준 ../migrations)
+ *  - 모노레포: packages/database/migrations
+ *  - 기타:     cwd/migrations
+ * 못 찾으면 첫 후보를 반환해 마이그레이션 러너가 명확한 에러를 내게 한다.
+ */
+function findMigrationsDir(): string {
+  const here = dirname(fileURLToPath(import.meta.url)); // dist/config
+  const candidates = [
+    resolve(here, "../../migrations"), // dist/config → <pkg>/migrations (Docker deploy)
+    resolve(process.cwd(), "migrations"),
+    resolve(process.cwd(), "packages/database/migrations"),
+    resolve(here, "../../../../packages/database/migrations"), // 모노레포에서 직접 실행
+  ];
+  for (const dir of candidates) {
+    if (existsSync(join(dir))) return dir;
+  }
+  return candidates[0];
 }

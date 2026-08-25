@@ -35,6 +35,11 @@ export default function AdminMediaPage() {
   }
 
   const isImage = (t: string) => t.startsWith("image/");
+  const humanSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  };
   return (
     <div>
       <h1>미디어 <span style={{ color: "#999", fontSize: 16 }}>{data.total}개</span></h1>
@@ -56,7 +61,7 @@ export default function AdminMediaPage() {
                 : <span style={{ fontSize: 32 }}>📄</span>}
             </div>
             <div style={{ marginTop: 8, wordBreak: "break-all" }}>{f.fileName}</div>
-            <div style={{ color: "#999" }}>{Math.round(Number(f.size) / 1024)} KB</div>
+            <div style={{ color: "#999" }}>{humanSize(Number(f.size))}</div>
             <div style={{ marginTop: 6, display: "flex", gap: 8 }}>
               <button onClick={() => navigator.clipboard.writeText(f.url)} style={{ cursor: "pointer" }}>URL 복사</button>
               <button onClick={() => remove(f.id)} style={{ cursor: "pointer", color: "crimson" }}>삭제</button>
