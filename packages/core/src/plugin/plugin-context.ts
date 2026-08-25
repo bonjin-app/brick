@@ -50,8 +50,13 @@ export interface BlockDefinition {
   displayName: string;
   /** 속성 편집 UI 생성용 JSON Schema */
   propsSchema?: Record<string, unknown>;
-  /** 서버 렌더 함수 — SEO를 위해 항상 HTML을 반환할 수 있어야 한다 */
-  render: (props: Record<string, unknown>) => Promise<string>;
+  /** 컨테이너 블록 여부 (자식 블록을 가질 수 있는가) — 빌더 UI 힌트 */
+  acceptsChildren?: boolean;
+  /**
+   * 서버 렌더 함수 — SEO를 위해 항상 HTML을 반환할 수 있어야 한다.
+   * children: 자식 블록들의 렌더 결과 (컨테이너 블록용)
+   */
+  render: (props: Record<string, unknown>, children?: string[]) => Promise<string>;
 }
 
 export interface PluginInstance {

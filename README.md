@@ -48,6 +48,27 @@ docker compose up -d
 
 핵심 설계 결정은 [docs/architecture.md](docs/architecture.md) 참고.
 
+## 현재 구현된 것 (v0.0.x)
+
+- ✅ 설치 마법사 (사이트명 + 관리자 계정만 입력)
+- ✅ 세션 인증 (argon2, httpOnly 쿠키, DB에는 토큰 해시만 저장)
+- ✅ 관리자 셸 — 대시보드 / 페이지 / 플러그인 / 테마
+- ✅ **페이지 빌더** — 블록 트리 편집, propsSchema 기반 속성 UI, SEO 설정
+- ✅ 공개 사이트 SSR — 테마가 `<html>`부터 문서 전체 소유, 완성 HTML 응답
+- ✅ **플러그인 시스템** — ZIP 업로드 → 활성화 → 재시작 없이 라우트/블록 동작
+- ✅ **테마 시스템** — 빌드 없는 런타임 템플릿, ZIP 업로드 즉시 적용
+- ✅ 코어 블록 (제목/문단/HTML/이미지/다단/여백) + 플러그인 블록
+- ✅ 태그 기반 렌더 캐시 (PostgreSQL, Redis 불필요) — 페이지/테마/플러그인 변경 시 자동 무효화
+- ✅ 게시판 플러그인(brick-board) — 다중 게시판, 글/댓글/조회수/권한
+- 🚧 메뉴 편집, 미디어 라이브러리, 회원 가입, 검색, i18n
+
+## 문서
+
+- [아키텍처 결정 기록 (ADR)](docs/architecture.md)
+- [플러그인 개발 가이드](docs/plugin-development.md)
+- [테마 개발 가이드](docs/theme-development.md)
+- [기여 가이드](CONTRIBUTING.md)
+
 ## 개발
 
 요구사항: Node.js 20.11+, pnpm 9, PostgreSQL 16+ (또는 Docker)
@@ -98,4 +119,4 @@ export default definePlugin((ctx) => {
 
 ## 라이선스
 
-MIT (예정)
+[MIT](LICENSE)

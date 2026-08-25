@@ -119,6 +119,7 @@ export class PluginLoaderService implements OnModuleInit {
         set: { version: manifest.version, manifest: manifest as never, isActive: true, activatedAt: new Date() },
       });
     await this.hooks.doAction("plugin.activated", { name, version: manifest.version });
+    await this.cache.invalidateTag("pages"); // 블록 구성이 바뀌었으므로 렌더 캐시 무효화
     this.logger.log(`plugin "${name}@${manifest.version}" activated`);
   }
 
@@ -134,6 +135,7 @@ export class PluginLoaderService implements OnModuleInit {
       if (blockName.startsWith(`${name}/`)) this.blocks.delete(blockName);
     }
     await this.db.update(installedPlugins).set({ isActive: false }).where(eq(installedPlugins.name, name));
+    await this.cache.invalidateTag("pages");
     this.logger.log(`plugin "${name}" deactivated`);
   }
 

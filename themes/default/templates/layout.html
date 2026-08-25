@@ -3,7 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>{{ site.name }}</title>
+  <title>{{ pageTitle }}</title>
+  {{#if seo.description}}<meta name="description" content="{{ seo.description }}" />{{/if}}
+  <meta property="og:title" content="{{ pageTitle }}" />
+  {{#if seo.description}}<meta property="og:description" content="{{ seo.description }}" />{{/if}}
   <style>{{{ themeTokens }}}</style>
   <link rel="stylesheet" href="{{ themeAssets }}/style.css" />
 </head>

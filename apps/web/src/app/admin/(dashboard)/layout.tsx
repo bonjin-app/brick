@@ -33,6 +33,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         <div style={{ padding: 16, fontWeight: 700, fontSize: 18 }}>BRICK</div>
         <nav>
           <a style={link} href="/admin">대시보드</a>
+          <a style={link} href="/admin/pages">페이지</a>
           <a style={link} href="/admin/plugins">플러그인</a>
           <a style={link} href="/admin/themes">테마</a>
         </nav>

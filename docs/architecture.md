@@ -60,3 +60,20 @@
 3. **M3 — 페이지 빌더**: 블록 편집 UI, 블록 캐시(태그 무효화), 메뉴 편집
 4. **M4 — 운영 품질**: 백업/복원, 업데이트 마이그레이션 검증, 권한 세분화, i18n
 5. **M5 — 생태계**: 플러그인 레지스트리, `create-brick-plugin` 템플릿, 문서 사이트
+
+## ADR-9. 공개 사이트는 Next.js Route Handler가 완성 HTML을 그대로 응답한다
+
+- catch-all을 React 페이지로 만들면 테마 HTML(완전한 문서)이 React 문서 안에 중첩되어
+  `<title>`/`<meta>`가 `<body>`에 갇힌다 — SEO 1급 목표와 정면 충돌.
+- 그래서 `app/[[...slug]]/route.ts`가 API의 렌더 파이프라인(`GET /api/render/page`)을 호출해
+  완성 HTML을 상태코드와 함께 그대로 응답한다. 테마가 문서 전체를 소유한다(WordPress 모델).
+- React는 관리자(/admin)와 설치 마법사(/install)에만 쓴다. 정적 라우트가 catch-all보다 우선한다.
+- 공개 페이지 캐시는 Next(ISR)가 아니라 API 쪽 태그 캐시가 담당한다
+  ("pages" / "page:<slug>" 태그, 페이지·테마·플러그인 변경 시 무효화).
+
+## 알려진 제약
+
+- **한국어 전문 검색**: `to_tsvector('simple', ...)`는 DB 로케일이 C면 한글을 토큰으로 인식하지
+  못한다. 공식 postgres 이미지(utf8 로케일)에서는 공백 단위 토큰화가 동작하지만, 조사/어미가 붙는
+  한국어 특성상 실전 검색 품질은 pg_trgm(ILIKE + GIN) 보강이 필요하다. 검색 기능 구현 시
+  `plain_text`에 pg_trgm 인덱스를 추가할 것.

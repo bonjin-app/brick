@@ -9,7 +9,8 @@ import { installedThemes, siteSettings } from "@brick/database";
 import { ThemesService } from "./themes.service.js";
 import { AdminGuard } from "../auth/auth.guard.js";
 import { ExtensionInstallerService } from "../extensions/extension-installer.service.js";
-import { DB } from "../../runtime.module.js";
+import type { CacheProvider } from "@brick/core";
+import { CACHE, DB } from "../../runtime.module.js";
 
 @Controller("api/themes")
 export class ThemesController {
@@ -17,6 +18,7 @@ export class ThemesController {
     private readonly themes: ThemesService,
     private readonly installer: ExtensionInstallerService,
     @Inject(DB) private readonly db: BrickDb,
+    @Inject(CACHE) private readonly cache: CacheProvider,
   ) {}
 
   @Get()
@@ -46,6 +48,7 @@ export class ThemesController {
       .onConflictDoUpdate({ target: siteSettings.key, set: { value: name as never, updatedAt: new Date() } });
     await this.db.update(installedThemes).set({ isActive: false });
     await this.db.update(installedThemes).set({ isActive: true }).where(eq(installedThemes.name, name));
+    await this.cache.invalidateTag("pages"); // 모든 페이지가 새 테마로 다시 렌더되어야 한다
     return { ok: true, active: name };
   }
 
