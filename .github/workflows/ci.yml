@@ -72,6 +72,45 @@ jobs:
           pnpm deploy --filter=@brick/api --prod /tmp/deploy-api
           test -f /tmp/deploy-api/dist/main.js
 
+  release:
+    name: 배포본(FTP 설치) 검증
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: brick
+          POSTGRES_PASSWORD: brick
+          POSTGRES_DB: brick
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U brick"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: 배포본 생성 + FTP 설치 경로 E2E
+        run: bash scripts/smoke-release.sh
+        env:
+          # 설치 마법사에 "입력할" DB. 앱에는 전달되지 않는다(스크립트가 env -u로 차단)
+          DATABASE_URL: postgresql://brick:brick@localhost:5432/brick
+
+      - name: 배포본 업로드 (아티팩트)
+        uses: actions/upload-artifact@v4
+        with:
+          name: brick-release
+          path: dist-release/*.tar.gz
+          retention-days: 14
+
   docker:
     name: Docker 이미지 빌드
     runs-on: ubuntu-latest

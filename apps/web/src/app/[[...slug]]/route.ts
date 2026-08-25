@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 
-const API = process.env.BRICK_API_URL ?? "http://localhost:3001";
+const API = (process.env.BRICK_API_URL ?? "http://127.0.0.1:3001").replace(/\/+$/, "");
 
 export const dynamic = "force-dynamic";
 
@@ -26,8 +26,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ slug?: stri
       headers: { "content-type": "text/plain; charset=utf-8" },
     });
   }
+  // "not_installed"(DB는 있으나 설치 전)와 "needs_database"(DB 설정 자체가 없음) 모두
+  // 설치 마법사로 보낸다 — 마법사가 어느 단계부터 시작할지 스스로 판단한다.
   if (install.state !== "installed") {
-    return Response.redirect(new URL("/install", req.url), 302);
+    // 절대 URL을 만들면 바인딩 주소(0.0.0.0 등)가 노출될 수 있다 — 상대 경로로 보낸다
+    return new Response(null, { status: 302, headers: { location: "/install" } });
   }
 
   const path = (slug ?? []).join("/");

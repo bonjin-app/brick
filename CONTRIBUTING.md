@@ -47,16 +47,33 @@ pnpm build          # 전체 빌드 (타입 검사 포함)
 pnpm typecheck
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 40개 항목을 검증합니다:
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다.
 
 ```bash
-DATABASE_URL=postgresql://brick:brick@localhost:5432/brick bash scripts/smoke-test.sh
+export DATABASE_URL=postgresql://brick:brick@localhost:5432/brick
+
+bash scripts/smoke-test.sh      # 코어 (설치·인증·페이지·미디어·메뉴·검색)
+bash scripts/smoke-shop.sh      # 커머스 (상품·재고 동시성·주문·쿠폰)
+bash scripts/smoke-security.sh  # 보안·결제 (금액 위조·멱등성·재설정·감사)
+bash scripts/smoke-release.sh   # 배포본 FTP 설치 경로
 ```
 
-CI(GitHub Actions)가 PR마다 자동으로 실행합니다: 빌드 → 마이그레이션(멱등성 포함) →
-스모크 테스트 → `pnpm deploy` 번들 검증 → Docker 이미지 빌드.
+CI(GitHub Actions)가 PR마다 전부 실행합니다:
+빌드 → 마이그레이션(멱등성 포함) → 스모크 4종 → `pnpm deploy` 번들 → Docker 이미지 빌드.
 
-동작을 추가/변경했다면 `scripts/smoke-test.sh` 에 검증 항목을 추가해주세요.
+동작을 추가/변경했다면 해당 스모크 스크립트에 검증 항목을 추가해주세요.
+
+### 스모크 스크립트 작성 시 주의
+
+지금까지 실제로 겪은 함정입니다:
+
+- `curl -d` 에 중첩 따옴표로 JSON을 넣으면 깨집니다.
+  `printf` 로 파일을 만들고 `--data-binary @file` 을 쓰세요.
+- 서버를 백그라운드로 띄운 스크립트에서 인수 없는 `wait` 는 **서버까지 기다려 멈춥니다.**
+  자식 PID를 모아 개별로 `wait` 하세요.
+- `pkill -f "…/server.js"` 는 실제 커맨드라인(`node server.js`)과 어긋나 매칭되지 않습니다.
+  실행 시 `$!` 로 PID를 잡아두세요.
+- 배포본 테스트는 `env -u DATABASE_URL …` 로 환경변수를 차단해야 설치 모드를 재현합니다.
 
 ## 커밋 / PR
 

@@ -1,0 +1,68 @@
+name: 릴리스
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "버전 (예: 0.1.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: 배포본 생성 및 첨부
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: 버전 결정
+        id: v
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 배포본 생성
+        run: bash scripts/build-release.sh "${{ steps.v.outputs.version }}"
+
+      - name: 체크섬
+        working-directory: dist-release
+        run: sha256sum *.tar.gz > SHA256SUMS.txt
+
+      - name: 릴리스에 첨부
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist-release/*.tar.gz
+            dist-release/SHA256SUMS.txt
+          body: |
+            ## 설치
+
+            **Docker (권장)**
+            ```bash
+            curl -O https://raw.githubusercontent.com/bonjin-app/brick/main/docker-compose.yml
+            echo "BRICK_SECRET=$(openssl rand -base64 32)" > .env
+            docker compose up -d
+            ```
+
+            **FTP 업로드** — 빌드 불필요
+            1. `brick-${{ steps.v.outputs.version }}.tar.gz` 를 내려받아 압축을 풉니다
+            2. 서버에 업로드하고 `data`, `uploads` 에 쓰기 권한을 줍니다
+            3. `node server.js` 실행 (cPanel/Plesk는 Node.js 앱의 시작 파일로 지정)
+            4. 브라우저로 접속해 데이터베이스 정보를 입력합니다
+
+            요구사항: Node.js 20.11+, PostgreSQL 14+
+            자세한 내용은 [설치 가이드](https://github.com/bonjin-app/brick/blob/main/docs/installation.md)를 참고하세요.

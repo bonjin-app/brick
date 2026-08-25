@@ -2,9 +2,16 @@ import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readConfigFile } from "./config-file.js";
 
 export interface BrickEnv {
+  /**
+   * DB 접속 문자열. **비어 있을 수 있다** — 그때는 설치 화면만 띄우는 setup 모드로 부팅한다.
+   * (FTP로 파일만 올린 상태에서 브라우저로 설치를 시작할 수 있게 하기 위함)
+   */
   databaseUrl: string;
+  /** DB 설정이 없어 설치 화면만 제공하는 상태 */
+  setupMode: boolean;
   secret: string;
   apiPort: number;
   pluginsDir: string;
@@ -30,18 +37,47 @@ export interface BrickEnv {
  * 환경변수 검증 — 부팅 시 1회.
  * 프로덕션에서 위험한 설정(기본 시크릿 등)은 조용히 넘기지 않고 즉시 실패시킨다.
  */
+let cached: BrickEnv | null = null;
+
+/**
+ * 환경 설정 로드 (프로세스당 1회).
+ *
+ * 여러 Provider가 호출하므로 캐시한다. 설정 파일이 설치 중에 새로 쓰이더라도
+ * 재시작을 요구하는 설계이므로(연결 풀·마이그레이션이 부팅 시점에 만들어진다)
+ * 캐시가 문제되지 않는다.
+ */
 export function loadEnv(): BrickEnv {
+  if (cached) return cached;
+  cached = loadEnvUncached();
+  return cached;
+}
+
+/** 테스트에서 설정을 다시 읽어야 할 때 */
+export function resetEnvCache(): void {
+  cached = null;
+}
+
+function loadEnvUncached(): BrickEnv {
   const errors: string[] = [];
   const isProduction = process.env.NODE_ENV === "production";
 
-  const databaseUrl = process.env.DATABASE_URL ?? "";
-  if (!databaseUrl) errors.push("DATABASE_URL is required");
-  else if (!/^postgres(ql)?:\/\//.test(databaseUrl)) errors.push("DATABASE_URL must be a postgresql:// URL");
+  // 우선순위: 환경변수 > 설정 파일.
+  // Docker/k8s에서는 환경변수가 이기므로 컨테이너를 다시 만들어도 옛 설정 파일이 방해하지 않는다.
+  const configFile = readConfigFile();
+  const databaseUrl = process.env.DATABASE_URL || configFile?.databaseUrl || "";
+  // DB 설정이 아예 없으면 실패시키지 않고 setup 모드로 부팅한다 — 브라우저에서 설치를 시작할 수 있게.
+  const setupMode = !databaseUrl;
+  if (databaseUrl && !/^postgres(ql)?:\/\//.test(databaseUrl)) {
+    errors.push("DATABASE_URL must be a postgresql:// URL");
+  }
 
-  let secret = process.env.BRICK_SECRET ?? "";
+  let secret = process.env.BRICK_SECRET || configFile?.secret || "";
   const WEAK = ["", "change-me", "please-change-me", "secret", "changeme"];
   if (WEAK.includes(secret)) {
-    if (isProduction) {
+    if (setupMode) {
+      // 설치 전에는 세션이 없다. 설치 완료 시 설정 파일에 강한 시크릿이 생성된다.
+      secret = randomBytes(32).toString("base64url");
+    } else if (isProduction) {
       errors.push(
         "BRICK_SECRET must be set to a strong random value in production " +
           "(generate: openssl rand -base64 32)",
@@ -64,7 +100,7 @@ export function loadEnv(): BrickEnv {
   if (!Number.isFinite(maxUploadMb) || maxUploadMb <= 0) errors.push("BRICK_MAX_UPLOAD_MB must be a positive number");
 
   // 메일 안의 링크는 상대경로일 수 없다 — 공개 주소가 필요하다
-  const siteUrl = (process.env.BRICK_SITE_URL ?? "http://localhost:3000").replace(/\/+$/, "");
+  const siteUrl = (process.env.BRICK_SITE_URL ?? configFile?.siteUrl ?? "http://localhost:3000").replace(/\/+$/, "");
   if (!/^https?:\/\//.test(siteUrl)) errors.push("BRICK_SITE_URL must start with http:// or https://");
   if (isProduction && siteUrl.startsWith("http://") && !siteUrl.includes("localhost")) {
     console.warn("[brick] BRICK_SITE_URL이 http:// 입니다 — 프로덕션에서는 https를 사용하세요");
@@ -99,6 +135,7 @@ export function loadEnv(): BrickEnv {
 
   return {
     databaseUrl,
+    setupMode,
     secret,
     apiPort,
     pluginsDir: process.env.BRICK_PLUGINS_DIR ?? "plugins",

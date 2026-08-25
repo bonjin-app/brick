@@ -32,6 +32,13 @@ code() { curl -s -o /dev/null -w "%{http_code}" "$@"; }
 
 echo "▶ Brick 스모크 테스트"
 
+# 매번 빈 DB에서 시작한다 — 스모크 테스트는 "설치 전" 상태를 전제로 한다.
+# (로컬 반복 실행 시 이전 데이터가 남아 실패하는 것을 막는다)
+if [[ "${BRICK_SMOKE_KEEP_DB:-}" != "1" ]]; then
+  node "$ROOT/scripts/reset-test-db.mjs" || exit 1
+fi
+
+
 # ── 서버 기동 ──────────────────────────────────────────
 export BRICK_PLUGINS_DIR="$ROOT/plugins"
 export BRICK_THEMES_DIR="$ROOT/themes"

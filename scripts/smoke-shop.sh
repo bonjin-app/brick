@@ -31,6 +31,13 @@ jq_get()   { python3 -c "import sys,json;d=json.load(sys.stdin);print(d$1)" 2>/d
 
 echo "▶ brick-shop 커머스 스모크 테스트"
 
+# 매번 빈 DB에서 시작한다 — 스모크 테스트는 "설치 전" 상태를 전제로 한다.
+# (로컬 반복 실행 시 이전 데이터가 남아 실패하는 것을 막는다)
+if [[ "${BRICK_SMOKE_KEEP_DB:-}" != "1" ]]; then
+  node "$ROOT/scripts/reset-test-db.mjs" || exit 1
+fi
+
+
 export BRICK_PLUGINS_DIR="$ROOT/plugins"
 export BRICK_THEMES_DIR="$ROOT/themes"
 export BRICK_UPLOADS_DIR="$TMP/uploads"

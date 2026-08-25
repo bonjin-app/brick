@@ -4,7 +4,7 @@
 
 <p align="center">
   <strong>설치는 그누보드처럼 쉽게, 속은 현대적으로.</strong><br />
-  Docker 한 번으로 설치하는 오픈소스 CMS · Next.js + NestJS + PostgreSQL
+  Docker 한 줄, 또는 FTP 업로드로 설치하는 오픈소스 CMS · Next.js + NestJS + PostgreSQL
 </p>
 
 <p align="center">
@@ -35,7 +35,7 @@
 |---|---|---|---|
 | 언어 | PHP | PHP | **TypeScript** |
 | DB | MySQL | MySQL | **PostgreSQL** |
-| 설치 | FTP 업로드 | FTP 업로드 | **`docker compose up -d`** |
+| 설치 | FTP 업로드 | FTP 업로드 | **Docker 한 줄 · 또는 FTP 업로드 + 웹 설치** |
 | 업데이트 | 파일 수동 교체 | 관리자 클릭 | **`pull && up` (자동 마이그레이션)** |
 | 플러그인 | 제한적 | ZIP 업로드 | **ZIP 업로드** |
 | 테마 | 스킨(PHP) | 테마(PHP) | **런타임 템플릿 (빌드 없음)** |
@@ -44,8 +44,9 @@
 | SSR / SEO | 기본 | 기본 | **Next.js SSR + ISR** |
 | 타입 안전성 | 없음 | 없음 | **전 구간 strict** |
 
-> ⚠️ Brick은 일반 PHP 호스팅(FTP 전용)에서는 동작하지 않습니다. Node 런타임이 필요합니다.
-> Docker 또는 Node를 지원하는 환경을 공식 요구사항으로 합니다.
+> ⚠️ Brick은 **순수 PHP 호스팅(Node 없음)** 에서는 동작하지 않습니다.
+> Docker, 또는 Node.js를 지원하는 호스팅(cPanel/Plesk의 "Node.js App", VPS)이 필요합니다.
+> 그 환경이라면 **FTP로 올려서 브라우저에서 설치**하는 방식이 동작합니다 → [설치 가이드](docs/installation.md)
 
 ---
 
@@ -64,6 +65,19 @@ docker compose up -d
 
 `http://localhost:3000` 접속 → 설치 마법사에서 **사이트 이름과 관리자 계정만** 입력하면 끝입니다.
 DB 접속 정보는 묻지 않습니다 — compose가 이미 주입했습니다.
+
+### FTP로 설치하기 (그누보드 방식)
+
+빌드도 `npm install` 도 필요 없는 배포본을 올리고 브라우저에서 설치합니다.
+
+```bash
+# 배포본 만들기 (또는 Releases에서 내려받기)
+bash scripts/build-release.sh
+# → dist-release/brick-<버전>.tar.gz
+```
+
+압축을 풀어 서버에 올린 뒤 `server.js` 를 실행하고, 브라우저에서 DB 정보를 입력하면 끝입니다.
+`data`, `uploads` 에 쓰기 권한만 주면 됩니다.
 
 자세한 내용은 [설치 가이드](docs/installation.md)를 참고하세요.
 
@@ -129,6 +143,8 @@ DB 마이그레이션은 컨테이너가 부팅할 때 스스로 적용합니다
 - **플러그인 관리 화면 자동 생성** — 필드 스키마만 선언하면 코어가 CRUD UI를 만든다 (빌드 불필요)
 - **렌더 캐시** — 태그 기반 자동 무효화 (Redis 불필요)
 - **자동 마이그레이션** — 부팅 시 스키마 자동 최신화
+- **웹 설치 마법사** — DB 정보 입력 → 설정 파일 자동 생성 (환경변수 불필요)
+- **빌드 없는 배포본** — FTP로 올려서 `node server.js` 만으로 실행
 - **백업 / 복원 CLI** — pg_dump 기반
 - **헬스체크** — `/healthz` · `/readyz`
 
@@ -231,7 +247,7 @@ plugins/
 themes/
   default/        기본 테마 (런타임 템플릿 레퍼런스)
 docs-site/        GitHub Pages 랜딩페이지
-scripts/          스모크 테스트
+scripts/          스모크 테스트 4종 + 배포본 생성(build-release.sh)
 docker/           Dockerfile, entrypoint
 ```
 

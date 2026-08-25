@@ -4,6 +4,7 @@ import { Logger } from "@nestjs/common";
 import cookie from "@fastify/cookie";
 import multipart from "@fastify/multipart";
 import { AppModule } from "./app.module.js";
+import { SetupAppModule } from "./setup.module.js";
 import { loadEnv } from "./config/env.js";
 import { runMigrations } from "./config/migrator.js";
 
@@ -15,11 +16,31 @@ async function bootstrap() {
   const env = loadEnv();
   const logger = new Logger("Bootstrap");
 
+  // ── setup 모드 ────────────────────────────────────
+  // DB 설정이 없으면 실패하지 않고 설치 마법사만 띄운다.
+  // FTP로 파일만 올린 상태에서 브라우저로 설치를 시작할 수 있게 하기 위함이다.
+  if (env.setupMode) {
+    const app = await NestFactory.create<NestFastifyApplication>(
+      SetupAppModule,
+      new FastifyAdapter({ trustProxy: env.trustProxy }),
+    );
+    app.enableShutdownHooks();
+    await app.listen(env.apiPort, "0.0.0.0");
+    logger.warn(
+      `데이터베이스가 설정되지 않았습니다 — 설치 모드로 시작합니다 (:${env.apiPort}).\n` +
+        `  브라우저에서 사이트를 열어 데이터베이스 정보를 입력하세요.`,
+    );
+    return;
+  }
+
   // 업데이트를 쉽게: 부팅할 때 스키마를 스스로 최신으로 맞춘다.
   // 사용자는 `docker compose pull && docker compose up -d` 외에 할 일이 없다.
   if (process.env.BRICK_AUTO_MIGRATE !== "false") {
     try {
-      const result = await runMigrations(env.databaseUrl, env.migrationsDir);
+      logger.log("데이터베이스 스키마를 확인합니다...");
+      const result = await runMigrations(env.databaseUrl, env.migrationsDir, {
+        log: (msg) => logger.warn(msg),
+      });
       if (result.applied.length) logger.log(`applied ${result.applied.length} migration(s): ${result.applied.join(", ")}`);
       else logger.log("database schema is up to date");
     } catch (err) {

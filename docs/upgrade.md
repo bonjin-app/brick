@@ -19,6 +19,25 @@ docker compose pull && docker compose up -d
 2. 활성 플러그인이 복원됩니다
 3. 마이그레이션이 실패하면 **서버가 뜨지 않습니다** — 깨진 스키마로 서비스하는 것보다 안전합니다
 
+## 배포본 업로드 (FTP)
+
+```
+1. data / uploads / plugins / themes 를 백업합니다 (설정·업로드·설치한 확장)
+2. 새 배포본에서 다음만 덮어씁니다:
+     server.js
+     node_modules/
+     api/
+     web/
+   ※ data, uploads, plugins, themes 는 그대로 두세요
+3. 호스팅 패널에서 Restart
+```
+
+재시작하면 DB 마이그레이션이 자동 적용됩니다. 설정 파일(`data/brick.config.json`)은
+그대로 유지되므로 DB 정보를 다시 입력할 필요가 없습니다.
+
+> `plugins/` 를 덮어쓰면 사용자가 업로드한 플러그인이 지워집니다.
+> 동봉 플러그인(게시판·쇼핑몰·결제)만 갱신하려면 해당 폴더만 개별로 덮어쓰세요.
+
 ## Node 직접 실행
 
 ```bash
@@ -52,6 +71,30 @@ docker compose exec brick node /app/api/dist/migrate.js
 - 새 버전에 추가된 `migrations/*.sql` 이 이때 적용됩니다
 - 이미 적용된 마이그레이션은 `plugin_migrations` 테이블로 건너뜁니다
 
+## 왜 "관리자 화면에서 업데이트" 버튼이 없는가
+
+워드프레스처럼 관리자에서 클릭 한 번으로 업데이트하는 기능은 **의도적으로 넣지 않았습니다.**
+
+자기 파일을 덮어쓰는 자체 업데이터는 다음 상황에서 사이트를 복구 불가 상태로 만듭니다:
+
+- 다운로드 중 연결이 끊겨 파일이 **부분만** 교체됨
+- 실행 중인 프로세스가 잡고 있는 파일을 교체하지 못해 **버전이 섞임**
+- 공유 호스팅에서 쓰기 권한이 일부 경로에만 있어 **중간에 실패**
+- 새 코드와 옛 코드가 동시에 로드되어 **정의되지 않은 동작**
+
+PHP는 요청마다 파일을 다시 읽으므로 파일 교체가 상대적으로 안전하지만,
+Node는 프로세스가 모듈을 메모리에 유지하므로 위험이 더 큽니다.
+
+대신 안전한 경로를 제공합니다:
+
+| 방식 | 명령 | 원자성 |
+|---|---|---|
+| Docker | `docker compose pull && up -d` | ✅ 이미지 단위로 교체 |
+| 배포본 | 파일 덮어쓰기 → 재시작 | ⚠️ 사용자가 백업 후 수행 |
+
+향후 자체 업데이터를 넣는다면 **원자적 교체**(새 버전을 다른 디렉터리에 내려받아
+검증한 뒤 심볼릭 링크를 바꾸는 방식)로 설계해야 합니다.
+
 ## 롤백
 
 ```bash
@@ -67,6 +110,16 @@ docker compose exec brick node /app/api/dist/backup.js restore /app/uploads/back
 > **주의**: Brick은 down 마이그레이션(되돌리기 SQL)을 제공하지 않습니다.
 > 스키마 롤백이 필요하면 백업 복원이 유일하게 안전한 경로입니다.
 > 그래서 업그레이드 전 백업을 권장합니다.
+
+## 현재 버전 확인
+
+```bash
+# Docker
+docker compose exec brick node -p "require('/app/api/package.json').version"
+
+# 배포본
+node -p "require('./package.json').version"
+```
 
 ## 업그레이드 전 확인
 

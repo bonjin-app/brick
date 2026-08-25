@@ -10,6 +10,45 @@ export interface MigrationResult {
 }
 
 /**
+ * 마이그레이션 락 획득.
+ *
+ * `pg_advisory_lock` 은 다른 세션이 락을 쥐고 있으면 **무한 대기**한다.
+ * 이전 인스턴스가 마이그레이션 중 비정상 종료해 커넥션이 남아 있으면
+ * 부팅이 아무 로그도 없이 멈춘다 — 운영자가 원인을 알 수 없다.
+ *
+ * 그래서 try 버전을 폴링하고, 제한 시간을 넘기면 명확한 에러로 실패시킨다.
+ */
+async function acquireLock(
+  client: pg.Client,
+  timeoutMs: number,
+  log: (msg: string) => void,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  let notified = false;
+  for (;;) {
+    const { rows } = await client.query<{ locked: boolean }>(
+      "SELECT pg_try_advisory_lock($1) AS locked",
+      [LOCK_KEY],
+    );
+    if (rows[0]?.locked) return;
+
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `마이그레이션 락을 ${Math.round(timeoutMs / 1000)}초 안에 얻지 못했습니다.\n` +
+          `  다른 인스턴스가 마이그레이션 중이거나, 이전 프로세스가 락을 쥔 채 남아 있습니다.\n` +
+          `  확인: SELECT pid, state, query FROM pg_stat_activity WHERE datname = current_database();\n` +
+          `  해제: SELECT pg_terminate_backend(<pid>);`,
+      );
+    }
+    if (!notified) {
+      log("다른 인스턴스가 마이그레이션 중입니다 — 락을 기다립니다...");
+      notified = true;
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+}
+
+/**
  * 코어 마이그레이션 러너.
  *
  * 설계:
@@ -19,14 +58,34 @@ export interface MigrationResult {
  *  - 각 마이그레이션은 트랜잭션 안에서 실행된다 — 실패 시 부분 적용이 남지 않는다.
  *  - 실패하면 예외를 던진다. 깨진 스키마로 서버가 뜨는 것이 더 위험하다.
  */
-export async function runMigrations(databaseUrl: string, migrationsDir: string): Promise<MigrationResult> {
+export async function runMigrations(
+  databaseUrl: string,
+  migrationsDir: string,
+  opts: { connectTimeoutMs?: number; lockTimeoutMs?: number; log?: (msg: string) => void } = {},
+): Promise<MigrationResult> {
   const dir = resolve(migrationsDir);
-  const client = new pg.Client({ connectionString: databaseUrl });
-  await client.connect();
+  const log = opts.log ?? (() => undefined);
+  const connectTimeoutMs = opts.connectTimeoutMs ?? 15_000;
+  const lockTimeoutMs = opts.lockTimeoutMs ?? 60_000;
+
+  // 연결 타임아웃이 없으면 DB에 닿지 않을 때 부팅이 조용히 멈춘다.
+  // (방화벽, 잘못된 호스트, DB 미기동 — 운영에서 흔한 상황)
+  const client = new pg.Client({
+    connectionString: databaseUrl,
+    connectionTimeoutMillis: connectTimeoutMs,
+  });
+  try {
+    await client.connect();
+  } catch (err) {
+    throw new Error(
+      `데이터베이스에 연결할 수 없습니다: ${err instanceof Error ? err.message : String(err)}\n` +
+        `  DATABASE_URL 또는 설정 파일의 접속 정보를 확인하세요.`,
+    );
+  }
   const applied: string[] = [];
 
   try {
-    await client.query("SELECT pg_advisory_lock($1)", [LOCK_KEY]);
+    await acquireLock(client, lockTimeoutMs, log);
     await client.query(`
       CREATE TABLE IF NOT EXISTS core_migrations (
         id varchar(255) PRIMARY KEY,

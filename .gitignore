@@ -15,3 +15,5 @@ coverage/
 *.tsbuildinfo
 /uploads/
 /.local-uploads/
+/dist-release/
+/data/

@@ -26,13 +26,16 @@ export const ENV = "BRICK_ENV";
 @Global()
 @Module({
   providers: [
+    { provide: ENV, useFactory: () => loadEnv() },
     {
       provide: DB,
-      useFactory: () => {
-        const url = process.env.DATABASE_URL;
-        if (!url) throw new Error("DATABASE_URL is required");
-        return createDb(url);
+      // loadEnv를 거쳐야 설정 파일(data/brick.config.json)의 값도 반영된다.
+      // process.env를 직접 읽으면 FTP식 설치(웹에서 DB 정보 입력)가 동작하지 않는다.
+      useFactory: (env: ReturnType<typeof loadEnv>) => {
+        if (!env.databaseUrl) throw new Error("DATABASE_URL is required");
+        return createDb(env.databaseUrl);
       },
+      inject: [ENV],
     },
     { provide: HOOKS, useValue: new HookBus() },
     {
@@ -47,9 +50,9 @@ export const ENV = "BRICK_ENV";
     },
     {
       provide: STORAGE,
-      useFactory: () => new LocalStorageProvider(process.env.BRICK_UPLOADS_DIR ?? "uploads"),
+      useFactory: (env: ReturnType<typeof loadEnv>) => new LocalStorageProvider(env.uploadsDir),
+      inject: [ENV],
     },
-    { provide: ENV, useFactory: () => loadEnv() },
     {
       // SMTP_HOST가 없으면 콘솔 출력으로 폴백한다 — 메일 서버 없이도 개발이 막히지 않는다
       provide: MAIL,
