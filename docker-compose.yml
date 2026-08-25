@@ -1,0 +1,50 @@
+# Brick 설치 = 이 파일 + `docker compose up -d`
+# 접속: http://localhost:3000 → 설치 마법사
+#
+# 사용자 관점에서 이것이 "설치 프로그램"이다.
+# Redis/MinIO는 의도적으로 없다 — Brick Core는 PostgreSQL만으로 동작한다.
+services:
+  brick:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    # 배포판에서는: image: ghcr.io/uulab/brick:latest
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://brick:${POSTGRES_PASSWORD:-brick}@db:5432/brick
+      BRICK_SECRET: ${BRICK_SECRET:-please-change-me}
+      BRICK_API_URL: http://localhost:3001
+      BRICK_PLUGINS_DIR: /app/plugins
+      BRICK_THEMES_DIR: /app/themes
+      BRICK_UPLOADS_DIR: /app/uploads
+    volumes:
+      # ZIP 업로드로 설치되는 확장은 볼륨에 남아 컨테이너 업데이트에도 유지된다
+      - brick_plugins:/app/plugins
+      - brick_themes:/app/themes
+      - brick_uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: brick
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-brick}
+      POSTGRES_DB: brick
+    volumes:
+      - brick_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U brick"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  brick_db:
+  brick_plugins:
+  brick_themes:
+  brick_uploads:

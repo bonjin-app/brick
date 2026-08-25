@@ -1,0 +1,19 @@
+{
+  "name": "default",
+  "version": "0.0.1",
+  "displayName": "Brick Default",
+  "description": "Brick 기본 테마 — 빌드 없이 동작하는 런타임 템플릿의 레퍼런스",
+  "brickVersion": ">=0.0.1",
+  "templates": {
+    "layout": "templates/layout.html",
+    "home": "templates/home.html",
+    "page": "templates/page.html"
+  },
+  "tokens": {
+    "color-primary": "#e2574c",
+    "color-bg": "#ffffff",
+    "color-text": "#1a1a1a",
+    "font-body": "'Pretendard', 'Apple SD Gothic Neo', sans-serif"
+  },
+  "assets": "assets"
+}

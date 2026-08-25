@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ site.name }}</title>
+  <style>{{{ themeTokens }}}</style>
+  <link rel="stylesheet" href="{{ themeAssets }}/style.css" />
+</head>
+<body>
+  <header class="brick-header">
+    <a class="brick-logo" href="/">{{ site.name }}</a>
+  </header>
+  <main class="brick-main">
+    {{{ content }}}
+  </main>
+  <footer class="brick-footer">
+    Powered by <a href="https://github.com/uulab/brick">Brick</a>
+  </footer>
+</body>
+</html>

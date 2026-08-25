@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.next/
+.turbo/
+*.log
+.env
+.env.local
+.env.*.local
+coverage/
+.DS_Store
+
+# 런타임 데이터 (설치 후 생성)
+/data/
+/uploads/

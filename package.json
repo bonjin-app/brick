@@ -1,0 +1,25 @@
+{
+  "name": "brick",
+  "version": "0.0.1",
+  "private": true,
+  "description": "설치형 오픈소스 CMS — Next.js + NestJS + PostgreSQL",
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "db:generate": "pnpm --filter @brick/database generate",
+    "db:migrate": "pnpm --filter @brick/database migrate",
+    "db:studio": "pnpm --filter @brick/database studio"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.3"
+  }
+}
