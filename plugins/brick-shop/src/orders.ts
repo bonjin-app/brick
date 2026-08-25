@@ -1,0 +1,238 @@
+import { sql } from "drizzle-orm";
+import { uuidv7 } from "uuidv7";
+import type { Db, OrderStatus, ShopSettings } from "./types.js";
+import { ShopError, STATUS_TRANSITIONS, STOCK_RESTORING } from "./types.js";
+import { quote, type Quote } from "./pricing.js";
+
+export interface OrdererInput {
+  ordererName: string;
+  ordererPhone: string;
+  ordererEmail?: string;
+  receiverName?: string;
+  receiverPhone?: string;
+  postcode: string;
+  address1: string;
+  address2?: string;
+  deliveryMemo?: string;
+  paymentMethod?: string;
+}
+
+const PAYMENT_METHODS = ["bank_transfer"]; // PG 연동은 별도 플러그인이 추가한다
+
+/**
+ * 주문 생성.
+ *
+ * 재고 동시성이 이 함수의 핵심이다.
+ * 조회 후 차감(check-then-act)은 동시 주문에서 초과판매를 일으킨다.
+ * 그래서 **조건부 원자적 UPDATE**로 차감하고, 영향받은 행이 0이면 실패시킨다:
+ *
+ *   UPDATE ... SET stock = stock - qty WHERE id = ? AND stock >= qty
+ *
+ * 전체를 하나의 트랜잭션으로 감싸 실패 시 부분 차감이 남지 않게 한다.
+ */
+export async function createOrder(
+  db: Db,
+  params: {
+    items: Array<{ productId: string; optionId?: string | null; quantity: number }>;
+    orderer: OrdererInput;
+    couponCode?: string | null;
+    userId?: string | null;
+    guestToken?: string | null;
+    settings: ShopSettings;
+  },
+): Promise<{ id: string; orderNo: string; total: number; guestToken: string | null }> {
+  const { orderer } = params;
+  validateOrderer(orderer);
+
+  const method = orderer.paymentMethod ?? "bank_transfer";
+  if (!PAYMENT_METHODS.includes(method)) {
+    throw new ShopError(400, `지원하지 않는 결제수단입니다: ${method}`);
+  }
+
+  // 서버 가격으로 재계산 (클라이언트 금액을 신뢰하지 않는다)
+  const q: Quote = await quote(db, params.items, params.settings, params.couponCode);
+
+  const orderId = uuidv7();
+  const guestToken = params.userId ? null : (params.guestToken ?? uuidv7().replace(/-/g, ""));
+
+  // 트랜잭션: 재고 차감 → 쿠폰 사용 → 주문 생성이 전부 성공하거나 전부 취소된다.
+  // (execute("BEGIN")은 풀에서 커넥션이 바뀔 수 있어 트랜잭션이 성립하지 않는다)
+  const orderNo = await db.transaction(async (tx) => {
+    const orderNo = await nextOrderNo(tx);
+
+    // ── 1. 재고 차감 (원자적) ──────────────────────────
+    for (const line of q.lines) {
+      if (line.stock === null) continue; // 무한 재고
+
+      const target = line.optionId
+        ? sql`UPDATE shop_product_options SET stock = stock - ${line.quantity}
+              WHERE id = ${line.optionId}::uuid AND stock IS NOT NULL AND stock >= ${line.quantity}
+              RETURNING id`
+        : sql`UPDATE shop_products SET stock = stock - ${line.quantity}
+              WHERE id = ${line.productId}::uuid AND stock IS NOT NULL AND stock >= ${line.quantity}
+              RETURNING id`;
+
+      const { rows } = await tx.execute(target);
+      if (!rows.length) {
+        // 다른 주문이 먼저 재고를 가져갔다
+        throw new ShopError(409, `"${line.productName}" 재고가 부족합니다. 장바구니를 다시 확인해주세요.`);
+      }
+    }
+
+    // ── 2. 쿠폰 사용 횟수 (한도가 있으면 원자적으로) ──
+    if (q.couponCode) {
+      const { rows } = await tx.execute(sql`
+        UPDATE shop_coupons SET used_count = used_count + 1
+        WHERE upper(code) = ${q.couponCode.toUpperCase()}
+          AND is_active = true
+          AND (usage_limit IS NULL OR used_count < usage_limit)
+        RETURNING id
+      `);
+      if (!rows.length) throw new ShopError(400, "쿠폰을 사용할 수 없습니다. 한도가 소진되었을 수 있습니다.");
+    }
+
+    // ── 3. 주문 ────────────────────────────────────────
+    await tx.execute(sql`
+      INSERT INTO shop_orders (
+        id, order_no, user_id, status,
+        subtotal, discount, shipping_fee, total, coupon_code,
+        payment_method, payment_status,
+        orderer_name, orderer_phone, orderer_email,
+        receiver_name, receiver_phone, postcode, address1, address2, delivery_memo,
+        guest_token
+      ) VALUES (
+        ${orderId}, ${orderNo}, ${params.userId ?? null}::uuid, 'pending',
+        ${q.subtotal}, ${q.discount}, ${q.shippingFee}, ${q.total}, ${q.couponCode},
+        ${method}, 'unpaid',
+        ${orderer.ordererName}, ${orderer.ordererPhone}, ${orderer.ordererEmail ?? null},
+        ${orderer.receiverName || orderer.ordererName}, ${orderer.receiverPhone || orderer.ordererPhone},
+        ${orderer.postcode}, ${orderer.address1}, ${orderer.address2 ?? null}, ${orderer.deliveryMemo ?? null},
+        ${guestToken}
+      )
+    `);
+
+    // ── 4. 주문 항목 (가격 스냅샷) ─────────────────────
+    for (const line of q.lines) {
+      await tx.execute(sql`
+        INSERT INTO shop_order_items
+          (id, order_id, product_id, option_id, product_name, option_name, unit_price, quantity, line_total)
+        VALUES
+          (${uuidv7()}, ${orderId}, ${line.productId}::uuid, ${line.optionId}::uuid,
+           ${line.productName}, ${line.optionName}, ${line.unitPrice}, ${line.quantity}, ${line.lineTotal})
+      `);
+      await tx.execute(sql`
+        UPDATE shop_products SET sold_count = sold_count + ${line.quantity} WHERE id = ${line.productId}::uuid
+      `);
+    }
+
+    await tx.execute(sql`
+      INSERT INTO shop_order_events (id, order_id, from_status, to_status, note)
+      VALUES (${uuidv7()}, ${orderId}, NULL, 'pending', '주문 접수')
+    `);
+
+    return orderNo;
+  });
+
+  return { id: orderId, orderNo, total: q.total, guestToken };
+}
+
+/**
+ * 주문 상태 변경.
+ * 전이 규칙을 강제하고, 취소/환불이면 재고를 되돌린다.
+ */
+export async function changeOrderStatus(
+  db: Db,
+  orderId: string,
+  to: OrderStatus,
+  opts: { note?: string; actorId?: string | null; trackingNo?: string | null } = {},
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    // 동시 상태 변경 방지 — 주문 행을 잠근다 (FOR UPDATE는 트랜잭션 안에서만 유효)
+    const { rows } = await tx.execute(sql`
+      SELECT status FROM shop_orders WHERE id = ${orderId}::uuid FOR UPDATE
+    `);
+    const current = rows[0]?.status as OrderStatus | undefined;
+    if (!current) throw new ShopError(404, "주문을 찾을 수 없습니다.");
+
+    if (current === to) return; // 멱등
+    if (!STATUS_TRANSITIONS[current].includes(to)) {
+      throw new ShopError(400, `"${current}" 상태에서 "${to}" 로 변경할 수 없습니다.`);
+    }
+
+    // 취소/환불이면 재고 복원 (이미 복원된 상태에서 또 하지 않도록 전이 규칙이 보장)
+    if (STOCK_RESTORING.includes(to)) {
+      const { rows: items } = await tx.execute(sql`
+        SELECT product_id, option_id, quantity FROM shop_order_items WHERE order_id = ${orderId}::uuid
+      `);
+      for (const it of items) {
+        if (it.option_id) {
+          await tx.execute(sql`
+            UPDATE shop_product_options SET stock = stock + ${Number(it.quantity)}
+            WHERE id = ${String(it.option_id)}::uuid AND stock IS NOT NULL
+          `);
+        }
+        if (it.product_id) {
+          await tx.execute(sql`
+            UPDATE shop_products
+            SET stock = CASE WHEN stock IS NULL THEN NULL ELSE stock + ${Number(it.quantity)} END,
+                sold_count = greatest(0, sold_count - ${Number(it.quantity)})
+            WHERE id = ${String(it.product_id)}::uuid
+          `);
+        }
+      }
+    }
+
+    const paidAt = to === "paid" ? sql`now()` : sql`paid_at`;
+    const paymentStatus = to === "paid" ? "paid" : to === "refunded" ? "refunded" : null;
+
+    await tx.execute(sql`
+      UPDATE shop_orders SET
+        status = ${to},
+        paid_at = ${paidAt},
+        payment_status = coalesce(${paymentStatus}, payment_status),
+        tracking_no = coalesce(${opts.trackingNo ?? null}, tracking_no),
+        cancelled_reason = coalesce(${to === "cancelled" ? (opts.note ?? null) : null}, cancelled_reason),
+        updated_at = now()
+      WHERE id = ${orderId}::uuid
+    `);
+
+    await tx.execute(sql`
+      INSERT INTO shop_order_events (id, order_id, from_status, to_status, note, actor_id)
+      VALUES (${uuidv7()}, ${orderId}, ${current}, ${to}, ${opts.note ?? null}, ${opts.actorId ?? null}::uuid)
+    `);
+  });
+}
+
+/**
+ * 주문번호: YYYYMMDD-NNNNNN
+ *
+ * 순번은 시퀀스에서 받는다. count(*)+1 로 만들면 동시 주문이 같은 번호를 만들어
+ * unique 제약에 걸린다(실제로 발생했던 버그). 시퀀스는 트랜잭션 롤백과 무관하게
+ * 원자적으로 증가하므로 경합이 없다 — 번호가 건너뛸 수 있지만 중복은 없다.
+ */
+async function nextOrderNo(db: Db): Promise<string> {
+  const { rows } = await db.execute(sql`
+    SELECT to_char(now(), 'YYYYMMDD') AS day, nextval('shop_order_no_seq') AS seq
+  `);
+  const day = String(rows[0]?.day ?? "00000000");
+  const seq = String(rows[0]?.seq ?? 1).padStart(6, "0");
+  return `${day}-${seq}`;
+}
+
+function validateOrderer(o: OrdererInput): void {
+  const required: Array<[keyof OrdererInput, string]> = [
+    ["ordererName", "주문자 이름"],
+    ["ordererPhone", "주문자 연락처"],
+    ["postcode", "우편번호"],
+    ["address1", "주소"],
+  ];
+  for (const [key, label] of required) {
+    if (!String(o?.[key] ?? "").trim()) throw new ShopError(400, `${label}을(를) 입력해주세요.`);
+  }
+  if (!/^[0-9\-+() ]{7,30}$/.test(o.ordererPhone.trim())) {
+    throw new ShopError(400, "연락처 형식이 올바르지 않습니다.");
+  }
+  if (o.ordererEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(o.ordererEmail)) {
+    throw new ShopError(400, "이메일 형식이 올바르지 않습니다.");
+  }
+}

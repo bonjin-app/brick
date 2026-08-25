@@ -58,8 +58,11 @@ jobs:
         env:
           BRICK_MIGRATIONS_DIR: packages/database/migrations
 
-      - name: E2E 스모크 테스트
+      - name: E2E 스모크 테스트 (코어)
         run: bash scripts/smoke-test.sh
+
+      - name: E2E 스모크 테스트 (커머스)
+        run: bash scripts/smoke-shop.sh
 
       - name: pnpm deploy 번들 검증 (Docker 런타임과 동일 경로)
         run: |

@@ -14,7 +14,10 @@
  *     return {};
  *   });
  */
-export type { PluginContext, PluginInstance, BlockDefinition, PluginRouteHandler } from "@brick/core";
+export type {
+  PluginContext, PluginInstance, BlockDefinition, PluginRouteHandler,
+  AdminResource, AdminField, PluginDb,
+} from "@brick/core";
 export type { PluginManifest } from "@brick/shared";
 import type { PluginContext, PluginInstance } from "@brick/core";
 

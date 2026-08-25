@@ -72,6 +72,37 @@ export class PluginsController {
     }
   }
 
+  /**
+   * 관리자 내비게이션 — 플러그인이 등록한 메뉴와 리소스.
+   * 코어 관리자 셸이 이걸 읽어 사이드바를 구성한다.
+   */
+  @Get("admin/nav")
+  @UseGuards(AdminGuard)
+  adminNav() {
+    return {
+      menus: this.loader.adminMenus,
+      resources: this.loader.adminResources
+        .slice()
+        .sort((a, b) => (a.order ?? 100) - (b.order ?? 100))
+        .map((r) => ({
+          plugin: r.plugin,
+          name: r.name,
+          title: r.title,
+          itemLabel: r.itemLabel,
+          order: r.order,
+        })),
+    };
+  }
+
+  /** 특정 리소스의 전체 스키마 — 관리자가 목록/폼 화면을 생성하는 데 쓴다 */
+  @Get("admin/resources/:plugin/:name")
+  @UseGuards(AdminGuard)
+  adminResource(@Param("plugin") plugin: string, @Param("name") name: string) {
+    const found = this.loader.adminResources.find((r) => r.plugin === plugin && r.name === name);
+    if (!found) throw new NotFoundException(`unknown admin resource: ${plugin}/${name}`);
+    return found;
+  }
+
   /** 페이지 빌더가 사용할 블록 카탈로그 */
   @Get("blocks")
   blocks() {

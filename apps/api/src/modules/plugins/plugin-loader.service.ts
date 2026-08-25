@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import type { BrickDb } from "@brick/database";
 import { installedPlugins, siteSettings } from "@brick/database";
 import type { PluginManifest } from "@brick/shared";
-import type { PluginContext, PluginInstance, BlockDefinition, PluginRouteHandler, HookBus, CacheProvider, QueueProvider, StorageProvider } from "@brick/core";
+import type { PluginContext, PluginInstance, BlockDefinition, PluginRouteHandler, PluginDb, AdminResource, HookBus, CacheProvider, QueueProvider, StorageProvider } from "@brick/core";
 import { DB, HOOKS, CACHE, QUEUE, STORAGE } from "../../runtime.module.js";
 
 /**
@@ -54,6 +54,8 @@ export class PluginLoaderService implements OnModuleInit {
   /** 페이지 빌더 블록 레지스트리 */
   readonly blocks = new Map<string, BlockDefinition>();
   readonly adminMenus: Array<{ plugin: string; label: string; path: string; icon?: string }> = [];
+  /** 플러그인이 선언한 관리자 리소스 — 코어 관리자가 이걸로 CRUD 화면을 생성한다 */
+  readonly adminResources: Array<AdminResource & { plugin: string }> = [];
 
   constructor(
     @Inject(DB) private readonly db: BrickDb,
@@ -152,8 +154,14 @@ export class PluginLoaderService implements OnModuleInit {
     for (let i = this.routes.length - 1; i >= 0; i--) {
       if (this.routes[i].plugin === name) this.routes.splice(i, 1);
     }
-    for (const [blockName, block] of [...this.blocks]) {
+    for (const [blockName] of [...this.blocks]) {
       if (blockName.startsWith(`${name}/`)) this.blocks.delete(blockName);
+    }
+    for (let i = this.adminMenus.length - 1; i >= 0; i--) {
+      if (this.adminMenus[i].plugin === name) this.adminMenus.splice(i, 1);
+    }
+    for (let i = this.adminResources.length - 1; i >= 0; i--) {
+      if (this.adminResources[i].plugin === name) this.adminResources.splice(i, 1);
     }
     await this.db.update(installedPlugins).set({ isActive: false }).where(eq(installedPlugins.name, name));
     await this.cache.invalidateTag("pages");
@@ -168,7 +176,8 @@ export class PluginLoaderService implements OnModuleInit {
       cache: this.cache,
       queue: this.queue,
       storage: this.storage,
-      db: this.db,
+      // Drizzle 핸들은 execute/transaction을 모두 제공하므로 PluginDb 계약을 충족한다
+      db: this.db as unknown as PluginDb,
       settings: {
         get: async <T>(key: string): Promise<T | null> => {
           const [row] = await this.db
@@ -201,6 +210,9 @@ export class PluginLoaderService implements OnModuleInit {
       },
       registerAdminMenu: (item) => {
         this.adminMenus.push({ plugin: pluginName, ...item });
+      },
+      registerAdminResource: (resource) => {
+        this.adminResources.push({ ...resource, plugin: pluginName });
       },
     };
   }

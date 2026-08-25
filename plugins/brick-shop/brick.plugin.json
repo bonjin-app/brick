@@ -1,0 +1,10 @@
+{
+  "name": "brick-shop",
+  "version": "0.1.0",
+  "displayName": "쇼핑몰",
+  "description": "상품·장바구니·주문·결제·재고·쿠폰 — 영카트에 대응하는 커머스 플러그인",
+  "author": "Brick",
+  "brickVersion": ">=0.0.1",
+  "entry": "dist/index.js",
+  "migrations": "migrations"
+}
