@@ -60,7 +60,14 @@ async function bootstrap() {
   );
 
   await app.register(cookie as never, { secret: env.secret });
-  await app.register(multipart as never, { limits: { fileSize: env.maxUploadMb * 1024 * 1024, files: 1 } });
+  await app.register(multipart as never, {
+    limits: {
+      fileSize: env.maxUploadMb * 1024 * 1024,
+      // 게시판 첨부처럼 여러 파일을 받는 플러그인이 있다.
+      // 개수 제한은 각 기능이 자기 정책으로 검사한다(게시판은 board.max_files).
+      files: env.maxUploadFiles,
+    },
+  });
 
   // 보안 헤더 — 내부 서버지만 Next rewrite로 그대로 전달되므로 여기서 설정한다
   app.getHttpAdapter().getInstance().addHook("onSend", (_req, reply, payload, done) => {

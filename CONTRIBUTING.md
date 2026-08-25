@@ -53,13 +53,14 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 export DATABASE_URL=postgresql://brick:brick@localhost:5432/brick
 
 bash scripts/smoke-test.sh      # 코어 (설치·인증·페이지·미디어·메뉴·검색)
+bash scripts/smoke-board.sh     # 게시판 (권한·답변형·첨부·비밀글·추천)
 bash scripts/smoke-shop.sh      # 커머스 (상품·재고 동시성·주문·쿠폰)
 bash scripts/smoke-security.sh  # 보안·결제 (금액 위조·멱등성·재설정·감사)
 bash scripts/smoke-release.sh   # 배포본 FTP 설치 경로
 ```
 
 CI(GitHub Actions)가 PR마다 전부 실행합니다:
-빌드 → 마이그레이션(멱등성 포함) → 스모크 4종 → `pnpm deploy` 번들 → Docker 이미지 빌드.
+빌드 → 마이그레이션(멱등성 포함) → 스모크 5종 → `pnpm deploy` 번들 → Docker 이미지 빌드.
 
 동작을 추가/변경했다면 해당 스모크 스크립트에 검증 항목을 추가해주세요.
 

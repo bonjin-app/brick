@@ -102,26 +102,33 @@ contains "플러그인 활성화" \
 contains "코어 블록 등록" "$(curl -s "$API/api/blocks")" "core/heading"
 contains "플러그인 블록 등록" "$(curl -s "$API/api/blocks")" "brick-board/latest-posts"
 
-echo "── 게시판"
+echo "── 게시판 (플러그인 연동 최소 확인 — 상세는 smoke-board.sh)"
+# 게시판 생성은 관리자 API를 쓴다 (그누보드의 게시판 관리에 대응)
+printf '{"slug":"smoke","title":"스모크 게시판","write_role":"member","comment_role":"member"}' > "$TMP/board.json"
 contains "게시판 생성" \
-  "$(curl -s -b "$COOKIES" -X POST "$API/api/plugins/brick-board/boards" -H 'content-type: application/json' \
-      -d '{"slug":"smoke","title":"스모크 게시판"}')" '"id"'
+  "$(curl -s -b "$COOKIES" -X POST "$API/api/plugins/brick-board/admin/boards" \
+      -H 'content-type: application/json' --data-binary "@$TMP/board.json")" '"id"'
+printf '{"title":"익명","content":"본문"}' > "$TMP/anon.json"
 check "미로그인 글쓰기 차단" \
-  "$(code -X POST "$API/api/plugins/brick-board/boards/smoke/posts" -H 'content-type: application/json' \
-      -d '{"title":"익명","content":"본문"}')" "401"
+  "$(code -X POST "$API/api/plugins/brick-board/boards/smoke/posts" \
+      -H 'content-type: application/json' --data-binary "@$TMP/anon.json")" "401"
+
 # 제목에 스크립트 태그를 넣어 블록 렌더의 이스케이프를 검증한다
+printf '{"title":"스모크 <script>alert(1)</script>","content":"본문"}' > "$TMP/post.json"
 POST_ID="$(curl -s -b "$COOKIES" -X POST "$API/api/plugins/brick-board/boards/smoke/posts" \
-  -H 'content-type: application/json' -d '{"title":"스모크 <script>alert(1)</script>","content":"본문"}' \
+  -H 'content-type: application/json' --data-binary "@$TMP/post.json" \
   | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
 [[ -n "$POST_ID" ]] && ok "글 작성" || bad "글 작성"
+printf '{"content":"댓글"}' > "$TMP/cmt.json"
 contains "댓글 작성" \
   "$(curl -s -b "$COOKIES" -X POST "$API/api/plugins/brick-board/posts/$POST_ID/comments" \
-      -H 'content-type: application/json' -d '{"content":"댓글"}')" '"id"'
+      -H 'content-type: application/json' --data-binary "@$TMP/cmt.json")" '"id"'
 contains "글 읽기(조회수)" "$(curl -s "$API/api/plugins/brick-board/posts/$POST_ID")" '"view_count":1'
+printf '{"name":"brick-board/latest-posts","props":{"board":"smoke","limit":3}}' > "$TMP/blk.json"
 BLOCK_HTML="$(curl -s -X POST "$API/api/blocks/render" -H 'content-type: application/json' \
-  -d '{"name":"brick-board/latest-posts","props":{"board":"smoke","limit":3}}')"
+  --data-binary "@$TMP/blk.json")"
 contains "블록 XSS 이스케이프" "$BLOCK_HTML" "&lt;script&gt;"
-if [[ "$BLOCK_HTML" != *"<script>"* ]]; then ok "raw script 태그 미포함"; else bad "raw script 태그 미포함"; fi
+if [[ "$BLOCK_HTML" != *"<script>alert(1)</script>"* ]]; then ok "raw script 태그 미포함"; else bad "raw script 태그 미포함"; fi
 
 echo "── 페이지 · 렌더"
 PAGE_ID="$(curl -s -b "$COOKIES" -X POST "$API/api/pages" -H 'content-type: application/json' -d '{

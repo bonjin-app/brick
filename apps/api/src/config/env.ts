@@ -21,6 +21,7 @@ export interface BrickEnv {
   isProduction: boolean;
   trustProxy: boolean;
   maxUploadMb: number;
+  maxUploadFiles: number;
   /** 메일 링크에 쓰는 공개 주소. 예: https://example.com */
   siteUrl: string;
   smtp: {
@@ -99,6 +100,11 @@ function loadEnvUncached(): BrickEnv {
   const maxUploadMb = Number(process.env.BRICK_MAX_UPLOAD_MB ?? 50);
   if (!Number.isFinite(maxUploadMb) || maxUploadMb <= 0) errors.push("BRICK_MAX_UPLOAD_MB must be a positive number");
 
+  const maxUploadFiles = Number(process.env.BRICK_MAX_UPLOAD_FILES ?? 10);
+  if (!Number.isInteger(maxUploadFiles) || maxUploadFiles < 1 || maxUploadFiles > 50) {
+    errors.push("BRICK_MAX_UPLOAD_FILES must be an integer between 1 and 50");
+  }
+
   // 메일 안의 링크는 상대경로일 수 없다 — 공개 주소가 필요하다
   const siteUrl = (process.env.BRICK_SITE_URL ?? configFile?.siteUrl ?? "http://localhost:3000").replace(/\/+$/, "");
   if (!/^https?:\/\//.test(siteUrl)) errors.push("BRICK_SITE_URL must start with http:// or https://");
@@ -145,6 +151,7 @@ function loadEnvUncached(): BrickEnv {
     isProduction,
     trustProxy: process.env.BRICK_TRUST_PROXY === "true",
     maxUploadMb,
+    maxUploadFiles,
     siteUrl,
     smtp,
   };

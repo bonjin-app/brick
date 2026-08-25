@@ -35,11 +35,17 @@ export class PluginLoaderService implements OnModuleInit {
     handler: PluginRouteHandler;
   }> = [];
 
-  /** 디스패치: 메서드/경로를 라우트 테이블과 대조하고 :param을 추출한다 */
+  /**
+   * 디스패치: 메서드/경로를 라우트 테이블과 대조하고 :param을 추출한다.
+   *
+   * HEAD는 GET 라우트로 처리한다 — HTTP 표준이며, 이렇게 하지 않으면
+   * `curl -I` 나 링크 검사 도구가 404를 받는다.
+   */
   matchRoute(method: string, path: string): { handler: PluginRouteHandler; params: Record<string, string> } | null {
+    const wanted = method === "HEAD" ? "GET" : method;
     const parts = path.split("/").filter(Boolean);
     for (const r of this.routes) {
-      if (r.method !== method || r.segments.length !== parts.length) continue;
+      if (r.method !== wanted || r.segments.length !== parts.length) continue;
       const params: Record<string, string> = {};
       let ok = true;
       for (let i = 0; i < parts.length; i++) {

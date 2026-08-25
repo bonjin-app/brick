@@ -61,6 +61,9 @@ jobs:
       - name: E2E 스모크 테스트 (코어)
         run: bash scripts/smoke-test.sh
 
+      - name: E2E 스모크 테스트 (게시판)
+        run: bash scripts/smoke-board.sh
+
       - name: E2E 스모크 테스트 (커머스)
         run: bash scripts/smoke-shop.sh
 

@@ -1,8 +1,9 @@
 import {
   All, BadRequestException, Body, Controller, Get, HttpException, NotFoundException,
-  Param, Post, Req, UseGuards,
+  Param, Post, Req, Res, UseGuards,
 } from "@nestjs/common";
-import type { FastifyRequest } from "fastify";
+import type { FastifyReply, FastifyRequest } from "fastify";
+import { isRawResponse, type PluginUploadedFile } from "@brick/core";
 import { PluginLoaderService } from "./plugin-loader.service.js";
 import { AdminGuard } from "../auth/auth.guard.js";
 import { AuthService } from "../auth/auth.service.js";
@@ -64,18 +65,35 @@ export class PluginsController {
 
   /** 플러그인이 registerRoute로 등록한 라우트 디스패치 (":param" 지원, 세션 사용자 주입) */
   @All("plugins/:name/*")
-  async dispatch(@Param("name") name: string, @Req() req: FastifyRequest, @Body() body: unknown) {
+  async dispatch(
+    @Param("name") name: string,
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+    @Body() body: unknown,
+  ) {
     const url = req.url.split("?")[0];
     const match = this.loader.matchRoute(req.method, url);
     if (!match) throw new NotFoundException();
     const user = await this.auth.resolveFromRequest(req);
+
     try {
-      return await match.handler({
+      const result = await match.handler({
         params: match.params,
         query: req.query as Record<string, string>,
         body,
         user,
+        ip: req.ip,
+        // 지연 로딩: 업로드를 받지 않는 라우트는 본문을 읽지 않는다
+        files: () => this.readFiles(req),
       });
+
+      // 플러그인이 원본 응답(RSS 등)을 돌려주면 content-type을 지정해 그대로 보낸다
+      if (isRawResponse(result)) {
+        reply.status(result.status ?? 200).header("content-type", result.contentType);
+        for (const [key, value] of Object.entries(result.headers ?? {})) reply.header(key, value);
+        return result.body;
+      }
+      return result;
     } catch (err) {
       // 플러그인이 { status } 를 가진 에러를 던지면 HTTP 상태코드로 매핑한다
       const status = (err as { status?: number })?.status;
@@ -84,6 +102,23 @@ export class PluginsController {
       }
       throw err;
     }
+  }
+
+  /**
+   * multipart 파일을 모두 읽는다.
+   * multipart 요청이 아니면 빈 배열 — 플러그인이 분기하지 않아도 되게 한다.
+   */
+  private async readFiles(req: FastifyRequest): Promise<PluginUploadedFile[]> {
+    if (!req.isMultipart?.()) return [];
+    const out: PluginUploadedFile[] = [];
+    for await (const part of req.files()) {
+      out.push({
+        fileName: part.filename ?? "untitled",
+        contentType: part.mimetype ?? "application/octet-stream",
+        buffer: await part.toBuffer(),
+      });
+    }
+    return out;
   }
 
   /**

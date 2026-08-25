@@ -105,12 +105,61 @@ export interface PluginDb {
   transaction<T>(fn: (tx: PluginDb) => Promise<T>): Promise<T>;
 }
 
+/** 플러그인 라우트가 받는 업로드 파일 */
+export interface PluginUploadedFile {
+  fileName: string;
+  contentType: string;
+  buffer: Buffer;
+}
+
 export type PluginRouteHandler = (req: {
   params: Record<string, string>;
   query: Record<string, string>;
   body: unknown;
-  user: { id: string; role: string } | null;
+  user: { id: string; role: string; displayName?: string; email?: string } | null;
+  /**
+   * 클라이언트 IP. 요청 제한·도배 방지에 쓴다.
+   * 프록시 뒤에서는 코어가 X-Forwarded-For를 해석한 값을 넣는다
+   * (BRICK_TRUST_PROXY 설정에 따름).
+   */
+  ip: string;
+  /**
+   * multipart 업로드 파일을 읽는다. 파일이 없으면 빈 배열.
+   * 호출하지 않으면 본문을 읽지 않으므로, 업로드를 받지 않는 라우트는 부담이 없다.
+   */
+  files: () => Promise<PluginUploadedFile[]>;
 }) => Promise<unknown>;
+
+/**
+ * JSON이 아닌 응답(RSS, XML, 사이트맵 등)을 돌려줄 때 쓴다.
+ *
+ * instanceof 대신 구조적 표시를 쓴다 — 모듈 사본이 다를 수 있는 환경에서
+ * instanceof는 신뢰할 수 없다.
+ */
+export interface PluginRawResponse {
+  readonly __brickRaw: true;
+  body: string | Buffer;
+  contentType: string;
+  status?: number;
+  headers?: Record<string, string>;
+}
+
+/** 원본 응답 생성 헬퍼 */
+export function rawResponse(
+  body: string | Buffer,
+  contentType: string,
+  init: { status?: number; headers?: Record<string, string> } = {},
+): PluginRawResponse {
+  return { __brickRaw: true, body, contentType, ...init };
+}
+
+export function isRawResponse(value: unknown): value is PluginRawResponse {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { __brickRaw?: unknown }).__brickRaw === true
+  );
+}
 
 /**
  * Block — 페이지 빌더의 최소 단위.
