@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import type { Db } from "./types.js";
 import { ShopError } from "./types.js";
-import { changeOrderStatus } from "./orders.js";
+import { changeOrderStatus, type PointsPort } from "./orders.js";
 
 /**
  * 결제 게이트웨이 추상화.
@@ -67,6 +67,9 @@ export async function confirmPayment(
     providerTid: string;
     claimedAmount?: number;
     actorId?: string | null;
+    pointsPort?: PointsPort | null;
+    /** 결제 완료를 알린다 (포인트 적립 등이 구독한다) */
+    onPaid?: (info: { orderNo: string; userId: string | null; amount: number }) => Promise<void>;
   },
 ): Promise<{ ok: boolean; orderNo: string; amount: number }> {
   const gateway = gateways.get(params.provider);
@@ -74,7 +77,7 @@ export async function confirmPayment(
 
   // ── 1. 주문 확인 (금액의 기준은 언제나 DB) ──────────
   const { rows: orderRows } = await db.execute(sql`
-    SELECT id, order_no, status, total, payment_status
+    SELECT id, order_no, status, total, payment_status, user_id
     FROM shop_orders WHERE order_no = ${params.orderNo} LIMIT 1
   `);
   const order = orderRows[0];
@@ -163,7 +166,20 @@ export async function confirmPayment(
   await changeOrderStatus(db, String(order.id), "paid", {
     note: `${gateway.displayName} 결제 승인 (${approved.toLocaleString("ko-KR")}원)`,
     actorId: params.actorId ?? null,
+    pointsPort: params.pointsPort ?? null,
   });
+
+  // 결제 완료 통지 — 포인트 적립 등이 구독한다.
+  // 실패해도 결제는 유효하므로 예외를 삼킨다 (적립은 나중에 보정할 수 있다).
+  if (params.onPaid) {
+    await params
+      .onPaid({
+        orderNo: params.orderNo,
+        userId: order.user_id ? String(order.user_id) : null,
+        amount: approved,
+      })
+      .catch(() => undefined);
+  }
 
   return { ok: true, orderNo: params.orderNo, amount: approved };
 }
@@ -174,7 +190,13 @@ export async function confirmPayment(
  */
 export async function refundPayment(
   db: Db,
-  params: { orderNo: string; amount?: number; reason: string; actorId?: string | null },
+  params: {
+    orderNo: string;
+    amount?: number;
+    reason: string;
+    actorId?: string | null;
+    pointsPort?: PointsPort | null;
+  },
 ): Promise<{ ok: boolean; refunded: number; remaining: number }> {
   const { rows } = await db.execute(sql`
     SELECT p.id, p.provider, p.provider_tid, p.amount, p.refunded_amount, o.id AS order_id, o.status
@@ -218,6 +240,7 @@ export async function refundPayment(
     await changeOrderStatus(db, String(payment.order_id), "refunded", {
       note: `전액 환불: ${params.reason}`,
       actorId: params.actorId ?? null,
+      pointsPort: params.pointsPort ?? null,
     });
   } else {
     await db.execute(sql`

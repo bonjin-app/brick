@@ -62,6 +62,11 @@ export class PluginLoaderService implements OnModuleInit {
   readonly adminMenus: Array<{ plugin: string; label: string; path: string; icon?: string }> = [];
   /** 플러그인이 선언한 관리자 리소스 — 코어 관리자가 이걸로 CRUD 화면을 생성한다 */
   readonly adminResources: Array<AdminResource & { plugin: string }> = [];
+  /**
+   * 플러그인 간 서비스 레지스트리.
+   * 훅으로 표현할 수 없는 협력(호출자 트랜잭션 참여 등)에 쓴다.
+   */
+  private readonly services = new Map<string, { plugin: string; impl: unknown }>();
 
   constructor(
     @Inject(DB) private readonly db: BrickDb,
@@ -170,6 +175,9 @@ export class PluginLoaderService implements OnModuleInit {
     for (let i = this.adminResources.length - 1; i >= 0; i--) {
       if (this.adminResources[i].plugin === name) this.adminResources.splice(i, 1);
     }
+    for (const [serviceName, entry] of [...this.services]) {
+      if (entry.plugin === name) this.services.delete(serviceName);
+    }
     await this.db.update(installedPlugins).set({ isActive: false }).where(eq(installedPlugins.name, name));
     await this.cache.invalidateTag("pages");
     this.logger.log(`plugin "${name}" deactivated`);
@@ -222,6 +230,19 @@ export class PluginLoaderService implements OnModuleInit {
       registerAdminResource: (resource) => {
         this.adminResources.push({ ...resource, plugin: pluginName });
       },
+      provideService: (name, impl) => {
+        const existing = this.services.get(name);
+        if (existing && existing.plugin !== pluginName) {
+          // 같은 이름을 두 플러그인이 제공하면 어느 쪽이 쓰일지 예측할 수 없다
+          this.logger.warn(
+            `서비스 "${name}" 을 "${existing.plugin}" 이 이미 제공하고 있습니다 — ` +
+              `"${pluginName}" 의 등록으로 덮어씁니다.`,
+          );
+        }
+        this.services.set(name, { plugin: pluginName, impl });
+        this.logger.log(`plugin "${pluginName}" provides service "${name}"`);
+      },
+      useService: <T>(name: string): T | null => (this.services.get(name)?.impl as T) ?? null,
     };
   }
 

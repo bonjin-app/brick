@@ -1,0 +1,10 @@
+{
+  "name": "brick-point",
+  "version": "0.1.0",
+  "displayName": "포인트",
+  "description": "그누보드식 포인트 — 글쓰기·댓글·가입·구매 적립, 쇼핑몰 결제 시 사용, 만료 관리",
+  "author": "Brick",
+  "brickVersion": ">=0.0.1",
+  "entry": "dist/index.js",
+  "migrations": "migrations"
+}

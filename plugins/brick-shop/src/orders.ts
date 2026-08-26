@@ -4,6 +4,22 @@ import type { Db, OrderStatus, ShopSettings } from "./types.js";
 import { ShopError, STATUS_TRANSITIONS, STOCK_RESTORING } from "./types.js";
 import { quote, type Quote } from "./pricing.js";
 
+/**
+ * 포인트 서비스의 최소 계약 — brick-point가 공개하는 것 중 쇼핑몰이 쓰는 부분만.
+ * 인터페이스를 여기서 좁게 선언하면 brick-point에 대한 컴파일 의존이 생기지 않는다.
+ */
+export interface PointsPort {
+  balance(userId: string, tx?: Db): Promise<number>;
+  spend(
+    params: { userId: string; amount: number; reason: string; refType?: string; refId?: string },
+    tx?: Db,
+  ): Promise<boolean>;
+  refund(
+    params: { userId: string; refType: string; refId: string; reason: string },
+    tx?: Db,
+  ): Promise<number>;
+}
+
 export interface OrdererInput {
   ordererName: string;
   ordererPhone: string;
@@ -41,6 +57,10 @@ export async function createOrder(
     settings: ShopSettings;
     /** 클라이언트 재시도로 중복 주문이 생기는 것을 막는 키 (선택) */
     idempotencyKey?: string | null;
+    /** 사용 요청 포인트. 회원만 가능 */
+    pointUsed?: number;
+    /** 포인트 서비스 (brick-point 미설치 시 null) */
+    pointsPort?: PointsPort | null;
   },
 ): Promise<{ id: string; orderNo: string; total: number; guestToken: string | null }> {
   const { orderer } = params;
@@ -69,8 +89,25 @@ export async function createOrder(
     throw new ShopError(400, `지원하지 않는 결제수단입니다: ${method}`);
   }
 
+  // 포인트는 회원만 쓸 수 있고, 실제 잔액을 넘을 수 없다.
+  // 잔액 검증은 여기서 한 번, 차감 시점(트랜잭션 안)에서 다시 한다 —
+  // 그 사이에 잔액이 줄었을 수 있으므로 최종 판정은 차감이 한다.
+  let requestedPoint = Math.max(0, Math.floor(Number(params.pointUsed ?? 0)));
+  if (requestedPoint > 0) {
+    if (!params.userId) throw new ShopError(400, "포인트는 로그인 후 사용할 수 있습니다.");
+    if (!params.pointsPort) throw new ShopError(400, "포인트 기능이 활성화되지 않았습니다.");
+    const balance = await params.pointsPort.balance(params.userId);
+    if (balance < requestedPoint) {
+      throw new ShopError(400, `보유 포인트가 부족합니다. (보유: ${balance.toLocaleString("ko-KR")})`);
+    }
+  }
+
   // 서버 가격으로 재계산 (클라이언트 금액을 신뢰하지 않는다)
-  const q: Quote = await quote(db, params.items, params.settings, params.couponCode);
+  const q: Quote = await quote(db, params.items, params.settings, params.couponCode, {
+    pointUsed: requestedPoint,
+  });
+  // pricing이 상한을 적용했을 수 있다 (상품금액 초과분은 쓰지 않는다)
+  requestedPoint = q.pointUsed;
 
   const orderId = uuidv7();
   const guestToken = params.userId ? null : (params.guestToken ?? uuidv7().replace(/-/g, ""));
@@ -111,18 +148,37 @@ export async function createOrder(
       if (!rows.length) throw new ShopError(400, "쿠폰을 사용할 수 없습니다. 한도가 소진되었을 수 있습니다.");
     }
 
-    // ── 3. 주문 ────────────────────────────────────────
+    // ── 3. 포인트 차감 ─────────────────────────────────
+    // 주문 생성과 같은 트랜잭션이어야 한다. 하나만 성공하면 잔액이 어긋난다.
+    if (requestedPoint > 0 && params.pointsPort && params.userId) {
+      const ok = await params.pointsPort.spend(
+        {
+          userId: params.userId,
+          amount: requestedPoint,
+          reason: `주문 결제 (${orderNo})`,
+          refType: "shop.order",
+          refId: orderNo,
+        },
+        tx,
+      );
+      if (!ok) {
+        // 검증 후 차감 사이에 잔액이 줄었다 — 주문 전체를 되돌린다
+        throw new ShopError(409, "포인트 잔액이 부족합니다. 다시 시도해주세요.");
+      }
+    }
+
+    // ── 4. 주문 ────────────────────────────────────────
     await tx.execute(sql`
       INSERT INTO shop_orders (
         id, order_no, user_id, status,
-        subtotal, discount, shipping_fee, total, coupon_code,
+        subtotal, discount, shipping_fee, total, coupon_code, point_used,
         payment_method, payment_status,
         orderer_name, orderer_phone, orderer_email,
         receiver_name, receiver_phone, postcode, address1, address2, delivery_memo,
         guest_token, idempotency_key
       ) VALUES (
         ${orderId}, ${orderNo}, ${params.userId ?? null}::uuid, 'pending',
-        ${q.subtotal}, ${q.discount}, ${q.shippingFee}, ${q.total}, ${q.couponCode},
+        ${q.subtotal}, ${q.discount}, ${q.shippingFee}, ${q.total}, ${q.couponCode}, ${requestedPoint},
         ${method}, 'unpaid',
         ${orderer.ordererName}, ${orderer.ordererPhone}, ${orderer.ordererEmail ?? null},
         ${orderer.receiverName || orderer.ordererName}, ${orderer.receiverPhone || orderer.ordererPhone},
@@ -131,7 +187,7 @@ export async function createOrder(
       )
     `);
 
-    // ── 4. 주문 항목 (가격 스냅샷) ─────────────────────
+    // ── 5. 주문 항목 (가격 스냅샷) ─────────────────────
     for (const line of q.lines) {
       await tx.execute(sql`
         INSERT INTO shop_order_items
@@ -164,7 +220,13 @@ export async function changeOrderStatus(
   db: Db,
   orderId: string,
   to: OrderStatus,
-  opts: { note?: string; actorId?: string | null; trackingNo?: string | null } = {},
+  opts: {
+    note?: string;
+    actorId?: string | null;
+    trackingNo?: string | null;
+    /** 취소·환불 시 사용 포인트를 되돌리기 위해 필요 */
+    pointsPort?: PointsPort | null;
+  } = {},
 ): Promise<void> {
   await db.transaction(async (tx) => {
     // 동시 상태 변경 방지 — 주문 행을 잠근다 (FOR UPDATE는 트랜잭션 안에서만 유효)
@@ -177,6 +239,26 @@ export async function changeOrderStatus(
     if (current === to) return; // 멱등
     if (!STATUS_TRANSITIONS[current].includes(to)) {
       throw new ShopError(400, `"${current}" 상태에서 "${to}" 로 변경할 수 없습니다.`);
+    }
+
+    // 취소/환불이면 사용 포인트를 되돌린다.
+    // 재고 복원과 같은 트랜잭션에서 처리해야 부분 실패가 남지 않는다.
+    if (STOCK_RESTORING.includes(to) && opts.pointsPort) {
+      const { rows: order } = await tx.execute(sql`
+        SELECT user_id, order_no, point_used FROM shop_orders WHERE id = ${orderId}::uuid
+      `);
+      const used = Number(order[0]?.point_used ?? 0);
+      if (used > 0 && order[0]?.user_id) {
+        await opts.pointsPort.refund(
+          {
+            userId: String(order[0].user_id),
+            refType: "shop.order",
+            refId: String(order[0].order_no),
+            reason: `주문 ${to === "cancelled" ? "취소" : "환불"} 포인트 반환 (${order[0].order_no})`,
+          },
+          tx,
+        );
+      }
     }
 
     // 취소/환불이면 재고 복원 (이미 복원된 상태에서 또 하지 않도록 전이 규칙이 보장)

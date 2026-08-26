@@ -289,7 +289,13 @@ export default definePlugin(async (ctx) => {
         UPDATE board_posts SET comment_count = comment_count + 1 WHERE id = ${String(post.id)}::uuid
       `);
     });
-    await ctx.hooks.doAction("board.comment.created", { commentId: id, postId: String(post.id) });
+    // 구독자가 누가 썼는지 알아야 한다 (포인트 적립 등). 비회원이면 null.
+    await ctx.hooks.doAction("board.comment.created", {
+      commentId: id,
+      postId: String(post.id),
+      board: String(post.slug),
+      authorId: user?.id ?? null,
+    });
     return { id };
   });
 

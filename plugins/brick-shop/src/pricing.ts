@@ -28,6 +28,8 @@ export interface Quote {
   lines: PricedLine[];
   subtotal: number;
   discount: number;
+  /** 포인트로 결제한 금액 (brick-point가 설치된 경우) */
+  pointUsed: number;
   shippingFee: number;
   total: number;
   couponCode: string | null;
@@ -38,6 +40,11 @@ export interface Quote {
 }
 
 export interface QuoteOptions {
+  /**
+   * 포인트 사용 요청액. 실제 사용 가능액은 호출자가 포인트 서비스로 검증해 넘긴다.
+   * (pricing은 금액 계산만 하고 포인트 잔액을 모른다 — 관심사 분리)
+   */
+  pointUsed?: number;
   /**
    * true(기본)면 재고 부족·판매중지를 예외로 던진다 — 주문 생성 시.
    * false면 해당 항목을 available=false로 표시하고 합계에서 제외한다 — 장바구니 조회 시.
@@ -65,7 +72,10 @@ export async function quote(
   const strict = opts.enforceStock !== false;
   if (!items.length) {
     if (strict) throw new ShopError(400, "주문할 상품이 없습니다.");
-    return { lines: [], subtotal: 0, discount: 0, shippingFee: 0, total: 0, couponCode: null, hasUnavailable: false };
+    return {
+      lines: [], subtotal: 0, discount: 0, pointUsed: 0, shippingFee: 0, total: 0,
+      couponCode: null, hasUnavailable: false,
+    };
   }
 
   const lines: PricedLine[] = [];
@@ -150,12 +160,19 @@ export async function quote(
 
   const shippingFee = payable.length ? calcShipping(payable, subtotal - discount, settings) : 0;
 
+  // 포인트는 쿠폰 할인 후 상품금액까지만 쓸 수 있다.
+  // 배송비까지 포인트로 덮으면 총액이 0이 되어 PG 승인이 불가능해지고,
+  // 마이너스 총액도 막아야 한다.
+  const payableGoods = Math.max(0, subtotal - discount);
+  const pointUsed = Math.max(0, Math.min(Math.floor(opts.pointUsed ?? 0), payableGoods));
+
   return {
     lines,
     subtotal,
     discount,
+    pointUsed,
     shippingFee,
-    total: subtotal - discount + shippingFee,
+    total: subtotal - discount - pointUsed + shippingFee,
     couponCode: appliedCode,
     ...(couponError ? { couponError } : {}),
     hasUnavailable: lines.some((l) => !l.available),

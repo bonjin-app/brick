@@ -5,7 +5,7 @@ import { DEFAULT_SETTINGS, ShopError, STATUS_LABEL, escapeHtml, won,
          type Db, type OrderStatus, type ShopSettings } from "./types.js";
 import { quote } from "./pricing.js";
 import { addToCart, clearCart, getCartItems, updateCartItem, type CartOwner } from "./cart.js";
-import { changeOrderStatus, createOrder } from "./orders.js";
+import { changeOrderStatus, createOrder, type PointsPort } from "./orders.js";
 import { bankTransferGateway, confirmPayment, gateways, refundPayment, registerGateway } from "./payments.js";
 import { CATEGORY_RESOURCE, COUPON_RESOURCE, ORDER_RESOURCE, PRODUCT_RESOURCE } from "./admin-resources.js";
 import { registerStorefrontBlocks } from "./blocks.js";
@@ -29,6 +29,14 @@ export default definePlugin(async (ctx) => {
     ...DEFAULT_SETTINGS,
     ...((await ctx.settings.get<Partial<ShopSettings>>("settings")) ?? {}),
   });
+
+  /**
+   * 포인트 서비스 — brick-point가 설치·활성화된 경우에만 존재한다.
+   *
+   * 활성화 시점이 아니라 **사용 시점**에 조회한다. 플러그인 활성화 순서에 의존하면
+   * 쇼핑몰이 먼저 켜진 경우 포인트를 못 찾는다.
+   */
+  const pointsPort = (): PointsPort | null => ctx.useService<PointsPort>("points");
 
   /** 요청에서 장바구니 소유자 판별 — 회원 우선, 비회원은 토큰 */
   const owner = (req: { user: { id: string } | null; query: Record<string, string> }): CartOwner =>
@@ -139,10 +147,23 @@ export default definePlugin(async (ctx) => {
 
   // ── 견적 (주문서에서 실시간 금액 확인) ───────────────
   ctx.registerRoute("POST", "/quote", async (req) => {
-    const body = req.body as { items?: Array<{ productId: string; optionId?: string; quantity: number }>; couponCode?: string };
+    const body = req.body as {
+      items?: Array<{ productId: string; optionId?: string; quantity: number }>;
+      couponCode?: string;
+      pointUsed?: number;
+    };
     const items = body.items?.length ? body.items : await getCartItems(db, owner(req));
-    const q = await quote(db, items, await settings(), body.couponCode);
-    return q;
+
+    // 포인트 사용 요청이 있으면 실제 잔액으로 상한을 잡는다 (클라이언트 값을 신뢰하지 않는다)
+    let pointUsed = 0;
+    const port = pointsPort();
+    if (body.pointUsed && req.user && port) {
+      const balance = await port.balance(req.user.id);
+      pointUsed = Math.max(0, Math.min(Math.floor(Number(body.pointUsed)), balance));
+    }
+
+    const q = await quote(db, items, await settings(), body.couponCode, { pointUsed });
+    return { ...q, pointsAvailable: Boolean(port) };
   });
 
   // ── 주문 ────────────────────────────────────────────
@@ -152,6 +173,7 @@ export default definePlugin(async (ctx) => {
       couponCode?: string;
       guestToken?: string;
       idempotencyKey?: string;
+      pointUsed?: number;
       orderer: Parameters<typeof createOrder>[1]["orderer"];
     };
     const own = req.user ? { userId: req.user.id } : { guestToken: body.guestToken ?? null };
@@ -167,6 +189,8 @@ export default definePlugin(async (ctx) => {
       settings: await settings(),
       // 네트워크 재시도로 같은 주문이 두 번 생기는 것을 막는다
       idempotencyKey: body.idempotencyKey ?? null,
+      pointUsed: body.pointUsed,
+      pointsPort: pointsPort(),
     });
 
     // 주문한 상품을 장바구니에서 비운다 (직접 구매가 아니라 장바구니 주문일 때만)
@@ -222,7 +246,11 @@ export default definePlugin(async (ctx) => {
     if (rows[0].status !== "pending") {
       throw new ShopError(400, "결제가 확인된 주문은 직접 취소할 수 없습니다. 판매자에게 문의해주세요.");
     }
-    await changeOrderStatus(db, String(rows[0].id), "cancelled", { note: "고객 취소", actorId: req.user?.id ?? null });
+    await changeOrderStatus(db, String(rows[0].id), "cancelled", {
+      note: "고객 취소",
+      actorId: req.user?.id ?? null,
+      pointsPort: pointsPort(),
+    });
     return { ok: true };
   });
 
@@ -254,6 +282,8 @@ export default definePlugin(async (ctx) => {
     return {
       methods: [...gateways.values()].map((g) => ({ provider: g.provider, displayName: g.displayName })),
       bankAccount: s.bankAccount,
+      // 포인트 플러그인이 활성화되어 있으면 주문서에 포인트 사용 UI를 띄운다
+      pointsAvailable: Boolean(pointsPort()),
     };
   });
 
@@ -277,6 +307,11 @@ export default definePlugin(async (ctx) => {
       providerTid: b.providerTid,
       claimedAmount: b.amount,
       actorId: req.user?.id ?? null,
+      pointsPort: pointsPort(),
+      // 포인트 적립 등이 이 훅을 구독한다
+      onPaid: async (info) => {
+        await ctx.hooks.doAction("shop.order.paid", info);
+      },
     });
   });
 
@@ -290,6 +325,7 @@ export default definePlugin(async (ctx) => {
       amount: b.amount,
       reason: b.reason || "관리자 환불",
       actorId: req.user?.id ?? null,
+      pointsPort: pointsPort(),
     });
   });
 
@@ -441,6 +477,7 @@ export default definePlugin(async (ctx) => {
         note: b.note || undefined,
         actorId: req.user?.id ?? null,
         trackingNo: b.tracking_no || null,
+        pointsPort: pointsPort(),
       });
     } else if (b.tracking_no !== undefined) {
       await db.execute(sql`

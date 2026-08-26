@@ -40,6 +40,7 @@
 | 플러그인 | 제한적 | ZIP 업로드 | **ZIP 업로드** |
 | 테마 | 스킨(PHP) | 테마(PHP) | **런타임 템플릿 (빌드 없음)** |
 | 게시판 | ✅ (핵심 기능) | 플러그인 | **✅ 첨부·권한·답변형·비밀글** |
+| 포인트 | ✅ | 플러그인 | **✅ 원장 기반·만료·쇼핑몰 연동** |
 | 페이지 빌더 | 없음 | Gutenberg | **코어 기본 제공** |
 | 쇼핑몰 | 영카트(별도) | WooCommerce | **플러그인 기본 동봉** |
 | SSR / SEO | 기본 | 기본 | **Next.js SSR + ISR** |
@@ -144,6 +145,8 @@ DB 마이그레이션은 컨테이너가 부팅할 때 스스로 적용합니다
 - **결제** — PG 추상화 + 토스페이먼츠 플러그인, 금액 위조·중복 승인 방어, 부분 환불
 - **비밀번호 재설정** — 메일 발송(SMTP), 단회성 토큰, 이메일 열거 방지
 - **감사 로그** — 관리 동작을 행위자·IP와 함께 기록 (180일 보관)
+- **포인트 플러그인** — 그누보드 포인트 + 영카트 적립금을 하나로.
+  가입·글쓰기·댓글·구매 적립, 쇼핑몰 결제 시 사용, FIFO 소비·만료, 원장 감사 추적
 - **플러그인 관리 화면 자동 생성** — 필드 스키마만 선언하면 코어가 CRUD UI를 만든다 (빌드 불필요)
 - **렌더 캐시** — 태그 기반 자동 무효화 (Redis 불필요)
 - **자동 마이그레이션** — 부팅 시 스키마 자동 최신화
@@ -154,7 +157,7 @@ DB 마이그레이션은 컨테이너가 부팅할 때 스스로 적용합니다
 
 ### 예정
 
-포인트 · 쪽지 · 상품 후기/문의 · 적립금 · 정기결제 · 2FA · 이메일 인증 ·
+쪽지 · 상품 후기/문의 · 정기결제 · 2FA · 이메일 인증 ·
 그누보드 데이터 이전 도구 · OpenAPI 문서 · 플러그인 레지스트리
 
 ---
@@ -218,7 +221,7 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 197개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 246개 항목):
 
 ```bash
 DATABASE_URL=postgresql://brick:brick@localhost:5432/brick bash scripts/smoke-test.sh
@@ -226,6 +229,10 @@ DATABASE_URL=postgresql://brick:brick@localhost:5432/brick bash scripts/smoke-te
 
 ```bash
 DATABASE_URL=postgresql://brick:brick@localhost:5432/brick bash scripts/smoke-board.sh
+```
+
+```bash
+DATABASE_URL=postgresql://brick:brick@localhost:5432/brick bash scripts/smoke-point.sh
 ```
 
 ```bash
@@ -251,6 +258,7 @@ packages/
 plugins/
   brick-board/    게시판 (레퍼런스 구현)
   brick-shop/     쇼핑몰 (관리자 리소스·트랜잭션·재고 동시성 레퍼런스)
+  brick-point/    포인트 (플러그인 간 서비스 협력 레퍼런스)
   brick-pay-toss/ 토스페이먼츠 (PG를 코어 수정 없이 붙이는 레퍼런스)
 themes/
   default/        기본 테마 (런타임 템플릿 레퍼런스)
@@ -269,6 +277,7 @@ docker/           Dockerfile, entrypoint
 | [업그레이드 가이드](docs/upgrade.md) | 업데이트 절차, 자동 마이그레이션 원리, 롤백 |
 | [운영 가이드](docs/operations.md) | 백업, 모니터링, 성능, 한국어 검색, 스케일링 |
 | [게시판](docs/board.md) | 권한·분류·답변형·첨부파일, 그누보드와의 차이 |
+| [포인트](docs/point.md) | 적립 정책, 원장 설계, 플러그인 간 협력 방법 |
 | [쇼핑몰](docs/commerce.md) | 상품·주문·재고·쿠폰, 커머스 설계 원칙 |
 | [결제](docs/payments.md) | PG 설정, 결제 흐름, 위조·중복 방어, 새 PG 붙이기 |
 | [보안](docs/security.md) | 구현된 방어, **신뢰 모델**, 배포 체크리스트 |
