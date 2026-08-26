@@ -6,6 +6,7 @@ import { hashGuestPassword } from "./guest.js";
 import { assertCanModify, canReadSecret, checkWriteInterval, loadBoard, requireRole } from "./access.js";
 import { attachFiles, claimDownload, deleteAttachments, listAttachments } from "./attachments.js";
 import { createPost, listPosts, type WritePostInput } from "./posts.js";
+import { sanitizeHtml, toPlainText } from "./sanitize.js";
 import { BOARD_RESOURCE, POST_RESOURCE } from "./admin-resources.js";
 import { registerBoardBlocks } from "./blocks.js";
 
@@ -149,8 +150,11 @@ export default definePlugin(async (ctx) => {
     assertCanModify(post as never, userOf(req), body.guestPassword);
 
     const title = String(body.title ?? "").trim();
-    const content = String(body.content ?? "").trim();
-    if (!title || !content) throw new BoardError(400, "제목과 내용을 입력해주세요.");
+    // 수정 경로에서도 새니타이즈를 빼먹으면 우회 통로가 된다
+    const content = sanitizeHtml(String(body.content ?? "").trim());
+    if (!title || !content.replace(/<[^>]*>/g, "").trim()) {
+      throw new BoardError(400, "제목과 내용을 입력해주세요.");
+    }
 
     const cats = Array.isArray(post.categories) ? (post.categories as string[]) : [];
     const category = body.category ? String(body.category).trim() : null;
@@ -245,7 +249,9 @@ export default definePlugin(async (ctx) => {
     const user = userOf(req);
     requireRole(user, String(post.comment_role), "댓글 작성");
 
-    const content = String(body.content ?? "").trim();
+    // 댓글은 서식을 허용하지 않는다 — 평문으로 저장하고 렌더 시 이스케이프한다.
+    // (댓글에까지 HTML을 허용할 이유가 없고, 표면을 줄이는 것이 안전하다)
+    const content = String(body.content ?? "").replace(/<[^>]*>/g, "").trim();
     if (!content) throw new BoardError(400, "댓글 내용을 입력해주세요.");
     if (content.length > 5000) throw new BoardError(400, "댓글이 너무 깁니다.");
 
@@ -368,8 +374,7 @@ export default definePlugin(async (ctx) => {
     // 비공개 게시판은 RSS를 제공하지 않는다 (로그인 없이 접근되는 경로다)
     if (board.read_role !== "guest") throw new BoardError(403, "이 게시판은 RSS를 제공하지 않습니다.");
     const { rows } = await db.execute(sql`
-      SELECT id, title, author_name, created_at,
-             left(regexp_replace(content, '<[^>]*>', '', 'g'), 300) AS summary
+      SELECT id, title, author_name, created_at, content
       FROM board_posts WHERE board_id = ${board.id}::uuid AND is_secret = false
       ORDER BY created_at DESC LIMIT 30
     `);
@@ -381,7 +386,7 @@ export default definePlugin(async (ctx) => {
       <guid isPermaLink="false">${escapeHtml(r.id)}</guid>
       <author>${escapeHtml(r.author_name ?? "")}</author>
       <pubDate>${new Date(String(r.created_at)).toUTCString()}</pubDate>
-      <description>${escapeHtml(r.summary)}</description>
+      <description>${escapeHtml(toPlainText(String(r.content ?? ""), 300))}</description>
     </item>`,
       )
       .join("\n");

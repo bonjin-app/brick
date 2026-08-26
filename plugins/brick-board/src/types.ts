@@ -15,10 +15,14 @@ export class BoardError extends Error {
 
 export interface SessionUser {
   id: string;
-  email: string;
-  displayName: string;
   role: string;
+  displayName: string;
+  /** 라우트 컨텍스트에는 있지만 블록 렌더 컨텍스트에는 없다 */
+  email?: string;
 }
+
+/** 권한 검사에 필요한 최소 형태 — 라우트와 블록 컨텍스트 양쪽을 받는다 */
+export type RoleBearer = { role: string } | null | undefined;
 
 /**
  * 권한 등급.
@@ -38,7 +42,7 @@ export function rankOf(role: string | undefined | null): number {
 }
 
 /** user가 required 등급 이상인가 */
-export function hasRole(user: SessionUser | null, required: string): boolean {
+export function hasRole(user: RoleBearer, required: string): boolean {
   return rankOf(user?.role ?? "guest") >= rankOf(required);
 }
 

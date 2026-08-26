@@ -34,7 +34,19 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ slug?: stri
   }
 
   const path = (slug ?? []).join("/");
-  const res = await fetch(`${API}/api/render/page?path=${encodeURIComponent(path)}`, { cache: "no-store" });
+  // 쿼리스트링과 세션 쿠키를 함께 넘긴다.
+  // 검색·페이지네이션은 쿼리가 필요하고, 로그인 사용자는 캐시를 우회해야 한다.
+  const incoming = new URL(req.url).searchParams;
+  const params = new URLSearchParams();
+  params.set("path", path);
+  for (const [key, value] of incoming) {
+    if (key !== "path") params.append(key, value);
+  }
+  const cookie = req.headers.get("cookie");
+  const res = await fetch(`${API}/api/render/page?${params}`, {
+    cache: "no-store",
+    headers: cookie ? { cookie } : undefined,
+  });
   if (!res.ok) {
     return new Response("렌더링 오류가 발생했습니다.", {
       status: 500,

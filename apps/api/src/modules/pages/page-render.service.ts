@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 import { and, eq } from "drizzle-orm";
 import type { BrickDb } from "@brick/database";
 import { menus, pages, siteSettings } from "@brick/database";
-import type { CacheProvider } from "@brick/core";
+import type { BlockRenderContext, CacheProvider } from "@brick/core";
 import { PluginLoaderService } from "../plugins/plugin-loader.service.js";
 import { ThemesService } from "../themes/themes.service.js";
 import { DB, CACHE } from "../../runtime.module.js";
@@ -17,6 +17,15 @@ export interface BlockNode {
 export interface RenderedPage {
   html: string;
   status: number;
+  /** 실제로 매칭된 페이지 slug (하위 경로 매칭 시 요청 경로와 다르다) */
+  slug?: string;
+}
+
+/** 렌더를 요청한 사용자 — 블록에 전달된다 */
+export interface RequestUser {
+  id: string;
+  role: string;
+  displayName: string;
 }
 
 /**
@@ -39,14 +48,38 @@ export class PageRenderService {
     private readonly themes: ThemesService,
   ) {}
 
-  async renderPath(rawPath: string): Promise<RenderedPage> {
+  async renderPath(
+    rawPath: string,
+    opts: { query?: Record<string, string>; user?: RequestUser | null } = {},
+  ): Promise<RenderedPage> {
     const path = rawPath.replace(/^\/+|\/+$/g, "") || "home";
-    const cacheKey = `render:page:${path}`;
-    const cached = await this.cache.get<RenderedPage>(cacheKey);
-    if (cached) return cached;
+    const query = opts.query ?? {};
+    const user = opts.user ?? null;
 
-    const result = await this.compute(path);
-    await this.cache.setWithTags(cacheKey, result, ["pages", `page:${path}`], 300);
+    /**
+     * 캐시 정책 — 유출을 막는 것이 성능보다 우선이다.
+     *
+     *  - 로그인 사용자에게는 캐시를 쓰지 않는다. 렌더 결과에 "수정" 버튼이나
+     *    비밀글 본문처럼 사용자별 내용이 들어갈 수 있고, 그것이 캐시되면
+     *    다른 사용자에게 새어 나간다.
+     *  - 쿼리스트링을 키에 포함한다. 검색·페이지네이션 결과가 섞이면 안 된다.
+     */
+    const cacheable = !user;
+    const queryKey = Object.keys(query).length
+      ? `?${new URLSearchParams(Object.entries(query).sort()).toString()}`
+      : "";
+    const cacheKey = `render:page:${path}${queryKey}`;
+
+    if (cacheable) {
+      const cached = await this.cache.get<RenderedPage>(cacheKey);
+      if (cached) return cached;
+    }
+
+    const result = await this.compute(path, query, user);
+    // 페이지 slug 기준으로 태그를 달아야 무효화가 정확하다 (하위 경로 포함)
+    if (cacheable) {
+      await this.cache.setWithTags(cacheKey, result, ["pages", `page:${result.slug ?? path}`], 300);
+    }
     return result;
   }
 
@@ -55,19 +88,44 @@ export class PageRenderService {
     await this.cache.invalidateTag(slug ? `page:${slug}` : "pages");
   }
 
-  private async compute(path: string): Promise<RenderedPage> {
+  private async compute(
+    path: string,
+    query: Record<string, string>,
+    user: RequestUser | null,
+  ): Promise<RenderedPage> {
     const [site, nav] = await Promise.all([this.siteInfo(), this.menu("header")]);
-    const [page] = await this.db
-      .select()
-      .from(pages)
-      .where(and(eq(pages.slug, path), eq(pages.status, "published")))
-      .limit(1);
+
+    /**
+     * 경로 매칭: 정확히 일치하는 페이지가 없으면 상위 경로를 순서대로 시도한다.
+     *
+     * 예: 요청 "board/free/01a0..." → "board/free/01a0..." → "board/free" → "board"
+     * 매칭된 나머지("01a0...")를 pathTail로 블록에 넘긴다.
+     * 게시판 상세처럼 URL에 식별자가 들어가는 화면을 페이지 하나로 처리할 수 있다.
+     */
+    const segments = path.split("/").filter(Boolean);
+    let page: typeof pages.$inferSelect | undefined;
+    let pathTail = "";
+    for (let i = segments.length; i >= 1; i--) {
+      const candidate = segments.slice(0, i).join("/");
+      const [found] = await this.db
+        .select()
+        .from(pages)
+        .where(and(eq(pages.slug, candidate), eq(pages.status, "published")))
+        .limit(1);
+      if (found) {
+        page = found;
+        pathTail = segments.slice(i).join("/");
+        break;
+      }
+    }
+
+    const blockCtx = { path, pathTail, query, user };
 
     if (!page) {
       // 홈 페이지가 없으면 테마의 home 슬롯으로 폴백 (설치 직후 상태)
       if (path === "home") {
         const html = await this.themes.render("home", { site, menu: nav, pageTitle: site.name, seo: {} });
-        return { html, status: 200 };
+        return { html, status: 200, slug: "home" };
       }
       const html = await this.themes.render("page", {
         site,
@@ -81,7 +139,7 @@ export class PageRenderService {
     }
 
     const seo = (page.seo ?? {}) as { title?: string; description?: string };
-    const blocksHtml = await this.renderNodes((page.blocks ?? []) as BlockNode[]);
+    const blocksHtml = await this.renderNodes((page.blocks ?? []) as BlockNode[], blockCtx);
     const html = await this.themes.render("page", {
       site,
       menu: nav,
@@ -90,11 +148,14 @@ export class PageRenderService {
       blocksHtml,
       seo,
     });
-    return { html, status: 200 };
+    return { html, status: 200, slug: page.slug };
   }
 
   /** 블록 트리 렌더. 한 블록의 실패가 페이지 전체를 죽이지 않는다 */
-  async renderNodes(nodes: BlockNode[]): Promise<string> {
+  async renderNodes(
+    nodes: BlockNode[],
+    ctx: Omit<BlockRenderContext, "children"> = { path: "", pathTail: "", query: {}, user: null },
+  ): Promise<string> {
     const parts: string[] = [];
     for (const node of nodes ?? []) {
       const def = this.loader.blocks.get(node.block);
@@ -104,9 +165,9 @@ export class PageRenderService {
       }
       try {
         const children = node.children?.length
-          ? await Promise.all(node.children.map((c) => this.renderNodes([c])))
+          ? await Promise.all(node.children.map((c) => this.renderNodes([c], ctx)))
           : [];
-        parts.push(await def.render(node.props ?? {}, children));
+        parts.push(await def.render(node.props ?? {}, { ...ctx, children }));
       } catch (err) {
         this.logger.warn(`block "${node.block}" render failed: ${String(err)}`);
         parts.push(`<!-- block "${escapeHtml(node.block)}" failed -->`);

@@ -9,6 +9,7 @@ import type { BrickDb } from "@brick/database";
 import { pages } from "@brick/database";
 import { AdminGuard } from "../auth/auth.guard.js";
 import { AuditService } from "../audit/audit.service.js";
+import { AuthService } from "../auth/auth.service.js";
 import { PageRenderService, type BlockNode } from "./page-render.service.js";
 import { DB } from "../../runtime.module.js";
 
@@ -28,12 +29,23 @@ export class PagesController {
     @Inject(DB) private readonly db: BrickDb,
     private readonly renderer: PageRenderService,
     private readonly audit: AuditService,
+    private readonly auth: AuthService,
   ) {}
 
-  /** 공개 렌더 파이프라인 — Next.js catch-all이 호출한다 */
+  /**
+   * 공개 렌더 파이프라인 — Next.js catch-all이 호출한다.
+   *
+   * 쿼리와 세션을 함께 넘긴다: 블록이 검색·페이지네이션·수정버튼을 처리해야 하고,
+   * 렌더 캐시는 비로그인 요청에만 적용된다(사용자별 내용 유출 방지).
+   */
   @Get("render/page")
-  async renderPublic(@Query("path") path: string) {
-    return this.renderer.renderPath(path ?? "");
+  async renderPublic(@Query() query: Record<string, string>, @Req() req: FastifyRequest) {
+    const { path, ...rest } = query ?? {};
+    const user = await this.auth.resolveFromRequest(req);
+    return this.renderer.renderPath(path ?? "", {
+      query: rest,
+      user: user ? { id: user.id, role: user.role, displayName: user.displayName } : null,
+    });
   }
 
   // ── 관리자 CRUD ──────────────────────────────────

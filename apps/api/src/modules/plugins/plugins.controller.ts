@@ -164,10 +164,26 @@ export class PluginsController {
 
   /** 블록 서버 렌더 (Next.js가 페이지 조립 시 호출). 블록 이름에 "/"가 포함되므로 body로 받는다 */
   @Post("blocks/render")
-  async renderBlock(@Body() body: { name: string; props?: Record<string, unknown> }) {
+  async renderBlock(
+    @Body() body: {
+      name: string;
+      props?: Record<string, unknown>;
+      path?: string;
+      pathTail?: string;
+      query?: Record<string, string>;
+    },
+    @Req() req: FastifyRequest,
+  ) {
     const block = this.loader.blocks.get(body?.name ?? "");
     if (!block) throw new NotFoundException(`unknown block: ${body?.name}`);
-    const html = await block.render(body?.props ?? {});
+    const user = await this.auth.resolveFromRequest(req);
+    const html = await block.render(body?.props ?? {}, {
+      children: [],
+      path: body?.path ?? "",
+      pathTail: body?.pathTail ?? "",
+      query: body?.query ?? {},
+      user: user ? { id: user.id, role: user.role, displayName: user.displayName } : null,
+    });
     return { html };
   }
 }

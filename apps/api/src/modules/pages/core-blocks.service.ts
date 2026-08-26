@@ -74,8 +74,9 @@ export class CoreBlocksService implements OnModuleInit {
         type: "object",
         properties: { gap: { type: "number", title: "간격(px)", default: 24 } },
       },
-      render: async (props, children = []) => {
+      render: async (props, ctx) => {
         const gap = Number(props.gap ?? 24);
+        const children = ctx.children ?? [];
         const cells = children.map((c) => `<div>${c}</div>`).join("");
         return `<div style="display:grid;grid-template-columns:repeat(${children.length || 1},1fr);gap:${gap}px">${cells}</div>`;
       },

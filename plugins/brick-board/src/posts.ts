@@ -3,6 +3,7 @@ import { uuidv7 } from "uuidv7";
 import type { BoardRow, Db, SessionUser } from "./types.js";
 import { BoardError, hasRole } from "./types.js";
 import { hashGuestPassword } from "./guest.js";
+import { sanitizeHtml } from "./sanitize.js";
 
 export interface WritePostInput {
   title: string;
@@ -38,10 +39,18 @@ export async function createPost(
   const { board, input, user, ip } = params;
 
   const title = String(input.title ?? "").trim();
-  const content = String(input.content ?? "").trim();
   if (!title) throw new BoardError(400, "제목을 입력해주세요.");
   if (title.length > 500) throw new BoardError(400, "제목이 너무 깁니다. (500자 이내)");
-  if (!content) throw new BoardError(400, "내용을 입력해주세요.");
+
+  // 본문은 HTML로 렌더되므로 반드시 걸러낸다 (저장형 XSS 방지).
+  // 저장 시점에 정제해 두면 렌더할 때마다 비용을 치르지 않는다.
+  const raw = String(input.content ?? "").trim();
+  if (!raw) throw new BoardError(400, "내용을 입력해주세요.");
+  if (raw.length > 200_000) throw new BoardError(400, "내용이 너무 깁니다.");
+  const content = sanitizeHtml(raw);
+  if (!content.replace(/<[^>]*>/g, "").trim()) {
+    throw new BoardError(400, "내용을 입력해주세요.");
+  }
 
   // 분류가 설정된 게시판이면 목록에 있는 값만 허용한다
   const category = input.category ? String(input.category).trim() : null;

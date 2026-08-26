@@ -162,6 +162,29 @@ export function isRawResponse(value: unknown): value is PluginRawResponse {
 }
 
 /**
+ * 블록 렌더 컨텍스트.
+ *
+ * 왜 필요한가: 게시판 상세(/board/free/<글id>)나 페이지네이션처럼 URL에 따라
+ * 내용이 달라지는 블록은 요청 정보를 알아야 한다. props만으로는 불가능하다.
+ */
+export interface BlockRenderContext {
+  /** 컨테이너 블록의 자식 렌더 결과 */
+  children: string[];
+  /** 전체 요청 경로 (앞뒤 슬래시 없음). 예: "board/free/01a0..." */
+  path: string;
+  /**
+   * 페이지 slug 이후의 나머지 경로.
+   * 페이지 slug가 "board/free"이고 요청이 "/board/free/01a0..." 이면 "01a0...".
+   * 게시판 블록은 이 값으로 목록/상세/글쓰기를 구분한다.
+   */
+  pathTail: string;
+  /** 쿼리스트링 */
+  query: Record<string, string>;
+  /** 요청한 사용자 (비로그인이면 null). 수정 버튼 표시 등에 쓴다 */
+  user: { id: string; role: string; displayName: string } | null;
+}
+
+/**
  * Block — 페이지 빌더의 최소 단위.
  * render는 서버에서 HTML 문자열을 만들거나(SSR/SEO),
  * clientComponent로 사전 빌드된 React 컴포넌트 이름을 지정한다.
@@ -175,9 +198,11 @@ export interface BlockDefinition {
   acceptsChildren?: boolean;
   /**
    * 서버 렌더 함수 — SEO를 위해 항상 HTML을 반환할 수 있어야 한다.
-   * children: 자식 블록들의 렌더 결과 (컨테이너 블록용)
+   *
+   * ctx로 요청 정보를 받는다. 게시판 상세처럼 URL에 따라 내용이 달라지는 블록은
+   * ctx.pathTail / ctx.query 를 읽고, 컨테이너 블록은 ctx.children 을 쓴다.
    */
-  render: (props: Record<string, unknown>, children?: string[]) => Promise<string>;
+  render: (props: Record<string, unknown>, ctx: BlockRenderContext) => Promise<string>;
 }
 
 export interface PluginInstance {

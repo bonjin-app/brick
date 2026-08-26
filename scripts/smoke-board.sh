@@ -10,6 +10,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export DATABASE_URL="${DATABASE_URL:?DATABASE_URL이 필요합니다}"
 API_PORT="${BRICK_API_PORT:-3001}"
 API="http://127.0.0.1:${API_PORT}"
 BD="$API/api/plugins/brick-board"
@@ -28,6 +29,9 @@ contains() { [[ "$2" == *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 없음: ${2:0:14
 absent()   { [[ "$2" != *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 가 있어서는 안 됨)"; }
 code()     { curl -s -o /dev/null -w "%{http_code}" "$@"; }
 jpost()    { curl -s -X POST "$1" -H 'content-type: application/json' --data-binary "@$2"; }
+# 렌더 결과의 html 필드를 꺼낸다.
+# JSON 안에서는 따옴표가 이스케이프되므로 원문에서 문자열을 찾으면 어긋난다.
+render_html() { curl -s "$API/api/render/page?path=$1" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("html",""))'; }
 
 echo "▶ brick-board 게시판 스모크 테스트"
 
@@ -196,6 +200,95 @@ jpost "$BD/boards/free/posts" "$TMP/xss.json" >/dev/null
 RENDER2="$(jpost "$API/api/blocks/render" "$TMP/blk.json")"
 contains "제목 XSS 이스케이프" "$RENDER2" "&lt;script&gt;"
 absent   "raw script 태그 없음" "$RENDER2" "<script>alert(1)</script>"
+
+echo "── 저장형 XSS 방어 (새니타이저)"
+# 본문은 HTML로 렌더되므로 저장 시점에 걸러야 한다
+# 속성값에 홑따옴표를 써서 JSON 이스케이프를 피한다 (겹따옴표는 printf와 JSON 양쪽에서 깨진다)
+printf '{"title":"XSS 시도","content":"<p>정상</p><script>alert(1)</script><img src=x onerror=alert(1)><a href=%sjavascript:alert(1)%s>링크</a><iframe src=//evil></iframe>"}' "'" "'" > "$TMP/xss2.json"
+PX="$(curl -s -b "$ADMIN" -X POST "$BD/boards/free/posts" -H 'content-type: application/json' --data-binary "@$TMP/xss2.json" | python3 -c "import sys,json;print(json.load(sys.stdin).get('id',''))")"
+STORED="$(curl -s -b "$ADMIN" "$BD/posts/$PX")"
+absent "script 태그 제거" "$STORED" "<script"
+absent "onerror 속성 제거" "$STORED" "onerror"
+absent "javascript: 링크 제거" "$STORED" "javascript:"
+absent "iframe 제거" "$STORED" "<iframe"
+contains "정상 서식은 유지" "$STORED" "<p>정상</p>"
+# 수정 경로에도 새니타이저가 걸려야 한다 (우회 통로 방지)
+printf '{"title":"수정 XSS","content":"<p>본문</p><script>alert(2)</script>"}' > "$TMP/xss3.json"
+curl -s -b "$ADMIN" -X PUT "$BD/posts/$PX" -H 'content-type: application/json' --data-binary "@$TMP/xss3.json" >/dev/null
+absent "수정 경로도 새니타이즈" "$(curl -s -b "$ADMIN" "$BD/posts/$PX")" "<script"
+# 댓글은 서식을 아예 허용하지 않는다
+printf '{"content":"<b>굵게</b>와 <script>alert(3)</script>"}' > "$TMP/cx.json"
+curl -s -b "$ADMIN" -X POST "$BD/posts/$PX/comments" -H 'content-type: application/json' --data-binary "@$TMP/cx.json" >/dev/null
+CMTS="$(curl -s -b "$ADMIN" "$BD/posts/$PX")"
+absent "댓글에서 태그 제거" "$CMTS" "<b>굵게</b>"
+
+echo "── 화면 렌더 (목록 · 상세 · 글쓰기)"
+# 페이지 하나가 pathTail로 세 화면을 처리한다
+printf '{"slug":"board/free","title":"자유게시판","status":"published","blocks":[{"block":"brick-board/board","props":{"board":"free"}}]}' > "$TMP/page.json"
+curl -s -b "$ADMIN" -X POST "$API/api/pages" -H 'content-type: application/json' --data-binary "@$TMP/page.json" >/dev/null
+LIST="$(render_html "board%2Ffree")"
+contains "목록 화면 렌더" "$LIST" "brick-board-table"
+contains "목록에 검색 폼" "$LIST" "brick-board-search"
+contains "목록에 분류 내비" "$LIST" "brick-cat-nav"
+DETAIL="$(render_html "board%2Ffree%2F$P1")"
+contains "상세 화면 렌더 (하위 경로 매칭)" "$DETAIL" "brick-post-content"
+contains "상세에 댓글 영역" "$DETAIL" "brick-comments"
+contains "상세에 추천 버튼" "$DETAIL" "data-vote"
+WRITE="$(render_html "board%2Ffree%2Fwrite")"
+contains "글쓰기 화면 렌더" "$WRITE" "brick-write-form"
+contains "위지윅 에디터 툴바" "$WRITE" "brick-toolbar"
+contains "에디터 본문 영역" "$WRITE" 'contenteditable="true"'
+contains "비회원 이름·비밀번호 입력" "$WRITE" "guestPassword"
+contains "첨부파일 입력" "$WRITE" 'type="file"'
+# 상세 화면에서도 새니타이즈된 본문만 나가야 한다
+DETAILX="$(render_html "board%2Ffree%2F$PX")"
+absent "렌더된 상세에 script 없음" "$DETAILX" "alert(2)"
+
+echo "── 비밀글은 서버 렌더에 본문을 담지 않는다 (캐시 유출 방지)"
+SECRET_RENDER="$(render_html "board%2Ffree%2F$PSEC")"
+contains "비밀글 안내 표시" "$SECRET_RENDER" "비밀글입니다"
+absent   "비밀글 본문 미포함" "$SECRET_RENDER" "비밀 내용"
+
+echo "── 렌더 캐시 정책"
+# 비로그인 요청만 캐시된다 (로그인 사용자 렌더가 캐시되면 유출된다)
+CACHED="$(node -e "
+const pg = require('$ROOT/apps/api/node_modules/pg');
+(async () => {
+  const c = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await c.connect();
+  const { rows } = await c.query(\"SELECT key FROM cache_entries WHERE key LIKE 'render:page:board%'\");
+  console.log(rows.map(r => r.key).join(','));
+  await c.end();
+})();
+")"
+contains "비로그인 렌더는 캐시됨" "$CACHED" "render:page:board/free"
+# 로그인 요청 후에도 캐시 항목이 늘지 않아야 한다
+curl -s -b "$ADMIN" "$API/api/render/page?path=board%2Ffree" >/dev/null
+CACHED2="$(node -e "
+const pg = require('$ROOT/apps/api/node_modules/pg');
+(async () => {
+  const c = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await c.connect();
+  const { rows } = await c.query(\"SELECT count(*) n FROM cache_entries WHERE key LIKE 'render:page:board%'\");
+  console.log(rows[0].n);
+  await c.end();
+})();
+")"
+CACHED1_COUNT="$(echo "$CACHED" | tr ',' '\n' | grep -c . || echo 0)"
+check "로그인 요청은 캐시하지 않음" "$CACHED2" "$CACHED1_COUNT"
+# 쿼리가 다르면 별도 캐시 (검색 결과가 섞이면 안 된다)
+curl -s "$API/api/render/page?path=board%2Ffree&q=%EC%B2%A8%EB%B6%80" >/dev/null
+QCACHE="$(node -e "
+const pg = require('$ROOT/apps/api/node_modules/pg');
+(async () => {
+  const c = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await c.connect();
+  const { rows } = await c.query(\"SELECT key FROM cache_entries WHERE key LIKE 'render:page:board/free?%'\");
+  console.log(rows.length ? 'has-query-key' : 'none');
+  await c.end();
+})();
+")"
+check "쿼리별로 캐시 분리" "$QCACHE" "has-query-key"
 
 echo "── 삭제 (첨부 정리)"
 check "비관리자 관리 목록 차단" "$(code -b "$MEMBER" "$BD/admin/posts")" "403"
