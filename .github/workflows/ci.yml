@@ -33,7 +33,7 @@ jobs:
       BRICK_API_PORT: "3001"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # 버전을 지정하지 않는다 — package.json 의 packageManager 가 유일한 출처다.
       # 양쪽에 적으면 action-setup@v4 가 "Multiple versions of pnpm specified" 로 거부한다.
@@ -105,7 +105,7 @@ jobs:
           --health-interval 5s --health-timeout 5s --health-retries 10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # 버전을 지정하지 않는다 — package.json 의 packageManager 가 유일한 출처다.
       # 양쪽에 적으면 action-setup@v4 가 "Multiple versions of pnpm specified" 로 거부한다.
       - uses: pnpm/action-setup@v4
@@ -132,7 +132,7 @@ jobs:
     name: Docker 이미지 빌드
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v3
       - name: 이미지 빌드
         uses: docker/build-push-action@v6
