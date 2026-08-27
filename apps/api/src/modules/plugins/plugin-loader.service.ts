@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import type { BrickDb } from "@brick/database";
 import { installedPlugins, siteSettings } from "@brick/database";
 import type { PluginManifest } from "@brick/shared";
-import type { PluginContext, PluginInstance, BlockDefinition, PluginRouteHandler, PluginDb, AdminResource, HookBus, CacheProvider, QueueProvider, StorageProvider, MailProvider, CaptchaProvider, PersonalDataEraser } from "@brick/core";
+import type { PluginContext, PluginInstance, BlockDefinition, PluginRouteHandler, PluginDb, AdminResource, HookBus, CacheProvider, QueueProvider, StorageProvider, MailProvider, CaptchaProvider, PersonalDataEraser, SitemapSource } from "@brick/core";
 import { DB, HOOKS, CACHE, QUEUE, STORAGE, MAIL, CAPTCHA } from "../../runtime.module.js";
 
 /**
@@ -86,6 +86,8 @@ export class PluginLoaderService implements OnModuleInit {
    * 코어가 플러그인 테이블 이름을 알지 않게 하려는 장치다 (ADR-38).
    */
   readonly dataErasers: Array<PersonalDataEraser & { plugin: string }> = [];
+  /** 사이트맵 URL 공급자 — 코어는 페이지만 알고, 게시글·상품 주소는 플러그인이 안다 */
+  readonly sitemapSources: Array<SitemapSource & { plugin: string }> = [];
   /**
    * 플러그인 간 서비스 레지스트리.
    * 훅으로 표현할 수 없는 협력(호출자 트랜잭션 참여 등)에 쓴다.
@@ -210,6 +212,9 @@ export class PluginLoaderService implements OnModuleInit {
     for (let i = this.dataErasers.length - 1; i >= 0; i--) {
       if (this.dataErasers[i].plugin === name) this.dataErasers.splice(i, 1);
     }
+    for (let i = this.sitemapSources.length - 1; i >= 0; i--) {
+      if (this.sitemapSources[i].plugin === name) this.sitemapSources.splice(i, 1);
+    }
     this.logger.log(`plugin "${name}" deactivated`);
   }
 
@@ -277,6 +282,10 @@ export class PluginLoaderService implements OnModuleInit {
       registerDataEraser: (eraser) => {
         this.dataErasers.push({ ...eraser, plugin: pluginName });
         this.logger.log(`plugin "${pluginName}" registers data eraser "${eraser.label}"`);
+      },
+      registerSitemapSource: (source) => {
+        this.sitemapSources.push({ ...source, plugin: pluginName });
+        this.logger.log(`plugin "${pluginName}" registers sitemap source "${source.label}"`);
       },
     };
   }

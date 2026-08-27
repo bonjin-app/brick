@@ -721,6 +721,45 @@ ${items}
     },
   });
 
+  /**
+   * 사이트맵: 공개 게시판의 글 주소.
+   *
+   * 비밀글과 비공개 게시판은 제외한다 — 검색엔진에 노출되면 안 되는 것이
+   * 사이트맵에 들어가면 그 자체가 유출이다.
+   *
+   * 주소는 `/board/<slug>` 관례를 쓴다. views.ts 의 링크 생성과 같은 규칙이므로
+   * 어긋나면 목록 링크도 같이 깨진다(둘 중 하나만 틀릴 수는 없다).
+   * 정렬은 created_at + id 로 고정한다. 페이지를 나눠 읽는 동안 순서가 바뀌면
+   * 어떤 글은 두 번 나오고 어떤 글은 빠진다.
+   */
+  ctx.registerSitemapSource({
+    label: "게시글",
+    async count() {
+      const { rows } = await db.execute(sql`
+        SELECT count(*) AS n FROM board_posts p
+        JOIN board_boards b ON b.id = p.board_id
+        WHERE p.is_secret = false AND b.read_role = 'guest'
+      `);
+      return Number(rows[0]?.n ?? 0);
+    },
+    async page({ offset, limit }) {
+      const { rows } = await db.execute(sql`
+        SELECT b.slug AS board, p.id, p.updated_at
+        FROM board_posts p
+        JOIN board_boards b ON b.id = p.board_id
+        WHERE p.is_secret = false AND b.read_role = 'guest'
+        ORDER BY p.created_at, p.id
+        LIMIT ${limit} OFFSET ${offset}
+      `);
+      return rows.map((r) => ({
+        path: `/board/${String(r.board)}/${String(r.id)}`,
+        lastmod: r.updated_at as Date,
+        changefreq: "weekly" as const,
+        priority: 0.6,
+      }));
+    },
+  });
+
   registerBoardBlocks(ctx, db);
 
   return {};

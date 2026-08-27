@@ -885,6 +885,36 @@ export default definePlugin(async (ctx) => {
   ctx.registerAdminResource(REVIEW_RESOURCE);
   ctx.registerAdminResource(INQUIRY_RESOURCE);
 
+  /**
+   * 사이트맵: 판매 중인 상품 주소.
+   *
+   * draft·hidden 은 제외한다. soldout 은 포함한다 — 품절이어도 상품 페이지는
+   * 유효한 콘텐츠이고, 재입고되면 색인이 이미 되어 있는 것이 유리하다.
+   */
+  ctx.registerSitemapSource({
+    label: "상품",
+    async count() {
+      const { rows } = await db.execute(sql`
+        SELECT count(*) AS n FROM shop_products WHERE status IN ('selling', 'soldout')
+      `);
+      return Number(rows[0]?.n ?? 0);
+    },
+    async page({ offset, limit }) {
+      const { rows } = await db.execute(sql`
+        SELECT slug, updated_at FROM shop_products
+        WHERE status IN ('selling', 'soldout')
+        ORDER BY created_at, id
+        LIMIT ${limit} OFFSET ${offset}
+      `);
+      return rows.map((r) => ({
+        path: `/shop/${String(r.slug)}`,
+        lastmod: r.updated_at as Date,
+        changefreq: "daily" as const,
+        priority: 0.8,
+      }));
+    },
+  });
+
   registerStorefrontBlocks(ctx, db, settings);
 
   return {};

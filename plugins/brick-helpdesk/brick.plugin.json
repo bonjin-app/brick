@@ -1,0 +1,10 @@
+{
+  "name": "brick-helpdesk",
+  "version": "0.1.0",
+  "displayName": "1:1 문의 · FAQ",
+  "description": "비공개 1:1 문의와 관리자 답변, 분류가 있는 FAQ — 그누보드의 Q&A·FAQ에 대응",
+  "author": "Brick",
+  "brickVersion": ">=0.0.1",
+  "entry": "dist/index.js",
+  "migrations": "migrations"
+}

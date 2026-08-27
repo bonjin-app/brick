@@ -103,6 +103,21 @@ drizzle 0.45 가 오류를 `cause` 로 감싸기 시작하자 여덟 곳이 한�
 스모크에 따로 적혀 있어서 셋 다 달라졌고, Docker 설치본에는 쇼핑몰이 없었습니다.
 `scripts/collect-plugins.sh` 가 유일한 출처입니다.
 
+**`= ANY(${배열})` 을 쓰지 마세요.** drizzle 이 JS 배열을 PostgreSQL 배열 리터럴로
+직렬화하지 않아 `malformed array literal` 이 납니다. `sql.join` 으로 IN 목록을
+명시적으로 만드세요.
+
+```ts
+// ✗ 런타임에 깨집니다
+sql`WHERE slug = ANY(${slugs})`
+
+// ✓
+sql`WHERE slug IN (${sql.join(slugs.map((s) => sql`${s}`), sql`, `)})`
+```
+
+**공개 URL을 만드는 플러그인은 `registerSitemapSource` 를 등록하세요.** 없으면
+검색엔진이 그 주소를 찾지 못합니다 (ADR-40).
+
 **개인정보를 저장하는 플러그인은 `registerDataEraser` 를 등록하세요.** 없으면
 회원이 탈퇴한 뒤에도 데이터가 남아 위법 상태가 됩니다. 코어는 플러그인 테이블
 이름을 모르므로 대신 지워줄 수 없습니다 (ADR-38).

@@ -11,6 +11,7 @@ import { MediaModule } from "./modules/media/media.module.js";
 import { MembersModule } from "./modules/members/members.module.js";
 import { PagesModule } from "./modules/pages/pages.module.js";
 import { PluginsModule } from "./modules/plugins/plugins.module.js";
+import { SeoModule } from "./modules/seo/seo.module.js";
 import { SiteModule } from "./modules/site/site.module.js";
 import { StaticModule } from "./modules/static/static.module.js";
 import { ThemesModule } from "./modules/themes/themes.module.js";
@@ -29,6 +30,7 @@ import { UsersModule } from "./modules/users/users.module.js";
     UsersModule,
     MediaModule,
     MembersModule,
+    SeoModule,
     SiteModule,
     PluginsModule,
     ThemesModule,

@@ -1,0 +1,16 @@
+{
+  "name": "brick-plugin-helpdesk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@brick/plugin-sdk": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "uuidv7": "^1.2.1"
+  },
+  "devDependencies": { "typescript": "^5.7.3" }
+}

@@ -85,6 +85,44 @@ export interface PluginContext {
    * 나중에 항의가 들어온다(특히 포인트와 주문 내역).
    */
   registerDataEraser(eraser: PersonalDataEraser): void;
+  /**
+   * 이 플러그인이 만드는 **공개 URL 목록**을 사이트맵에 제공한다.
+   *
+   * 코어는 페이지만 안다. 게시글·상품 주소는 플러그인이 만들었으므로
+   * 플러그인만 알 수 있다 — 등록하지 않으면 검색엔진이 그 주소를 찾지 못한다.
+   *
+   * 큰 사이트를 전제로 **페이지 단위**로 요구한다. 그누보드 사이트는 게시글이
+   * 십만 건인 경우가 흔하고, 한 번에 다 읽으면 메모리가 터진다.
+   */
+  registerSitemapSource(source: SitemapSource): void;
+}
+
+/** 사이트맵 항목 */
+export interface SitemapUrl {
+  /** 사이트 루트 기준 경로 (예: "/board/free/123"). 절대 URL도 허용 */
+  path: string;
+  /** 마지막 수정 시각 */
+  lastmod?: Date | string | null;
+  /** 변경 빈도 힌트 */
+  changefreq?: "always" | "hourly" | "daily" | "weekly" | "monthly" | "yearly" | "never";
+  /** 0.0~1.0 */
+  priority?: number;
+}
+
+/**
+ * 사이트맵 URL 공급자.
+ *
+ * 정렬은 **안정적이어야 한다.** 페이지를 나눠 읽는 동안 순서가 바뀌면
+ * 어떤 URL은 두 번 나오고 어떤 URL은 빠진다. created_at 처럼 변하지 않는
+ * 컬럼으로 정렬하고, 동률은 id 로 깬다.
+ */
+export interface SitemapSource {
+  /** 로그와 진단에 쓰는 이름 (예: "게시글") */
+  label: string;
+  /** 전체 개수 — 사이트맵 인덱스를 몇 조각으로 나눌지 계산한다 */
+  count(): Promise<number>;
+  /** offset 부터 limit 개 */
+  page(params: { offset: number; limit: number }): Promise<SitemapUrl[]>;
 }
 
 /**
