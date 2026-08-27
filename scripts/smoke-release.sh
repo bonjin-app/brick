@@ -188,14 +188,30 @@ printf '{"email":"admin@rel.test","password":"relpass1234"}' > "$WORK/login.json
 contains "관리자 로그인" "$(curl -s -c "$CK" -X POST "$BASE/api/auth/login" -H 'content-type: application/json' --data-binary "@$WORK/login.json")" '"role":"admin"'
 
 echo "── 동봉 플러그인 (node_modules 해석 검증)"
+# 배포본에 무엇이 들어갔는지는 조용히 썩는 지점이다 — 한때 Docker 이미지에는
+# 게시판만, 배포본에는 셋만 들어가서 쇼핑몰·포인트·쪽지가 없는 설치본이 나갔다.
+# 저장소의 플러그인 전부가 들어왔는지 목록을 대조한다.
 PLUGINS="$(curl -s "$BASE/api/plugins")"
-contains "게시판 포함" "$PLUGINS" "brick-board"
-contains "쇼핑몰 포함" "$PLUGINS" "brick-shop"
-contains "결제 포함" "$PLUGINS" "brick-pay-toss"
-for p in brick-board brick-shop brick-pay-toss; do
+EXPECTED=()
+for dir in "$ROOT"/plugins/*/; do
+  name="$(basename "$dir")"
+  [[ -f "$dir/brick.plugin.json" && -f "$dir/dist/index.js" ]] && EXPECTED+=("$name")
+done
+[[ ${#EXPECTED[@]} -ge 6 ]] && ok "저장소 플러그인 ${#EXPECTED[@]}개 확인" \
+  || bad "저장소 플러그인이 6개 미만 (${#EXPECTED[*]})"
+
+for p in "${EXPECTED[@]}"; do
+  contains "$p 동봉" "$PLUGINS" "$p"
+done
+for p in "${EXPECTED[@]}"; do
   contains "$p 활성화" "$(curl -s -b "$CK" -X POST "$BASE/api/plugins/$p/activate")" '"ok":true'
 done
-contains "쇼핑몰 관리 리소스 등록" "$(curl -s -b "$CK" "$BASE/api/admin/nav")" '"name":"products"'
+
+# 관리 리소스가 뜨는 것 = 플러그인이 코어 계약대로 로드됐다는 증거
+NAV="$(curl -s -b "$CK" "$BASE/api/admin/nav")"
+contains "쇼핑몰 관리 리소스 등록" "$NAV" '"name":"products"'
+contains "후기 관리 리소스 등록" "$NAV" '"name":"reviews"'
+contains "포인트 관리 리소스 등록" "$NAV" '"name":"balances"'
 
 echo "── 실제 기능 (drizzle sql identity 확인)"
 printf '{"slug":"rel-smoke","name":"배포본 상품","price":15000,"stock":5,"status":"selling"}' > "$WORK/prod.json"

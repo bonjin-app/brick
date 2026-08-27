@@ -67,13 +67,8 @@ cp -R "$ROOT/apps/web/.next/static" "$STAGE/web/apps/web/.next/static"
 
 echo "── 4/5 확장 · 런처"
 mkdir -p "$STAGE/plugins" "$STAGE/themes" "$STAGE/uploads" "$STAGE/data"
-for p in brick-board brick-shop brick-pay-toss; do
-  [[ -d "$ROOT/plugins/$p" ]] || continue
-  mkdir -p "$STAGE/plugins/$p"
-  cp "$ROOT/plugins/$p/brick.plugin.json" "$STAGE/plugins/$p/"
-  cp -R "$ROOT/plugins/$p/dist" "$STAGE/plugins/$p/dist"
-  [[ -d "$ROOT/plugins/$p/migrations" ]] && cp -R "$ROOT/plugins/$p/migrations" "$STAGE/plugins/$p/migrations"
-done
+# 목록을 여기 적지 않는다 — 빌드된 플러그인을 전부 동봉한다 (collect-plugins.sh)
+bash "$ROOT/scripts/collect-plugins.sh" "$STAGE/plugins"
 cp -R "$ROOT/themes/default" "$STAGE/themes/default"
 cp "$ROOT/LICENSE" "$STAGE/LICENSE"
 

@@ -1,0 +1,44 @@
+# Docker 빌드 컨텍스트에서 제외.
+#
+# 이 파일이 없으면 COPY . . 가 호스트의 node_modules 를 그대로 이미지에 넣는다.
+# pnpm 의 node_modules 는 호스트 스토어를 가리키는 심볼릭 링크라, 컨테이너 안에서는
+# 전부 깨진 링크가 되고 컨테이너에서 설치한 것을 덮어써 버린다.
+
+# 의존성 — 컨테이너 안에서 새로 설치한다
+node_modules
+**/node_modules
+
+# 빌드 산출물 — 컨테이너 안에서 새로 빌드한다
+dist
+**/dist
+.next
+**/.next
+.turbo
+**/.turbo
+*.tsbuildinfo
+dist-release
+
+# 런타임 상태 — 이미지에 들어가면 안 된다
+data
+uploads
+**/data/brick.config.json
+
+# 비밀
+.env
+.env.*
+!.env.example
+
+# 개발·CI 부속물
+.git
+.github
+.vscode
+.idea
+docs-site
+*.log
+.DS_Store
+coverage
+
+# 도커 자신
+Dockerfile
+docker-compose.yml
+.dockerignore
