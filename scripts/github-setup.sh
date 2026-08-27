@@ -96,6 +96,19 @@ gh api -X PATCH "repos/$REPO" \
   -F allow_rebase_merge=false \
   --silent
 
+echo "── GitHub Pages (랜딩페이지)"
+# 워크플로(.github/workflows/pages.yml)는 이미 있지만, Pages의 소스를
+# "GitHub Actions" 로 지정하지 않으면 배포가 시작되지 않고 홈페이지가 404가 된다.
+# 이미 켜져 있으면 PUT, 아니면 POST — 둘 다 시도한다.
+if gh api "repos/$REPO/pages" --silent >/dev/null 2>&1; then
+  gh api -X PUT "repos/$REPO/pages" -f build_type=workflow --silent
+  echo "   기존 설정을 Actions 빌드로 맞췄습니다."
+else
+  gh api -X POST "repos/$REPO/pages" -f build_type=workflow --silent
+  echo "   Pages를 켰습니다. 첫 배포는 pages 워크플로를 한 번 돌려야 합니다:"
+  echo "     gh workflow run pages.yml --repo $REPO"
+fi
+
 echo "── 취약점 경고 · 자동 보안 수정"
 gh api -X PUT "repos/$REPO/vulnerability-alerts" --silent 2>/dev/null || true
 gh api -X PUT "repos/$REPO/automated-security-fixes" --silent 2>/dev/null || true
@@ -113,4 +126,9 @@ cat <<MSG
 
 2) Discussions 켜기 (이슈 템플릿이 링크로 안내합니다)
    → Settings → General → Features → Discussions
+   API로는 켤 수 없습니다.
+
+3) 랜딩페이지 첫 배포
+   gh workflow run pages.yml --repo $REPO
+   → https://bonjin-app.github.io/brick/ 확인
 MSG
