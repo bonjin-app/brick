@@ -10,6 +10,10 @@ import type { CacheProvider } from "@brick/core";
 import { AdminGuard } from "../auth/auth.guard.js";
 import { AuditService } from "../audit/audit.service.js";
 import { CACHE, DB } from "../../runtime.module.js";
+import {
+  EMPTY_BUSINESS_INFO, FIELD_LABEL, isCommerceReady, validateBusinessInfo,
+  type BusinessInfo,
+} from "./business-info.js";
 
 interface MenuItem {
   label: string;
@@ -22,7 +26,12 @@ const EDITABLE_SETTINGS: Record<string, "string" | "boolean"> = {
   "site.name": "string",
   "site.description": "string",
   "site.registration_open": "boolean",
+  // 검색 노출 차단 — robots.txt 가 읽는다 (SeoService)
+  "site.seo_noindex": "boolean",
 };
+
+/** 사업자정보를 담는 설정 키 (단일 JSON) */
+const BUSINESS_KEY = "site.business_info";
 
 @Controller("api")
 export class SiteController {
@@ -43,6 +52,64 @@ export class SiteController {
       if (!row.key.startsWith("plugin:")) out[row.key] = row.value;
     }
     return out;
+  }
+
+  /**
+   * 사업자정보 조회 — **공개**다.
+   *
+   * 전자상거래법 제13조는 소비자가 쉽게 알 수 있도록 표시하라고 정한다.
+   * 관리자만 볼 수 있으면 표시 의무를 지키는 것이 아니다.
+   * 테마가 푸터에 렌더하지만, 별도 화면(사업자정보 페이지)을 만들 수도 있으므로
+   * API 로도 낸다.
+   */
+  @Get("business-info")
+  async getBusinessInfo() {
+    const info = await this.readBusinessInfo();
+    const status = isCommerceReady(info);
+    return {
+      info,
+      labels: FIELD_LABEL,
+      // 관리 화면이 "쇼핑몰을 열 수 있는 상태인가"를 알려주는 데 쓴다
+      commerceReady: status.ready,
+      missing: status.missing,
+    };
+  }
+
+  @Put("business-info")
+  @UseGuards(AdminGuard)
+  async putBusinessInfo(
+    @Body() body: Record<string, unknown>,
+    @Req() req: FastifyRequest,
+  ) {
+    const { info, errors, warnings } = validateBusinessInfo(body ?? {});
+    if (errors.length) throw new BadRequestException(errors.join(" "));
+
+    await this.db
+      .insert(siteSettings)
+      .values({ key: BUSINESS_KEY, value: info as never })
+      .onConflictDoUpdate({
+        target: siteSettings.key,
+        set: { value: info as never, updatedAt: new Date() },
+      });
+
+    // 푸터에 렌더되므로 모든 페이지 캐시를 비운다
+    await this.cache.invalidateTag("pages");
+    await this.audit.fromRequest(req as never, {
+      action: "settings.business_info", targetType: "settings",
+      summary: info.companyName || "(상호 없음)",
+    });
+
+    const status = isCommerceReady(info);
+    return { ok: true, warnings, commerceReady: status.ready, missing: status.missing };
+  }
+
+  private async readBusinessInfo(): Promise<BusinessInfo> {
+    const [row] = await this.db
+      .select()
+      .from(siteSettings)
+      .where(eq(siteSettings.key, BUSINESS_KEY))
+      .limit(1);
+    return { ...EMPTY_BUSINESS_INFO, ...((row?.value as Partial<BusinessInfo>) ?? {}) };
   }
 
   @Put("settings")

@@ -104,6 +104,9 @@ export async function createOrder(
 
   // 서버 가격으로 재계산 (클라이언트 금액을 신뢰하지 않는다)
   const q: Quote = await quote(db, params.items, params.settings, params.couponCode, {
+    // 배송지 우편번호를 넘겨야 지역 추가비가 계산된다.
+    // 빠뜨리면 주문서에는 6,000원으로 보이고 실제로는 3,000원만 받는다.
+    postcode: params.orderer.postcode,
     pointUsed: requestedPoint,
   });
   // pricing이 상한을 적용했을 수 있다 (상품금액 초과분은 쓰지 않는다)
@@ -171,14 +174,15 @@ export async function createOrder(
     await tx.execute(sql`
       INSERT INTO shop_orders (
         id, order_no, user_id, status,
-        subtotal, discount, shipping_fee, total, coupon_code, point_used,
+        subtotal, discount, shipping_fee, zone_fee, zone_name, total, coupon_code, point_used,
         payment_method, payment_status,
         orderer_name, orderer_phone, orderer_email,
         receiver_name, receiver_phone, postcode, address1, address2, delivery_memo,
         guest_token, idempotency_key
       ) VALUES (
         ${orderId}, ${orderNo}, ${params.userId ?? null}::uuid, 'pending',
-        ${q.subtotal}, ${q.discount}, ${q.shippingFee}, ${q.total}, ${q.couponCode}, ${requestedPoint},
+        ${q.subtotal}, ${q.discount}, ${q.shippingFee}, ${q.zoneFee}, ${q.zoneName},
+        ${q.total}, ${q.couponCode}, ${requestedPoint},
         ${method}, 'unpaid',
         ${orderer.ordererName}, ${orderer.ordererPhone}, ${orderer.ordererEmail ?? null},
         ${orderer.receiverName || orderer.ordererName}, ${orderer.receiverPhone || orderer.ordererPhone},

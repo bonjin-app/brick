@@ -5,6 +5,10 @@ body { margin: 0; font-family: var(--font-body); color: var(--color-text); backg
 .brick-hero { text-align: center; padding: 80px 0; }
 .brick-footer { padding: 24px; text-align: center; color: #999; font-size: 13px; border-top: 1px solid #eee; }
 .brick-footer a { color: inherit; }
+/* 사업자정보 — 전자상거래법상 표시 의무. 항목을 쉼표 없이 간격으로 구분한다 */
+.brick-business { display: flex; flex-wrap: wrap; gap: 4px 14px; justify-content: center; margin-bottom: 10px; line-height: 1.8; }
+.brick-business b { font-weight: 600; color: #666; }
+.brick-footer-credit { opacity: .7; }
 .brick-header { display: flex; align-items: center; gap: 24px; }
 .brick-nav { display: flex; gap: 16px; }
 .brick-nav a { color: var(--color-text); text-decoration: none; font-size: 14px; }

@@ -2,6 +2,9 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 import { and, eq } from "drizzle-orm";
 import type { BrickDb } from "@brick/database";
 import { menus, pages, siteSettings } from "@brick/database";
+import {
+  EMPTY_BUSINESS_INFO, toTemplateVars, type BusinessInfo,
+} from "../site/business-info.js";
 import type { BlockRenderContext, CacheProvider } from "@brick/core";
 import { PluginLoaderService } from "../plugins/plugin-loader.service.js";
 import { ThemesService } from "../themes/themes.service.js";
@@ -176,12 +179,25 @@ export class PageRenderService {
     return parts.join("\n");
   }
 
-  private async siteInfo(): Promise<{ name: string; description: string }> {
+  private async siteInfo(): Promise<{
+    name: string;
+    description: string;
+    /**
+     * 사업자정보 — 값이 하나도 없으면 null.
+     *
+     * 테마 푸터가 `{{#if site.business}}` 로 감싸 렌더한다. 법적 표시 의무이므로
+     * 테마가 아니라 사이트가 값을 갖는다 — 테마를 바꿀 때마다 다시 입력하게
+     * 만들면 빠뜨린다 (docs/business-info.md).
+     */
+    business: Record<string, string> | null;
+  }> {
     const rows = await this.db.select().from(siteSettings);
     const map = new Map(rows.map((r) => [r.key, r.value]));
+    const stored = (map.get("site.business_info") as Partial<BusinessInfo>) ?? {};
     return {
       name: (map.get("site.name") as string) ?? "Brick",
       description: (map.get("site.description") as string) ?? "",
+      business: toTemplateVars({ ...EMPTY_BUSINESS_INFO, ...stored }),
     };
   }
 

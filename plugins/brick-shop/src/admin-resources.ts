@@ -183,3 +183,25 @@ export const RETURN_RESOURCE: AdminResource = {
     { name: "admin_note", label: "내부 메모", type: "textarea" },
   ],
 };
+
+export const SHIPPING_ZONE_RESOURCE: AdminResource = {
+  name: "shipping-zones",
+  title: "지역별 배송비",
+  itemLabel: "지역",
+  basePath: "/admin/shipping-zones",
+  order: 35,
+  description:
+    "제주·도서산간 추가 배송비를 우편번호 구간으로 정합니다. " +
+    "주소 문자열이 아니라 우편번호로 판단합니다 — 서울에도 '제주도로'가 있습니다. " +
+    "구간이 겹치면 가장 비싼 값이 적용됩니다.",
+  fields: [
+    { name: "name", label: "지역명", type: "text", required: true, inList: true },
+    { name: "postcode_from", label: "우편번호 시작", type: "text", required: true, inList: true,
+      help: "5자리 숫자. 예: 63000" },
+    { name: "postcode_to", label: "우편번호 끝", type: "text", required: true, inList: true,
+      help: "5자리 숫자. 예: 63644" },
+    { name: "extra_fee", label: "추가 배송비", type: "money", required: true, inList: true },
+    { name: "is_active", label: "적용", type: "boolean", inList: true },
+    { name: "sort_order", label: "순서", type: "number", inList: true },
+  ],
+};

@@ -8,7 +8,8 @@ import { addToCart, clearCart, getCartItems, updateCartItem, type CartOwner } fr
 import { changeOrderStatus, createOrder, type PointsPort } from "./orders.js";
 import { bankTransferGateway, confirmPayment, gateways, refundPayment, registerGateway } from "./payments.js";
 import { CATEGORY_RESOURCE, COUPON_RESOURCE, INQUIRY_RESOURCE, ORDER_RESOURCE,
-         PRODUCT_RESOURCE, RETURN_RESOURCE, REVIEW_RESOURCE } from "./admin-resources.js";
+         PRODUCT_RESOURCE, RETURN_RESOURCE, REVIEW_RESOURCE,
+         SHIPPING_ZONE_RESOURCE } from "./admin-resources.js";
 import { registerStorefrontBlocks } from "./blocks.js";
 import {
   createInquiry, createReview, deleteInquiry, deleteReview, findPurchase,
@@ -20,6 +21,11 @@ import {
   cancelRequest, getReturn, getReturnable, listAllReturns, listMyReturns,
   requestReturn, updateReturnStatus,
 } from "./returns.js";
+import {
+  addToWishlist, createZone, deleteZone, findZoneFee, isInWishlist, listRecentViews,
+  listWishlist, listZones, mergeGuestViews, mergeGuestWishlist, purgeOldViews,
+  recordView, removeFromWishlist, updateZone, type Owner as WishOwner,
+} from "./wishlist.js";
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,148}$/;
 
@@ -102,7 +108,21 @@ export default definePlugin(async (ctx) => {
       WHERE product_id = ${String(product.id)}::uuid AND is_active = true
       ORDER BY sort_order, name
     `);
+    // 최근 본 상품에 기록한다. 실패해도 상세 화면은 떠야 하므로 예외를 삼킨다 —
+    // 열람 기록은 부가 기능이고, 이것 때문에 상품을 못 보면 안 된다.
+    let viewToken: string | null = null;
+    try {
+      const owner = wishOwner(req);
+      if (owner.userId || owner.guestToken || req.query.track === "1") {
+        const rec = await recordView(db, { owner, productId: String(product.id) });
+        viewToken = rec.guestToken;
+      }
+    } catch {
+      // 무시
+    }
+
     return {
+      guestToken: viewToken,
       product: {
         ...product,
         rating_avg:
@@ -173,6 +193,8 @@ export default definePlugin(async (ctx) => {
       items?: Array<{ productId: string; optionId?: string; quantity: number }>;
       couponCode?: string;
       pointUsed?: number;
+      /** 배송지 우편번호 — 지역별 추가 배송비를 계산한다 */
+      postcode?: string;
     };
     const items = body.items?.length ? body.items : await getCartItems(db, owner(req));
 
@@ -184,7 +206,10 @@ export default definePlugin(async (ctx) => {
       pointUsed = Math.max(0, Math.min(Math.floor(Number(body.pointUsed)), balance));
     }
 
-    const q = await quote(db, items, await settings(), body.couponCode, { pointUsed });
+    const q = await quote(db, items, await settings(), body.couponCode, {
+      pointUsed,
+      postcode: body.postcode ?? null,
+    });
     return { ...q, pointsAvailable: Boolean(port) };
   });
 
@@ -883,6 +908,118 @@ export default definePlugin(async (ctx) => {
     return result;
   });
 
+
+  // ════════════════════════════════════════════════════
+  //  위시리스트 · 최근 본 상품
+  //
+  //  비회원도 쓸 수 있다. "담아두다가 나중에 가입"이 실제 흐름이고,
+  //  로그인을 요구하면 아무도 쓰지 않는다 (장바구니와 같은 판단).
+  // ════════════════════════════════════════════════════
+
+  /** 위시리스트 소유자 — 회원 우선, 비회원은 장바구니와 같은 토큰을 쓴다 */
+  const wishOwner = (req: {
+    user: { id: string } | null;
+    query: Record<string, string>;
+    body?: unknown;
+  }): WishOwner =>
+    req.user
+      ? { userId: req.user.id }
+      : {
+          guestToken:
+            (req.body as { guestToken?: string } | undefined)?.guestToken ??
+            req.query.guest ??
+            null,
+        };
+
+  ctx.registerRoute("GET", "/wishlist", async (req) => {
+    const owner = wishOwner(req);
+    if (!owner.userId && !owner.guestToken) return { items: [], total: 0 };
+    return await listWishlist(db, owner);
+  });
+
+  ctx.registerRoute("POST", "/wishlist", async (req) => {
+    const body = req.body as { productId?: string };
+    if (!body?.productId) throw new ShopError(400, "상품을 지정해주세요.");
+    const result = await addToWishlist(db, {
+      owner: wishOwner(req),
+      productId: String(body.productId),
+    });
+    return { ok: true, added: result.added, guestToken: result.guestToken };
+  });
+
+  ctx.registerRoute("DELETE", "/wishlist/:productId", async (req) => {
+    await removeFromWishlist(db, {
+      owner: wishOwner(req),
+      productId: req.params.productId,
+    });
+    return { ok: true };
+  });
+
+  /** 하트 상태 — 목록 화면이 여러 상품을 한 번에 물어본다 */
+  ctx.registerRoute("GET", "/wishlist/check", async (req) => {
+    const ids = String(req.query.ids ?? "")
+      .split(",")
+      .map((x) => x.trim())
+      .filter((x) => /^[0-9a-f-]{36}$/i.test(x))
+      .slice(0, 100);
+    return { ids: await isInWishlist(db, { owner: wishOwner(req), productIds: ids }) };
+  });
+
+  ctx.registerRoute("GET", "/recent-views", async (req) => {
+    const owner = wishOwner(req);
+    if (!owner.userId && !owner.guestToken) return { items: [] };
+    return await listRecentViews(db, owner, Number(req.query.limit ?? 10));
+  });
+
+  /**
+   * 로그인 후 비회원 데이터 이어받기.
+   *
+   * 클라이언트가 로그인 직후 호출한다. 이게 없으면 "담아두고 가입했더니
+   * 사라졌다"가 되어 비회원 허용의 의미가 없어진다.
+   */
+  ctx.registerRoute("POST", "/wishlist/merge", async (req) => {
+    if (!req.user) throw new ShopError(401, "로그인이 필요합니다.");
+    const token = String((req.body as { guestToken?: string })?.guestToken ?? "");
+    if (!token) return { merged: 0 };
+    const merged = await mergeGuestWishlist(db, { userId: req.user.id, guestToken: token });
+    await mergeGuestViews(db, { userId: req.user.id, guestToken: token });
+    return { merged };
+  });
+
+  // ── 지역별 배송비 ───────────────────────────────────
+
+  /** 우편번호로 추가 배송비 조회 — 주문서가 금액을 미리 보여주는 데 쓴다 */
+  ctx.registerRoute("GET", "/shipping-zone", async (req) => {
+    const zone = await findZoneFee(db, String(req.query.postcode ?? ""));
+    return zone ?? { name: null, extraFee: 0 };
+  });
+
+  ctx.registerRoute("GET", "/admin/shipping-zones", async (req) => {
+    requireAdmin(req);
+    return await listZones(db);
+  });
+
+  ctx.registerRoute("POST", "/admin/shipping-zones", async (req) => {
+    requireAdmin(req);
+    const result = await createZone(db, req.body as Record<string, unknown>);
+    await ctx.cache.invalidateTag("pages");
+    return result;
+  });
+
+  ctx.registerRoute("PUT", "/admin/shipping-zones/:id", async (req) => {
+    requireAdmin(req);
+    await updateZone(db, req.params.id, req.body as Record<string, unknown>);
+    await ctx.cache.invalidateTag("pages");
+    return { ok: true };
+  });
+
+  ctx.registerRoute("DELETE", "/admin/shipping-zones/:id", async (req) => {
+    requireAdmin(req);
+    await deleteZone(db, req.params.id);
+    await ctx.cache.invalidateTag("pages");
+    return { ok: true };
+  });
+
   // ── 쇼핑몰 설정 ─────────────────────────────────────
   ctx.registerRoute("GET", "/admin/settings", async (req) => {
     requireAdmin(req);
@@ -993,6 +1130,7 @@ export default definePlugin(async (ctx) => {
   ctx.registerAdminResource(REVIEW_RESOURCE);
   ctx.registerAdminResource(INQUIRY_RESOURCE);
   ctx.registerAdminResource(RETURN_RESOURCE);
+  ctx.registerAdminResource(SHIPPING_ZONE_RESOURCE);
 
   /**
    * 사이트맵: 판매 중인 상품 주소.

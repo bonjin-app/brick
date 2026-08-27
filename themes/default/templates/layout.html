@@ -21,7 +21,27 @@
     {{{ content }}}
   </main>
   <footer class="brick-footer">
-    Powered by <a href="https://github.com/bonjin-app/brick">Brick</a>
+    {{#if site.business}}
+    <!--
+      사업자정보 — 전자상거래법 제13조상 표시 의무.
+      값은 관리자 → 설정 → 사업자정보에서 입력하고, 없는 항목은 내려오지 않으므로
+      각 항목을 {{#if}} 로 감싼다.
+    -->
+    <div class="brick-business">
+      {{#if site.business.companyName}}<span>상호 <b>{{ site.business.companyName }}</b></span>{{/if}}
+      {{#if site.business.representative}}<span>대표 {{ site.business.representative }}</span>{{/if}}
+      {{#if site.business.businessNo}}<span>사업자등록번호 {{ site.business.businessNo }}</span>{{/if}}
+      {{#if site.business.mailOrderNo}}<span>통신판매업신고 {{ site.business.mailOrderNo }}</span>{{/if}}
+      {{#if site.business.address}}<span>{{ site.business.address }}</span>{{/if}}
+      {{#if site.business.phone}}<span>전화 {{ site.business.phone }}</span>{{/if}}
+      {{#if site.business.email}}<span>이메일 {{ site.business.email }}</span>{{/if}}
+      {{#if site.business.privacyOfficer}}<span>개인정보 보호책임자 {{ site.business.privacyOfficer }}</span>{{/if}}
+      {{#if site.business.hostingProvider}}<span>호스팅 {{ site.business.hostingProvider }}</span>{{/if}}
+    </div>
+    {{/if}}
+    <div class="brick-footer-credit">
+      Powered by <a href="https://github.com/bonjin-app/brick">Brick</a>
+    </div>
   </footer>
 </body>
 </html>
