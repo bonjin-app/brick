@@ -8,13 +8,18 @@ import { addToCart, clearCart, getCartItems, updateCartItem, type CartOwner } fr
 import { changeOrderStatus, createOrder, type PointsPort } from "./orders.js";
 import { bankTransferGateway, confirmPayment, gateways, refundPayment, registerGateway } from "./payments.js";
 import { CATEGORY_RESOURCE, COUPON_RESOURCE, INQUIRY_RESOURCE, ORDER_RESOURCE,
-         PRODUCT_RESOURCE, REVIEW_RESOURCE } from "./admin-resources.js";
+         PRODUCT_RESOURCE, RETURN_RESOURCE, REVIEW_RESOURCE } from "./admin-resources.js";
 import { registerStorefrontBlocks } from "./blocks.js";
 import {
   createInquiry, createReview, deleteInquiry, deleteReview, findPurchase,
   listInquiries, listReviews, replyToInquiry, replyToReview, setReviewVisible, updateReview,
 } from "./reviews.js";
 import { formatOptions, parseImages, parseOptions, syncOptions } from "./options.js";
+import {
+  KIND_LABEL, REASON_CODES, RETURN_KINDS, RETURN_STATUS, RETURN_STATUS_LABEL,
+  cancelRequest, getReturn, getReturnable, listAllReturns, listMyReturns,
+  requestReturn, updateReturnStatus,
+} from "./returns.js";
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,148}$/;
 
@@ -776,6 +781,108 @@ export default definePlugin(async (ctx) => {
     return { ok: true };
   });
 
+
+  // ════════════════════════════════════════════════════
+  //  취소 · 반품 · 교환
+  //
+  //  전자상거래법 제17조: 소비자는 상품을 받은 날부터 7일 안에 청약철회를 할 수
+  //  있고, 사업자는 이를 거부할 수 없다. 편의 기능이 아니라 법적 요건이다.
+  // ════════════════════════════════════════════════════
+
+  /** 반품·교환 사유 목록 — 화면이 선택지를 만들 때 쓴다 */
+  ctx.registerRoute("GET", "/returns/reasons", async () => ({
+    items: Object.entries(REASON_CODES).map(([code, v]) => ({
+      code,
+      label: v.label,
+      // 누가 반송비를 내는지 **미리** 알려준다. 나중에 환불액이 깎여 있으면 분쟁이 된다
+      shippingPayer: v.payer,
+    })),
+    kinds: RETURN_KINDS.map((k) => ({ code: k, label: KIND_LABEL[k] })),
+  }));
+
+  /** 이 주문에서 무엇을 얼마나 신청할 수 있는가 */
+  ctx.registerRoute("GET", "/orders/:orderNo/returnable", async (req) => {
+    const view = await getReturnable(db, { orderNo: req.params.orderNo, viewer: req.user });
+    const s = await settings();
+    return {
+      items: view.items,
+      allowedKinds: view.allowedKinds.map((k) => ({ code: k, label: KIND_LABEL[k] })),
+      withdrawalDeadline: view.withdrawalDeadline,
+      withdrawalExpired: view.withdrawalExpired,
+      returnShippingFee: s.returnShippingFee,
+      orderStatus: view.order.status,
+    };
+  });
+
+  ctx.registerRoute("POST", "/orders/:orderNo/returns", async (req) => {
+    const s = await settings();
+    const result = await requestReturn(db, {
+      orderNo: req.params.orderNo,
+      input: req.body as never,
+      viewer: req.user,
+      settings: { returnShippingFee: s.returnShippingFee },
+    });
+    await ctx.hooks.doAction("shop.return.requested", {
+      returnId: result.id, returnNo: result.returnNo, orderNo: req.params.orderNo,
+      userId: req.user?.id ?? null,
+    });
+    return result;
+  });
+
+  ctx.registerRoute("GET", "/my/returns", async (req) => {
+    if (!req.user) throw new ShopError(401, "로그인이 필요합니다.");
+    return await listMyReturns(db, req.user.id, Number(req.query.page ?? 1));
+  });
+
+  ctx.registerRoute("GET", "/returns/:id", async (req) => {
+    return await getReturn(db, { returnId: req.params.id, viewer: req.user });
+  });
+
+  /** 고객이 요청을 철회 (처리 시작 전에만) */
+  ctx.registerRoute("POST", "/returns/:id/cancel", async (req) => {
+    await cancelRequest(db, { returnId: req.params.id, viewer: req.user });
+    return { ok: true };
+  });
+
+  // ── 관리자 ──────────────────────────────────────────
+  ctx.registerRoute("GET", "/admin/returns", async (req) => {
+    requireAdmin(req);
+    return await listAllReturns(db, {
+      page: Number(req.query.page ?? 1),
+      status: req.query.status,
+      kind: req.query.kind,
+    });
+  });
+
+  ctx.registerRoute("PUT", "/admin/returns/:id", async (req) => {
+    requireAdmin(req);
+    const b = req.body as Record<string, unknown>;
+    const result = await updateReturnStatus(db, {
+      returnId: req.params.id,
+      status: String(b.status ?? ""),
+      actorId: req.user!.id,
+      note: b.admin_note === undefined ? undefined : String(b.admin_note),
+      rejectReason: b.reject_reason === undefined ? undefined : String(b.reject_reason),
+      pickupTrackingNo: b.pickup_tracking_no === undefined ? undefined : String(b.pickup_tracking_no),
+      exchangeTrackingNo: b.exchange_tracking_no === undefined ? undefined : String(b.exchange_tracking_no),
+      // 실제 환불은 결제 모듈이 한다 — 금액 검증과 PG 호출이 거기 있다
+      refund: async (orderNo, amount, reason) => {
+        await refundPayment(db, {
+          orderNo, amount, reason, actorId: req.user!.id, pointsPort: pointsPort(),
+        });
+      },
+      pointsPort: pointsPort(),
+    });
+
+    if (result.status === "completed" || result.status === "rejected") {
+      await ctx.hooks.doAction("shop.return.resolved", {
+        returnId: req.params.id, status: result.status, refunded: result.refunded,
+      });
+    }
+    await ctx.cache.invalidateTag("pages");
+    return result;
+  });
+
   // ── 쇼핑몰 설정 ─────────────────────────────────────
   ctx.registerRoute("GET", "/admin/settings", async (req) => {
     requireAdmin(req);
@@ -790,6 +897,7 @@ export default definePlugin(async (ctx) => {
       freeShippingOver: Math.max(0, Math.floor(Number(b.freeShippingOver ?? DEFAULT_SETTINGS.freeShippingOver))),
       bankAccount: String(b.bankAccount ?? "").slice(0, 200),
       pageSize: Math.min(60, Math.max(4, Math.floor(Number(b.pageSize ?? DEFAULT_SETTINGS.pageSize)))),
+      returnShippingFee: Math.max(0, Math.floor(Number(b.returnShippingFee ?? DEFAULT_SETTINGS.returnShippingFee))),
     };
     await ctx.settings.set("settings", next);
     await ctx.cache.invalidateTag("pages");
@@ -884,6 +992,7 @@ export default definePlugin(async (ctx) => {
   ctx.registerAdminResource(COUPON_RESOURCE);
   ctx.registerAdminResource(REVIEW_RESOURCE);
   ctx.registerAdminResource(INQUIRY_RESOURCE);
+  ctx.registerAdminResource(RETURN_RESOURCE);
 
   /**
    * 사이트맵: 판매 중인 상품 주소.

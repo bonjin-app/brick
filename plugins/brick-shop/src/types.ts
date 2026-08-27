@@ -73,6 +73,14 @@ export interface ShopSettings {
   bankAccount: string;
   /** 상품 목록 페이지당 개수 */
   pageSize: number;
+  /**
+   * 반품 배송비 (원).
+   *
+   * 단순 변심 반품에서 고객이 부담하는 반송비다 (전자상거래법 제18조 제9항).
+   * 불량·오배송은 사업자 부담이므로 이 값이 쓰이지 않는다 —
+   * 그 판단은 사유 구분(returns.ts REASON_CODES)이 한다.
+   */
+  returnShippingFee: number;
 }
 
 export const DEFAULT_SETTINGS: ShopSettings = {
@@ -80,6 +88,7 @@ export const DEFAULT_SETTINGS: ShopSettings = {
   freeShippingOver: 50000,
   bankAccount: "",
   pageSize: 20,
+  returnShippingFee: 3000,
 };
 
 export function escapeHtml(s: unknown): string {

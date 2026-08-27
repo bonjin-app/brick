@@ -1,5 +1,6 @@
 import type { AdminResource } from "@brick/plugin-sdk";
 import { ORDER_STATUS, STATUS_LABEL, PRODUCT_STATUS_LABEL } from "./types.js";
+import { REASON_CODES, RETURN_STATUS, RETURN_STATUS_LABEL } from "./returns.js";
 
 /**
  * 관리자 리소스 선언.
@@ -145,5 +146,40 @@ export const COUPON_RESOURCE: AdminResource = {
     { name: "usage_limit", label: "사용 한도", type: "number", help: "비우면 무제한." },
     { name: "used_count", label: "사용됨", type: "number", readOnly: true, inList: true },
     { name: "is_active", label: "활성", type: "boolean", inList: true },
+  ],
+};
+
+export const RETURN_RESOURCE: AdminResource = {
+  name: "returns",
+  title: "취소·반품·교환",
+  itemLabel: "요청",
+  basePath: "/admin/returns",
+  order: 6,
+  description:
+    "상태를 '처리완료'로 바꾸는 순간 재고가 복원되고 환불이 실행됩니다. " +
+    "반품·교환은 물건을 받은 뒤(입고완료) 완료로 바꾸세요 — 그 전에 완료하면 돈만 나갑니다. " +
+    "거부할 때는 사유를 반드시 입력해야 합니다.",
+  can: { create: false, delete: false },
+  fields: [
+    { name: "return_no", label: "요청번호", type: "text", readOnly: true, inList: true },
+    { name: "created_at", label: "신청일", type: "date", readOnly: true, inList: true },
+    { name: "order_no", label: "주문번호", type: "text", readOnly: true, inList: true },
+    { name: "orderer_name", label: "주문자", type: "text", readOnly: true, inList: true },
+    { name: "kind_label", label: "종류", type: "text", readOnly: true, inList: true },
+    { name: "status_label", label: "상태", type: "text", readOnly: true, inList: true },
+    { name: "reason_label", label: "사유", type: "text", readOnly: true, inList: true },
+    { name: "reason", label: "상세 사유", type: "textarea", readOnly: true },
+    { name: "refund_amount", label: "환불 예정액", type: "money", readOnly: true, inList: true },
+    { name: "return_shipping_fee", label: "반품 배송비", type: "money", readOnly: true },
+    { name: "shipping_payer", label: "배송비 부담", type: "text", readOnly: true,
+      help: "단순 변심은 고객(customer), 불량·오배송은 사업자(seller) 부담입니다." },
+    { name: "status", label: "상태 변경", type: "select",
+      options: RETURN_STATUS.map((s) => ({ value: s, label: RETURN_STATUS_LABEL[s] })),
+      help: "허용된 전이만 가능합니다. '처리완료'에서 재고 복원과 환불이 실행됩니다." },
+    { name: "reject_reason", label: "거부 사유", type: "textarea",
+      help: "거부하려면 반드시 입력해야 합니다. 고객에게 그대로 전달됩니다." },
+    { name: "pickup_tracking_no", label: "수거 운송장", type: "text" },
+    { name: "exchange_tracking_no", label: "교환품 운송장", type: "text" },
+    { name: "admin_note", label: "내부 메모", type: "textarea" },
   ],
 };

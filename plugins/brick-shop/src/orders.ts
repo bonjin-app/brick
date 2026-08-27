@@ -243,6 +243,9 @@ export async function changeOrderStatus(
 
     // 취소/환불이면 사용 포인트를 되돌린다.
     // 재고 복원과 같은 트랜잭션에서 처리해야 부분 실패가 남지 않는다.
+    //
+    // 부분 반품에서 이미 원복되었을 수 있다. pointsPort.refund 는
+    // (refType, refId) 기준으로 멱등하므로 두 번 불러도 두 배가 되지 않는다.
     if (STOCK_RESTORING.includes(to) && opts.pointsPort) {
       const { rows: order } = await tx.execute(sql`
         SELECT user_id, order_no, point_used FROM shop_orders WHERE id = ${orderId}::uuid
@@ -261,36 +264,52 @@ export async function changeOrderStatus(
       }
     }
 
-    // 취소/환불이면 재고 복원 (이미 복원된 상태에서 또 하지 않도록 전이 규칙이 보장)
+    // 취소/환불이면 재고 복원.
+    //
+    // **아직 살아 있는 수량만** 되돌린다. 부분 반품으로 이미 복원된 수량을
+    // 또 되돌리면 판 것보다 많은 재고가 생긴다 — 세 개 중 하나를 반품한 뒤
+    // 주문 전체를 취소하면 네 개가 복원된다.
     if (STOCK_RESTORING.includes(to)) {
       const { rows: items } = await tx.execute(sql`
-        SELECT product_id, option_id, quantity FROM shop_order_items WHERE order_id = ${orderId}::uuid
+        SELECT id, product_id, option_id, quantity - cancelled_qty AS live
+        FROM shop_order_items WHERE order_id = ${orderId}::uuid
       `);
       for (const it of items) {
+        const live = Number(it.live);
+        if (live <= 0) continue;
         if (it.option_id) {
           await tx.execute(sql`
-            UPDATE shop_product_options SET stock = stock + ${Number(it.quantity)}
+            UPDATE shop_product_options SET stock = stock + ${live}
             WHERE id = ${String(it.option_id)}::uuid AND stock IS NOT NULL
           `);
         }
         if (it.product_id) {
           await tx.execute(sql`
             UPDATE shop_products
-            SET stock = CASE WHEN stock IS NULL THEN NULL ELSE stock + ${Number(it.quantity)} END,
-                sold_count = greatest(0, sold_count - ${Number(it.quantity)})
+            SET stock = CASE WHEN stock IS NULL THEN NULL ELSE stock + ${live} END,
+                sold_count = greatest(0, sold_count - ${live})
             WHERE id = ${String(it.product_id)}::uuid
           `);
         }
+        // 취소 수량을 채워 "이 항목은 더 이상 살아 있지 않다"를 기록한다.
+        // 이후의 반품 신청이 이 수량을 다시 요청하지 못하게 막는다.
+        await tx.execute(sql`
+          UPDATE shop_order_items SET cancelled_qty = quantity WHERE id = ${String(it.id)}::uuid
+        `);
       }
     }
 
     const paidAt = to === "paid" ? sql`now()` : sql`paid_at`;
+    // 배송 완료 시각은 **청약철회 기간(7일)의 기산점**이다.
+    // 기록하지 않으면 "언제까지 반품할 수 있는가"를 계산할 수 없다.
+    const deliveredAt = to === "delivered" ? sql`now()` : sql`delivered_at`;
     const paymentStatus = to === "paid" ? "paid" : to === "refunded" ? "refunded" : null;
 
     await tx.execute(sql`
       UPDATE shop_orders SET
         status = ${to},
         paid_at = ${paidAt},
+        delivered_at = ${deliveredAt},
         payment_status = coalesce(${paymentStatus}, payment_status),
         tracking_no = coalesce(${opts.trackingNo ?? null}, tracking_no),
         cancelled_reason = coalesce(${to === "cancelled" ? (opts.note ?? null) : null}, cancelled_reason),
