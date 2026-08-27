@@ -26,11 +26,61 @@ export const PRODUCT_RESOURCE: AdminResource = {
     { name: "status", label: "판매 상태", type: "select", inList: true,
       options: Object.entries(PRODUCT_STATUS_LABEL).map(([value, label]) => ({ value, label })) },
     { name: "image_url", label: "대표 이미지", type: "image" },
+    { name: "images_text", label: "추가 이미지", type: "textarea",
+      help: "한 줄에 이미지 주소 하나. 최대 20장. 상세 화면에서 갤러리로 보여집니다. 대표 이미지를 비우면 첫 줄이 대표가 됩니다." },
+    { name: "options_text", label: "옵션", type: "textarea",
+      help: "한 줄에 하나: 이름|추가금|재고 (예: 색상: 빨강|1000|10). 추가금·재고는 생략 가능하고, 재고를 비우면 무한입니다. 이름을 그대로 두면 장바구니에 담긴 옵션이 유지됩니다." },
     { name: "summary", label: "짧은 설명", type: "textarea", help: "목록과 검색 결과에 노출됩니다." },
     { name: "description", label: "상세 설명", type: "richtext", help: "HTML을 사용할 수 있습니다." },
     { name: "free_shipping", label: "무료배송", type: "boolean" },
     { name: "sort_order", label: "진열 순서", type: "number", help: "작을수록 먼저 표시됩니다." },
     { name: "sold_count", label: "판매수량", type: "number", readOnly: true, inList: true },
+    { name: "rating_avg", label: "평점", type: "number", readOnly: true, inList: true },
+    { name: "review_count", label: "후기", type: "number", readOnly: true, inList: true },
+  ],
+};
+
+export const REVIEW_RESOURCE: AdminResource = {
+  name: "reviews",
+  title: "상품 후기",
+  itemLabel: "후기",
+  basePath: "/admin/reviews",
+  order: 40,
+  description:
+    "구매 확인된 후기에는 '구매확인' 표시가 붙습니다. 부적절한 후기는 삭제 대신 표시를 끄면 되돌릴 수 있습니다.",
+  can: { create: false },
+  fields: [
+    { name: "created_at", label: "작성일", type: "date", readOnly: true, inList: true },
+    { name: "product_name", label: "상품", type: "text", readOnly: true, inList: true },
+    { name: "author_name", label: "작성자", type: "text", readOnly: true, inList: true },
+    { name: "rating", label: "별점", type: "number", readOnly: true, inList: true },
+    { name: "verified", label: "구매확인", type: "boolean", readOnly: true, inList: true },
+    { name: "content", label: "내용", type: "textarea", readOnly: true },
+    { name: "admin_reply", label: "판매자 답변", type: "textarea",
+      help: "고객에게 후기 아래에 함께 표시됩니다. 비우면 답변을 지웁니다." },
+    { name: "is_visible", label: "표시", type: "boolean", inList: true,
+      help: "끄면 고객에게 보이지 않고 평점에서도 제외됩니다." },
+  ],
+};
+
+export const INQUIRY_RESOURCE: AdminResource = {
+  name: "inquiries",
+  title: "상품 문의",
+  itemLabel: "문의",
+  basePath: "/admin/inquiries",
+  order: 41,
+  description: "답변을 저장하면 상태가 '답변완료'로 바뀝니다. 비밀 문의는 작성자와 관리자만 볼 수 있습니다.",
+  can: { create: false },
+  fields: [
+    { name: "created_at", label: "문의일", type: "date", readOnly: true, inList: true },
+    { name: "product_name", label: "상품", type: "text", readOnly: true, inList: true },
+    { name: "author_name", label: "작성자", type: "text", readOnly: true, inList: true },
+    { name: "status_label", label: "상태", type: "text", readOnly: true, inList: true },
+    { name: "is_secret", label: "비밀", type: "boolean", readOnly: true, inList: true },
+    { name: "title", label: "제목", type: "text", readOnly: true, inList: true },
+    { name: "content", label: "문의 내용", type: "textarea", readOnly: true },
+    { name: "admin_reply", label: "답변", type: "textarea",
+      help: "저장하면 상태가 답변완료로 바뀝니다." },
   ],
 };
 

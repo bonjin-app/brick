@@ -146,15 +146,25 @@ sleep 1
 check "구매 적립 (+220)" "$(balance)" "235"
 check "같은 주문 적립은 1회만" "$(psql_one "SELECT count(*) FROM point_ledger WHERE kind='earn' AND ref_type='shop.order'")" "1"
 
+echo "── 후기 작성 적립 (구매 검증과 연동)"
+# 결제가 확인된 주문이므로 후기 자격이 생긴다 (brick-shop이 검증)
+RVID="$(curl -s -b "$MEMBER" -X POST "$SH/products/$PROD/reviews" -H 'content-type: application/json' \
+  -d '{"rating":5,"content":"포인트도 받고 상품도 좋습니다."}' | python3 -c 'import sys,json;print(json.load(sys.stdin).get("id",""))')"
+[[ -n "$RVID" ]] && ok "후기 작성" || bad "후기 작성"
+sleep 1
+check "후기 적립 (+100)" "$(balance)" "335"
+check "후기 적립도 1회만" "$(psql_one "SELECT count(*) FROM point_ledger WHERE ref_type='shop.review'")" "1"
+contains "적립 내역에 후기 표시" "$(curl -s -b "$MEMBER" "$PT/my")" "상품 후기 작성"
+
 echo "── 환불 시 포인트 복원"
 printf '{"orderNo":"%s","reason":"고객 요청"}' "$ONO" > "$TMP/rf.json"
 contains "전액 환불" "$(curl -s -b "$ADMIN" -X POST "$SH/admin/payments/refund" -H 'content-type: application/json' --data-binary "@$TMP/rf.json")" '"remaining":0'
 sleep 1
-check "사용 포인트 복원 (235+1000)" "$(balance)" "1235"
+check "사용 포인트 복원 (335+1000)" "$(balance)" "1335"
 contains "복원 내역 표시" "$(curl -s -b "$MEMBER" "$PT/my")" "포인트 반환"
 # 재환불은 결제 내역이 없어 거부되고, 포인트도 중복 복원되지 않아야 한다
 curl -s -b "$ADMIN" -X POST "$SH/admin/payments/refund" -H 'content-type: application/json' --data-binary "@$TMP/rf.json" >/dev/null
-check "재환불에도 잔액 유지" "$(balance)" "1235"
+check "재환불에도 잔액 유지" "$(balance)" "1335"
 
 echo "── 원자성 (주문 실패 시 차감되지 않는다)"
 printf '{"slug":"scarce","name":"희귀상품","price":50000,"stock":1,"status":"selling"}' > "$TMP/scarce.json"

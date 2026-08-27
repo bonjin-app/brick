@@ -43,6 +43,8 @@ export BRICK_THEMES_DIR="$ROOT/themes"
 export BRICK_UPLOADS_DIR="$TMP/uploads"
 export BRICK_MIGRATIONS_DIR="$ROOT/packages/database/migrations"
 export BRICK_SECRET="${BRICK_SECRET:-smoke-shop-secret-value}"
+# 후기 작성자를 회원으로 등록해야 하므로 캡차는 끈다 (캡차 자체는 보안 스모크가 검증)
+export BRICK_CAPTCHA=off
 
 node "$ROOT/apps/api/dist/main.js" > "$TMP/api.log" 2>&1 &
 API_PID=$!
@@ -172,6 +174,204 @@ else
   bad "취소 대상 주문 없음"
 fi
 
+echo "── 옵션·다중 이미지 (관리 텍스트 편집)"
+cat > "$TMP/optprod.json" <<'JSON'
+{"slug":"opt-item","name":"옵션 상품","price":10000,"status":"selling","stock":100,
+ "images_text":"/uploads/a.jpg\n/uploads/b.jpg",
+ "options_text":"색상: 빨강|1000|5\n색상: 파랑||3\n무광"}
+JSON
+OPID="$(curl -s -b "$CK" -X POST "$SHOP/admin/products" -H 'content-type: application/json' \
+  --data-binary "@$TMP/optprod.json" | jq_get "['id']")"
+[[ -n "$OPID" ]] && ok "옵션·이미지 포함 상품 등록" || bad "옵션·이미지 포함 상품 등록"
+OPDETAIL="$(curl -s "$SHOP/products/opt-item")"
+contains "옵션 3개 생성" "$OPDETAIL" '"무광"'
+contains "옵션 추가금 반영" "$OPDETAIL" '"extra_price":1000'
+contains "다중 이미지 저장" "$OPDETAIL" '/uploads/b.jpg'
+contains "대표 이미지 자동 지정(첫 줄)" "$OPDETAIL" '"image_url":"/uploads/a.jpg"'
+
+# 관리 목록은 배열을 텍스트로 되돌려 준다 (선언적 폼이 편집할 수 있는 형태)
+ADMIN_LIST="$(curl -s -b "$CK" "$SHOP/admin/products")"
+contains "옵션 텍스트 역변환" "$ADMIN_LIST" '색상: 빨강|1000|5'
+contains "이미지 텍스트 역변환" "$ADMIN_LIST" '/uploads/a.jpg'
+
+check "옵션 이름 중복 차단" \
+  "$(code -b "$CK" -X POST "$SHOP/admin/products" -H 'content-type: application/json' \
+      -d '{"slug":"dup-opt","name":"x","price":100,"status":"selling","options_text":"빨강|0|1\n빨강|0|2"}')" "400"
+check "옵션 재고 음수 차단" \
+  "$(code -b "$CK" -X POST "$SHOP/admin/products" -H 'content-type: application/json' \
+      -d '{"slug":"neg-opt","name":"x","price":100,"status":"selling","options_text":"빨강|0|-5"}')" "400"
+check "javascript: 이미지 주소 차단" \
+  "$(code -b "$CK" -X POST "$SHOP/admin/products" -H 'content-type: application/json' \
+      -d '{"slug":"js-img","name":"x","price":100,"status":"selling","images_text":"javascript:alert(1)"}')" "400"
+
+# 옵션 id 유지: 장바구니가 조용히 망가지지 않아야 한다
+RED_ID="$(echo "$OPDETAIL" | python3 -c "
+import sys,json
+for o in json.load(sys.stdin)['options']:
+    if '빨강' in o['name']: print(o['id']); break")"
+printf '{"productId":"%s","optionId":"%s","quantity":1}' "$OPID" "$RED_ID" > "$TMP/optcart.json"
+OGT="$(curl -s -X POST "$SHOP/cart" -H 'content-type: application/json' --data-binary "@$TMP/optcart.json" | jq_get "['guestToken']")"
+contains "옵션 담기(추가금 11000원)" "$(curl -s "$SHOP/cart?guest=$OGT")" '"unitPrice":11000'
+# 이름을 그대로 두고 하나만 지운 뒤에도 빨강의 id는 살아 있어야 한다
+cat > "$TMP/optprod2.json" <<'JSON'
+{"slug":"opt-item","name":"옵션 상품","price":10000,"status":"selling","stock":100,
+ "images_text":"/uploads/a.jpg",
+ "options_text":"색상: 빨강|2000|5\n색상: 파랑||3"}
+JSON
+curl -s -b "$CK" -X PUT "$SHOP/admin/products/$OPID" -H 'content-type: application/json' \
+  --data-binary "@$TMP/optprod2.json" >/dev/null
+NEW_RED="$(curl -s "$SHOP/products/opt-item" | python3 -c "
+import sys,json
+for o in json.load(sys.stdin)['options']:
+    if '빨강' in o['name']: print(o['id']); break")"
+check "옵션 수정 후 id 유지(장바구니 보존)" "$NEW_RED" "$RED_ID"
+OPT_NAMES="$(curl -s "$SHOP/products/opt-item")"
+[[ "$OPT_NAMES" != *"무광"* ]] && ok "목록에서 뺀 옵션 삭제" || bad "목록에서 뺀 옵션 삭제"
+contains "수정된 추가금 반영" "$(curl -s "$SHOP/cart?guest=$OGT")" '"unitPrice":12000'
+
+echo "── 상품 후기 (구매 검증)"
+BCK="$TMP/buyer.txt"
+curl -s -X POST "$API/api/register" -H 'content-type: application/json' \
+  -d '{"email":"buyer@shop.test","password":"buyerpass123","displayName":"구매자"}' >/dev/null
+curl -s -c "$BCK" -X POST "$API/api/auth/login" -H 'content-type: application/json' \
+  -d '{"email":"buyer@shop.test","password":"buyerpass123"}' >/dev/null
+
+check "비로그인 후기 작성 차단" \
+  "$(code -X POST "$SHOP/products/$OPID/reviews" -H 'content-type: application/json' \
+      -d '{"rating":5,"content":"좋아요 정말 좋아요"}')" "401"
+contains "미구매 회원은 자격 없음" \
+  "$(curl -s -b "$BCK" "$SHOP/products/$OPID/reviews/eligibility")" '"reason":"not_purchased"'
+check "미구매 회원 후기 작성 차단(핵심)" \
+  "$(code -b "$BCK" -X POST "$SHOP/products/$OPID/reviews" -H 'content-type: application/json' \
+      -d '{"rating":5,"content":"안 사고 쓰는 후기"}')" "403"
+
+# 회원 주문 → 결제 확인까지
+printf '{"items":[{"productId":"%s","quantity":1}],"orderer":{"ordererName":"구매자","ordererPhone":"010-2222-3333","postcode":"06236","address1":"서울"}}' "$OPID" > "$TMP/border.json"
+BORDER="$(curl -s -b "$BCK" -X POST "$SHOP/orders" -H 'content-type: application/json' --data-binary "@$TMP/border.json")"
+BORDER_NO="$(echo "$BORDER" | jq_get "['orderNo']")"
+[[ -n "$BORDER_NO" ]] && ok "회원 주문 생성" || bad "회원 주문 생성"
+BOID="$(curl -s -b "$CK" "$SHOP/admin/orders" | python3 -c "
+import sys,json
+for o in json.load(sys.stdin)['items']:
+    if o['order_no'] == '$BORDER_NO': print(o['id']); break")"
+contains "입금대기 상태에서는 자격 없음" \
+  "$(curl -s -b "$BCK" "$SHOP/products/$OPID/reviews/eligibility")" '"reason":"not_purchased"'
+curl -s -b "$CK" -X PUT "$SHOP/admin/orders/$BOID" -H 'content-type: application/json' \
+  -d '{"status":"paid"}' >/dev/null
+contains "결제 확인 후 자격 획득" \
+  "$(curl -s -b "$BCK" "$SHOP/products/$OPID/reviews/eligibility")" '"canWrite":true'
+
+check "짧은 후기 차단" \
+  "$(code -b "$BCK" -X POST "$SHOP/products/$OPID/reviews" -H 'content-type: application/json' \
+      -d '{"rating":5,"content":"굿"}')" "400"
+check "범위 밖 별점 차단" \
+  "$(code -b "$BCK" -X POST "$SHOP/products/$OPID/reviews" -H 'content-type: application/json' \
+      -d '{"rating":9,"content":"별점 조작 시도입니다"}')" "400"
+RID="$(curl -s -b "$BCK" -X POST "$SHOP/products/$OPID/reviews" -H 'content-type: application/json' \
+  -d '{"rating":4,"content":"배송이 빠르고 품질이 좋았습니다."}' | jq_get "['id']")"
+[[ -n "$RID" ]] && ok "구매자 후기 작성" || bad "구매자 후기 작성"
+check "같은 상품 재작성 차단" \
+  "$(code -b "$BCK" -X POST "$SHOP/products/$OPID/reviews" -H 'content-type: application/json' \
+      -d '{"rating":1,"content":"두 번째 후기 시도입니다"}')" "409"
+contains "이미 작성 상태 안내" \
+  "$(curl -s -b "$BCK" "$SHOP/products/$OPID/reviews/eligibility")" '"reason":"already_written"'
+
+REVIEWS="$(curl -s "$SHOP/products/$OPID/reviews")"
+contains "후기 목록 공개" "$REVIEWS" "배송이 빠르고"
+contains "구매확인 배지" "$REVIEWS" '"verified":true'
+[[ "$REVIEWS" != *'"order_no"'* ]] && ok "주문번호 비노출" || bad "주문번호가 노출됨"
+contains "평균 별점 집계" "$REVIEWS" '"average":4'
+contains "별점 분포" "$REVIEWS" '"distribution"'
+contains "상품에 후기 수 반영" "$(curl -s "$SHOP/products/opt-item")" '"review_count":1'
+contains "상품 평점 반영" "$(curl -s "$SHOP/products/opt-item")" '"rating_avg":4'
+
+echo "── 후기 관리 (판매자)"
+contains "관리 목록에 후기" "$(curl -s -b "$CK" "$SHOP/admin/reviews")" '"verified":true'
+contains "판매자 답변 저장" \
+  "$(curl -s -b "$CK" -X PUT "$SHOP/admin/reviews/$RID" -H 'content-type: application/json' \
+      -d '{"admin_reply":"이용해 주셔서 감사합니다.","is_visible":true}')" '"ok":true'
+contains "답변이 고객에게 보임" "$(curl -s "$SHOP/products/$OPID/reviews")" "감사합니다"
+curl -s -b "$CK" -X PUT "$SHOP/admin/reviews/$RID" -H 'content-type: application/json' \
+  -d '{"admin_reply":"이용해 주셔서 감사합니다.","is_visible":false}' >/dev/null
+HIDDEN="$(curl -s "$SHOP/products/$OPID/reviews")"
+contains "숨긴 후기는 목록에서 제외" "$HIDDEN" '"total":0'
+contains "숨김 시 평점에서 제외" "$(curl -s "$SHOP/products/opt-item")" '"review_count":0'
+contains "관리자는 숨긴 후기도 조회" \
+  "$(curl -s -b "$CK" "$SHOP/products/$OPID/reviews")" '"is_visible":false'
+curl -s -b "$CK" -X PUT "$SHOP/admin/reviews/$RID" -H 'content-type: application/json' \
+  -d '{"admin_reply":"","is_visible":true}' >/dev/null
+contains "표시 복구 후 평점 재계산" "$(curl -s "$SHOP/products/opt-item")" '"review_count":1'
+
+echo "── 상품 문의"
+check "비로그인 문의 차단" \
+  "$(code -X POST "$SHOP/products/$OPID/inquiries" -H 'content-type: application/json' \
+      -d '{"title":"질문","content":"내용"}')" "401"
+check "제목 없는 문의 차단" \
+  "$(code -b "$BCK" -X POST "$SHOP/products/$OPID/inquiries" -H 'content-type: application/json' \
+      -d '{"title":"","content":"내용만 있음"}')" "400"
+QID="$(curl -s -b "$BCK" -X POST "$SHOP/products/$OPID/inquiries" -H 'content-type: application/json' \
+  -d '{"title":"배송 기간 문의","content":"언제 도착하나요?"}' | jq_get "['id']")"
+[[ -n "$QID" ]] && ok "공개 문의 작성" || bad "공개 문의 작성"
+SQID="$(curl -s -b "$BCK" -X POST "$SHOP/products/$OPID/inquiries" -H 'content-type: application/json' \
+  -d '{"title":"주소 변경","content":"연락처 010-9999-8888로 변경해주세요","isSecret":true}' | jq_get "['id']")"
+[[ -n "$SQID" ]] && ok "비밀 문의 작성" || bad "비밀 문의 작성"
+
+PUBQ="$(curl -s "$SHOP/products/$OPID/inquiries")"
+contains "공개 문의는 누구나 봄" "$PUBQ" "언제 도착하나요"
+contains "비밀 문의 제목 가림" "$PUBQ" "비밀 문의입니다"
+[[ "$PUBQ" != *"010-9999-8888"* ]] && ok "비밀 문의 내용 비노출(개인정보)" || bad "비밀 문의 내용 노출"
+contains "작성자는 자기 비밀 문의 열람" \
+  "$(curl -s -b "$BCK" "$SHOP/products/$OPID/inquiries")" "010-9999-8888"
+contains "관리자는 비밀 문의 열람" \
+  "$(curl -s -b "$CK" "$SHOP/products/$OPID/inquiries")" "010-9999-8888"
+contains "상품에 문의 수 반영" "$(curl -s "$SHOP/products/opt-item")" '"inquiry_count":2'
+
+contains "관리 목록에 미답변 표시" "$(curl -s -b "$CK" "$SHOP/admin/inquiries")" '"status_label":"미답변"'
+contains "문의 답변 저장" \
+  "$(curl -s -b "$CK" -X PUT "$SHOP/admin/inquiries/$QID" -H 'content-type: application/json' \
+      -d '{"admin_reply":"주문 후 2~3일 내 도착합니다."}')" '"ok":true'
+contains "답변 후 상태 변경" "$(curl -s "$SHOP/products/$OPID/inquiries")" '"status":"answered"'
+contains "답변 내용 공개" "$(curl -s "$SHOP/products/$OPID/inquiries")" "2~3일"
+
+echo "── 후기·문의 권한"
+CCK="$TMP/other.txt"
+curl -s -X POST "$API/api/register" -H 'content-type: application/json' \
+  -d '{"email":"other@shop.test","password":"otherpass123","displayName":"제3자"}' >/dev/null
+curl -s -c "$CCK" -X POST "$API/api/auth/login" -H 'content-type: application/json' \
+  -d '{"email":"other@shop.test","password":"otherpass123"}' >/dev/null
+check "남의 후기 수정 차단" \
+  "$(code -b "$CCK" -X PUT "$SHOP/reviews/$RID" -H 'content-type: application/json' \
+      -d '{"rating":1,"content":"남의 후기를 조작합니다"}')" "403"
+check "남의 후기 삭제 차단" "$(code -b "$CCK" -X DELETE "$SHOP/reviews/$RID")" "403"
+check "남의 문의 삭제 차단" "$(code -b "$CCK" -X DELETE "$SHOP/inquiries/$QID")" "403"
+contains "본인 후기 수정" \
+  "$(curl -s -b "$BCK" -X PUT "$SHOP/reviews/$RID" -H 'content-type: application/json' \
+      -d '{"rating":5,"content":"다시 써보니 더 좋습니다."}')" '"ok":true'
+contains "수정 후 평점 재계산" "$(curl -s "$SHOP/products/opt-item")" '"rating_avg":5'
+
+echo "── 후기 XSS (저장형)"
+XCK="$TMP/xss.txt"
+curl -s -X POST "$API/api/register" -H 'content-type: application/json' \
+  -d '{"email":"xss@shop.test","password":"xsspass123","displayName":"<img src=x onerror=alert(1)>"}' >/dev/null
+curl -s -c "$XCK" -X POST "$API/api/auth/login" -H 'content-type: application/json' \
+  -d '{"email":"xss@shop.test","password":"xsspass123"}' >/dev/null
+printf '{"items":[{"productId":"%s","quantity":1}],"orderer":{"ordererName":"엑","ordererPhone":"010-3333-4444","postcode":"06236","address1":"서울"}}' "$OPID" > "$TMP/xorder.json"
+XNO="$(curl -s -b "$XCK" -X POST "$SHOP/orders" -H 'content-type: application/json' --data-binary "@$TMP/xorder.json" | jq_get "['orderNo']")"
+XOID="$(curl -s -b "$CK" "$SHOP/admin/orders" | python3 -c "
+import sys,json
+for o in json.load(sys.stdin)['items']:
+    if o['order_no'] == '$XNO': print(o['id']); break")"
+curl -s -b "$CK" -X PUT "$SHOP/admin/orders/$XOID" -H 'content-type: application/json' -d '{"status":"paid"}' >/dev/null
+curl -s -b "$XCK" -X POST "$SHOP/products/$OPID/reviews" -H 'content-type: application/json' \
+  -d '{"rating":3,"content":"<script>alert(1)</script>","images":["javascript:alert(1)","/uploads/ok.jpg"]}' >/dev/null
+XREV="$(curl -s "$SHOP/products/$OPID/reviews")"
+contains "후기 이미지 스킴 필터" "$XREV" '/uploads/ok.jpg'
+[[ "$XREV" != *"javascript:alert"* ]] && ok "javascript: 이미지 제거" || bad "javascript: 이미지 통과"
+# 렌더 시점 이스케이프 — 상세 블록 안의 클라이언트 스크립트가 esc()를 통과시킨다
+contains "후기 영역 서버 렌더 포함" \
+  "$(curl -s -X POST "$API/api/blocks/render" -H 'content-type: application/json' \
+      -d '{"name":"brick-shop/product-detail","props":{"slug":"opt-item"}}')" "brick-pd-tabs"
+
 echo "── 스토어프론트 블록"
 BLOCKS="$(curl -s "$API/api/blocks")"
 contains "상품목록 블록" "$BLOCKS" "brick-shop/product-list"
@@ -181,6 +381,11 @@ DETAIL="$(curl -s -X POST "$API/api/blocks/render" -H 'content-type: application
 contains "상품 상세 서버 렌더" "$DETAIL" "스모크 상품"
 contains "JSON-LD 구조화 데이터(SEO)" "$DETAIL" "schema.org"
 contains "상품명 XSS 이스케이프 준비" "$DETAIL" "brick-product-detail"
+contains "후기·문의 탭 렌더" "$DETAIL" "상품후기"
+GAL="$(curl -s -X POST "$API/api/blocks/render" -H 'content-type: application/json' \
+  -d '{"name":"brick-shop/product-detail","props":{"slug":"opt-item"}}')"
+contains "평점 별 표시" "$GAL" "brick-detail-rating"
+contains "aggregateRating(SEO)" "$GAL" "AggregateRating"
 
 echo "── 통계"
 contains "매출 통계" "$(curl -s -b "$CK" "$SHOP/admin/stats")" "revenue"

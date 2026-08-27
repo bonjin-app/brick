@@ -100,6 +100,26 @@ export default definePlugin(async (ctx) => {
   });
 
   /**
+   * 상품 후기 적립.
+   * 후기는 구매한 사람만 쓸 수 있으므로(brick-shop이 검증) 어뷰징 여지가 작다.
+   * 게시글보다 후하게 주는 것이 쇼핑몰의 관례다.
+   */
+  ctx.hooks.onAction("shop.review.created", "brick-point", async (payload) => {
+    const { reviewId, authorId } = (payload ?? {}) as { reviewId?: string; authorId?: string | null };
+    if (!reviewId || !authorId) return;
+    const s = await settings();
+    if (s.reviewPoint > 0) {
+      await points.grant({
+        userId: authorId,
+        amount: s.reviewPoint,
+        reason: "상품 후기 작성",
+        refType: "shop.review",
+        refId: reviewId,
+      });
+    }
+  });
+
+  /**
    * 쇼핑몰 결제 완료 적립.
    * refId를 주문번호로 두면 같은 주문에 두 번 적립되지 않는다(멱등 인덱스).
    */
@@ -305,6 +325,7 @@ export default definePlugin(async (ctx) => {
       signupPoint: num(b.signupPoint, DEFAULT_SETTINGS.signupPoint, 0, 1_000_000),
       postPoint: num(b.postPoint, DEFAULT_SETTINGS.postPoint, 0, 100_000),
       commentPoint: num(b.commentPoint, DEFAULT_SETTINGS.commentPoint, 0, 100_000),
+      reviewPoint: num(b.reviewPoint, DEFAULT_SETTINGS.reviewPoint, 0, 100_000),
       loginPoint: num(b.loginPoint, DEFAULT_SETTINGS.loginPoint, 0, 100_000),
       purchaseRate: num(b.purchaseRate, DEFAULT_SETTINGS.purchaseRate, 0, 100),
       maxUseRate: num(b.maxUseRate, DEFAULT_SETTINGS.maxUseRate, 0, 100),
@@ -349,6 +370,8 @@ export default definePlugin(async (ctx) => {
       { name: "signupPoint", label: "회원가입 적립", type: "number", inList: true },
       { name: "postPoint", label: "게시글 작성 적립", type: "number", inList: true },
       { name: "commentPoint", label: "댓글 작성 적립", type: "number", inList: true },
+      { name: "reviewPoint", label: "상품 후기 적립", type: "number", inList: true,
+        help: "구매 확인된 후기에만 지급됩니다." },
       { name: "loginPoint", label: "출석(로그인) 적립", type: "number", help: "1일 1회" },
       { name: "purchaseRate", label: "구매 적립률 (%)", type: "number", inList: true,
         help: "결제 완료 시 결제금액의 이 비율만큼 적립합니다." },
@@ -381,6 +404,7 @@ export default definePlugin(async (ctx) => {
       signupPoint: num(b.signupPoint, current.signupPoint, 0, 1_000_000),
       postPoint: num(b.postPoint, current.postPoint, 0, 100_000),
       commentPoint: num(b.commentPoint, current.commentPoint, 0, 100_000),
+      reviewPoint: num(b.reviewPoint, current.reviewPoint, 0, 100_000),
       loginPoint: num(b.loginPoint, current.loginPoint, 0, 100_000),
       purchaseRate: num(b.purchaseRate, current.purchaseRate, 0, 100),
       maxUseRate: num(b.maxUseRate, current.maxUseRate, 0, 100),

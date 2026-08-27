@@ -19,6 +19,7 @@
 | 회원가입 | 1,000 | `signupPoint` |
 | 게시글 작성 | 10 | `postPoint` |
 | 댓글 작성 | 5 | `commentPoint` |
+| 상품 후기 작성 | 100 | `reviewPoint` — 구매 확인된 후기만 |
 | 출석(로그인) | 0 (끔) | `loginPoint` — 1일 1회 |
 | 구매 (결제 완료) | 결제금액의 1% | `purchaseRate` |
 
@@ -56,6 +57,7 @@ point_ledger
 ```
 글쓰기 적립  → ("board.post", "<글id>")
 구매 적립    → ("shop.order", "<주문번호>")
+후기 적립    → ("shop.review", "<후기id>")
 출석 적립    → ("auth.login", "<회원id>:<날짜>")
 ```
 
@@ -152,7 +154,7 @@ interface PointsService {
 
 ## 아직 없는 것
 
-포인트 선물(회원 간 이전), 등급별 적립률, 첫 구매 보너스, 리뷰 작성 적립,
+포인트 선물(회원 간 이전), 등급별 적립률, 첫 구매 보너스,
 포인트 사용 통계, 관리자 일괄 지급(CSV).
 
 관련 문서: [게시판](board.md) · [쇼핑몰](commerce.md) · [플러그인 개발](plugin-development.md)

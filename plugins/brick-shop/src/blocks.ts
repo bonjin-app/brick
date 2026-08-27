@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { PluginContext } from "@brick/plugin-sdk";
 import { escapeHtml, won, type Db, type ShopSettings } from "./types.js";
+import { reviewSection } from "./reviews-view.js";
 
 /**
  * 스토어프론트 블록.
@@ -40,7 +41,8 @@ export function registerStorefrontBlocks(
         : sql`p.sort_order, p.created_at DESC`;
 
       const { rows } = await db.execute(sql`
-        SELECT p.slug, p.name, p.price, p.list_price, p.image_url, p.status, p.stock
+        SELECT p.slug, p.name, p.price, p.list_price, p.image_url, p.status, p.stock,
+               p.review_count, p.rating_sum
         FROM shop_products p
         LEFT JOIN shop_categories c ON c.id = p.category_id
         WHERE p.status IN ('selling', 'soldout') AND (${category} = '' OR c.slug = ${category})
@@ -65,6 +67,7 @@ export function registerStorefrontBlocks(
       ${soldout ? `<span class="brick-badge-soldout">품절</span>` : ""}
     </div>
     <div class="brick-product-name">${escapeHtml(p.name)}</div>
+    ${Number(p.review_count) > 0 ? `<div class="brick-card-rating"><span class="brick-stars">${"★".repeat(Math.round(Number(p.rating_sum) / Number(p.review_count)))}</span> <span>(${Number(p.review_count)})</span></div>` : ""}
     <div class="brick-product-price">
       ${discount ? `<span class="brick-discount">${discount}%</span>` : ""}
       <strong>${won(Number(p.price))}</strong>
@@ -97,7 +100,8 @@ export function registerStorefrontBlocks(
       if (!slug) return `<div class="brick-shop-empty">상품을 지정해주세요.</div>`;
 
       const { rows } = await db.execute(sql`
-        SELECT id, slug, name, summary, description, image_url, price, list_price, stock, status, free_shipping
+        SELECT id, slug, name, summary, description, image_url, images, price, list_price,
+               stock, status, free_shipping, review_count, rating_sum, inquiry_count
         FROM shop_products WHERE slug = ${slug} AND status IN ('selling', 'soldout') LIMIT 1
       `);
       const p = rows[0];
@@ -109,6 +113,12 @@ export function registerStorefrontBlocks(
       `);
       const s = await settings();
       const soldout = p.status === "soldout" || (p.stock !== null && Number(p.stock) <= 0);
+
+      // 대표 이미지 + 추가 이미지 = 갤러리. 대표가 목록에 이미 있으면 중복을 걷어낸다
+      const extra = Array.isArray(p.images) ? (p.images as string[]).map(String) : [];
+      const gallery = [...new Set([p.image_url, ...extra].filter(Boolean) as string[])];
+      const reviewCount = Number(p.review_count ?? 0);
+      const ratingAvg = reviewCount > 0 ? Number(p.rating_sum) / reviewCount : 0;
 
       const optionSelect = options.length
         ? `<label class="brick-field">옵션
@@ -128,22 +138,32 @@ export function registerStorefrontBlocks(
         "@type": "Product",
         name: p.name,
         description: p.summary ?? "",
-        image: p.image_url ?? undefined,
+        image: gallery.length ? gallery : undefined,
         offers: {
           "@type": "Offer",
           price: Number(p.price),
           priceCurrency: "KRW",
           availability: soldout ? "https://schema.org/OutOfStock" : "https://schema.org/InStock",
         },
+        // 검색 결과에 별점을 노출시킨다 — 후기가 있을 때만 넣어야 유효한 마크업이 된다
+        aggregateRating: reviewCount > 0
+          ? { "@type": "AggregateRating", ratingValue: Math.round(ratingAvg * 10) / 10, reviewCount }
+          : undefined,
       });
 
       return `
 <div class="brick-product-detail">
-  <div class="brick-detail-media">
-    ${p.image_url ? `<img src="${escapeHtml(p.image_url)}" alt="${escapeHtml(p.name)}" />` : `<span class="brick-noimg">이미지 없음</span>`}
+  <div>
+    <div class="brick-detail-media">
+      ${gallery.length ? `<img id="brick-main-img" src="${escapeHtml(gallery[0])}" alt="${escapeHtml(p.name)}" />` : `<span class="brick-noimg">이미지 없음</span>`}
+    </div>
+    ${gallery.length > 1 ? `<div class="brick-gallery">${gallery.map((u, i) =>
+      `<button type="button" class="${i === 0 ? "is-on" : ""}" data-src="${escapeHtml(u)}" aria-label="이미지 ${i + 1}"><img src="${escapeHtml(u)}" alt="" loading="lazy" /></button>`,
+    ).join("")}</div>` : ""}
   </div>
   <div class="brick-detail-info">
     <h1>${escapeHtml(p.name)}</h1>
+    ${reviewCount > 0 ? `<p class="brick-detail-rating"><span class="brick-stars">${"★".repeat(Math.round(ratingAvg))}${"☆".repeat(5 - Math.round(ratingAvg))}</span> <strong>${ratingAvg.toFixed(1)}</strong> <a href="#brick-reviews">후기 ${reviewCount}개</a></p>` : ""}
     ${p.summary ? `<p class="brick-detail-summary">${escapeHtml(p.summary)}</p>` : ""}
     <div class="brick-detail-price">
       ${p.list_price && Number(p.list_price) > Number(p.price) ? `<del>${won(Number(p.list_price))}</del>` : ""}
@@ -170,8 +190,10 @@ export function registerStorefrontBlocks(
   </div>
 </div>
 <div class="brick-detail-description">${String(p.description ?? "")}</div>
+<a id="brick-reviews"></a>
+${reviewSection({ id: String(p.id), reviewCount, ratingAvg, inquiryCount: Number(p.inquiry_count ?? 0) })}
 <script type="application/ld+json">${jsonLd}</script>
-${BUY_SCRIPT}${STOREFRONT_CSS}`;
+${BUY_SCRIPT}${GALLERY_SCRIPT}${STOREFRONT_CSS}`;
     },
   });
 
@@ -254,7 +276,27 @@ const STOREFRONT_CSS = `
 .brick-cart-total dd{margin:0;text-align:right}
 .brick-cart-total .brick-grand{font-size:20px;font-weight:700;padding-top:10px;border-top:1px solid #e0e0e8}
 .brick-cart-qty{width:64px;padding:6px;border:1px solid #ddd;border-radius:5px}
+.brick-detail-rating{display:flex;align-items:center;gap:7px;margin:0 0 10px;font-size:15px}
+.brick-detail-rating a{color:#888;font-size:13px}
+.brick-card-rating{margin-top:3px;font-size:13px;color:#888;display:flex;gap:4px;align-items:center}
+.brick-stars{color:#f5a623;letter-spacing:1px}
 </style>`;
+
+/* ── 이미지 갤러리 (썸네일 클릭으로 대표 이미지 교체) ── */
+const GALLERY_SCRIPT = `
+<script>
+(function(){
+  var wrap = document.currentScript.parentNode.querySelector('.brick-gallery');
+  var main = document.getElementById('brick-main-img');
+  if (!wrap || !main) return;
+  wrap.querySelectorAll('button').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      main.src = btn.dataset.src;
+      wrap.querySelectorAll('button').forEach(function(b){ b.classList.toggle('is-on', b === btn); });
+    });
+  });
+})();
+</script>`;
 
 /* ── 장바구니 담기 / 바로 구매 스크립트 ──────────────
    비회원 장바구니 토큰은 localStorage에 보관한다. */

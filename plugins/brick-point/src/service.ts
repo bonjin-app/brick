@@ -61,6 +61,8 @@ export interface PointSettings {
   postPoint: number;
   /** 댓글 작성 적립 */
   commentPoint: number;
+  /** 상품 후기 작성 적립 — 구매 검증을 통과한 후기만 대상이다 */
+  reviewPoint: number;
   /** 로그인 적립 (1일 1회) */
   loginPoint: number;
   /** 구매 적립률(%) — 결제 완료 시 결제금액의 이 비율만큼 적립 */
@@ -76,6 +78,7 @@ export const DEFAULT_SETTINGS: PointSettings = {
   signupPoint: 1000,
   postPoint: 10,
   commentPoint: 5,
+  reviewPoint: 100,
   loginPoint: 0,
   purchaseRate: 1,
   maxUseRate: 50,

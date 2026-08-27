@@ -7,8 +7,14 @@ import { quote } from "./pricing.js";
 import { addToCart, clearCart, getCartItems, updateCartItem, type CartOwner } from "./cart.js";
 import { changeOrderStatus, createOrder, type PointsPort } from "./orders.js";
 import { bankTransferGateway, confirmPayment, gateways, refundPayment, registerGateway } from "./payments.js";
-import { CATEGORY_RESOURCE, COUPON_RESOURCE, ORDER_RESOURCE, PRODUCT_RESOURCE } from "./admin-resources.js";
+import { CATEGORY_RESOURCE, COUPON_RESOURCE, INQUIRY_RESOURCE, ORDER_RESOURCE,
+         PRODUCT_RESOURCE, REVIEW_RESOURCE } from "./admin-resources.js";
 import { registerStorefrontBlocks } from "./blocks.js";
+import {
+  createInquiry, createReview, deleteInquiry, deleteReview, findPurchase,
+  listInquiries, listReviews, replyToInquiry, replyToReview, setReviewVisible, updateReview,
+} from "./reviews.js";
+import { formatOptions, parseImages, parseOptions, syncOptions } from "./options.js";
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,148}$/;
 
@@ -56,7 +62,8 @@ export default definePlugin(async (ctx) => {
 
     const { rows } = await db.execute(sql`
       SELECT p.id, p.slug, p.name, p.summary, p.image_url, p.price, p.list_price,
-             p.stock, p.status, p.sold_count, c.name AS category_name, c.slug AS category_slug
+             p.stock, p.status, p.sold_count, p.review_count, p.rating_sum,
+             c.name AS category_name, c.slug AS category_slug
       FROM shop_products p
       LEFT JOIN shop_categories c ON c.id = p.category_id
       WHERE p.status IN ('selling', 'soldout')
@@ -79,8 +86,9 @@ export default definePlugin(async (ctx) => {
     const { rows } = await db.execute(sql`
       UPDATE shop_products SET view_count = view_count + 1
       WHERE slug = ${req.params.slug} AND status IN ('selling', 'soldout')
-      RETURNING id, slug, name, summary, description, image_url, price, list_price,
-                stock, status, free_shipping, sold_count, view_count, category_id
+      RETURNING id, slug, name, summary, description, image_url, images, price, list_price,
+                stock, status, free_shipping, sold_count, view_count, category_id,
+                review_count, rating_sum, inquiry_count
     `);
     const product = rows[0];
     if (!product) throw new ShopError(404, "상품을 찾을 수 없습니다.");
@@ -89,7 +97,16 @@ export default definePlugin(async (ctx) => {
       WHERE product_id = ${String(product.id)}::uuid AND is_active = true
       ORDER BY sort_order, name
     `);
-    return { product, options };
+    return {
+      product: {
+        ...product,
+        rating_avg:
+          Number(product.review_count) > 0
+            ? Math.round((Number(product.rating_sum) / Number(product.review_count)) * 10) / 10
+            : 0,
+      },
+      options,
+    };
   });
 
   ctx.registerRoute("GET", "/categories", async () => {
@@ -349,49 +366,86 @@ export default definePlugin(async (ctx) => {
     requireAdmin(req);
     const page = Math.max(1, Number(req.query.page ?? 1));
     const { rows } = await db.execute(sql`
-      SELECT id, slug, name, price, list_price, stock, status, image_url, summary, description,
-             free_shipping, sort_order, sold_count, category_id
-      FROM shop_products ORDER BY sort_order, created_at DESC LIMIT 30 OFFSET ${(page - 1) * 30}
+      SELECT p.id, p.slug, p.name, p.price, p.list_price, p.stock, p.status, p.image_url,
+             p.summary, p.description, p.free_shipping, p.sort_order, p.sold_count,
+             p.category_id, p.images, p.review_count, p.rating_sum,
+             coalesce(
+               (SELECT json_agg(json_build_object('name', o.name, 'extra_price', o.extra_price, 'stock', o.stock)
+                                ORDER BY o.sort_order, o.name)
+                FROM shop_product_options o WHERE o.product_id = p.id),
+               '[]'
+             ) AS options
+      FROM shop_products p ORDER BY p.sort_order, p.created_at DESC LIMIT 30 OFFSET ${(page - 1) * 30}
     `);
     const { rows: cnt } = await db.execute(sql`SELECT count(*) AS n FROM shop_products`);
-    return { items: rows, total: Number(cnt[0]?.n ?? 0), page, pageSize: 30 };
+    // 관리 화면은 배열을 편집할 수 없으므로 줄바꿈 텍스트로 바꿔 보낸다
+    return {
+      items: rows.map((r) => ({
+        ...r,
+        images_text: Array.isArray(r.images) ? (r.images as string[]).join("\n") : "",
+        options_text: formatOptions(
+          (r.options ?? []) as Array<{ name: unknown; extra_price: unknown; stock: unknown }>,
+        ),
+        rating_avg:
+          Number(r.review_count) > 0
+            ? Math.round((Number(r.rating_sum) / Number(r.review_count)) * 10) / 10
+            : 0,
+        images: undefined,
+        options: undefined,
+      })),
+      total: Number(cnt[0]?.n ?? 0),
+      page,
+      pageSize: 30,
+    };
   });
 
   ctx.registerRoute("POST", "/admin/products", async (req) => {
     requireAdmin(req);
-    const p = validateProduct(req.body as Record<string, unknown>);
+    const body = req.body as Record<string, unknown>;
+    const p = validateProduct(body);
+    const images = parseImages(String(body.images_text ?? ""));
+    const options = parseOptions(String(body.options_text ?? ""));
     const id = uuidv7();
     try {
       await db.execute(sql`
         INSERT INTO shop_products
-          (id, slug, name, price, list_price, stock, status, image_url, summary, description, free_shipping, sort_order)
+          (id, slug, name, price, list_price, stock, status, image_url, summary, description,
+           free_shipping, sort_order, images)
         VALUES
           (${id}, ${p.slug}, ${p.name}, ${p.price}, ${p.listPrice}, ${p.stock}, ${p.status},
-           ${p.imageUrl}, ${p.summary}, ${p.description}, ${p.freeShipping}, ${p.sortOrder})
+           ${p.imageUrl ?? images[0] ?? null}, ${p.summary}, ${p.description},
+           ${p.freeShipping}, ${p.sortOrder}, ${JSON.stringify(images)}::jsonb)
       `);
     } catch (err) {
       throw slugConflict(err, "상품");
     }
+    if (options.length) await syncOptions(db, id, options);
     await ctx.cache.invalidateTag("pages");
     return { id };
   });
 
   ctx.registerRoute("PUT", "/admin/products/:id", async (req) => {
     requireAdmin(req);
-    const p = validateProduct(req.body as Record<string, unknown>);
+    const body = req.body as Record<string, unknown>;
+    const p = validateProduct(body);
+    const images = parseImages(String(body.images_text ?? ""));
+    const options = parseOptions(String(body.options_text ?? ""));
     try {
       const { rows } = await db.execute(sql`
         UPDATE shop_products SET
           slug = ${p.slug}, name = ${p.name}, price = ${p.price}, list_price = ${p.listPrice},
-          stock = ${p.stock}, status = ${p.status}, image_url = ${p.imageUrl}, summary = ${p.summary},
+          stock = ${p.stock}, status = ${p.status},
+          image_url = ${p.imageUrl ?? images[0] ?? null}, summary = ${p.summary},
           description = ${p.description}, free_shipping = ${p.freeShipping}, sort_order = ${p.sortOrder},
-          updated_at = now()
+          images = ${JSON.stringify(images)}::jsonb, updated_at = now()
         WHERE id = ${req.params.id}::uuid RETURNING id
       `);
       if (!rows.length) throw new ShopError(404, "상품을 찾을 수 없습니다.");
     } catch (err) {
       throw slugConflict(err, "상품");
     }
+    // 옵션은 이름으로 짝지어 갱신한다 — 전부 지우면 장바구니의 옵션이 사라진다
+    await syncOptions(db, req.params.id, options);
     await ctx.cache.invalidateTag("pages");
     return { ok: true };
   });
@@ -556,6 +610,172 @@ export default definePlugin(async (ctx) => {
     return { ...rows[0], lowStock: low };
   });
 
+
+  // ════════════════════════════════════════════════════
+  //  상품 후기 · 문의 (공개)
+  // ════════════════════════════════════════════════════
+
+  /** 로그인 필수 — 후기·문의는 익명 허용하지 않는다 (구매 검증과 책임 추적) */
+  const requireLogin = (req: { user: { id: string; displayName?: string } | null }) => {
+    if (!req.user) throw new ShopError(401, "로그인이 필요합니다.");
+    return req.user;
+  };
+  const isManager = (req: { user: { role: string } | null }) =>
+    req.user?.role === "admin" || req.user?.role === "manager";
+
+  ctx.registerRoute("GET", "/products/:id/reviews", async (req) => {
+    return await listReviews(db, {
+      productId: req.params.id,
+      page: Number(req.query.page ?? 1),
+      viewerId: req.user?.id ?? null,
+      isManager: isManager(req),
+    });
+  });
+
+  /** 후기 작성 가능 여부 — 화면이 폼을 보여줄지 결정하는 데 쓴다 */
+  ctx.registerRoute("GET", "/products/:id/reviews/eligibility", async (req) => {
+    if (!req.user) return { canWrite: false, reason: "login" };
+    const orderNo = await findPurchase(db, { productId: req.params.id, userId: req.user.id });
+    if (!orderNo) return { canWrite: false, reason: "not_purchased" };
+    const { rows } = await db.execute(sql`
+      SELECT id FROM shop_reviews
+      WHERE product_id = ${req.params.id}::uuid AND user_id = ${req.user.id}::uuid LIMIT 1
+    `);
+    if (rows.length) return { canWrite: false, reason: "already_written", reviewId: rows[0].id };
+    return { canWrite: true, reason: null };
+  });
+
+  ctx.registerRoute("POST", "/products/:id/reviews", async (req) => {
+    const user = requireLogin(req);
+    const result = await createReview(db, {
+      productId: req.params.id,
+      userId: user.id,
+      authorName: String(user.displayName ?? "회원").slice(0, 100),
+      input: req.body as never,
+    });
+    await ctx.cache.invalidateTag("pages");
+    // 후기 작성 포인트 — brick-point가 설치되어 있으면 적립된다
+    await ctx.hooks.doAction("shop.review.created", {
+      reviewId: result.id, productId: req.params.id, authorId: user.id,
+    });
+    return { id: result.id };
+  });
+
+  ctx.registerRoute("PUT", "/reviews/:id", async (req) => {
+    const user = requireLogin(req);
+    await updateReview(db, {
+      reviewId: req.params.id, userId: user.id, isManager: isManager(req),
+      input: req.body as never,
+    });
+    await ctx.cache.invalidateTag("pages");
+    return { ok: true };
+  });
+
+  ctx.registerRoute("DELETE", "/reviews/:id", async (req) => {
+    const user = requireLogin(req);
+    await deleteReview(db, { reviewId: req.params.id, userId: user.id, isManager: isManager(req) });
+    await ctx.cache.invalidateTag("pages");
+    return { ok: true };
+  });
+
+  ctx.registerRoute("GET", "/products/:id/inquiries", async (req) => {
+    return await listInquiries(db, {
+      productId: req.params.id,
+      page: Number(req.query.page ?? 1),
+      viewerId: req.user?.id ?? null,
+      isManager: isManager(req),
+    });
+  });
+
+  ctx.registerRoute("POST", "/products/:id/inquiries", async (req) => {
+    const user = requireLogin(req);
+    const result = await createInquiry(db, {
+      productId: req.params.id,
+      userId: user.id,
+      authorName: String(user.displayName ?? "회원").slice(0, 100),
+      input: req.body as never,
+    });
+    await ctx.cache.invalidateTag("pages");
+    await ctx.hooks.doAction("shop.inquiry.created", {
+      inquiryId: result.id, productId: req.params.id, authorId: user.id,
+    });
+    return { id: result.id };
+  });
+
+  ctx.registerRoute("DELETE", "/inquiries/:id", async (req) => {
+    const user = requireLogin(req);
+    await deleteInquiry(db, { inquiryId: req.params.id, userId: user.id, isManager: isManager(req) });
+    await ctx.cache.invalidateTag("pages");
+    return { ok: true };
+  });
+
+  // ── 관리자: 후기 ────────────────────────────────────
+  ctx.registerRoute("GET", "/admin/reviews", async (req) => {
+    requireAdmin(req);
+    const page = Math.max(1, Number(req.query.page ?? 1));
+    const { rows } = await db.execute(sql`
+      SELECT r.id, r.rating, r.content, r.admin_reply, r.is_visible, r.created_at,
+             r.author_name, (r.order_no IS NOT NULL) AS verified, p.name AS product_name
+      FROM shop_reviews r JOIN shop_products p ON p.id = r.product_id
+      ORDER BY r.created_at DESC LIMIT 30 OFFSET ${(page - 1) * 30}
+    `);
+    const { rows: cnt } = await db.execute(sql`SELECT count(*) AS n FROM shop_reviews`);
+    return { items: rows, total: Number(cnt[0]?.n ?? 0), page, pageSize: 30 };
+  });
+
+  ctx.registerRoute("PUT", "/admin/reviews/:id", async (req) => {
+    requireAdmin(req);
+    const b = req.body as Record<string, unknown>;
+    await replyToReview(db, req.params.id, String(b.admin_reply ?? ""));
+    await setReviewVisible(db, req.params.id, b.is_visible !== false);
+    await ctx.cache.invalidateTag("pages");
+    return { ok: true };
+  });
+
+  ctx.registerRoute("DELETE", "/admin/reviews/:id", async (req) => {
+    requireAdmin(req);
+    await deleteReview(db, { reviewId: req.params.id, userId: req.user!.id, isManager: true });
+    await ctx.cache.invalidateTag("pages");
+    return { ok: true };
+  });
+
+  // ── 관리자: 문의 ────────────────────────────────────
+  ctx.registerRoute("GET", "/admin/inquiries", async (req) => {
+    requireAdmin(req);
+    const page = Math.max(1, Number(req.query.page ?? 1));
+    const { rows } = await db.execute(sql`
+      SELECT q.id, q.title, q.content, q.is_secret, q.status, q.admin_reply, q.created_at,
+             q.author_name, p.name AS product_name
+      FROM shop_inquiries q JOIN shop_products p ON p.id = q.product_id
+      ORDER BY (q.status = 'open') DESC, q.created_at DESC LIMIT 30 OFFSET ${(page - 1) * 30}
+    `);
+    const { rows: cnt } = await db.execute(sql`SELECT count(*) AS n FROM shop_inquiries`);
+    return {
+      items: rows.map((q) => ({
+        ...q,
+        status_label: q.status === "answered" ? "답변완료" : "미답변",
+      })),
+      total: Number(cnt[0]?.n ?? 0),
+      page,
+      pageSize: 30,
+    };
+  });
+
+  ctx.registerRoute("PUT", "/admin/inquiries/:id", async (req) => {
+    requireAdmin(req);
+    const b = req.body as Record<string, unknown>;
+    await replyToInquiry(db, req.params.id, String(b.admin_reply ?? ""));
+    await ctx.cache.invalidateTag("pages");
+    return { ok: true };
+  });
+
+  ctx.registerRoute("DELETE", "/admin/inquiries/:id", async (req) => {
+    requireAdmin(req);
+    await deleteInquiry(db, { inquiryId: req.params.id, userId: req.user!.id, isManager: true });
+    await ctx.cache.invalidateTag("pages");
+    return { ok: true };
+  });
+
   // ── 쇼핑몰 설정 ─────────────────────────────────────
   ctx.registerRoute("GET", "/admin/settings", async (req) => {
     requireAdmin(req);
@@ -583,6 +803,8 @@ export default definePlugin(async (ctx) => {
   ctx.registerAdminResource(PRODUCT_RESOURCE);
   ctx.registerAdminResource(CATEGORY_RESOURCE);
   ctx.registerAdminResource(COUPON_RESOURCE);
+  ctx.registerAdminResource(REVIEW_RESOURCE);
+  ctx.registerAdminResource(INQUIRY_RESOURCE);
 
   registerStorefrontBlocks(ctx, db, settings);
 
