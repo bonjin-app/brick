@@ -4,7 +4,9 @@
 # 사용자에게 Brick은 "하나의 앱 컨테이너 + PostgreSQL"이다 (ADR-1).
 
 # ── 1. 의존성 + 빌드 ───────────────────────────────────
-FROM node:22-alpine AS build
+# LTS 에 머문다 — Node 26 은 아직 LTS 가 아니다.
+# 설치형 CMS 는 사용자가 몇 년 단위로 운영하므로, 짝수라도 LTS 로 승격된 뒤에 올린다.
+FROM node:24-alpine AS build
 # alpine 에는 bash 가 없다 — 빌드 스크립트가 bash 문법을 쓴다
 RUN apk add --no-cache bash && corepack enable pnpm
 WORKDIR /app
@@ -25,7 +27,7 @@ RUN pnpm deploy --filter=@brick/api --prod /deploy/api
 RUN bash scripts/collect-plugins.sh /seed/plugins
 
 # ── 2. 런타임 ─────────────────────────────────────────
-FROM node:22-alpine AS runtime
+FROM node:24-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production \
     BRICK_API_PORT=3001 \
