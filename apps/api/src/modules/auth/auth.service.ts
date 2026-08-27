@@ -23,18 +23,36 @@ export class AuthService {
 
   async login(email: string, password: string): Promise<{ token: string; user: SessionUser }> {
     const [row] = await this.db.select().from(users).where(eq(users.email, email)).limit(1);
-    // 사용자 부재와 비밀번호 불일치를 구분해 노출하지 않는다
-    if (!row || !row.isActive || !(await argon2.verify(row.passwordHash, password))) {
+    // 사용자 부재와 비밀번호 불일치를 구분해 노출하지 않는다.
+    // 소셜 전용 계정(passwordLoginEnabled=false)도 같은 응답으로 거절한다 —
+    // "이 이메일은 소셜 계정입니다"라고 알려주면 가입 여부가 새어 나간다.
+    if (
+      !row ||
+      !row.isActive ||
+      row.passwordLoginEnabled === false ||
+      !(await argon2.verify(row.passwordHash, password))
+    ) {
       throw new UnauthorizedException("invalid credentials");
     }
+    return { token: await this.issueSession(row.id), user: this.toSessionUser(row) };
+  }
+
+  /**
+   * 세션 발급.
+   *
+   * 비밀번호 검증과 분리해 둔다 — 소셜 로그인은 비밀번호를 보지 않지만
+   * 세션은 똑같이 발급해야 한다. 이 메서드는 **인증을 하지 않으므로**,
+   * 호출자가 신원을 확인한 뒤에만 불러야 한다.
+   */
+  async issueSession(userId: string): Promise<string> {
     const token = randomBytes(32).toString("base64url");
     await this.db.insert(sessions).values({
       id: uuidv7(),
-      userId: row.id,
+      userId,
       tokenHash: this.hash(token),
       expiresAt: new Date(Date.now() + SESSION_TTL_DAYS * 86400_000),
     });
-    return { token, user: this.toSessionUser(row) };
+    return token;
   }
 
   async logout(token: string): Promise<void> {

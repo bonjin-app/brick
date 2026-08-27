@@ -1,12 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { SocialButtons } from "../../components/SocialButtons";
 
 /** 공개 로그인 — 로그인 후 홈으로 이동한다 (관리자 로그인은 /admin/login) */
 export default function LoginPage() {
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // 소셜 로그인이 실패하면 콜백이 /login?error=... 로 되돌린다
+  useEffect(() => {
+    const message = new URLSearchParams(window.location.search).get("error");
+    if (message) setError(message);
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -42,6 +49,7 @@ export default function LoginPage() {
         </button>
       </form>
       {error && <p style={{ color: "crimson" }}>{error}</p>}
+      <SocialButtons next="/" />
       <p style={{ textAlign: "center", marginTop: 16, fontSize: 14 }}>
         계정이 없나요? <a href="/register">회원가입</a>
         {" · "}

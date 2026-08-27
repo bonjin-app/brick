@@ -46,6 +46,10 @@
 | 스크랩 | ✅ | ✗ | **✅** |
 | 페이지 빌더 | 없음 | Gutenberg | **코어 기본 제공** |
 | 쇼핑몰 | 영카트(별도) | WooCommerce | **플러그인 기본 동봉** |
+| 상품 후기 | 영카트 ✅ | 플러그인 | **✅ 구매 검증·판매자 답변** |
+| 방문자 집계 | ✅ (IP 저장) | 플러그인 | **✅ IP를 해시로만 저장** |
+| 팝업/배너 | ✅ | 플러그인 | **✅ 경로·기간·클릭 집계** |
+| 소셜 로그인 | 플러그인 | 플러그인 | **✅ 코어 내장 (5종 + 사내 SSO)** |
 | SSR / SEO | 기본 | 기본 | **Next.js SSR + ISR** |
 | 타입 안전성 | 없음 | 없음 | **전 구간 strict** |
 
@@ -122,7 +126,7 @@ DB 마이그레이션은 컨테이너가 부팅할 때 스스로 적용합니다
          (Redis · S3는 선택 — 없으면 PG 기반 기본 구현)
 ```
 
-핵심 설계 결정 32건은 [docs/architecture.md](docs/architecture.md)에 ADR로 기록되어 있습니다.
+핵심 설계 결정 36건은 [docs/architecture.md](docs/architecture.md)에 ADR로 기록되어 있습니다.
 
 ---
 
@@ -153,6 +157,10 @@ DB 마이그레이션은 컨테이너가 부팅할 때 스스로 적용합니다
 - **상품 이미지 갤러리** — 대표 + 추가 이미지 20장, JSON-LD 평점(AggregateRating)까지 SEO 반영
 - **결제** — PG 추상화 + 토스페이먼츠 플러그인, 금액 위조·중복 승인 방어, 부분 환불
 - **비밀번호 재설정** — 메일 발송(SMTP), 단회성 토큰, 이메일 열거 방지
+- **소셜 로그인** — 구글 · 카카오 · 네이버 · GitHub + 사내 SSO(표준 OIDC).
+  로그인 CSRF·계정 탈취 방어, 계정 연결/해제, 관리 화면에서 키 설정
+- **방문자 집계** — 오늘·어제·최고·전체 + 유입 경로. **IP를 원문으로 저장하지 않는다**
+- **팝업 · 배너** — 노출 경로·기간, 다시 보지 않기, 노출·클릭 집계, 본문 새니타이즈
 - **감사 로그** — 관리 동작을 행위자·IP와 함께 기록 (180일 보관)
 - **포인트 플러그인** — 그누보드 포인트 + 영카트 적립금을 하나로.
   가입·글쓰기·댓글·후기·구매 적립, 쇼핑몰 결제 시 사용, FIFO 소비·만료, 원장 감사 추적
@@ -166,8 +174,8 @@ DB 마이그레이션은 컨테이너가 부팅할 때 스스로 적용합니다
 
 ### 예정
 
-방문자 집계 · 팝업/배너 · 소셜 로그인 · 위시리스트 · 반품/교환 워크플로 ·
-정기결제 · 2FA · 이메일 인증 · 그누보드 데이터 이전 도구 · OpenAPI 문서
+위시리스트 · 반품/교환 워크플로 · 현금영수증 · 정기결제 · 2FA · 이메일 인증 ·
+그누보드 데이터 이전 도구 · OpenAPI 문서 · 플러그인 레지스트리
 
 ---
 
@@ -230,7 +238,7 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 398개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 587개 항목):
 
 ```bash
 DATABASE_URL=postgresql://brick:brick@localhost:5432/brick bash scripts/smoke-test.sh
@@ -250,6 +258,14 @@ DATABASE_URL=postgresql://brick:brick@localhost:5432/brick bash scripts/smoke-me
 
 ```bash
 DATABASE_URL=postgresql://brick:brick@localhost:5432/brick bash scripts/smoke-shop.sh
+```
+
+```bash
+DATABASE_URL=postgresql://brick:brick@localhost:5432/brick bash scripts/smoke-site.sh
+```
+
+```bash
+DATABASE_URL=postgresql://brick:brick@localhost:5432/brick bash scripts/smoke-social.sh
 ```
 
 ```bash
@@ -277,7 +293,7 @@ plugins/
 themes/
   default/        기본 테마 (런타임 템플릿 레퍼런스)
 docs-site/        GitHub Pages 랜딩페이지
-scripts/          스모크 테스트 7종 + 배포본 생성(build-release.sh)
+scripts/          스모크 테스트 9종 + OIDC 스텁 + 배포본 생성(build-release.sh)
 docker/           Dockerfile, entrypoint
 ```
 
@@ -293,7 +309,9 @@ docker/           Dockerfile, entrypoint
 | [게시판](docs/board.md) | 권한·분류·답변형·첨부파일, 그누보드와의 차이 |
 | [포인트](docs/point.md) | 적립 정책, 원장 설계, 플러그인 간 협력 방법 |
 | [쪽지](docs/memo.md) | 프라이버시 설계, 차단, 포인트 차감, 스크랩 |
-| [쇼핑몰](docs/commerce.md) | 상품·주문·재고·쿠폰, 커머스 설계 원칙 |
+| [쇼핑몰](docs/commerce.md) | 상품·주문·재고·쿠폰·후기·문의, 커머스 설계 원칙 |
+| [소셜 로그인](docs/social-login.md) | 구글·카카오·네이버·GitHub·사내 SSO 설정과 보안 |
+| [방문자·팝업](docs/site-ops.md) | 접속자 집계, 팝업·배너, 개인정보 처리 |
 | [결제](docs/payments.md) | PG 설정, 결제 흐름, 위조·중복 방어, 새 PG 붙이기 |
 | [보안](docs/security.md) | 구현된 방어, **신뢰 모델**, 배포 체크리스트 |
 | [아키텍처 (ADR)](docs/architecture.md) | 설계 결정 9건과 그 이유 |

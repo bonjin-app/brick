@@ -73,6 +73,12 @@ jobs:
       - name: E2E 스모크 테스트 (커머스)
         run: bash scripts/smoke-shop.sh
 
+      - name: E2E 스모크 테스트 (방문자·팝업)
+        run: bash scripts/smoke-site.sh
+
+      - name: E2E 스모크 테스트 (소셜 로그인)
+        run: bash scripts/smoke-social.sh
+
       - name: E2E 스모크 테스트 (보안·결제)
         run: bash scripts/smoke-security.sh
 

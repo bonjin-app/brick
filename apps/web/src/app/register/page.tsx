@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { SocialButtons } from "../../components/SocialButtons";
 
 /** 공개 회원가입. site.registration_open이 false면 서버가 403으로 거부한다 */
 export default function RegisterPage() {
@@ -52,6 +53,7 @@ export default function RegisterPage() {
         </form>
       )}
       {error && <p style={{ color: "crimson" }}>{error}</p>}
+      <SocialButtons next="/" />
       <p style={{ textAlign: "center", marginTop: 16, fontSize: 14 }}>
         이미 계정이 있나요? <a href="/login">로그인</a>
       </p>

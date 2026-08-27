@@ -43,7 +43,9 @@ export class PasswordResetService {
     const email = rawEmail.toLowerCase().trim();
     const [user] = await this.db.select().from(users).where(eq(users.email, email)).limit(1);
 
-    if (!user || !user.isActive) {
+    // 소셜 전용 계정에는 재설정 메일을 보내지 않는다 —
+    // 재설정으로 비밀번호를 만들면 소셜 연결을 우회해 들어올 수 있다
+    if (!user || !user.isActive || user.passwordLoginEnabled === false) {
       // 존재하지 않는 계정에도 같은 시간을 쓴다 (타이밍으로 구분되지 않게)
       await argon2.hash(randomBytes(16).toString("hex")).catch(() => undefined);
       this.logger.log(`재설정 요청 — 대상 없음 (열거 방지를 위해 성공 응답)`);

@@ -1,0 +1,10 @@
+{
+  "name": "brick-site",
+  "version": "0.1.0",
+  "displayName": "사이트 운영",
+  "description": "방문자 집계(오늘·어제·전체·최고), 팝업·배너 관리 — 그누보드의 접속자 집계와 팝업을 대체",
+  "author": "Brick",
+  "brickVersion": ">=0.0.1",
+  "entry": "dist/index.js",
+  "migrations": "migrations"
+}

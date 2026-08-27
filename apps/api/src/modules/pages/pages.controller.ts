@@ -11,7 +11,8 @@ import { AdminGuard } from "../auth/auth.guard.js";
 import { AuditService } from "../audit/audit.service.js";
 import { AuthService } from "../auth/auth.service.js";
 import { PageRenderService, type BlockNode } from "./page-render.service.js";
-import { DB } from "../../runtime.module.js";
+import { HookBus } from "@brick/core";
+import { DB, HOOKS } from "../../runtime.module.js";
 
 const SLUG_RE = /^[a-z0-9][a-z0-9\-/]{0,200}$/;
 
@@ -30,6 +31,7 @@ export class PagesController {
     private readonly renderer: PageRenderService,
     private readonly audit: AuditService,
     private readonly auth: AuthService,
+    @Inject(HOOKS) private readonly hooks: HookBus,
   ) {}
 
   /**
@@ -42,10 +44,29 @@ export class PagesController {
   async renderPublic(@Query() query: Record<string, string>, @Req() req: FastifyRequest) {
     const { path, ...rest } = query ?? {};
     const user = await this.auth.resolveFromRequest(req);
-    return this.renderer.renderPath(path ?? "", {
+    const result = await this.renderer.renderPath(path ?? "", {
       query: rest,
       user: user ? { id: user.id, role: user.role, displayName: user.displayName } : null,
     });
+
+    /**
+     * 방문 집계 훅.
+     *
+     * 응답을 기다리게 하지 않는다 — 집계는 렌더의 부수효과이고, 집계가 느리다고
+     * 페이지가 늦게 뜨면 안 된다. HookBus가 플러그인 예외를 삼키므로
+     * 처리되지 않은 rejection이 되지 않는다.
+     *
+     * 렌더 캐시가 적중한 요청에서도 이 훅은 발행된다 — 캐시된 페이지를 본 것도 방문이다.
+     */
+    void this.hooks.doAction("page.viewed", {
+      path: path ?? "",
+      userId: user?.id ?? null,
+      ip: req.ip,
+      userAgent: String(req.headers["user-agent"] ?? ""),
+      referer: String(req.headers.referer ?? ""),
+    });
+
+    return result;
   }
 
   // ── 관리자 CRUD ──────────────────────────────────

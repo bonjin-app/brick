@@ -10,6 +10,12 @@ export const users = pgTable(
     displayName: varchar("display_name", { length: 100 }).notNull(),
     role: varchar("role", { length: 20 }).notNull().default("member"), // admin | manager | member
     emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
+    /**
+     * 비밀번호로 로그인할 수 있는가.
+     * 소셜 전용 계정은 false — 비밀번호 로그인과 재설정 메일을 모두 막는다
+     * (재설정으로 비밀번호를 만들어 소셜 연결을 우회하는 경로를 닫는다).
+     */
+    passwordLoginEnabled: boolean("password_login_enabled").notNull().default(true),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

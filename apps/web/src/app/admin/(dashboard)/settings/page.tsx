@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { SocialLoginSettings } from "./SocialLoginSettings";
 
 export default function AdminSettingsPage() {
   const [settings, setSettings] = useState<Record<string, unknown>>({});
@@ -47,6 +48,7 @@ export default function AdminSettingsPage() {
         </button>
         {message && <p style={{ color: "#0a7" }}>{message}</p>}
       </div>
+      <SocialLoginSettings />
     </div>
   );
 }
