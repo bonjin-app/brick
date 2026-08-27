@@ -133,7 +133,9 @@ for i in $(seq 1 6); do
 done
 # API 서버도 백그라운드 작업이므로 bare `wait` 는 영원히 멈춘다 — curl PID만 기다린다
 for pid in "${PIDS[@]}"; do wait "$pid" || true; done
-SUCCESS="$(grep -l orderNo "$TMP"/o*.json 2>/dev/null | wc -l | tr -d ' ')"
+# grep 은 매칭이 없으면 1을 반환한다 — pipefail 아래에서 스크립트가 죽어
+# "0건 성공"이라는 회귀를 보고하지 못하고 조용히 중단된다
+SUCCESS="$( { grep -l orderNo "$TMP"/o*.json 2>/dev/null | wc -l | tr -d ' '; } || true )"
 check "동시 주문 6건 중 3건만 성공 (초과판매 없음)" "$SUCCESS" "3"
 contains "실패는 명확한 재고 메시지" "$(cat "$TMP"/o*.json)" "재고가"
 contains "주문번호 중복 없음(시퀀스)" "$(curl -s -b "$CK" "$SHOP/admin/orders")" '"total":3'

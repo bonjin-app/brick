@@ -83,11 +83,29 @@ start_app() {
   return 1
 }
 
+# 포트를 점유한 PID 를 찾는다.
+#
+# lsof 는 매칭이 없으면 종료코드 1을 낸다. `set -euo pipefail` 아래에서는
+# 그 파이프라인 하나가 스크립트 전체를 죽인다 — CI 에서 "고아 프로세스 정리"
+# 항목이 실행조차 되지 않고 조용히 중단됐다.
+# 그리고 lsof 가 없는 리눅스 이미지도 있으므로 ss · fuser 로 물러난다.
+pids_on_port() {
+  local port="$1"
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | awk 'NR>1 {print $2}' | sort -u || true
+  elif command -v ss >/dev/null 2>&1; then
+    ss -lptnH "sport = :$port" 2>/dev/null | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u || true
+  elif command -v fuser >/dev/null 2>&1; then
+    fuser -n tcp "$port" 2>/dev/null | tr -s ' ' '\n' | grep -E '^[0-9]+$' | sort -u || true
+  fi
+  return 0
+}
+
 stop_app() {
   [[ -n "${LAUNCHER_PID:-}" ]] && kill "$LAUNCHER_PID" 2>/dev/null || true
   sleep 2
   # 자식(api/web)이 남아 있으면 포트로 찾아 정리
-  for p in $(lsof -nP -iTCP:"$PORT" -iTCP:"$((PORT+1))" 2>/dev/null | awk 'NR>1{print $2}' | sort -u); do
+  for p in $(pids_on_port "$PORT") $(pids_on_port "$((PORT+1))"); do
     kill -9 "$p" 2>/dev/null || true
   done
   sleep 1
@@ -153,7 +171,11 @@ contains "잘못된 비밀번호는 명확한 안내" "$(curl -s -X POST "$BASE/
 echo "── DB 설정 저장"
 contains "저장 성공" "$(curl -s -X POST "$BASE/api/setup/save" -H 'content-type: application/json' --data-binary "@$WORK/db.json")" '"restartRequired":true'
 [[ -f "$APP/data/brick.config.json" ]] && ok "설정 파일 생성" || bad "설정 파일 생성"
-PERM="$(stat -f "%Lp" "$APP/data/brick.config.json" 2>/dev/null || stat -c "%a" "$APP/data/brick.config.json")"
+# stat 은 BSD(macOS)와 GNU(Linux)의 문법이 다르다. `stat -f` 로 시작하면
+# Linux 에서 "파일시스템 정보"로 해석되어 **성공하면서** 엉뚱한 값을 내고,
+# `||` 폴백이 걸리지 않는다 (CI 에서 이 항목이 실패했다).
+# node 는 어차피 필요하므로 모호함이 없는 쪽을 쓴다.
+PERM="$(node -e 'console.log((require("fs").statSync(process.argv[1]).mode & 0o777).toString(8))' "$APP/data/brick.config.json")"
 check "설정 파일 권한 600 (DB 비밀번호 보호)" "$PERM" "600"
 contains "시크릿 자동 생성" "$(cat "$APP/data/brick.config.json")" '"secret"'
 
@@ -164,7 +186,7 @@ ORPHAN_PIDS="$(cat "$APP/data/brick.pid" 2>/dev/null || echo '[]')"
 kill -9 "$LAUNCHER_PID" 2>/dev/null || true
 sleep 2
 # 전제 확인: 고아가 실제로 포트를 물고 있어야 이 시나리오가 의미가 있다
-ORPHANS_HOLDING="$(lsof -nP -iTCP:"$PORT" -iTCP:"$((PORT+1))" 2>/dev/null | awk 'NR>1' | wc -l | tr -d ' ')"
+ORPHANS_HOLDING="$( { pids_on_port "$PORT"; pids_on_port "$((PORT+1))"; } | grep -c . || true )"
 if [[ "$ORPHANS_HOLDING" -gt 0 ]]; then
   ok "강제 종료 후 고아가 포트 점유 (전제 성립)"
 else

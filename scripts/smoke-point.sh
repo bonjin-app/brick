@@ -177,7 +177,9 @@ for i in 1 2 3; do
   PIDS+=($!)
 done
 for pid in "${PIDS[@]}"; do wait "$pid" || true; done
-SUCCESS="$(grep -l orderNo "$TMP"/cr*.json 2>/dev/null | wc -l | tr -d ' ')"
+# grep 은 매칭이 없으면 1을 반환한다 — pipefail 아래에서 스크립트가 죽어
+# "0건 성공"이라는 회귀를 보고하지 못하고 조용히 중단된다
+SUCCESS="$( { grep -l orderNo "$TMP"/cr*.json 2>/dev/null | wc -l | tr -d ' '; } || true )"
 check "재고 1개에 동시 3주문 → 1건 성공" "$SUCCESS" "1"
 AFTER="$(balance)"
 check "실패한 주문은 포인트 미차감" "$((BEFORE - AFTER))" "500"
