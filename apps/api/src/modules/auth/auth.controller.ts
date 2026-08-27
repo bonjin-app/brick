@@ -1,10 +1,12 @@
 import {
-  Body, Controller, Get, HttpException, HttpStatus, Post, Query, Req, Res, UnauthorizedException,
+  Body, Controller, Get, HttpException, HttpStatus, Inject, Post, Query, Req, Res, UnauthorizedException,
 } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { AuthService, SESSION_COOKIE } from "./auth.service.js";
 import { RateLimitService } from "./rate-limit.service.js";
 import { PasswordResetService } from "./password-reset.service.js";
+import type { HookBus } from "@brick/core";
+import { HOOKS } from "../../runtime.module.js";
 import { AuditService } from "../audit/audit.service.js";
 
 @Controller("api/auth")
@@ -14,6 +16,7 @@ export class AuthController {
     private readonly rateLimit: RateLimitService,
     private readonly reset: PasswordResetService,
     private readonly audit: AuditService,
+    @Inject(HOOKS) private readonly hooks: HookBus,
   ) {}
 
   @Post("login")
@@ -51,6 +54,9 @@ export class AuthController {
       secure: process.env.NODE_ENV === "production",
       maxAge: 30 * 86400,
     });
+    // 출석 적립·접속 로그 등이 구독한다. 실패해도 로그인은 성공해야 하므로
+    // doAction 내부에서 예외를 삼킨다(HookBus의 계약).
+    await this.hooks.doAction("auth.login", { userId: user.id, email: user.email, ip: req.ip });
     return { user };
   }
 

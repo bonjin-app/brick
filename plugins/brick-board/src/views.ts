@@ -209,7 +209,8 @@ export async function renderDetail(
   const base = `/board/${encodeURIComponent(board.slug)}`;
   const { rows } = await db.execute(sql`
     SELECT id, title, content, category, author_id, author_name, created_at, updated_at,
-           view_count, up_count, down_count, comment_count, file_count, is_secret, is_notice, depth
+           view_count, up_count, down_count, comment_count, file_count, scrap_count,
+           is_secret, is_notice, depth
     FROM board_posts WHERE id = ${postId}::uuid AND board_id = ${board.id}::uuid LIMIT 1
   `);
   const post = rows[0];
@@ -232,6 +233,15 @@ export async function renderDetail(
     <p><a href="${base}">목록으로</a></p>
   </div>
 </div>`;
+  }
+
+  // 스크랩 여부 — 로그인 사용자에게만 의미가 있다
+  let scrapped = false;
+  if (ctx.user) {
+    const { rows: sc } = await db.execute(sql`
+      SELECT 1 FROM board_scraps WHERE post_id = ${postId}::uuid AND user_id = ${ctx.user.id}::uuid
+    `);
+    scrapped = sc.length > 0;
   }
 
   const { rows: files } = await db.execute(sql`
@@ -311,6 +321,15 @@ ${filesHtml}
       <button type="button" data-vote="1">&#128077; 추천 <span data-up>${Number(post.up_count)}</span></button>
       <button type="button" data-vote="-1">&#128078; <span data-down>${Number(post.down_count)}</span></button>
     </div>`
+        : ""
+    }
+    ${
+      ctx.user
+        ? `<button type="button" class="brick-scrap${scrapped ? " is-on" : ""}" data-scrap
+        aria-pressed="${scrapped ? "true" : "false"}">
+      <span data-scrap-icon>${scrapped ? "&#9733;" : "&#9734;"}</span>
+      스크랩 <span data-scrap-count>${Number(post.scrap_count ?? 0)}</span>
+    </button>`
         : ""
     }
     <div class="brick-post-actions">

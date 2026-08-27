@@ -1,0 +1,10 @@
+{
+  "name": "brick-memo",
+  "version": "0.1.0",
+  "displayName": "쪽지",
+  "description": "회원 간 쪽지 — 받은/보낸 쪽지함, 읽음 표시, 차단, 포인트 차감 연동",
+  "author": "Brick",
+  "brickVersion": ">=0.0.1",
+  "entry": "dist/index.js",
+  "migrations": "migrations"
+}

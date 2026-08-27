@@ -230,6 +230,20 @@ export const BOARD_SCRIPT = `
       });
     });
 
+    // 스크랩 토글
+    var scrapBtn = postRoot.querySelector('[data-scrap]');
+    if (scrapBtn) {
+      scrapBtn.addEventListener('click', function () {
+        post(API + '/posts/' + postId + '/scrap').then(function (res) {
+          if (!res.ok) { alert(res.data.message || '스크랩에 실패했습니다.'); return; }
+          scrapBtn.classList.toggle('is-on', res.data.scrapped);
+          scrapBtn.setAttribute('aria-pressed', res.data.scrapped ? 'true' : 'false');
+          scrapBtn.querySelector('[data-scrap-icon]').innerHTML = res.data.scrapped ? '\u2605' : '\u2606';
+          scrapBtn.querySelector('[data-scrap-count]').textContent = res.data.count;
+        });
+      });
+    }
+
     // 글 삭제
     var delBtn = postRoot.querySelector('[data-delete-post]');
     if (delBtn) {
@@ -367,6 +381,8 @@ export const BOARD_CSS = `
 .brick-post-foot{display:flex;align-items:center;gap:14px;margin-top:28px;padding-top:16px;border-top:1px solid #e8e8ee;flex-wrap:wrap}
 .brick-vote{display:flex;gap:8px}
 .brick-vote button{padding:8px 16px;border:1px solid #ddd;border-radius:20px;background:#fff;cursor:pointer;font-size:14px}
+.brick-scrap{padding:8px 16px;border:1px solid #ddd;border-radius:20px;background:#fff;cursor:pointer;font-size:14px}
+.brick-scrap.is-on{border-color:var(--color-primary,#d0402c);color:var(--color-primary,#d0402c)}
 .brick-post-actions{margin-left:auto;display:flex;gap:8px;align-items:center}
 .brick-post-actions a,.brick-post-actions button{padding:8px 16px;border:1px solid #ddd;border-radius:6px;background:#fff;text-decoration:none;color:inherit;cursor:pointer;font-size:14px}
 

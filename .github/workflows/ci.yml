@@ -67,6 +67,9 @@ jobs:
       - name: E2E 스모크 테스트 (포인트)
         run: bash scripts/smoke-point.sh
 
+      - name: E2E 스모크 테스트 (쪽지·스크랩)
+        run: bash scripts/smoke-memo.sh
+
       - name: E2E 스모크 테스트 (커머스)
         run: bash scripts/smoke-shop.sh
 

@@ -44,18 +44,37 @@ export class PluginLoaderService implements OnModuleInit {
   matchRoute(method: string, path: string): { handler: PluginRouteHandler; params: Record<string, string> } | null {
     const wanted = method === "HEAD" ? "GET" : method;
     const parts = path.split("/").filter(Boolean);
+
+    /**
+     * 구체적인 경로가 파라미터 경로보다 우선한다.
+     *
+     * 등록 순서대로 첫 매칭을 쓰면 "/:id" 가 먼저 등록된 경우 "/cost" 요청이
+     * 그쪽으로 빨려 들어간다(실제로 발생). 플러그인 개발자가 등록 순서를
+     * 신경 쓰게 하는 것은 함정이므로, 정적 세그먼트가 많은 쪽을 고른다.
+     */
+    let best: { handler: PluginRouteHandler; params: Record<string, string>; score: number } | null = null;
+
     for (const r of this.routes) {
       if (r.method !== wanted || r.segments.length !== parts.length) continue;
       const params: Record<string, string> = {};
       let ok = true;
+      let score = 0;
       for (let i = 0; i < parts.length; i++) {
         const seg = r.segments[i];
-        if (seg.startsWith(":")) params[seg.slice(1)] = decodeURIComponent(parts[i]);
-        else if (seg !== parts[i]) { ok = false; break; }
+        if (seg.startsWith(":")) {
+          params[seg.slice(1)] = decodeURIComponent(parts[i]);
+        } else if (seg === parts[i]) {
+          score += 1; // 정적 세그먼트가 일치할수록 구체적이다
+        } else {
+          ok = false;
+          break;
+        }
       }
-      if (ok) return { handler: r.handler, params };
+      if (!ok) continue;
+      if (!best || score > best.score) best = { handler: r.handler, params, score };
     }
-    return null;
+
+    return best ? { handler: best.handler, params: best.params } : null;
   }
   /** 페이지 빌더 블록 레지스트리 */
   readonly blocks = new Map<string, BlockDefinition>();

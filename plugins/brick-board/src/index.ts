@@ -132,13 +132,20 @@ export default definePlugin(async (ctx) => {
       `).then((r) => r.rows),
     ]);
 
-    // 내 투표 상태 (있으면 UI가 표시)
+    // 내 투표·스크랩 상태 (있으면 UI가 표시)
     let myVote = 0;
+    let scrapped = false;
     if (user) {
-      const { rows: v } = await db.execute(sql`
-        SELECT value FROM board_votes WHERE post_id = ${String(post.id)}::uuid AND user_id = ${user.id}::uuid
-      `);
+      const [{ rows: v }, { rows: sc }] = await Promise.all([
+        db.execute(sql`
+          SELECT value FROM board_votes WHERE post_id = ${String(post.id)}::uuid AND user_id = ${user.id}::uuid
+        `),
+        db.execute(sql`
+          SELECT 1 FROM board_scraps WHERE post_id = ${String(post.id)}::uuid AND user_id = ${user.id}::uuid
+        `),
+      ]);
       myVote = Number(v[0]?.value ?? 0);
+      scrapped = sc.length > 0;
     }
 
     // 비밀번호 해시는 절대 응답에 넣지 않는다
@@ -153,6 +160,7 @@ export default definePlugin(async (ctx) => {
           : c,
       ),
       myVote,
+      scrapped,
       canModify: hasRole(user, "manager") || Boolean(user && user.id === post.author_id),
     };
   });
@@ -394,6 +402,67 @@ export default definePlugin(async (ctx) => {
         myVote: prev === value ? 0 : value,
       };
     });
+  });
+
+  // ── 스크랩 ──────────────────────────────────────────
+  /**
+   * 스크랩 토글.
+   * 이미 스크랩했으면 해제한다 — 별도 API를 두지 않아 UI가 단순해진다.
+   */
+  ctx.registerRoute("POST", "/posts/:id/scrap", async (req) => {
+    const user = userOf(req);
+    if (!user) throw new BoardError(401, "스크랩에는 로그인이 필요합니다.");
+
+    // 읽을 수 있는 글만 스크랩할 수 있다
+    const { rows } = await db.execute(sql`
+      SELECT p.id, b.read_role FROM board_posts p JOIN board_boards b ON b.id = p.board_id
+      WHERE p.id = ${req.params.id}::uuid LIMIT 1
+    `);
+    if (!rows[0]) throw new BoardError(404, "글을 찾을 수 없습니다.");
+    requireRole(user, String(rows[0].read_role), "이 게시판 열람");
+
+    return db.transaction(async (tx) => {
+      const { rows: existing } = await tx.execute(sql`
+        DELETE FROM board_scraps
+        WHERE user_id = ${user.id}::uuid AND post_id = ${req.params.id}::uuid
+        RETURNING post_id
+      `);
+      const scrapped = existing.length === 0;
+      if (scrapped) {
+        await tx.execute(sql`
+          INSERT INTO board_scraps (user_id, post_id) VALUES (${user.id}::uuid, ${req.params.id}::uuid)
+          ON CONFLICT DO NOTHING
+        `);
+      }
+      // 집계는 다시 센다 (증감 누적보다 정확하다)
+      const { rows: agg } = await tx.execute(sql`
+        UPDATE board_posts SET scrap_count =
+          (SELECT count(*) FROM board_scraps s WHERE s.post_id = board_posts.id)
+        WHERE id = ${req.params.id}::uuid RETURNING scrap_count
+      `);
+      return { scrapped, count: Number(agg[0]?.scrap_count ?? 0) };
+    });
+  });
+
+  /** 내 스크랩 목록 */
+  ctx.registerRoute("GET", "/my/scraps", async (req) => {
+    const user = userOf(req);
+    if (!user) throw new BoardError(401, "로그인이 필요합니다.");
+    const page = Math.max(1, Number(req.query.page ?? 1));
+    const size = 20;
+    const { rows } = await db.execute(sql`
+      SELECT p.id, p.title, p.author_name, p.created_at, p.comment_count,
+             b.slug AS board_slug, b.title AS board_title, s.created_at AS scrapped_at
+      FROM board_scraps s
+      JOIN board_posts p ON p.id = s.post_id
+      JOIN board_boards b ON b.id = p.board_id
+      WHERE s.user_id = ${user.id}::uuid
+      ORDER BY s.created_at DESC LIMIT ${size} OFFSET ${(page - 1) * size}
+    `);
+    const { rows: cnt } = await db.execute(sql`
+      SELECT count(*) AS n FROM board_scraps WHERE user_id = ${user.id}::uuid
+    `);
+    return { items: rows, total: Number(cnt[0]?.n ?? 0), page, pageSize: size };
   });
 
   // ── RSS ─────────────────────────────────────────────
