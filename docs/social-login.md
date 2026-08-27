@@ -154,7 +154,7 @@ DATABASE_URL=postgresql://brick:brick@localhost:5432/brick bash scripts/smoke-so
 ```
 
 스텁([scripts/oidc-stub.mjs](../scripts/oidc-stub.mjs))이 인증·토큰·프로필
-엔드포인트를 흉내내고, Brick의 `oidc` 공급자로 연결해 흐름 전체를 검증합니다 —
+엔드포인트를 대신 제공하고, Brick의 `oidc` 공급자로 연결해 흐름 전체를 검증합니다 —
 state 쿠키 결속, 코드 1회성, 계정 생성·연결, 정지 계정 차단, 우회 경로까지 76개
 항목입니다. 스텁이 표준 OIDC를 그대로 말하므로, 여기서 통과하면 실제 OIDC
 공급자에서도 같은 경로로 동작합니다.

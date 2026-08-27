@@ -1,0 +1,82 @@
+name: 버그 신고
+description: 동작하지 않는 것을 알려주세요
+title: "[버그] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        재현 방법이 있으면 고칠 수 있습니다. 없으면 추측만 하게 됩니다 —
+        귀찮으시겠지만 아래를 채워주시면 훨씬 빨리 해결됩니다.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: 무슨 일이 일어났나요
+      description: 기대한 것과 실제로 벌어진 것을 각각 적어주세요.
+      placeholder: |
+        기대: 게시글 첨부파일이 3개까지 올라간다
+        실제: 2개째에서 "파일이 너무 많습니다" 오류
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 재현 방법
+      description: 순서대로 적어주세요. 관리자 계정이 필요한지도 알려주세요.
+      placeholder: |
+        1. 관리자로 로그인
+        2. 게시판 만들기 → 첨부 개수 3
+        3. 글쓰기에서 파일 2개 선택
+        4. 등록 → 오류
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: 설치 방식
+      options:
+        - Docker (docker compose)
+        - 배포본 tar.gz (FTP 업로드 / cPanel / Plesk)
+        - 소스에서 개발 모드 (pnpm dev)
+        - 기타
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Brick 버전
+      description: 관리자 하단 또는 `package.json` 의 version. 소스라면 커밋 해시.
+      placeholder: "0.1.0 또는 c655d39"
+    validations:
+      required: true
+
+  - type: input
+    id: env
+    attributes:
+      label: 실행 환경
+      description: Node 버전, PostgreSQL 버전, OS
+      placeholder: "Node 22.3 / PostgreSQL 16 / Ubuntu 24.04"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 로그
+      description: |
+        서버 로그(`docker compose logs api` 또는 `data/brick.log`)와 브라우저 콘솔 오류.
+        **비밀번호·API 키·DATABASE_URL·BRICK_SECRET 은 지우고 붙여주세요.**
+      render: text
+
+  - type: checkboxes
+    id: checked
+    attributes:
+      label: 확인
+      options:
+        - label: 최신 버전에서도 같은 문제가 나는지 확인했습니다
+        - label: 붙여넣은 로그에서 비밀 정보를 지웠습니다
+          required: true

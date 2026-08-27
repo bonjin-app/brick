@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 보안 취약점 신고
+    url: https://github.com/bonjin-app/brick/security/advisories/new
+    about: 공개 이슈로 올리지 말고 비공개 보안 권고로 알려주세요 (SECURITY.md 참고)
+  - name: 질문 · 사용법 논의
+    url: https://github.com/bonjin-app/brick/discussions
+    about: 버그가 아닌 질문은 Discussions에서 이야기해요
+  - name: 문서
+    url: https://github.com/bonjin-app/brick/tree/main/docs
+    about: 설치 · 업그레이드 · 플러그인 개발 · 아키텍처(ADR 36건)

@@ -164,7 +164,7 @@ check "//로 시작하는 next는 /로 접힘" "$STATE_EVIL" "/"
 
 echo "── 첫 로그인 (계정 자동 생성)"
 set_profile '{"sub":"sso-1","email":"first@sso.test","email_verified":true,"name":"첫 사용자"}'
-# 브라우저를 흉내낸다: 쿠키 항아리를 공유하며 리다이렉트를 따라간다
+# 브라우저처럼 동작한다: 쿠키 항아리를 공유하며 리다이렉트를 따라간다
 U1="$TMP/u1.txt"
 curl -s -c "$U1" -b "$U1" -L -o /dev/null -D "$TMP/h2.txt" "$OA/oidc?next=/mypage"
 contains "세션 쿠키 발급" "$(cat "$TMP/h2.txt")" "brick_session="

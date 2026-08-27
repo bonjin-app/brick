@@ -1,0 +1,54 @@
+name: 기능 제안
+description: 있으면 좋을 기능을 제안해주세요
+title: "[제안] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Brick의 목표는 **그누보드·영카트로 하던 일을 더 나은 기반에서** 하는 것입니다.
+        "그누보드에서는 이렇게 했는데" 같은 맥락이 특히 도움이 됩니다.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 어떤 상황에서 막히나요
+      description: 기능 이름보다 **하려던 일**을 적어주세요. 해결 방법은 저희가 같이 찾겠습니다.
+      placeholder: |
+        쇼핑몰에서 반품 요청을 받고 있는데, 지금은 주문을 통째로 취소하는 수밖에 없어서
+        일부 상품만 반품할 때 금액을 손으로 계산해 따로 환불하고 있습니다.
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: 생각하신 방법 (선택)
+      description: 화면이나 흐름이 떠오르셨다면 적어주세요.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: 어느 영역인가요
+      options:
+        - 코어 (설치·인증·페이지·미디어·테마)
+        - 게시판
+        - 쇼핑몰 · 결제
+        - 포인트 · 쪽지
+        - 소셜 로그인 · 회원
+        - 방문자 집계 · 팝업
+        - 플러그인/테마 개발 도구
+        - 배포 · 운영 (Docker, FTP, 업데이트)
+        - 잘 모르겠습니다
+    validations:
+      required: true
+
+  - type: dropdown
+    id: shape
+    attributes:
+      label: 코어에 들어가야 할까요, 플러그인이면 될까요
+      description: Brick은 없어도 사이트가 돌아가는 기능은 플러그인으로 둡니다.
+      options:
+        - 플러그인으로 충분합니다
+        - 코어에 있어야 합니다
+        - 판단이 어렵습니다

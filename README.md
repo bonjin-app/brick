@@ -16,9 +16,18 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT" />
+  <a href="https://github.com/bonjin-app/brick/actions/workflows/ci.yml">
+    <img src="https://github.com/bonjin-app/brick/actions/workflows/ci.yml/badge.svg" alt="CI" />
+  </a>
+  <a href="https://github.com/bonjin-app/brick/releases">
+    <img src="https://img.shields.io/github/v/release/bonjin-app/brick?include_prereleases&label=release&color=ff6b4a" alt="release" />
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT" />
+  </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
+  <img src="https://img.shields.io/badge/E2E-587%20passing-2ea043.svg" alt="스모크 테스트 587개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
 </p>
 
@@ -314,10 +323,12 @@ docker/           Dockerfile, entrypoint
 | [방문자·팝업](docs/site-ops.md) | 접속자 집계, 팝업·배너, 개인정보 처리 |
 | [결제](docs/payments.md) | PG 설정, 결제 흐름, 위조·중복 방어, 새 PG 붙이기 |
 | [보안](docs/security.md) | 구현된 방어, **신뢰 모델**, 배포 체크리스트 |
-| [아키텍처 (ADR)](docs/architecture.md) | 설계 결정 9건과 그 이유 |
+| [아키텍처 (ADR)](docs/architecture.md) | 설계 결정 36건과 그 이유 |
 | [플러그인 개발](docs/plugin-development.md) | manifest, API, 마이그레이션, 배포 |
 | [테마 개발](docs/theme-development.md) | 템플릿 문법, 스코프, 배포 |
-| [기여 가이드](CONTRIBUTING.md) | 개발 환경, 구조 규칙, PR 규칙 |
+| [기여 가이드](CONTRIBUTING.md) | 개발 환경, 구조 규칙, PR 규칙, 테스트 함정 |
+| [행동 규범](CODE_OF_CONDUCT.md) | 이슈·PR에서 지켜주셨으면 하는 것 |
+| [보안 신고](SECURITY.md) | 취약점 신고 절차와 대응 약속 |
 
 ---
 
@@ -326,7 +337,18 @@ docker/           Dockerfile, entrypoint
 **알파.** 기능은 동작하고 E2E로 검증되지만, 아직 실사용 검증이 부족합니다.
 프로덕션에 올리기 전 [보안 문서](docs/security.md)의 신뢰 모델과 체크리스트를 반드시 읽어주세요.
 
-이슈 · PR · 플러그인 제작 모두 환영합니다. → [CONTRIBUTING.md](CONTRIBUTING.md)
+### 어떻게 도울 수 있나요
+
+- **써보고 막힌 곳을 알려주세요.** 설치가 안 되는 것이 가장 중요한 버그입니다 →
+  [버그 신고](https://github.com/bonjin-app/brick/issues/new?template=bug_report.yml)
+- **그누보드·영카트로 하던 일이 안 되는지 알려주세요.** 그게 다음에 만들 것이 됩니다 →
+  [기능 제안](https://github.com/bonjin-app/brick/issues/new?template=feature_request.yml)
+- **플러그인이나 테마를 만들어보세요.** 코어를 고치지 않고 어디까지 되는지가
+  이 프로젝트의 실질적인 시험입니다 → [플러그인 개발](docs/plugin-development.md)
+- **코드로 기여해주세요.** 개발 환경 준비와 테스트 함정은
+  [CONTRIBUTING.md](CONTRIBUTING.md)에 정리해두었습니다.
+
+한국어로 편하게 남겨주세요. 영어도 괜찮습니다.
 
 ## 라이선스
 

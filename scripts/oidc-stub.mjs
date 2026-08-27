@@ -12,7 +12,7 @@
  * 사용법:
  *   node scripts/oidc-stub.mjs --port 45999
  *
- * 프로필은 요청마다 바꿀 수 있다 (테스트가 여러 사용자를 흉내내야 한다):
+ * 프로필은 요청마다 바꿀 수 있다 (테스트가 여러 사용자를 번갈아 써야 한다):
  *   PUT /_profile  {"sub":"u1","email":"a@b.c","email_verified":true,"name":"홍길동"}
  */
 import { createServer } from "node:http";
@@ -73,7 +73,7 @@ const server = createServer(async (req, res) => {
     return res.end();
   }
 
-  // 사용자가 취소한 경우를 흉내내는 경로
+  // 사용자가 취소한 경우를 재현하는 경로
   if (url.pathname === "/authorize-deny") {
     const back = new URL(url.searchParams.get("redirect_uri"));
     back.searchParams.set("error", "access_denied");
