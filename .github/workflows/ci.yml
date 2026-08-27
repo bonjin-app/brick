@@ -65,6 +65,9 @@ jobs:
       - name: E2E 스모크 테스트 (회원 생애주기)
         run: bash scripts/smoke-member.sh
 
+      - name: E2E 스모크 테스트 (그누보드 이전)
+        run: bash scripts/smoke-migrate.sh
+
       - name: E2E 스모크 테스트 (문의·FAQ·사이트맵)
         run: bash scripts/smoke-helpdesk.sh
 

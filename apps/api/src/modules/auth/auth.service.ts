@@ -1,4 +1,4 @@
-import { Injectable, Inject, UnauthorizedException } from "@nestjs/common";
+import { Injectable, Inject, Logger, UnauthorizedException } from "@nestjs/common";
 import { createHash, randomBytes } from "node:crypto";
 import { and, eq, gt } from "drizzle-orm";
 import argon2 from "argon2";
@@ -8,6 +8,7 @@ import type { BrickDb } from "@brick/database";
 import { users, sessions } from "@brick/database";
 import type { SessionUser } from "@brick/shared";
 import { DB } from "../../runtime.module.js";
+import { isLegacyHash, verifyLegacyPassword } from "./legacy-hash.js";
 
 export const SESSION_COOKIE = "brick_session";
 const SESSION_TTL_DAYS = 30;
@@ -19,6 +20,8 @@ const SESSION_TTL_DAYS = 30;
  */
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger("Auth");
+
   constructor(@Inject(DB) private readonly db: BrickDb) {}
 
   async login(email: string, password: string): Promise<{ token: string; user: SessionUser }> {
@@ -26,13 +29,40 @@ export class AuthService {
     // 사용자 부재와 비밀번호 불일치를 구분해 노출하지 않는다.
     // 소셜 전용 계정(passwordLoginEnabled=false)도 같은 응답으로 거절한다 —
     // "이 이메일은 소셜 계정입니다"라고 알려주면 가입 여부가 새어 나간다.
-    if (
-      !row ||
-      !row.isActive ||
-      row.passwordLoginEnabled === false ||
-      !(await argon2.verify(row.passwordHash, password))
-    ) {
+    if (!row || !row.isActive || row.passwordLoginEnabled === false) {
       throw new UnauthorizedException("invalid credentials");
+    }
+
+    // 비밀번호 검증 — 옮겨온 계정은 원본 해시로 검증한다.
+    //
+    // 이전 후 회원 전원이 비밀번호를 다시 만들어야 하면 상당수가 돌아오지 않는다.
+    // 그래서 그누보드의 bcrypt/MD5 해시를 그대로 보존하고 여기서 검증한다.
+    let ok: boolean;
+    let needsUpgrade = false;
+    if (isLegacyHash(row.passwordHash)) {
+      ok = await verifyLegacyPassword(row.passwordHash, password);
+      needsUpgrade = ok;
+    } else {
+      ok = await argon2.verify(row.passwordHash, password).catch(() => false);
+    }
+    if (!ok) throw new UnauthorizedException("invalid credentials");
+
+    // 자동 승급 — 로그인 시점이 평문 비밀번호를 손에 쥔 유일한 순간이다.
+    // 그누보드의 MD5 는 유출되면 사실상 평문이므로 그대로 두면 이전한 사이트는
+    // 영구히 약한 해시를 갖는다. 회원은 아무것도 하지 않는다.
+    //
+    // 승급 실패는 로그인을 막지 않는다 — 다음 로그인에 다시 시도된다.
+    if (needsUpgrade) {
+      try {
+        const upgraded = await argon2.hash(password);
+        await this.db
+          .update(users)
+          .set({ passwordHash: upgraded, updatedAt: new Date() })
+          .where(eq(users.id, row.id));
+        this.logger.log(`비밀번호 해시 승급: ${row.id}`);
+      } catch (err) {
+        this.logger.warn(`비밀번호 해시 승급 실패 (다음 로그인에 재시도): ${String(err)}`);
+      }
     }
 
     // 탈퇴한 계정은 is_active=false 이므로 위에서 이미 걸린다.
@@ -93,6 +123,10 @@ export class AuthService {
     const [row] = await this.db.select().from(users).where(eq(users.id, userId)).limit(1);
     if (!row || row.passwordLoginEnabled === false) return false;
     if (!password) return false;
+    // 옮겨온 계정은 아직 argon2 해시가 아닐 수 있다 (첫 로그인 전)
+    if (isLegacyHash(row.passwordHash)) {
+      return await verifyLegacyPassword(row.passwordHash, password);
+    }
     try {
       return await argon2.verify(row.passwordHash, password);
     } catch {
