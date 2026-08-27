@@ -1,4 +1,4 @@
-import { definePlugin, rawResponse } from "@brick/plugin-sdk";
+import { definePlugin, isUniqueViolation, rawResponse } from "@brick/plugin-sdk";
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import { BoardError, escapeHtml, hasRole, type Db, type SessionUser } from "./types.js";
@@ -589,7 +589,7 @@ ${items}
         )
       `);
     } catch (err) {
-      if (String(err).includes("board_boards_slug_key") || String(err).includes("duplicate key")) {
+      if (isUniqueViolation(err, "board_boards_slug")) {
         throw new BoardError(409, `이미 사용 중인 주소입니다: ${v.slug}`);
       }
       throw err;
@@ -616,7 +616,7 @@ ${items}
       `);
       if (!rows.length) throw new BoardError(404, "게시판을 찾을 수 없습니다.");
     } catch (err) {
-      if (String(err).includes("board_boards_slug_key") || String(err).includes("duplicate key")) {
+      if (isUniqueViolation(err, "board_boards_slug")) {
         throw new BoardError(409, `이미 사용 중인 주소입니다: ${v.slug}`);
       }
       throw err;

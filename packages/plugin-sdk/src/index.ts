@@ -23,6 +23,12 @@ export type {
 } from "@brick/core";
 // 값(함수)으로 재수출 — 플러그인이 원본 응답을 만들 때 쓴다
 export { rawResponse } from "@brick/core";
+// DB 오류 판별 — 중복 등록을 409로 돌려줄 때 쓴다.
+// 오류 문자열로 검사하면 드라이버가 메시지 형태를 바꿀 때 조용히 깨진다.
+export {
+  PG_ERROR, isUniqueViolation, isForeignKeyViolation, isCheckViolation,
+  isRetryable, pgErrorCode, violatedConstraint,
+} from "@brick/core";
 export type { PluginManifest } from "@brick/shared";
 import type { PluginContext, PluginInstance } from "@brick/core";
 

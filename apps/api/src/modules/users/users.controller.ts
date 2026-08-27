@@ -15,6 +15,7 @@ import { RateLimitService } from "../auth/rate-limit.service.js";
 import type { CaptchaProvider } from "@brick/core";
 import { AuditService } from "../audit/audit.service.js";
 import { CAPTCHA, DB, HOOKS } from "../../runtime.module.js";
+import { isUniqueViolation } from "@brick/core";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ROLES = ["admin", "manager", "member"] as const;
@@ -78,7 +79,7 @@ export class UsersController {
         role: "member",
       });
     } catch (err) {
-      if (String(err).includes("users_email_unique") || String(err).includes("duplicate key")) {
+      if (isUniqueViolation(err, "users_email")) {
         throw new ConflictException("이미 등록된 이메일입니다.");
       }
       throw err;

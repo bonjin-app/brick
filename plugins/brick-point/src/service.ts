@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import type { PluginDb } from "@brick/plugin-sdk";
+import { isUniqueViolation } from "@brick/plugin-sdk";
 
 /**
  * 포인트 서비스 — 다른 플러그인이 `ctx.useService("points")` 로 가져다 쓴다.
@@ -87,8 +88,7 @@ export const DEFAULT_SETTINGS: PointSettings = {
 
 /** 중복 키 위반인지 (멱등 처리에 쓴다) */
 function isDuplicate(err: unknown): boolean {
-  const s = String(err);
-  return s.includes("point_ledger_once_idx") || s.includes("duplicate key");
+  return isUniqueViolation(err, "point_ledger_once_idx");
 }
 
 export function createPointsService(

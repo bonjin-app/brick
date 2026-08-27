@@ -1,4 +1,4 @@
-import { definePlugin } from "@brick/plugin-sdk";
+import { definePlugin, isUniqueViolation } from "@brick/plugin-sdk";
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import { DEFAULT_SETTINGS, ShopError, STATUS_LABEL, escapeHtml, won,
@@ -565,7 +565,7 @@ export default definePlugin(async (ctx) => {
                 ${c.usageLimit}, ${c.isActive})
       `);
     } catch (err) {
-      if (String(err).includes("shop_coupons_code_key") || String(err).includes("duplicate key")) {
+      if (isUniqueViolation(err, "shop_coupons_code")) {
         throw new ShopError(409, `쿠폰 코드 "${c.code}" 는 이미 사용 중입니다.`);
       }
       throw err;
@@ -875,7 +875,7 @@ function validateCoupon(b: Record<string, unknown>) {
 
 function slugConflict(err: unknown, label: string): unknown {
   const s = String(err);
-  if (s.includes("_slug_key") || s.includes("duplicate key")) {
+  if (isUniqueViolation(err, "_slug")) {
     return new ShopError(409, `이미 사용 중인 ${label} 주소(slug)입니다.`);
   }
   return err;

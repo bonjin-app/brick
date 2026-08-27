@@ -27,7 +27,7 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-587%20passing-2ea043.svg" alt="스모크 테스트 587개" />
+  <img src="https://img.shields.io/badge/E2E-596%20passing-2ea043.svg" alt="스모크 테스트 596개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
 </p>
 
@@ -135,7 +135,7 @@ DB 마이그레이션은 컨테이너가 부팅할 때 스스로 적용합니다
          (Redis · S3는 선택 — 없으면 PG 기반 기본 구현)
 ```
 
-핵심 설계 결정 36건은 [docs/architecture.md](docs/architecture.md)에 ADR로 기록되어 있습니다.
+핵심 설계 결정 37건은 [docs/architecture.md](docs/architecture.md)에 ADR로 기록되어 있습니다.
 
 ---
 
@@ -247,7 +247,20 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 587개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 596개 항목):
+
+| 수트 | 항목 | 무엇을 못박는가 |
+|---|---:|---|
+| `smoke-test.sh` | 40 | 설치 · 인증 · 페이지 · 미디어 · 플러그인 로드 |
+| `smoke-board.sh` | 85 | 권한 4단계 · 답변형 · 비밀글 · 첨부 원자성 · XSS |
+| `smoke-point.sh` | 53 | FIFO 소모 · 멱등 적립 · 만료 · 동시성 |
+| `smoke-memo.sh` | 72 | 프라이버시 · 차단 · 포인트 차감 트랜잭션 |
+| `smoke-shop.sh` | 100 | 재고 동시성 · 금액 위조 · 구매 검증 후기 · 비밀 문의 |
+| `smoke-site.sh` | 73 | 방문자 집계(IP 해시) · 팝업 노출 규칙 |
+| `smoke-social.sh` | 76 | state 쿠키 결속 · 코드 1회성 · 계정 탈취 경로 |
+| `smoke-security.sh` | 48 | 캡차 · 레이트리밋 · 결제 위조 · 권한 우회 |
+| `smoke-release.sh` | 49 | FTP 설치 경로 · 동봉 플러그인 · 고아 프로세스 정리 |
+
 
 ```bash
 DATABASE_URL=postgresql://brick:brick@localhost:5432/brick bash scripts/smoke-test.sh
@@ -323,7 +336,7 @@ docker/           Dockerfile, entrypoint
 | [방문자·팝업](docs/site-ops.md) | 접속자 집계, 팝업·배너, 개인정보 처리 |
 | [결제](docs/payments.md) | PG 설정, 결제 흐름, 위조·중복 방어, 새 PG 붙이기 |
 | [보안](docs/security.md) | 구현된 방어, **신뢰 모델**, 배포 체크리스트 |
-| [아키텍처 (ADR)](docs/architecture.md) | 설계 결정 36건과 그 이유 |
+| [아키텍처 (ADR)](docs/architecture.md) | 설계 결정 37건과 그 이유 |
 | [플러그인 개발](docs/plugin-development.md) | manifest, API, 마이그레이션, 배포 |
 | [테마 개발](docs/theme-development.md) | 템플릿 문법, 스코프, 배포 |
 | [기여 가이드](CONTRIBUTING.md) | 개발 환경, 구조 규칙, PR 규칙, 테스트 함정 |

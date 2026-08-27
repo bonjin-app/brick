@@ -3,6 +3,7 @@ import { uuidv7 } from "uuidv7";
 import type { Db } from "./types.js";
 import { ShopError } from "./types.js";
 import { changeOrderStatus, type PointsPort } from "./orders.js";
+import { isUniqueViolation } from "@brick/plugin-sdk";
 
 /**
  * 결제 게이트웨이 추상화.
@@ -113,7 +114,7 @@ export async function confirmPayment(
               'requested', ${orderTotal})
     `);
   } catch (err) {
-    if (String(err).includes("shop_payments_tid_uniq")) {
+    if (isUniqueViolation(err, "shop_payments_tid_uniq")) {
       // 같은 PG 거래가 이미 처리 중이거나 처리되었다 — 재고 이중 차감을 막는다
       throw new ShopError(409, "이미 처리된 결제입니다.");
     }

@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { isUniqueViolation } from "@brick/plugin-sdk";
 import { uuidv7 } from "uuidv7";
 import type { Db } from "./types.js";
 import { ShopError } from "./types.js";
@@ -105,7 +106,7 @@ export async function createReview(
          ${orderNo}, ${rating}, ${content}, ${JSON.stringify(images)}::jsonb)
     `);
   } catch (err) {
-    if (String(err).includes("shop_reviews_once_idx") || String(err).includes("duplicate key")) {
+    if (isUniqueViolation(err, "shop_reviews_once_idx")) {
       throw new ShopError(409, "이미 이 상품에 후기를 작성하셨습니다. 기존 후기를 수정해주세요.");
     }
     throw err;

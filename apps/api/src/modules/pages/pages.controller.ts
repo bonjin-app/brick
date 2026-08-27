@@ -13,6 +13,7 @@ import { AuthService } from "../auth/auth.service.js";
 import { PageRenderService, type BlockNode } from "./page-render.service.js";
 import { HookBus } from "@brick/core";
 import { DB, HOOKS } from "../../runtime.module.js";
+import { isUniqueViolation } from "@brick/core";
 
 const SLUG_RE = /^[a-z0-9][a-z0-9\-/]{0,200}$/;
 
@@ -104,7 +105,7 @@ export class PagesController {
         publishedAt: dto.status === "published" ? new Date() : null,
       });
     } catch (err) {
-      if (String(err).includes("pages_slug_idx")) throw new ConflictException(`slug "${dto.slug}" already exists`);
+      if (isUniqueViolation(err, "pages_slug")) throw new ConflictException(`slug "${dto.slug}" already exists`);
       throw err;
     }
     await this.renderer.invalidate();
@@ -137,7 +138,7 @@ export class PagesController {
         })
         .where(eq(pages.id, id));
     } catch (err) {
-      if (String(err).includes("pages_slug_idx")) throw new ConflictException(`slug "${dto.slug}" already exists`);
+      if (isUniqueViolation(err, "pages_slug")) throw new ConflictException(`slug "${dto.slug}" already exists`);
       throw err;
     }
     // 전체 무효화: slug 변경, 다른 페이지에 포함된 블록 갱신 등을 안전하게 커버

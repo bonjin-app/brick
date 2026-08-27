@@ -78,6 +78,35 @@ CI(GitHub Actions)가 PR마다 전부 실행합니다:
   실행 시 `$!` 로 PID를 잡아두세요.
 - 배포본 테스트는 `env -u DATABASE_URL …` 로 환경변수를 차단해야 설치 모드를 재현합니다.
 
+### 코드에서 하지 말아야 할 것
+
+지금까지 실제로 사고가 났던 패턴입니다.
+
+**오류를 문자열로 판별하지 마세요.**
+
+```ts
+// ✗ 드라이버·ORM 버전이 바뀌면 조용히 깨집니다
+if (String(err).includes("duplicate key")) { ... }
+
+// ✓ SQLSTATE 는 PostgreSQL 표준입니다
+import { isUniqueViolation } from "@brick/plugin-sdk";
+if (isUniqueViolation(err, "shop_coupons_code")) { ... }
+```
+
+drizzle 0.45 가 오류를 `cause` 로 감싸기 시작하자 여덟 곳이 한꺼번에 500이 됐습니다
+(ADR-37). 조용히 깨지는 것이 가장 나쁩니다 — 테스트가 없었다면 사용자가 먼저 봤습니다.
+
+**이미 적용된 마이그레이션 파일을 고치지 마세요.** 운영 중인 설치본은 그 파일을
+이미 실행했고 다시 실행하지 않습니다. 새 번호의 파일을 추가하세요.
+
+**동봉 목록을 하드코딩하지 마세요.** 플러그인 목록이 Dockerfile · 배포 스크립트 ·
+스모크에 따로 적혀 있어서 셋 다 달라졌고, Docker 설치본에는 쇼핑몰이 없었습니다.
+`scripts/collect-plugins.sh` 가 유일한 출처입니다.
+
+**트랜잭션을 `execute("BEGIN")` 으로 열지 마세요.** 풀에서 매번 다른 커넥션이
+나오므로 BEGIN 과 COMMIT 이 다른 커넥션에 갈 수 있습니다. `db.transaction()` 을
+쓰세요 (ADR-13).
+
 ## 커밋 / PR
 
 - 커밋 메시지는 "무엇을"이 아니라 "왜"가 드러나게.
