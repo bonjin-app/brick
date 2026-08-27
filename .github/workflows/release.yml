@@ -43,7 +43,7 @@ jobs:
         run: sha256sum *.tar.gz > SHA256SUMS.txt
 
       - name: 릴리스에 첨부
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             dist-release/*.tar.gz
