@@ -426,6 +426,37 @@ export default definePlugin(async (ctx) => {
     return { ok: true };
   });
 
+  /**
+   * 회원 탈퇴 시 쪽지 삭제.
+   *
+   * 통째로 지운다. 사적인 대화이고 보존 의무가 없다.
+   * 상대방 화면에서도 사라지는데, 그게 맞다 — 쪽지는 "관리자도 볼 수 없다"는
+   * 전제로 만들어졌고(ADR-30), 탈퇴한 사람의 대화를 상대방에게만 남길 근거가 없다.
+   */
+  ctx.registerDataEraser({
+    label: "쪽지",
+    order: 10,
+    async erase({ tx, userId }) {
+      const { rows } = await tx.execute(sql`
+        DELETE FROM memo_messages
+        WHERE sender_id = ${userId}::uuid OR receiver_id = ${userId}::uuid
+        RETURNING id
+      `);
+      await tx.execute(sql`
+        DELETE FROM memo_blocks WHERE user_id = ${userId}::uuid OR blocked_id = ${userId}::uuid
+      `);
+      return rows.length ? [`쪽지 ${rows.length}건 삭제`] : [];
+    },
+    async describe({ userId }) {
+      const { rows } = await db.execute(sql`
+        SELECT count(*) AS n FROM memo_messages
+        WHERE sender_id = ${userId}::uuid OR receiver_id = ${userId}::uuid
+      `);
+      const n = Number(rows[0]?.n ?? 0);
+      return n ? [{ label: "쪽지", detail: `${n}건이 삭제됩니다. 상대방 화면에서도 사라집니다.` }] : [];
+    },
+  });
+
   ctx.registerAdminResource({
     name: "messages",
     title: "쪽지",

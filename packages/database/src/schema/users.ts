@@ -17,6 +17,21 @@ export const users = pgTable(
      */
     passwordLoginEnabled: boolean("password_login_enabled").notNull().default(true),
     isActive: boolean("is_active").notNull().default(true),
+    /** 만 14세 이상 확인 — 미만은 법정대리인 동의 절차가 필요하다 */
+    ageConfirmed: boolean("age_confirmed").notNull().default(true),
+    /** 광고성 정보 수신 동의 (선택). 단체 메일 발송이 이 값을 존중해야 한다 */
+    marketingOptIn: boolean("marketing_opt_in").notNull().default(false),
+    /** 마지막 로그인 — 휴면 판정의 기준 */
+    lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+    /** 휴면 전환 시점. NULL 이면 정상 계정 */
+    dormantAt: timestamp("dormant_at", { withTimezone: true }),
+    /**
+     * 탈퇴 시점. NULL 이면 탈퇴하지 않은 계정.
+     * 탈퇴는 행 삭제가 아니라 익명화다 — 주문은 법정 보존 대상이므로
+     * CASCADE 로 지워지면 안 된다 (WithdrawalService).
+     */
+    withdrawnAt: timestamp("withdrawn_at", { withTimezone: true }),
+    withdrawReason: varchar("withdraw_reason", { length: 300 }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

@@ -211,7 +211,7 @@ check "검증 안 된 계정은 이메일 미검증" \
 
 echo "── 검증된 이메일은 기존 계정에 연결"
 curl -s -X POST "$API/api/register" -H 'content-type: application/json' \
-  -d '{"email":"local@sso.test","password":"localpass123","displayName":"로컬 회원"}' >/dev/null
+  -d '{"email":"local@sso.test","password":"localpass123","agreements":{"terms":true,"privacy":true,"third_party":true},"displayName":"로컬 회원"}' >/dev/null
 set_profile '{"sub":"sso-linked","email":"local@sso.test","email_verified":true,"name":"로컬 회원"}'
 U4="$TMP/u4.txt"
 curl -s -c "$U4" -b "$U4" -L -o /dev/null "$OA/oidc?next=/"
@@ -225,7 +225,7 @@ check "비밀번호로도 여전히 로그인 가능" \
 
 echo "── 검증되지 않은 이메일은 연결하지 않는다 (계정 탈취 방어)"
 curl -s -X POST "$API/api/register" -H 'content-type: application/json' \
-  -d '{"email":"victim@sso.test","password":"victimpass123","displayName":"피해자"}' >/dev/null
+  -d '{"email":"victim@sso.test","password":"victimpass123","agreements":{"terms":true,"privacy":true,"third_party":true},"displayName":"피해자"}' >/dev/null
 set_profile '{"sub":"sso-attacker","email":"victim@sso.test","email_verified":false,"name":"공격자"}'
 U5="$TMP/u5.txt"
 curl -s -c "$U5" -b "$U5" -L -o /dev/null -D "$TMP/h5.txt" "$OA/oidc?next=/"

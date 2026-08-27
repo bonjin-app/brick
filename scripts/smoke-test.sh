@@ -91,13 +91,13 @@ contains "세션 확인(me)" "$(curl -s -b "$COOKIES" "$API/api/auth/me")" "admi
 echo "── 회원"
 contains "회원가입" \
   "$(curl -s -X POST "$API/api/register" -H 'content-type: application/json' \
-      -d '{"email":"member@smoke.test","password":"memberpass1","displayName":"스모크"}')" '"id"'
+      -d '{"email":"member@smoke.test","password":"memberpass1","agreements":{"terms":true,"privacy":true,"third_party":true},"displayName":"스모크"}')" '"id"'
 check "중복 이메일 차단" \
   "$(code -X POST "$API/api/register" -H 'content-type: application/json' \
-      -d '{"email":"member@smoke.test","password":"memberpass1","displayName":"스모크"}')" "409"
+      -d '{"email":"member@smoke.test","password":"memberpass1","agreements":{"terms":true,"privacy":true,"third_party":true},"displayName":"스모크"}')" "409"
 check "약한 비밀번호 차단" \
   "$(code -X POST "$API/api/register" -H 'content-type: application/json' \
-      -d '{"email":"weak@smoke.test","password":"123","displayName":"약함"}')" "400"
+      -d '{"email":"weak@smoke.test","password":"123","agreements":{"terms":true,"privacy":true,"third_party":true},"displayName":"약함"}')" "400"
 
 echo "── 플러그인"
 contains "플러그인 활성화" \

@@ -336,6 +336,39 @@ export default definePlugin(async (ctx) => {
   });
 
   // ── 관리 화면 (선언만으로 생성) ─────────────────────
+  /**
+   * 회원 탈퇴 시 포인트 처리.
+   *
+   * 잔액은 소멸시키고 원장 행은 남긴다. 원장을 지우면 과거 정산이 맞지 않는다 —
+   * "지난달 적립 총액"이 탈퇴 때문에 바뀌면 회계가 성립하지 않는다.
+   * 승계 제도가 없으므로 잔액은 돌려주지 않는다. 그래서 미리 알려야 한다.
+   */
+  ctx.registerDataEraser({
+    label: "포인트",
+    order: 40,
+    async erase({ tx, userId }) {
+      const { rows } = await tx.execute(sql`
+        UPDATE point_ledger SET remaining = 0
+        WHERE user_id = ${userId}::uuid AND remaining > 0
+        RETURNING remaining
+      `);
+      return rows.length ? ["잔여 포인트 소멸 (원장 기록은 정산을 위해 유지)"] : [];
+    },
+    async describe({ userId }) {
+      const { rows } = await db.execute(sql`
+        SELECT coalesce(sum(remaining), 0) AS balance FROM point_ledger
+        WHERE user_id = ${userId}::uuid AND remaining > 0
+      `);
+      const balance = Number(rows[0]?.balance ?? 0);
+      return [{
+        label: "포인트",
+        detail: balance > 0
+          ? `${balance.toLocaleString("ko-KR")}점이 소멸됩니다. 되돌릴 수 없고 환불되지 않습니다.`
+          : "잔여 포인트가 없습니다.",
+      }];
+    },
+  });
+
   ctx.registerAdminResource({
     name: "balances",
     title: "포인트",

@@ -42,7 +42,7 @@ print(d["token"] + "|" + "".join(re.findall(r">([A-Z0-9])</text>", d["svg"])))'
 register_with_captcha() { # <email> <password> <displayName> <파일경로>
   local tk an
   IFS='|' read -r tk an <<< "$(captcha_issue)"
-  printf '{"email":"%s","password":"%s","displayName":"%s","captchaToken":"%s","captchaAnswer":"%s"}' \
+  printf '{"email":"%s","password":"%s","agreements":{"terms":true,"privacy":true,"third_party":true},"displayName":"%s","captchaToken":"%s","captchaAnswer":"%s"}' \
     "$1" "$2" "$3" "$tk" "$an" > "$4"
   curl -s -X POST "$API/api/register" -H 'content-type: application/json' --data-binary "@$4"
 }
@@ -167,24 +167,24 @@ A2="$(captcha_issue | cut -d'|' -f2)"
 [[ ${#A1} -eq 5 ]] && ok "문자 5자" || bad "문자 5자 (실제 ${#A1})"
 
 # 회원가입에 캡차 강제
-printf '{"email":"nocap@sec.test","password":"passok1234","displayName":"봇"}' > "$TMP/nocap.json"
+printf '{"email":"nocap@sec.test","password":"passok1234","agreements":{"terms":true,"privacy":true,"third_party":true},"displayName":"봇"}' > "$TMP/nocap.json"
 check "캡차 없는 가입 차단" "$(code -X POST "$API/api/register" -H 'content-type: application/json' --data-binary "@$TMP/nocap.json")" "400"
 
 IFS='|' read -r CTK CAN <<< "$(captcha_issue)"
-printf '{"email":"wrongcap@sec.test","password":"passok1234","displayName":"봇","captchaToken":"%s","captchaAnswer":"ZZZZZ"}' "$CTK" > "$TMP/wrongcap.json"
+printf '{"email":"wrongcap@sec.test","password":"passok1234","agreements":{"terms":true,"privacy":true,"third_party":true},"displayName":"봇","captchaToken":"%s","captchaAnswer":"ZZZZZ"}' "$CTK" > "$TMP/wrongcap.json"
 check "틀린 답 차단" "$(code -X POST "$API/api/register" -H 'content-type: application/json' --data-binary "@$TMP/wrongcap.json")" "400"
 
 IFS='|' read -r CTK CAN <<< "$(captcha_issue)"
-printf '{"email":"okcap@sec.test","password":"passok1234","displayName":"사람","captchaToken":"%s","captchaAnswer":"%s"}' "$CTK" "$CAN" > "$TMP/okcap.json"
+printf '{"email":"okcap@sec.test","password":"passok1234","agreements":{"terms":true,"privacy":true,"third_party":true},"displayName":"사람","captchaToken":"%s","captchaAnswer":"%s"}' "$CTK" "$CAN" > "$TMP/okcap.json"
 check "맞는 답으로 가입 성공" "$(code -X POST "$API/api/register" -H 'content-type: application/json' --data-binary "@$TMP/okcap.json")" "201"
 # 같은 토큰 재사용 — 봇이 한 번 풀고 무한 재사용하는 것을 막아야 한다
-printf '{"email":"reuse@sec.test","password":"passok1234","displayName":"봇","captchaToken":"%s","captchaAnswer":"%s"}' "$CTK" "$CAN" > "$TMP/reuse.json"
+printf '{"email":"reuse@sec.test","password":"passok1234","agreements":{"terms":true,"privacy":true,"third_party":true},"displayName":"봇","captchaToken":"%s","captchaAnswer":"%s"}' "$CTK" "$CAN" > "$TMP/reuse.json"
 check "토큰 재사용 차단 (1회용)" "$(code -X POST "$API/api/register" -H 'content-type: application/json' --data-binary "@$TMP/reuse.json")" "400"
 
 # 대소문자 무시 (사용자가 틀리면 캡차가 아니라 장벽이 된다)
 IFS='|' read -r CTK CAN <<< "$(captcha_issue)"
 LOWER="$(echo "$CAN" | tr 'A-Z' 'a-z')"
-printf '{"email":"lower@sec.test","password":"passok1234","displayName":"사람","captchaToken":"%s","captchaAnswer":"%s"}' "$CTK" "$LOWER" > "$TMP/lower.json"
+printf '{"email":"lower@sec.test","password":"passok1234","agreements":{"terms":true,"privacy":true,"third_party":true},"displayName":"사람","captchaToken":"%s","captchaAnswer":"%s"}' "$CTK" "$LOWER" > "$TMP/lower.json"
 check "소문자 입력도 통과" "$(code -X POST "$API/api/register" -H 'content-type: application/json' --data-binary "@$TMP/lower.json")" "201"
 
 # 위조 토큰 — HMAC 서명이 막아야 한다
@@ -192,7 +192,7 @@ FORGED="$(python3 -c '
 import base64, json, time
 p = json.dumps({"a": "AAAAA", "e": int(time.time()*1000)+60000, "n": "fake"}).encode()
 print(base64.urlsafe_b64encode(p).decode().rstrip("=") + ".badsignature")')"
-printf '{"email":"forged@sec.test","password":"passok1234","displayName":"봇","captchaToken":"%s","captchaAnswer":"AAAAA"}' "$FORGED" > "$TMP/forged.json"
+printf '{"email":"forged@sec.test","password":"passok1234","agreements":{"terms":true,"privacy":true,"third_party":true},"displayName":"봇","captchaToken":"%s","captchaAnswer":"AAAAA"}' "$FORGED" > "$TMP/forged.json"
 check "위조 토큰 차단 (서명 검증)" "$(code -X POST "$API/api/register" -H 'content-type: application/json' --data-binary "@$TMP/forged.json")" "400"
 
 echo "── 감사 로그"

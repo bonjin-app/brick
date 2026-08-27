@@ -85,7 +85,7 @@ contains "쇼핑몰이 포인트를 인식" "$(curl -s "$SH/payment-methods")" '
 curl -s -b "$ADMIN" -X POST "$API/api/plugins/brick-board/activate" >/dev/null
 
 echo "── 회원가입 적립"
-printf '{"email":"member@pt.test","password":"memberpass1","displayName":"회원"}' > "$TMP/reg.json"
+printf '{"email":"member@pt.test","password":"memberpass1","agreements":{"terms":true,"privacy":true,"third_party":true},"displayName":"회원"}' > "$TMP/reg.json"
 jpost "$API/api/register" "$TMP/reg.json" >/dev/null
 printf '{"email":"member@pt.test","password":"memberpass1"}' > "$TMP/lm.json"
 curl -s -c "$MEMBER" -X POST "$API/api/auth/login" -H 'content-type: application/json' --data-binary "@$TMP/lm.json" >/dev/null

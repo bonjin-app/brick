@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import type { BrickDb } from "@brick/database";
 import { installedPlugins, siteSettings } from "@brick/database";
 import type { PluginManifest } from "@brick/shared";
-import type { PluginContext, PluginInstance, BlockDefinition, PluginRouteHandler, PluginDb, AdminResource, HookBus, CacheProvider, QueueProvider, StorageProvider, MailProvider, CaptchaProvider } from "@brick/core";
+import type { PluginContext, PluginInstance, BlockDefinition, PluginRouteHandler, PluginDb, AdminResource, HookBus, CacheProvider, QueueProvider, StorageProvider, MailProvider, CaptchaProvider, PersonalDataEraser } from "@brick/core";
 import { DB, HOOKS, CACHE, QUEUE, STORAGE, MAIL, CAPTCHA } from "../../runtime.module.js";
 
 /**
@@ -81,6 +81,11 @@ export class PluginLoaderService implements OnModuleInit {
   readonly adminMenus: Array<{ plugin: string; label: string; path: string; icon?: string }> = [];
   /** 플러그인이 선언한 관리자 리소스 — 코어 관리자가 이걸로 CRUD 화면을 생성한다 */
   readonly adminResources: Array<AdminResource & { plugin: string }> = [];
+  /**
+   * 개인정보 삭제 처리기 — 회원 탈퇴 시 코어가 트랜잭션 안에서 부른다.
+   * 코어가 플러그인 테이블 이름을 알지 않게 하려는 장치다 (ADR-38).
+   */
+  readonly dataErasers: Array<PersonalDataEraser & { plugin: string }> = [];
   /**
    * 플러그인 간 서비스 레지스트리.
    * 훅으로 표현할 수 없는 협력(호출자 트랜잭션 참여 등)에 쓴다.
@@ -200,6 +205,11 @@ export class PluginLoaderService implements OnModuleInit {
     }
     await this.db.update(installedPlugins).set({ isActive: false }).where(eq(installedPlugins.name, name));
     await this.cache.invalidateTag("pages");
+    // 비활성화된 플러그인의 eraser 는 부르지 않는다 — 테이블이 남아 있어도
+    // 플러그인이 없으면 그 데이터를 해석할 방법이 없다.
+    for (let i = this.dataErasers.length - 1; i >= 0; i--) {
+      if (this.dataErasers[i].plugin === name) this.dataErasers.splice(i, 1);
+    }
     this.logger.log(`plugin "${name}" deactivated`);
   }
 
@@ -264,6 +274,10 @@ export class PluginLoaderService implements OnModuleInit {
         this.logger.log(`plugin "${pluginName}" provides service "${name}"`);
       },
       useService: <T>(name: string): T | null => (this.services.get(name)?.impl as T) ?? null,
+      registerDataEraser: (eraser) => {
+        this.dataErasers.push({ ...eraser, plugin: pluginName });
+        this.logger.log(`plugin "${pluginName}" registers data eraser "${eraser.label}"`);
+      },
     };
   }
 

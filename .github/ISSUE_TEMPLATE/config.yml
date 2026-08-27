@@ -8,4 +8,4 @@ contact_links:
     about: 버그가 아닌 질문은 Discussions에서 이야기해요
   - name: 문서
     url: https://github.com/bonjin-app/brick/tree/main/docs
-    about: 설치 · 업그레이드 · 플러그인 개발 · 아키텍처(ADR 37건)
+    about: 설치 · 업그레이드 · 플러그인 개발 · 아키텍처(ADR 39건)

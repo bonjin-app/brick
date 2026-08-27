@@ -8,6 +8,7 @@ import { HealthModule } from "./modules/health/health.module.js";
 import { InstallModule } from "./modules/install/install.module.js";
 import { MaintenanceModule } from "./modules/maintenance/maintenance.module.js";
 import { MediaModule } from "./modules/media/media.module.js";
+import { MembersModule } from "./modules/members/members.module.js";
 import { PagesModule } from "./modules/pages/pages.module.js";
 import { PluginsModule } from "./modules/plugins/plugins.module.js";
 import { SiteModule } from "./modules/site/site.module.js";
@@ -27,6 +28,7 @@ import { UsersModule } from "./modules/users/users.module.js";
     InstallModule,
     UsersModule,
     MediaModule,
+    MembersModule,
     SiteModule,
     PluginsModule,
     ThemesModule,

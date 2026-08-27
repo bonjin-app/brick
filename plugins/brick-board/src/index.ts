@@ -664,6 +664,63 @@ ${items}
   // ════════════════════════════════════════════════════
   ctx.registerAdminResource(BOARD_RESOURCE);
   ctx.registerAdminResource(POST_RESOURCE);
+  /**
+   * 회원 탈퇴 시 게시판 데이터 처리.
+   *
+   * 기본은 **남긴다.** 토론이 통째로 사라지면 남은 사람들의 글이 읽을 수 없게 된다.
+   * 남길 때도 작성자는 익명화한다 — author_id 만 끊으면 목록에 실명이 계속 보이므로
+   * 스냅샷으로 저장된 author_name 도 함께 바꿔야 한다.
+   */
+  ctx.registerDataEraser({
+    label: "게시판",
+    order: 20,
+    async erase({ tx, userId, deletePosts }) {
+      const done: string[] = [];
+
+      if (deletePosts) {
+        const { rows: posts } = await tx.execute(sql`
+          DELETE FROM board_posts WHERE author_id = ${userId}::uuid RETURNING id
+        `);
+        if (posts.length) done.push(`게시글 ${posts.length}건 삭제`);
+        const { rows: cmts } = await tx.execute(sql`
+          DELETE FROM board_comments WHERE author_id = ${userId}::uuid RETURNING id
+        `);
+        if (cmts.length) done.push(`댓글 ${cmts.length}건 삭제`);
+      } else {
+        const { rows: posts } = await tx.execute(sql`
+          UPDATE board_posts SET author_id = NULL, author_name = '탈퇴한 회원'
+          WHERE author_id = ${userId}::uuid RETURNING id
+        `);
+        if (posts.length) done.push(`게시글 ${posts.length}건 작성자 익명화 (내용 유지)`);
+        const { rows: cmts } = await tx.execute(sql`
+          UPDATE board_comments SET author_id = NULL, author_name = '탈퇴한 회원'
+          WHERE author_id = ${userId}::uuid RETURNING id
+        `);
+        if (cmts.length) done.push(`댓글 ${cmts.length}건 작성자 익명화`);
+      }
+
+      // 스크랩·추천은 개인의 행동 기록이다. 보존 의무가 없고 남길 이유도 없다.
+      await tx.execute(sql`DELETE FROM board_scraps WHERE user_id = ${userId}::uuid`);
+      await tx.execute(sql`DELETE FROM board_votes WHERE user_id = ${userId}::uuid`);
+      done.push("스크랩·추천 기록 삭제");
+      return done;
+    },
+    async describe({ userId }) {
+      const { rows } = await db.execute(sql`
+        SELECT (SELECT count(*) FROM board_posts WHERE author_id = ${userId}::uuid) AS posts,
+               (SELECT count(*) FROM board_comments WHERE author_id = ${userId}::uuid) AS comments
+      `);
+      const posts = Number(rows[0]?.posts ?? 0);
+      const comments = Number(rows[0]?.comments ?? 0);
+      if (!posts && !comments) return [];
+      return [{
+        label: "작성한 글",
+        detail: `게시글 ${posts}건, 댓글 ${comments}건. 남기면 작성자가 "탈퇴한 회원"으로 ` +
+                `바뀌고, 지우면 복구할 수 없습니다.`,
+      }];
+    },
+  });
+
   registerBoardBlocks(ctx, db);
 
   return {};

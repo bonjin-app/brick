@@ -234,7 +234,7 @@ contains "수정된 추가금 반영" "$(curl -s "$SHOP/cart?guest=$OGT")" '"uni
 echo "── 상품 후기 (구매 검증)"
 BCK="$TMP/buyer.txt"
 curl -s -X POST "$API/api/register" -H 'content-type: application/json' \
-  -d '{"email":"buyer@shop.test","password":"buyerpass123","displayName":"구매자"}' >/dev/null
+  -d '{"email":"buyer@shop.test","password":"buyerpass123","agreements":{"terms":true,"privacy":true,"third_party":true},"displayName":"구매자"}' >/dev/null
 curl -s -c "$BCK" -X POST "$API/api/auth/login" -H 'content-type: application/json' \
   -d '{"email":"buyer@shop.test","password":"buyerpass123"}' >/dev/null
 
@@ -338,7 +338,7 @@ contains "답변 내용 공개" "$(curl -s "$SHOP/products/$OPID/inquiries")" "2
 echo "── 후기·문의 권한"
 CCK="$TMP/other.txt"
 curl -s -X POST "$API/api/register" -H 'content-type: application/json' \
-  -d '{"email":"other@shop.test","password":"otherpass123","displayName":"제3자"}' >/dev/null
+  -d '{"email":"other@shop.test","password":"otherpass123","agreements":{"terms":true,"privacy":true,"third_party":true},"displayName":"제3자"}' >/dev/null
 curl -s -c "$CCK" -X POST "$API/api/auth/login" -H 'content-type: application/json' \
   -d '{"email":"other@shop.test","password":"otherpass123"}' >/dev/null
 check "남의 후기 수정 차단" \
@@ -354,7 +354,7 @@ contains "수정 후 평점 재계산" "$(curl -s "$SHOP/products/opt-item")" '"
 echo "── 후기 XSS (저장형)"
 XCK="$TMP/xss.txt"
 curl -s -X POST "$API/api/register" -H 'content-type: application/json' \
-  -d '{"email":"xss@shop.test","password":"xsspass123","displayName":"<img src=x onerror=alert(1)>"}' >/dev/null
+  -d '{"email":"xss@shop.test","password":"xsspass123","agreements":{"terms":true,"privacy":true,"third_party":true},"displayName":"<img src=x onerror=alert(1)>"}' >/dev/null
 curl -s -c "$XCK" -X POST "$API/api/auth/login" -H 'content-type: application/json' \
   -d '{"email":"xss@shop.test","password":"xsspass123"}' >/dev/null
 printf '{"items":[{"productId":"%s","quantity":1}],"orderer":{"ordererName":"엑","ordererPhone":"010-3333-4444","postcode":"06236","address1":"서울"}}' "$OPID" > "$TMP/xorder.json"

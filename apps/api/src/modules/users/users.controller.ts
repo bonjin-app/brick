@@ -2,7 +2,7 @@ import {
   BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, HttpException,
   HttpStatus, Inject, Param, Post, Put, Query, Req, UseGuards,
 } from "@nestjs/common";
-import { count, desc, eq } from "drizzle-orm";
+import { count, desc, eq, sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import argon2 from "argon2";
 import type { FastifyRequest } from "fastify";
@@ -16,6 +16,8 @@ import type { CaptchaProvider } from "@brick/core";
 import { AuditService } from "../audit/audit.service.js";
 import { CAPTCHA, DB, HOOKS } from "../../runtime.module.js";
 import { isUniqueViolation } from "@brick/core";
+import { AgreementsService } from "../members/agreements.service.js";
+import { EmailVerifyService } from "../members/email-verify.service.js";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ROLES = ["admin", "manager", "member"] as const;
@@ -29,6 +31,8 @@ export class UsersController {
     private readonly rateLimit: RateLimitService,
     private readonly audit: AuditService,
     @Inject(CAPTCHA) private readonly captcha: CaptchaProvider,
+    private readonly agreements: AgreementsService,
+    private readonly emailVerify: EmailVerifyService,
   ) {}
 
   /** 회원가입 — site.registration_open 설정으로 열고 닫을 수 있다 */
@@ -37,6 +41,10 @@ export class UsersController {
     @Body() body: {
       email: string; password: string; displayName: string;
       captchaToken?: string; captchaAnswer?: string;
+      /** 약관 동의 (kind → 동의 여부). 필수 항목을 빠뜨리면 가입이 거부된다 */
+      agreements?: Record<string, boolean>;
+      /** 만 14세 이상 확인 */
+      ageConfirmed?: boolean;
     },
     @Req() req: FastifyRequest,
   ) {
@@ -52,16 +60,30 @@ export class UsersController {
       }
     }
 
-    // 가입 스팸 방어
-    const { allowed, retryAfterSeconds } = this.rateLimit.consume(`register:${req.ip}`, 5, 60 * 60_000);
-    if (!allowed) {
-      throw new HttpException(
-        `가입 시도가 너무 많습니다. ${Math.ceil(retryAfterSeconds / 60)}분 후 다시 시도하세요.`,
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
+    const email = (body?.email ?? "").toLowerCase().trim();
+
+    // 가입 스팸 방어 — 두 축으로 나눈다.
+    //
+    // IP 하나에 5회/시간은 너무 좁다. 사무실·학교·카페처럼 NAT 뒤에서
+    // 여러 사람이 가입하면 여섯 번째 사람이 막힌다 — 로그인에서 이미 같은
+    // 문제를 겪고 고친 적이 있다(이메일별·IP별로 분리).
+    //
+    // 그래서: 같은 이메일 3회/시간(재시도 루프 차단),
+    //         같은 IP 20회/시간(대량 생성 차단).
+    // 봇 차단의 본체는 캡차이고, 레이트리밋은 그 보조다.
+    for (const [key, limit, label] of [
+      [`register-email:${email}`, 3, "이 이메일로"],
+      [`register-ip:${req.ip}`, 20, "이 네트워크에서"],
+    ] as const) {
+      const { allowed, retryAfterSeconds } = this.rateLimit.consume(key, limit, 60 * 60_000);
+      if (!allowed) {
+        throw new HttpException(
+          `${label} 가입 시도가 너무 많습니다. ${Math.ceil(retryAfterSeconds / 60)}분 후 다시 시도하세요.`,
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
     }
 
-    const email = (body?.email ?? "").toLowerCase().trim();
     const displayName = (body?.displayName ?? "").trim();
     if (!EMAIL_RE.test(email)) throw new BadRequestException("올바른 이메일을 입력하세요.");
     if ((body?.password ?? "").length < 8) throw new BadRequestException("비밀번호는 8자 이상이어야 합니다.");
@@ -69,14 +91,40 @@ export class UsersController {
       throw new BadRequestException("이름은 2~30자로 입력하세요.");
     }
 
+    // 만 14세 미만은 법정대리인 동의 절차 없이 가입시킬 수 없다.
+    // 생년월일 전체를 받지 않는다 — 확인에 필요한 최소는 "14세 이상인가" 뿐이다.
+    if (body?.ageConfirmed === false) {
+      throw new BadRequestException(
+        "만 14세 미만은 법정대리인 동의가 필요합니다. 사이트 운영자에게 문의해주세요.",
+      );
+    }
+
     const id = uuidv7();
+    const passwordHash = await argon2.hash(body.password);
+
+    // 계정 생성과 동의 기록은 한 트랜잭션이다.
+    // 나뉘면 "동의 없이 만들어진 계정"이 남을 수 있고, 그건 위법 상태다.
+    let marketingOptIn = false;
     try {
-      await this.db.insert(users).values({
-        id,
-        email,
-        passwordHash: await argon2.hash(body.password),
-        displayName,
-        role: "member",
+      await this.db.transaction(async (tx) => {
+        await tx.insert(users).values({
+          id,
+          email,
+          passwordHash,
+          displayName,
+          role: "member",
+        });
+        const consent = await this.agreements.recordForUser(tx as unknown as BrickDb, {
+          userId: id,
+          accepted: body?.agreements ?? {},
+          ip: req.ip,
+        });
+        marketingOptIn = consent.marketingOptIn;
+        if (marketingOptIn) {
+          await tx.execute(sql`
+            UPDATE users SET marketing_opt_in = true WHERE id = ${id}::uuid
+          `);
+        }
       });
     } catch (err) {
       if (isUniqueViolation(err, "users_email")) {
@@ -84,6 +132,15 @@ export class UsersController {
       }
       throw err;
     }
+
+    // 인증 메일은 가입을 막지 않는다 — SMTP 가 없는 사이트에서 가입이 실패하면
+    // 설치 직후 아무도 들어올 수 없다. 실패해도 계정은 남고, 나중에 재발송한다.
+    try {
+      await this.emailVerify.send({ userId: id });
+    } catch {
+      // 메일 실패는 조용히 넘긴다 (재발송 경로가 있다)
+    }
+
     await this.hooks.doAction("user.registered", { userId: id, email });
     await this.audit.record({ action: "user.register", targetType: "user", targetId: id, summary: email, ip: req.ip });
     return { id };

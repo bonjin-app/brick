@@ -174,3 +174,42 @@ zip -r my-plugin.zip brick.plugin.json dist migrations
 레퍼런스 구현:
 - [plugins/brick-board](../plugins/brick-board) — 게시판 (기본 패턴)
 - [plugins/brick-shop](../plugins/brick-shop) — 쇼핑몰 (관리자 리소스, 트랜잭션, 재고 동시성)
+
+---
+
+## 개인정보를 저장한다면 (필수)
+
+플러그인이 회원과 연결된 데이터를 저장하면 **삭제 방법을 등록해야 합니다.**
+등록하지 않으면 회원이 탈퇴한 뒤에도 그 데이터가 남아 **위법 상태**가 됩니다.
+코어는 여러분의 테이블 이름을 알 수 없으므로 대신 지워줄 수 없습니다 (ADR-38).
+
+```ts
+ctx.registerDataEraser({
+  label: "내 플러그인",
+  order: 50,                       // 작을수록 먼저 (기본 100)
+  async erase({ tx, userId, deletePosts }) {
+    // 반드시 넘어온 tx 를 쓴다 — ctx.db 는 트랜잭션 밖으로 나간다
+    const { rows } = await tx.execute(sql`
+      DELETE FROM my_table WHERE user_id = ${userId}::uuid RETURNING id
+    `);
+    return rows.length ? [`기록 ${rows.length}건 삭제`] : [];
+  },
+  // 되돌릴 수 없는 손실은 반드시 미리 알린다
+  async describe({ userId }) {
+    return [{ label: "내 기록", detail: "N건이 삭제되며 복구할 수 없습니다." }];
+  },
+});
+```
+
+**지킬 것 세 가지**
+
+1. **넘어온 `tx` 를 쓴다.** `ctx.db` 를 쓰면 트랜잭션 밖으로 나가고,
+   "데이터는 지웠는데 계정 익명화가 실패해 되돌아간" 상태가 가능해집니다.
+2. **예외를 삼키지 않는다.** 실패하면 탈퇴 전체가 되돌아가는 것이 맞습니다 —
+   지우지 못한 것을 지웠다고 말하지 않기 위해서입니다. 훅(action)과 반대입니다.
+3. **지울지 익명화할지 판단한다.** 법정 보존 의무가 있는 데이터(거래 기록)는
+   지우면 안 됩니다. 그 판단은 도메인을 아는 여러분이 해야 합니다.
+   판단 기준은 [회원 생애주기 문서](members.md)에 정리해두었습니다.
+
+동작 확인은 `scripts/smoke-member.sh` 를 참고하세요 — "파기했다"는 응답을 믿지 않고
+DB의 실제 행을 들여다봅니다.

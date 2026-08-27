@@ -80,7 +80,7 @@ done
 contains "쪽지 플러그인 활성화" "$(curl -s -b "$ADMIN" "$API/api/plugins")" "brick-memo"
 
 for n in 1 2; do
-  printf '{"email":"u%s@mm.test","password":"upass12345","displayName":"회원%s"}' "$n" "$n" > "$TMP/r$n.json"
+  printf '{"email":"u%s@mm.test","password":"upass12345","agreements":{"terms":true,"privacy":true,"third_party":true},"displayName":"회원%s"}' "$n" "$n" > "$TMP/r$n.json"
   jpost "$API/api/register" "$TMP/r$n.json" >/dev/null
   printf '{"email":"u%s@mm.test","password":"upass12345"}' "$n" > "$TMP/l$n.json"
 done

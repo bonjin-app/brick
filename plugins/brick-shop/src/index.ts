@@ -799,6 +799,85 @@ export default definePlugin(async (ctx) => {
   // ════════════════════════════════════════════════════
   //  관리자 화면 선언 + 스토어프론트 블록
   // ════════════════════════════════════════════════════
+  /**
+   * 회원 탈퇴 시 커머스 데이터 처리.
+   *
+   * 여기가 파기 의무와 보존 의무가 충돌하는 지점이다:
+   *   개인정보보호법 제21조 — 목적 달성 후 지체 없이 파기
+   *   전자상거래법 제6조   — 계약·결제·배송 기록은 5년 보존
+   *
+   * 둘 다 지키는 방법은 하나뿐이다. **개인을 지우고 거래를 남긴다.**
+   * 주문 행은 남기되 회원 연결을 끊는다. 주문 안의 수령인 정보는 보존 의무의
+   * 대상이므로 지우지 않는다 — 반품·분쟁·세무 조사에 필요하고, 지우면
+   * 사업자가 법을 위반한다.
+   */
+  ctx.registerDataEraser({
+    label: "쇼핑몰",
+    order: 30,
+    async erase({ tx, userId }) {
+      const done: string[] = [];
+
+      // 장바구니는 구매 전 데이터 — 보존 의무가 없다.
+      // 소유자는 shop_carts 에 있다 (shop_cart_items 에는 user_id 가 없다).
+      const { rows: carts } = await tx.execute(sql`
+        DELETE FROM shop_carts WHERE user_id = ${userId}::uuid RETURNING id
+      `);
+      if (carts.length) done.push("장바구니 삭제");
+
+      // 주문: 행은 남기고 회원 연결만 해제
+      const { rows: orders } = await tx.execute(sql`
+        UPDATE shop_orders SET user_id = NULL WHERE user_id = ${userId}::uuid RETURNING id
+      `);
+      if (orders.length) {
+        done.push(`주문 ${orders.length}건은 법정 보존 기간(5년) 동안 유지 — 회원 연결만 해제`);
+      }
+
+      // 후기는 남긴다. 다른 구매자에게 유용한 정보이고 개인정보가 아니다.
+      // 다만 작성자는 익명화한다.
+      const { rows: reviews } = await tx.execute(sql`
+        UPDATE shop_reviews SET user_id = NULL, author_name = '탈퇴한 회원'
+        WHERE user_id = ${userId}::uuid RETURNING id
+      `);
+      if (reviews.length) done.push(`상품 후기 ${reviews.length}건 작성자 익명화`);
+
+      // 비밀 문의는 지운다 — 배송지·연락처를 적는 경우가 많다
+      const { rows: secret } = await tx.execute(sql`
+        DELETE FROM shop_inquiries
+        WHERE user_id = ${userId}::uuid AND is_secret = true RETURNING id
+      `);
+      await tx.execute(sql`
+        UPDATE shop_inquiries SET user_id = NULL, author_name = '탈퇴한 회원'
+        WHERE user_id = ${userId}::uuid
+      `);
+      if (secret.length) done.push(`비밀 문의 ${secret.length}건 삭제 (개인정보 포함)`);
+
+      return done;
+    },
+    async describe({ userId }) {
+      const { rows } = await db.execute(sql`
+        SELECT count(*) AS total,
+               count(*) FILTER (WHERE status IN ('pending','paid','preparing','shipped')) AS ongoing
+        FROM shop_orders WHERE user_id = ${userId}::uuid
+      `);
+      const total = Number(rows[0]?.total ?? 0);
+      const ongoing = Number(rows[0]?.ongoing ?? 0);
+      const items: Array<{ label: string; detail: string }> = [];
+      if (ongoing > 0) {
+        items.push({
+          label: "진행 중인 주문",
+          detail: `${ongoing}건이 있습니다. 배송이 끝나기 전에 탈퇴하면 주문 조회가 어려워집니다.`,
+        });
+      }
+      if (total > 0) {
+        items.push({
+          label: "주문 내역",
+          detail: `${total}건은 전자상거래법에 따라 5년간 보존되지만, 회원 연결이 끊겨 조회할 수 없게 됩니다.`,
+        });
+      }
+      return items;
+    },
+  });
+
   ctx.registerAdminResource(ORDER_RESOURCE);
   ctx.registerAdminResource(PRODUCT_RESOURCE);
   ctx.registerAdminResource(CATEGORY_RESOURCE);

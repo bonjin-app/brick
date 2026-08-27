@@ -61,7 +61,7 @@ printf '{"siteName":"Board","adminEmail":"admin@bd.test","adminPassword":"bdpass
 jpost "$API/api/install" "$TMP/i.json" >/dev/null
 printf '{"email":"admin@bd.test","password":"bdpass1234"}' > "$TMP/la.json"
 curl -s -c "$ADMIN" -X POST "$API/api/auth/login" -H 'content-type: application/json' --data-binary "@$TMP/la.json" >/dev/null
-printf '{"email":"member@bd.test","password":"memberpass1","displayName":"일반회원"}' > "$TMP/reg.json"
+printf '{"email":"member@bd.test","password":"memberpass1","agreements":{"terms":true,"privacy":true,"third_party":true},"displayName":"일반회원"}' > "$TMP/reg.json"
 jpost "$API/api/register" "$TMP/reg.json" >/dev/null
 printf '{"email":"member@bd.test","password":"memberpass1"}' > "$TMP/lm.json"
 curl -s -c "$MEMBER" -X POST "$API/api/auth/login" -H 'content-type: application/json' --data-binary "@$TMP/lm.json" >/dev/null

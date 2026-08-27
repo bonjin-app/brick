@@ -27,7 +27,7 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-596%20passing-2ea043.svg" alt="스모크 테스트 596개" />
+  <img src="https://img.shields.io/badge/E2E-689%20passing-2ea043.svg" alt="스모크 테스트 689개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
 </p>
 
@@ -135,7 +135,7 @@ DB 마이그레이션은 컨테이너가 부팅할 때 스스로 적용합니다
          (Redis · S3는 선택 — 없으면 PG 기반 기본 구현)
 ```
 
-핵심 설계 결정 37건은 [docs/architecture.md](docs/architecture.md)에 ADR로 기록되어 있습니다.
+핵심 설계 결정 39건은 [docs/architecture.md](docs/architecture.md)에 ADR로 기록되어 있습니다.
 
 ---
 
@@ -146,6 +146,12 @@ DB 마이그레이션은 컨테이너가 부팅할 때 스스로 적용합니다
 - **설치 마법사** — 사이트명 + 관리자 계정만 입력
 - **인증** — argon2id, 세션(DB에는 토큰 해시만), 브루트포스 방어
 - **회원** — 가입 / 프로필 / 권한 관리(관리자·운영자·회원) / 계정 정지
+- **약관 동의** — 이용약관·개인정보·광고수신, **개정 시 재동의**, 동의 이력(IP는 해시로만).
+  선택 항목을 거부해도 가입된다(강제는 위법), 만 14세 미만 가입 제한
+- **이메일 인증** — 단회성 토큰, 주소 변경도 인증 후 반영
+- **회원 탈퇴** — 개인정보 즉시 파기 + **주문은 법정 보존**(전자상거래법 5년).
+  플러그인이 자기 데이터를 지운다, 탈퇴 전 손실 안내, 마지막 관리자 보호
+- **휴면 계정** — 장기 미접속 대상 조회(자동 전환 안 함 — 사전 통지 의무), 로그인 시 해제
 - **페이지 빌더** — 블록 트리 편집, 속성 UI 자동 생성, SEO 설정
 - **코어 블록** — 제목 · 문단 · HTML · 이미지 · 다단 레이아웃 · 여백
 - **미디어 라이브러리** — 업로드(확장자 화이트리스트) / 목록 / 삭제
@@ -183,8 +189,11 @@ DB 마이그레이션은 컨테이너가 부팅할 때 스스로 적용합니다
 
 ### 예정
 
-위시리스트 · 반품/교환 워크플로 · 현금영수증 · 정기결제 · 2FA · 이메일 인증 ·
-그누보드 데이터 이전 도구 · OpenAPI 문서 · 플러그인 레지스트리
+1:1 문의 · FAQ · 설문조사 · 최신글 모아보기 · 회원 단체메일 · sitemap.xml ·
+주문 취소/반품/교환 · 위시리스트 · 지역별 배송비 · 사업자정보 표기 ·
+**그누보드 데이터 이전 도구** · 현금영수증 · 정기결제 · 2FA · OpenAPI 문서
+
+순서와 이유는 [로드맵](docs/roadmap.md)에 있습니다.
 
 ---
 
@@ -247,11 +256,12 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 596개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 689개 항목):
 
 | 수트 | 항목 | 무엇을 못박는가 |
 |---|---:|---|
 | `smoke-test.sh` | 40 | 설치 · 인증 · 페이지 · 미디어 · 플러그인 로드 |
+| `smoke-member.sh` | 93 | 약관 강제 · 동의 이력 · 개인정보 파기 · 주문 보존 |
 | `smoke-board.sh` | 85 | 권한 4단계 · 답변형 · 비밀글 · 첨부 원자성 · XSS |
 | `smoke-point.sh` | 53 | FIFO 소모 · 멱등 적립 · 만료 · 동시성 |
 | `smoke-memo.sh` | 72 | 프라이버시 · 차단 · 포인트 차감 트랜잭션 |
@@ -330,15 +340,17 @@ docker/           Dockerfile, entrypoint
 | [운영 가이드](docs/operations.md) | 백업, 모니터링, 성능, 한국어 검색, 스케일링 |
 | [게시판](docs/board.md) | 권한·분류·답변형·첨부파일, 그누보드와의 차이 |
 | [포인트](docs/point.md) | 적립 정책, 원장 설계, 플러그인 간 협력 방법 |
+| [회원 생애주기](docs/members.md) | 약관 동의·이메일 인증·탈퇴·휴면, 법적 요건과 설계 |
 | [쪽지](docs/memo.md) | 프라이버시 설계, 차단, 포인트 차감, 스크랩 |
 | [쇼핑몰](docs/commerce.md) | 상품·주문·재고·쿠폰·후기·문의, 커머스 설계 원칙 |
 | [소셜 로그인](docs/social-login.md) | 구글·카카오·네이버·GitHub·사내 SSO 설정과 보안 |
 | [방문자·팝업](docs/site-ops.md) | 접속자 집계, 팝업·배너, 개인정보 처리 |
 | [결제](docs/payments.md) | PG 설정, 결제 흐름, 위조·중복 방어, 새 PG 붙이기 |
 | [보안](docs/security.md) | 구현된 방어, **신뢰 모델**, 배포 체크리스트 |
-| [아키텍처 (ADR)](docs/architecture.md) | 설계 결정 37건과 그 이유 |
+| [아키텍처 (ADR)](docs/architecture.md) | 설계 결정 39건과 그 이유 |
 | [플러그인 개발](docs/plugin-development.md) | manifest, API, 마이그레이션, 배포 |
 | [테마 개발](docs/theme-development.md) | 템플릿 문법, 스코프, 배포 |
+| [로드맵](docs/roadmap.md) | 그누보드·영카트와의 남은 격차와 순서 |
 | [기여 가이드](CONTRIBUTING.md) | 개발 환경, 구조 규칙, PR 규칙, 테스트 함정 |
 | [행동 규범](CODE_OF_CONDUCT.md) | 이슈·PR에서 지켜주셨으면 하는 것 |
 | [보안 신고](SECURITY.md) | 취약점 신고 절차와 대응 약속 |
