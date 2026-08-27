@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@brick/plugin-sdk": "workspace:*",
-    "drizzle-orm": "^0.38.3",
+    "drizzle-orm": "^0.45.2",
     "uuidv7": "^1.0.2"
   },
   "devDependencies": { "typescript": "^5.7.3" }
