@@ -1,0 +1,10 @@
+{
+  "name": "brick-poll",
+  "version": "0.1.0",
+  "displayName": "설문조사",
+  "description": "복수 선택 · 기간 · 중복 투표 방지 · 결과 공개 시점 — 그누보드의 설문조사에 대응",
+  "author": "Brick",
+  "brickVersion": ">=0.0.1",
+  "entry": "dist/index.js",
+  "migrations": "migrations"
+}

@@ -204,12 +204,12 @@ node server.js
       <div class="card">
         <span class="ico">🧪</span>
         <h3>실제 서버로 검증</h3>
-        <p><strong>E2E 스모크 1,079개</strong>가 실제 PostgreSQL과 실제 서버 프로세스를 띄워 돕니다. 재고 동시성·금액 위조·저장형 XSS·로그인 CSRF처럼 <strong>틀리면 돈이나 계정을 잃는</strong> 경로를 항목으로 못박아 두었습니다.</p>
+        <p><strong>E2E 스모크 1,181개</strong>가 실제 PostgreSQL과 실제 서버 프로세스를 띄워 돕니다. 재고 동시성·금액 위조·저장형 XSS·로그인 CSRF처럼 <strong>틀리면 돈이나 계정을 잃는</strong> 경로를 항목으로 못박아 두었습니다.</p>
       </div>
       <div class="card">
         <span class="ico">📐</span>
         <h3>결정의 이유가 남아 있다</h3>
-        <p>설계 결정 <strong>47건</strong>을 ADR로 기록했습니다. "왜 이렇게 되어 있나"에 답할 수 있는 코드가 오래 삽니다.</p>
+        <p>설계 결정 <strong>48건</strong>을 ADR로 기록했습니다. "왜 이렇게 되어 있나"에 답할 수 있는 코드가 오래 삽니다.</p>
       </div>
     </div>
   </div>
@@ -244,6 +244,7 @@ node server.js
           <tr><td>회원 탈퇴</td><td>있음</td><td>있음</td><td class="brick">파기 + 주문은 법정 보존(5년)</td></tr>
           <tr><td>1:1 문의</td><td>있음 (게시판 기반)</td><td>플러그인</td><td class="brick">전용 · 기본이 비공개</td></tr>
           <tr><td>FAQ</td><td>있음</td><td>플러그인</td><td class="brick">검색 · 조회수 · 유용성 평가</td></tr>
+          <tr><td>설문조사</td><td>있음</td><td>플러그인</td><td class="brick">IP를 해시로만 · 결과 공개 시점 선택</td></tr>
           <tr><td>사업자정보 표시</td><td>있음</td><td>플러그인</td><td class="brick">사업자번호 체크섬 검증 · 테마 자동 렌더</td></tr>
           <tr><td>위시리스트</td><td>영카트 보관함</td><td>플러그인</td><td class="brick">비회원도 사용 · 로그인 시 이어받기</td></tr>
           <tr><td>지역별 배송비</td><td>있음</td><td>플러그인</td><td class="brick">우편번호 구간 (주소 문자열 아님)</td></tr>
@@ -316,8 +317,8 @@ node server.js
       Brick은 초기 개발 단계입니다. 아래 기능은 동작하며, 프로덕션 사용 전 검토를 권합니다.
     </p>
     <div class="grid">
-      <div class="card"><h3>✅ 동작</h3><p>웹 설치 마법사 · 세션 인증 · 비밀번호 재설정 · 회원 · 페이지 빌더 · 미디어 · 메뉴 · 검색 · 플러그인/테마 ZIP 설치 · 게시판 · 쪽지 · 포인트 · 캡차 · <strong>소셜 로그인</strong> · 방문자 집계 · 팝업/배너 · <strong>쇼핑몰(상품 후기·문의·옵션)</strong> · <strong>약관 동의·이메일 인증·회원 탈퇴·휴면</strong> · <strong>1:1 문의·FAQ</strong> · sitemap.xml · <strong>그누보드 데이터 이전</strong> · <strong>결제(토스페이먼츠)</strong> · <strong>취소·반품·교환</strong> · <strong>사업자정보</strong> · 위시리스트 · 지역별 배송비 · 감사 로그 · 자동 마이그레이션 · 백업 CLI</p></div>
-      <div class="card"><h3>🚧 예정</h3><p>설문조사 · 관련 상품 · 판매 리포트 · 영카트 상품 이전 · 위시리스트 · 현금영수증 · OpenAPI 문서 — <a href="https://github.com/bonjin-app/brick/blob/main/docs/roadmap.md">로드맵</a></p></div>
+      <div class="card"><h3>✅ 동작</h3><p>웹 설치 마법사 · 세션 인증 · 비밀번호 재설정 · 회원 · 페이지 빌더 · 미디어 · 메뉴 · 검색 · 플러그인/테마 ZIP 설치 · 게시판 · 쪽지 · 포인트 · 캡차 · <strong>소셜 로그인</strong> · 방문자 집계 · 팝업/배너 · <strong>쇼핑몰(상품 후기·문의·옵션)</strong> · <strong>약관 동의·이메일 인증·회원 탈퇴·휴면</strong> · <strong>1:1 문의·FAQ·설문조사</strong> · sitemap.xml · <strong>그누보드 데이터 이전</strong> · <strong>결제(토스페이먼츠)</strong> · <strong>취소·반품·교환</strong> · <strong>사업자정보</strong> · 위시리스트 · 지역별 배송비 · 감사 로그 · 자동 마이그레이션 · 백업 CLI</p></div>
+      <div class="card"><h3>🚧 예정</h3><p>회원 단체메일 · 관련 상품 · 판매 리포트 · 영카트 상품 이전 · 위시리스트 · 현금영수증 · OpenAPI 문서 — <a href="https://github.com/bonjin-app/brick/blob/main/docs/roadmap.md">로드맵</a></p></div>
       <div class="card"><h3>🤝 함께</h3><p>설치가 안 되는 것이 가장 중요한 버그입니다.
         <a href="https://github.com/bonjin-app/brick/issues/new?template=bug_report.yml">버그 신고</a> ·
         <a href="https://github.com/bonjin-app/brick/issues/new?template=feature_request.yml">기능 제안</a> ·

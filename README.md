@@ -27,7 +27,7 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-1079%20passing-2ea043.svg" alt="스모크 테스트 1079개" />
+  <img src="https://img.shields.io/badge/E2E-1181%20passing-2ea043.svg" alt="스모크 테스트 1181개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
 </p>
 
@@ -135,7 +135,7 @@ DB 마이그레이션은 컨테이너가 부팅할 때 스스로 적용합니다
          (Redis · S3는 선택 — 없으면 PG 기반 기본 구현)
 ```
 
-핵심 설계 결정 47건은 [docs/architecture.md](docs/architecture.md)에 ADR로 기록되어 있습니다.
+핵심 설계 결정 48건은 [docs/architecture.md](docs/architecture.md)에 ADR로 기록되어 있습니다.
 
 ---
 
@@ -186,6 +186,8 @@ DB 마이그레이션은 컨테이너가 부팅할 때 스스로 적용합니다
 - **1:1 문의** — 비공개 문의 + 답변 + 대화 이어가기, 비회원 문의(조회 비밀번호),
   담당자 지정, 답변 메일 알림. **남의 문의는 404** (403은 존재를 알려준다)
 - **FAQ** — 분류·검색·조회수·"도움이 되었나". `<details>` 로 JS 없이 접히고 검색엔진은 답변을 다 읽는다
+- **설문조사** — 복수 선택 · 기간 · 기타 의견. **IP를 해시로만 저장**해 비회원 중복 투표 방지,
+  결과 공개 시점(항상/투표후/종료후) — 숨길 때는 득표 수를 응답에 넣지 않는다
 - **sitemap.xml · robots.txt** — 플러그인이 자기 URL을 제공. 조각으로 나눠 십만 건 규모 대응.
   **비밀글·비공개 게시판·임시 상품은 제외**
 - **최신글 모아보기** — 여러 게시판을 나란히 (그누보드 메인 화면). 쿼리 한 번으로
@@ -205,7 +207,7 @@ DB 마이그레이션은 컨테이너가 부팅할 때 스스로 적용합니다
 
 ### 예정
 
-설문조사 · 회원 단체메일 · 관련 상품 · 판매 리포트 · 영카트 상품·주문 이전 · 현금영수증 · 정기결제 · 2FA · OpenAPI 문서
+회원 단체메일 · 관련 상품 · 판매 리포트 · 영카트 상품·주문 이전 · 현금영수증 · 정기결제 · 2FA · OpenAPI 문서
 
 순서와 이유는 [로드맵](docs/roadmap.md)에 있습니다.
 
@@ -270,7 +272,7 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 1,079개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 1,181개 항목):
 
 | 수트 | 항목 | 무엇을 못박는가 |
 |---|---:|---|
@@ -280,6 +282,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `smoke-migrate.sh` | 86 | 덤프 파싱 · 레벨 매핑 · **비밀번호 보존** · 멱등성 |
 | `smoke-returns.sh` | 99 | 할인 안분 · 이중 재고 복원 방어 · 청약철회 기간 |
 | `smoke-storefront.sh` | 94 | 사업자번호 체크섬 · 위시리스트 격리 · 지역비 실수령 |
+| `smoke-poll.sh` | 100 | 중복 투표 · IP 해시 · 결과 공개 시점 · 집계 오염 |
 | `smoke-board.sh` | 85 | 권한 4단계 · 답변형 · 비밀글 · 첨부 원자성 · XSS |
 | `smoke-point.sh` | 53 | FIFO 소모 · 멱등 적립 · 만료 · 동시성 |
 | `smoke-memo.sh` | 72 | 프라이버시 · 차단 · 포인트 차감 트랜잭션 |
@@ -359,7 +362,7 @@ docker/           Dockerfile, entrypoint
 | [게시판](docs/board.md) | 권한·분류·답변형·첨부파일, 그누보드와의 차이 |
 | [포인트](docs/point.md) | 적립 정책, 원장 설계, 플러그인 간 협력 방법 |
 | [회원 생애주기](docs/members.md) | 약관 동의·이메일 인증·탈퇴·휴면, 법적 요건과 설계 |
-| [문의·FAQ·SEO](docs/helpdesk.md) | 1:1 문의 설계, FAQ, 사이트맵 |
+| [문의·FAQ·설문·SEO](docs/helpdesk.md) | 1:1 문의 설계, FAQ, 설문조사, 사이트맵 |
 | [사업자정보 표시](docs/business-info.md) | 전자상거래법 제13조, 사업자번호 검증, 테마 렌더 |
 | [그누보드 이전](docs/migrate-gnuboard.md) | 덤프 만들기, 리허설, 레벨 매핑, 비밀번호 보존 |
 | [쪽지](docs/memo.md) | 프라이버시 설계, 차단, 포인트 차감, 스크랩 |
@@ -368,7 +371,7 @@ docker/           Dockerfile, entrypoint
 | [방문자·팝업](docs/site-ops.md) | 접속자 집계, 팝업·배너, 개인정보 처리 |
 | [결제](docs/payments.md) | PG 설정, 결제 흐름, 위조·중복 방어, 새 PG 붙이기 |
 | [보안](docs/security.md) | 구현된 방어, **신뢰 모델**, 배포 체크리스트 |
-| [아키텍처 (ADR)](docs/architecture.md) | 설계 결정 47건과 그 이유 |
+| [아키텍처 (ADR)](docs/architecture.md) | 설계 결정 48건과 그 이유 |
 | [플러그인 개발](docs/plugin-development.md) | manifest, API, 마이그레이션, 배포 |
 | [테마 개발](docs/theme-development.md) | 템플릿 문법, 스코프, 배포 |
 | [로드맵](docs/roadmap.md) | 그누보드·영카트와의 남은 격차와 순서 |

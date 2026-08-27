@@ -256,6 +256,22 @@ importers:
         specifier: ^5.7.3
         version: 5.9.3
 
+  plugins/brick-poll:
+    dependencies:
+      '@brick/plugin-sdk':
+        specifier: workspace:*
+        version: link:../../packages/plugin-sdk
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(@types/pg@8.23.1)(gel@2.2.0)(pg@8.23.0)
+      uuidv7:
+        specifier: ^1.2.1
+        version: 1.2.1
+    devDependencies:
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+
   plugins/brick-shop:
     dependencies:
       '@brick/plugin-sdk':
