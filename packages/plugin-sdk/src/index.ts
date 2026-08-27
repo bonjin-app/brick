@@ -19,6 +19,7 @@ export type {
   AdminResource, AdminField, PluginDb,
   StorageProvider, StoredFile, CacheProvider, QueueProvider, MailProvider, HookBus,
   PluginUploadedFile, PluginRawResponse, BlockRenderContext,
+  CaptchaProvider, CaptchaChallenge,
 } from "@brick/core";
 // 값(함수)으로 재수출 — 플러그인이 원본 응답을 만들 때 쓴다
 export { rawResponse } from "@brick/core";

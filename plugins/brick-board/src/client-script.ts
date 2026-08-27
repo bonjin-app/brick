@@ -39,6 +39,52 @@ export const BOARD_SCRIPT = `
     el.style.color = isError ? 'crimson' : '#0a7';
   }
 
+  /* ── 캡차 ──────────────────────────────────────────
+     이미지를 서버 렌더에 넣으면 캐시된 페이지에 같은 문제가 박혀 무의미해진다.
+     그래서 클라이언트가 매번 새로 받아 채운다. */
+  document.querySelectorAll('[data-captcha]').forEach(function (box) {
+    var img = box.querySelector('.brick-captcha-image');
+    var tokenField = box.querySelector('input[name=captchaToken]');
+    var answerField = box.querySelector('input[name=captchaAnswer]');
+
+    function load() {
+      img.innerHTML = '<span class="brick-captcha-loading">불러오는 중…</span>';
+      fetch('/api/captcha', { cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (!d.enabled) {
+            // 캡차가 꺼져 있으면 필드를 숨기고 required도 해제한다
+            box.hidden = true;
+            if (answerField) answerField.required = false;
+            return;
+          }
+          img.innerHTML = d.svg;
+          tokenField.value = d.token;
+        })
+        .catch(function () {
+          img.innerHTML = '<span class="brick-captcha-loading">불러올 수 없습니다</span>';
+        });
+    }
+    load();
+    // 폼 제출이 실패해 다시 시도할 때는 새 문제를 받아야 한다 (토큰은 1회용)
+    box.captchaReload = load;
+    var reload = box.querySelector('[data-captcha-reload]');
+    if (reload) reload.addEventListener('click', function () { answerField.value = ''; load(); });
+  });
+
+  /** 캡차 값을 payload에 담고, 실패 후 재시도를 위해 새로고침 함수를 돌려준다 */
+  function captchaOf(form) {
+    var box = form.querySelector('[data-captcha]');
+    if (!box || box.hidden) return { fields: {}, reload: function () {} };
+    return {
+      fields: {
+        captchaToken: box.querySelector('input[name=captchaToken]').value,
+        captchaAnswer: box.querySelector('input[name=captchaAnswer]').value
+      },
+      reload: function () { if (box.captchaReload) box.captchaReload(); }
+    };
+  }
+
   /* ── 경량 에디터 ───────────────────────────────── */
   var editor = document.querySelector('.brick-editor');
   if (editor) {
@@ -103,6 +149,7 @@ export const BOARD_SCRIPT = `
       if (!eb || !eb.textContent.trim()) { msg(status, '내용을 입력해주세요.', true); return; }
 
       var fd = new FormData(form);
+      var cap = captchaOf(form);
       var payload = {
         title: fd.get('title'),
         content: content,
@@ -113,6 +160,7 @@ export const BOARD_SCRIPT = `
       if (fd.get('guestName')) payload.guestName = fd.get('guestName');
       if (fd.get('guestPassword')) payload.guestPassword = fd.get('guestPassword');
       if (replyTo) payload.replyTo = replyTo;
+      Object.keys(cap.fields).forEach(function (k) { payload[k] = cap.fields[k]; });
 
       submitBtn.disabled = true;
       msg(status, '저장 중...');
@@ -122,6 +170,8 @@ export const BOARD_SCRIPT = `
         if (!res.ok) {
           msg(status, res.data.message || '저장에 실패했습니다.', true);
           submitBtn.disabled = false;
+          // 캡차 토큰은 1회용이므로 실패 후에는 새 문제를 받아야 한다
+          cap.reload();
           return;
         }
         var postId = editId || res.data.id;
@@ -223,13 +273,19 @@ export const BOARD_SCRIPT = `
       cForm.addEventListener('submit', function (e) {
         e.preventDefault();
         var fd = new FormData(cForm);
+        var cap = captchaOf(cForm);
         var payload = { content: fd.get('content'), isSecret: fd.get('isSecret') === 'on' };
         if (fd.get('parentId')) payload.parentId = fd.get('parentId');
         if (fd.get('guestName')) payload.guestName = fd.get('guestName');
         if (fd.get('guestPassword')) payload.guestPassword = fd.get('guestPassword');
+        Object.keys(cap.fields).forEach(function (k) { payload[k] = cap.fields[k]; });
 
         post(API + '/posts/' + postId + '/comments', payload).then(function (res) {
-          if (!res.ok) { alert(res.data.message || '댓글 등록에 실패했습니다.'); return; }
+          if (!res.ok) {
+            alert(res.data.message || '댓글 등록에 실패했습니다.');
+            cap.reload();
+            return;
+          }
           location.reload();
         });
       });
@@ -353,6 +409,14 @@ export const BOARD_CSS = `
 .brick-write-actions{display:flex;gap:10px;align-items:center}
 .brick-write-actions .brick-primary{padding:11px 28px;background:var(--color-primary,#d0402c);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-size:15px}
 .brick-write-actions a{padding:11px 22px;border:1px solid #ddd;border-radius:6px;text-decoration:none;color:inherit}
+
+/* 캡차 */
+.brick-captcha-row{display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap}
+.brick-captcha-image{display:inline-flex;align-items:center;min-width:160px;min-height:56px;background:#f6f6f9;border-radius:6px}
+.brick-captcha-image svg{display:block;border-radius:6px}
+.brick-captcha-loading{color:#aaa;font-size:12.5px;padding:0 10px}
+.brick-captcha-row button{width:34px;height:34px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;font-size:16px}
+.brick-captcha-row input{width:150px;padding:9px;border:1px solid #ddd;border-radius:6px;font-size:15px;letter-spacing:2px;text-transform:uppercase}
 
 /* 카드 · 위젯 */
 .brick-board-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:18px 0}

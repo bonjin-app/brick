@@ -31,6 +31,25 @@ export default definePlugin(async (ctx) => {
     if (!hasRole(userOf(req), "manager")) throw new BoardError(403, "관리자 권한이 필요합니다.");
   };
 
+  /**
+   * 비회원 작성에 캡차를 요구한다.
+   *
+   * 회원은 요구하지 않는다 — 계정이 있으면 도배 방지와 계정 정지로 대응할 수 있고,
+   * 매 글마다 캡차를 풀게 하면 정상 사용자가 떠난다.
+   * 비회원은 추적 수단이 IP뿐이므로 캡차가 실질적인 유일한 방어다.
+   */
+  const requireCaptchaForGuest = async (
+    user: SessionUser | null,
+    body: { captchaToken?: string; captchaAnswer?: string } | undefined,
+  ) => {
+    if (user) return;
+    if (!ctx.captcha.enabled) return;
+    const passed = await ctx.captcha.verify(body?.captchaToken ?? "", body?.captchaAnswer ?? "");
+    if (!passed) {
+      throw new BoardError(400, "자동입력 방지 문자가 올바르지 않습니다. 다시 시도해주세요.");
+    }
+  };
+
   // ════════════════════════════════════════════════════
   //  공개 API
   // ════════════════════════════════════════════════════
@@ -65,6 +84,7 @@ export default definePlugin(async (ctx) => {
     const board = await loadBoard(db, req.params.slug);
     const user = userOf(req);
     requireRole(user, board.write_role, "글쓰기");
+    await requireCaptchaForGuest(user, req.body as never);
     await checkWriteInterval(db, board, user, ipOf(req));
 
     const result = await createPost(db, {
@@ -238,6 +258,7 @@ export default definePlugin(async (ctx) => {
     const body = req.body as {
       content: string; parentId?: string; isSecret?: boolean;
       guestName?: string; guestPassword?: string;
+      captchaToken?: string; captchaAnswer?: string;
     };
     const { rows } = await db.execute(sql`
       SELECT p.id, b.slug, b.comment_role FROM board_posts p JOIN board_boards b ON b.id = p.board_id
@@ -248,6 +269,7 @@ export default definePlugin(async (ctx) => {
 
     const user = userOf(req);
     requireRole(user, String(post.comment_role), "댓글 작성");
+    await requireCaptchaForGuest(user, body);
 
     // 댓글은 서식을 허용하지 않는다 — 평문으로 저장하고 렌더 시 이스케이프한다.
     // (댓글에까지 HTML을 허용할 이유가 없고, 표면을 줄이는 것이 안전하다)

@@ -56,6 +56,9 @@ export BRICK_THEMES_DIR="$ROOT/themes"
 export BRICK_UPLOADS_DIR="$TMP/uploads"
 export BRICK_MIGRATIONS_DIR="$ROOT/packages/database/migrations"
 export BRICK_SECRET="${BRICK_SECRET:-smoke-point-secret-value}"
+# 이 스위트는 캡차를 시험하지 않는다. 켜두면 회원가입·비회원 글쓰기가 막힌다.
+# 캡차 자체는 smoke-security.sh 가 검증한다.
+export BRICK_CAPTCHA=off
 
 node "$ROOT/apps/api/dist/main.js" > "$TMP/api.log" 2>&1 &
 API_PID=$!

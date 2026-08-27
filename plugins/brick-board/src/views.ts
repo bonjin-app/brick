@@ -16,6 +16,22 @@ import { escapeHtml, hasRole, humanSize, shortDate, type BoardRow, type Db } fro
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * 비회원용 자동입력 방지 필드.
+ *
+ * 이미지는 클라이언트가 /api/captcha 로 받아 채운다 — 서버 렌더에 넣으면
+ * 캐시된 페이지에 같은 문제가 박혀 무의미해진다.
+ */
+const CAPTCHA_FIELD = `<div class="brick-field brick-captcha" data-captcha>
+      <span class="brick-label">자동입력 방지</span>
+      <div class="brick-captcha-row">
+        <span class="brick-captcha-image" aria-live="polite"></span>
+        <button type="button" data-captcha-reload title="새로고침">&#8635;</button>
+        <input name="captchaAnswer" autocomplete="off" maxlength="10" placeholder="보이는 문자 입력" required />
+      </div>
+      <input type="hidden" name="captchaToken" value="" />
+    </div>`;
+
 /** pathTail로 어떤 화면인지 판별 */
 export function resolveView(pathTail: string): { view: "list" | "detail" | "write"; postId?: string } {
   const tail = pathTail.replace(/^\/+|\/+$/g, "");
@@ -320,7 +336,8 @@ ${commentsHtml || `      <li class="brick-board-empty">첫 댓글을 남겨보�
           : `<div class="brick-guest-fields">
         <input name="guestName" placeholder="이름" maxlength="20" required />
         <input name="guestPassword" type="password" placeholder="비밀번호" minlength="4" required />
-      </div>`
+      </div>
+      ${CAPTCHA_FIELD}`
       }
       <textarea name="content" rows="3" placeholder="댓글을 입력하세요" required></textarea>
       <div class="brick-comment-submit">
@@ -453,6 +470,8 @@ export async function renderWrite(
     </label>`
         : ""
     }
+
+    ${ctx.user ? "" : CAPTCHA_FIELD}
 
     <div class="brick-write-options">
       ${board.allow_secret ? `<label><input type="checkbox" name="isSecret"${editing?.is_secret ? " checked" : ""} /> 비밀글</label>` : ""}

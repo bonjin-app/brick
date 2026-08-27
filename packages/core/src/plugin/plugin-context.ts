@@ -2,6 +2,7 @@ import type { CacheProvider } from "../providers/cache.js";
 import type { QueueProvider } from "../providers/queue.js";
 import type { StorageProvider } from "../providers/storage.js";
 import type { MailProvider } from "../providers/mail.js";
+import type { CaptchaProvider } from "../providers/captcha.js";
 import type { HookBus } from "../hooks/hook-bus.js";
 
 /**
@@ -21,6 +22,11 @@ export interface PluginContext {
   readonly storage: StorageProvider;
   /** 메일 발송 (SMTP 미설정 시 콘솔 출력으로 폴백) */
   readonly mail: MailProvider;
+  /**
+   * 캡차. 비회원 글쓰기·댓글 같은 스팸 표적 경로에서 검증한다.
+   * `enabled` 가 false면 검사가 비활성이므로 UI도 숨겨야 한다.
+   */
+  readonly captcha: CaptchaProvider;
   /** 플러그인 전용 네임스페이스가 적용된 설정 저장소 */
   readonly settings: {
     get<T>(key: string): Promise<T | null>;

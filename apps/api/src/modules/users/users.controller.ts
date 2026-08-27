@@ -12,8 +12,9 @@ import type { HookBus } from "@brick/core";
 import { AdminGuard, AuthGuard } from "../auth/auth.guard.js";
 import { AuthService } from "../auth/auth.service.js";
 import { RateLimitService } from "../auth/rate-limit.service.js";
+import type { CaptchaProvider } from "@brick/core";
 import { AuditService } from "../audit/audit.service.js";
-import { DB, HOOKS } from "../../runtime.module.js";
+import { CAPTCHA, DB, HOOKS } from "../../runtime.module.js";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ROLES = ["admin", "manager", "member"] as const;
@@ -26,16 +27,29 @@ export class UsersController {
     private readonly auth: AuthService,
     private readonly rateLimit: RateLimitService,
     private readonly audit: AuditService,
+    @Inject(CAPTCHA) private readonly captcha: CaptchaProvider,
   ) {}
 
   /** 회원가입 — site.registration_open 설정으로 열고 닫을 수 있다 */
   @Post("register")
   async register(
-    @Body() body: { email: string; password: string; displayName: string },
+    @Body() body: {
+      email: string; password: string; displayName: string;
+      captchaToken?: string; captchaAnswer?: string;
+    },
     @Req() req: FastifyRequest,
   ) {
     const open = await this.setting<boolean>("site.registration_open");
     if (open === false) throw new ForbiddenException("회원가입이 닫혀 있습니다.");
+
+    // 캡차를 먼저 검사한다 — 비밀번호 해싱(argon2)은 비싸므로,
+    // 봇이 그 비용을 유발하기 전에 걸러내야 한다.
+    if (this.captcha.enabled) {
+      const passed = await this.captcha.verify(body?.captchaToken ?? "", body?.captchaAnswer ?? "");
+      if (!passed) {
+        throw new BadRequestException("자동입력 방지 문자가 올바르지 않습니다. 다시 시도해주세요.");
+      }
+    }
 
     // 가입 스팸 방어
     const { allowed, retryAfterSeconds } = this.rateLimit.consume(`register:${req.ip}`, 5, 60 * 60_000);

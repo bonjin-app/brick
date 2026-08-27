@@ -31,6 +31,22 @@ contains() { [[ "$2" == *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 없음: ${2:0:14
 absent()   { [[ "$2" != *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 가 있어서는 안 됨)"; }
 code()     { curl -s -o /dev/null -w "%{http_code}" "$@"; }
 post()     { curl -s -X POST "$1" -H 'content-type: application/json' --data-binary "@$2"; }
+# 캡차 발급 → SVG에서 정답을 추출한다 (테스트 목적. 실제 봇에게는 이 정보가 없다)
+captcha_issue() {
+  curl -s "$API/api/captcha" | python3 -c '
+import sys, json, re
+d = json.load(sys.stdin)
+print(d["token"] + "|" + "".join(re.findall(r">([A-Z0-9])</text>", d["svg"])))'
+}
+# 캡차를 풀어 회원가입한다
+register_with_captcha() { # <email> <password> <displayName> <파일경로>
+  local tk an
+  IFS='|' read -r tk an <<< "$(captcha_issue)"
+  printf '{"email":"%s","password":"%s","displayName":"%s","captchaToken":"%s","captchaAnswer":"%s"}' \
+    "$1" "$2" "$3" "$tk" "$an" > "$4"
+  curl -s -X POST "$API/api/register" -H 'content-type: application/json' --data-binary "@$4"
+}
+
 
 echo "▶ 보안·결제 스모크 테스트"
 
@@ -116,8 +132,7 @@ contains "전액 환불 시 재고 복원(10)" "$(curl -s "$SHOP/products/sec-it
 contains "결제 이력에 실패 기록 보존" "$(curl -s -b "$CK" "$SHOP/admin/payments/$ORDER_NO")" "금액 불일치"
 
 echo "── 비밀번호 재설정"
-printf '{"email":"member@sec.test","password":"oldpass123","displayName":"홍길동"}' > "$TMP/reg.json"
-post "$API/api/register" "$TMP/reg.json" >/dev/null
+register_with_captcha "member@sec.test" "oldpass123" "홍길동" "$TMP/reg.json" >/dev/null
 printf '{"email":"member@sec.test"}' > "$TMP/f1.json"
 contains "재설정 요청" "$(post "$API/api/auth/password/forgot" "$TMP/f1.json")" '"ok":true'
 printf '{"email":"nobody@nowhere.invalid"}' > "$TMP/f2.json"
@@ -138,6 +153,47 @@ printf '{"email":"member@sec.test","password":"newpass1234"}' > "$TMP/ln.json"
 check "새 비밀번호 로그인" "$(code -X POST "$API/api/auth/login" -H 'content-type: application/json' --data-binary "@$TMP/ln.json")" "201"
 printf '{"email":"member@sec.test","password":"oldpass123"}' > "$TMP/lo.json"
 check "옛 비밀번호 차단" "$(code -X POST "$API/api/auth/login" -H 'content-type: application/json' --data-binary "@$TMP/lo.json")" "401"
+
+echo "── 캡차 (스팸 방지)"
+CAP="$(curl -s "$API/api/captcha")"
+contains "SVG 이미지 발급" "$CAP" "<svg"
+contains "provider 표시" "$CAP" '"provider":"svg"'
+contains "활성 상태" "$CAP" '"enabled":true'
+contains "캐시 금지 헤더" "$(curl -sI "$API/api/captcha")" "no-store"
+# 두 번 발급하면 다른 문제여야 한다
+A1="$(captcha_issue | cut -d'|' -f2)"
+A2="$(captcha_issue | cut -d'|' -f2)"
+[[ "$A1" != "$A2" ]] && ok "발급마다 다른 문제" || bad "발급마다 다른 문제"
+[[ ${#A1} -eq 5 ]] && ok "문자 5자" || bad "문자 5자 (실제 ${#A1})"
+
+# 회원가입에 캡차 강제
+printf '{"email":"nocap@sec.test","password":"passok1234","displayName":"봇"}' > "$TMP/nocap.json"
+check "캡차 없는 가입 차단" "$(code -X POST "$API/api/register" -H 'content-type: application/json' --data-binary "@$TMP/nocap.json")" "400"
+
+IFS='|' read -r CTK CAN <<< "$(captcha_issue)"
+printf '{"email":"wrongcap@sec.test","password":"passok1234","displayName":"봇","captchaToken":"%s","captchaAnswer":"ZZZZZ"}' "$CTK" > "$TMP/wrongcap.json"
+check "틀린 답 차단" "$(code -X POST "$API/api/register" -H 'content-type: application/json' --data-binary "@$TMP/wrongcap.json")" "400"
+
+IFS='|' read -r CTK CAN <<< "$(captcha_issue)"
+printf '{"email":"okcap@sec.test","password":"passok1234","displayName":"사람","captchaToken":"%s","captchaAnswer":"%s"}' "$CTK" "$CAN" > "$TMP/okcap.json"
+check "맞는 답으로 가입 성공" "$(code -X POST "$API/api/register" -H 'content-type: application/json' --data-binary "@$TMP/okcap.json")" "201"
+# 같은 토큰 재사용 — 봇이 한 번 풀고 무한 재사용하는 것을 막아야 한다
+printf '{"email":"reuse@sec.test","password":"passok1234","displayName":"봇","captchaToken":"%s","captchaAnswer":"%s"}' "$CTK" "$CAN" > "$TMP/reuse.json"
+check "토큰 재사용 차단 (1회용)" "$(code -X POST "$API/api/register" -H 'content-type: application/json' --data-binary "@$TMP/reuse.json")" "400"
+
+# 대소문자 무시 (사용자가 틀리면 캡차가 아니라 장벽이 된다)
+IFS='|' read -r CTK CAN <<< "$(captcha_issue)"
+LOWER="$(echo "$CAN" | tr 'A-Z' 'a-z')"
+printf '{"email":"lower@sec.test","password":"passok1234","displayName":"사람","captchaToken":"%s","captchaAnswer":"%s"}' "$CTK" "$LOWER" > "$TMP/lower.json"
+check "소문자 입력도 통과" "$(code -X POST "$API/api/register" -H 'content-type: application/json' --data-binary "@$TMP/lower.json")" "201"
+
+# 위조 토큰 — HMAC 서명이 막아야 한다
+FORGED="$(python3 -c '
+import base64, json, time
+p = json.dumps({"a": "AAAAA", "e": int(time.time()*1000)+60000, "n": "fake"}).encode()
+print(base64.urlsafe_b64encode(p).decode().rstrip("=") + ".badsignature")')"
+printf '{"email":"forged@sec.test","password":"passok1234","displayName":"봇","captchaToken":"%s","captchaAnswer":"AAAAA"}' "$FORGED" > "$TMP/forged.json"
+check "위조 토큰 차단 (서명 검증)" "$(code -X POST "$API/api/register" -H 'content-type: application/json' --data-binary "@$TMP/forged.json")" "400"
 
 echo "── 감사 로그"
 check "비인증 조회 차단" "$(code "$API/api/audit")" "401"

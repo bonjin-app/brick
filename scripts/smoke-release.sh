@@ -61,7 +61,7 @@ start_app() {
     env -u DATABASE_URL -u BRICK_SECRET -u BRICK_CONFIG_PATH \
         -u BRICK_PLUGINS_DIR -u BRICK_THEMES_DIR -u BRICK_UPLOADS_DIR -u BRICK_MIGRATIONS_DIR \
         -u BRICK_API_URL -u BRICK_API_PORT -u BRICK_SITE_URL \
-        PORT="$PORT" node server.js > "$WORK/run-$tag.log" 2>&1 &
+        BRICK_CAPTCHA=off PORT="$PORT" node server.js > "$WORK/run-$tag.log" 2>&1 &
     echo $! > "$WORK/launcher.pid"
   )
   LAUNCHER_PID="$(cat "$WORK/launcher.pid" 2>/dev/null || echo "")"

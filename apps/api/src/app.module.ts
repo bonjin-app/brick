@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { RuntimeModule } from "./runtime.module.js";
 import { AuditModule } from "./modules/audit/audit.module.js";
 import { AuthModule } from "./modules/auth/auth.module.js";
+import { CaptchaModule } from "./modules/captcha/captcha.module.js";
 import { ExtensionsModule } from "./modules/extensions/extensions.module.js";
 import { HealthModule } from "./modules/health/health.module.js";
 import { InstallModule } from "./modules/install/install.module.js";
@@ -19,6 +20,7 @@ import { UsersModule } from "./modules/users/users.module.js";
     RuntimeModule,
     AuditModule,
     AuthModule,
+    CaptchaModule,
     ExtensionsModule,
     HealthModule,
     MaintenanceModule,
