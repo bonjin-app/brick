@@ -138,6 +138,40 @@ export function convertContent(raw: string | null, html: string | null): string 
 }
 
 /**
+ * 본문·이미지의 그누보드 경로를 Brick 경로로 바꾼다.
+ *
+ * 그누보드의 파일은 전부 /data/ 아래에 있다: 게시판 첨부는 /data/file/,
+ * 에디터 업로드는 /data/editor/, 영카트 상품 이미지는 /data/item/.
+ * 파일을 uploads/ 로 복사한 뒤(문서의 복사 표) 주소가 그대로면 이미지가
+ * 전부 깨진다 — 옮긴 사이트가 고장 나 보이는 가장 흔한 이유였다.
+ *
+ * oldBaseUrl 을 주면 절대주소(https://old.example.com/data/...)도 잡는다.
+ * http/https 프로토콜이 달라도 host 가 같으면 잡는다 — 옛 사이트가 http 였던
+ * 경우 본문에는 http 주소가 남아 있다.
+ */
+export function rewriteLegacyMediaUrls(html: string, oldBaseUrl?: string | null): string {
+  let out = html;
+  const base = String(oldBaseUrl ?? "").trim();
+  if (base) {
+    let host = "";
+    try {
+      host = new URL(base.includes("://") ? base : `https://${base}`).host;
+    } catch {
+      host = "";
+    }
+    if (host) {
+      const esc = host.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      // 절대주소를 루트 상대주소로 — 아래 규칙이 이어서 처리한다
+      out = out.replace(new RegExp(`https?://${esc}(?=/data/)`, "g"), "");
+    }
+  }
+  return out
+    .replace(/\/data\/file\//g, "/uploads/")
+    .replace(/\/data\/editor\//g, "/uploads/editor/")
+    .replace(/\/data\/item\//g, "/uploads/item/");
+}
+
+/**
  * 이전 대상 테이블.
  *
  * 그누보드는 게시판마다 `write_<bo_table>` 테이블을 따로 만든다.
@@ -165,4 +199,11 @@ export interface MigratePlan {
   shop?: boolean;
   /** 이미 있는 이메일을 만나면 건너뛴다(false) 또는 실패로 본다(true) */
   strictEmail: boolean;
+  /**
+   * 본문·이미지의 /data/ 경로를 /uploads/ 로 바꾼다 (기본 true).
+   * 리버스 프록시로 /data/ 를 직접 서빙하려는 경우에만 끈다.
+   */
+  imageRewrite?: boolean;
+  /** 옛 사이트 주소 — 본문의 절대주소 이미지도 잡는다 (예: https://old.example.com) */
+  oldBaseUrl?: string;
 }

@@ -187,22 +187,34 @@ DATABASE_URL=postgresql://... node scripts/migrate-gnuboard.mjs --dump gnuboard.
 
 ---
 
-## 첨부파일
+## 첨부파일과 본문 이미지
 
-파일 자체는 DB 에 없으므로 별도로 복사해야 합니다.
+파일 자체는 DB 에 없으므로 별도로 복사해야 합니다. **본문·상품의 이미지
+주소는 이전할 때 자동으로 바꿔 둡니다** — 복사만 하면 뜹니다.
+
+| 그누보드 | Brick 으로 복사 | 본문 주소 (자동 변환) |
+|---|---|---|
+| `data/file/` | `uploads/` | `/data/file/…` → `/uploads/…` |
+| `data/editor/` | `uploads/editor/` | `/data/editor/…` → `/uploads/editor/…` |
+| `data/item/` (영카트) | `uploads/item/` | `/data/item/…` → `/uploads/item/…` |
 
 ```bash
 # 그누보드 서버에서
-tar czf data.tar.gz data/file/
+tar czf data.tar.gz data/file/ data/editor/ data/item/
 
 # Brick 서버에서
 tar xzf data.tar.gz
-cp -r data/file/* /path/to/brick/uploads/
+cp -r data/file/*   /path/to/brick/uploads/
+cp -r data/editor/* /path/to/brick/uploads/editor/
+cp -r data/item/*   /path/to/brick/uploads/item/
 ```
 
-지금은 **게시글 본문의 이미지 주소를 자동으로 바꿔주지 않습니다.** 본문에
-`/data/file/free/...` 같은 주소가 들어 있으면 그대로 남습니다. 리버스 프록시에서
-`/data/file/` 을 `/uploads/` 로 돌리는 것이 가장 간단합니다.
+본문에 옛 사이트의 **절대주소**(`https://old-site.com/data/...`)가 들어
+있다면 실행할 때 `oldBaseUrl` 을 함께 넘기세요 — 그 주소도 잡습니다.
+남의 서버를 가리키는 이미지(외부 CDN 등)는 건드리지 않습니다.
+
+변환 없이 리버스 프록시로 옛 경로를 그대로 서빙하려면 `imageRewrite: false`
+로 끄고 아래처럼 돌립니다:
 
 ```nginx
 location /data/file/ {
@@ -220,7 +232,7 @@ location /data/file/ {
 - [ ] 비밀글이 목록에서 가려지는가
 - [ ] 오래된 글의 줄바꿈이 살아 있는가
 - [ ] 포인트 잔액이 맞는가
-- [ ] 게시글 본문의 이미지가 뜨는가 (첨부파일 복사·프록시 확인)
+- [ ] 게시글 본문의 이미지가 뜨는가 (첨부파일을 uploads/ 로 복사했는가 — 주소는 자동 변환됨)
 
 ---
 
@@ -230,7 +242,7 @@ location /data/file/ {
 DATABASE_URL=postgresql://brick:brick@localhost:5432/brick bash scripts/smoke-migrate.sh
 ```
 
-151개 항목. 픽스처([scripts/fixtures/gnuboard5-sample.sql](../scripts/fixtures/gnuboard5-sample.sql))에
+155개 항목. 픽스처([scripts/fixtures/gnuboard5-sample.sql](../scripts/fixtures/gnuboard5-sample.sql))에
 실제 데이터에서 파서가 깨지는 지점을 일부러 넣어두었습니다.
 
 - 게시글 본문의 `),(` 와 `\'` 와 `\n`
@@ -338,8 +350,8 @@ DATABASE_URL=postgresql://brick:brick@localhost:5432/brick bash scripts/smoke-mi
 ### 상품 이미지
 
 영카트는 `it_img1 ~ it_img10` 에 **파일명만** 저장하고 파일은
-`data/item/` 에 있습니다. 경로(`/data/item/<파일명>`)만 만들어 두므로
-파일을 옮기고 경로를 연결해야 보입니다.
+`data/item/` 에 있습니다. 이전할 때 주소를 `/uploads/item/<파일명>` 으로
+만들어 두므로, 파일만 복사하면 뜹니다.
 
 ```bash
 # 영카트 서버에서
@@ -348,12 +360,6 @@ tar czf item.tar.gz data/item/
 # Brick 서버에서
 tar xzf item.tar.gz
 cp -r data/item/* /path/to/brick/uploads/item/
-```
-
-```nginx
-location /data/item/ {
-  alias /path/to/brick/uploads/item/;
-}
 ```
 
 ### 옮긴 뒤 확인할 것 (쇼핑몰)

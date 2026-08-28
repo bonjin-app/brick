@@ -27,7 +27,7 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-2385%20passing-2ea043.svg" alt="스모크 테스트 2385개" />
+  <img src="https://img.shields.io/badge/E2E-2389%20passing-2ea043.svg" alt="스모크 테스트 2389개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
 </p>
 
@@ -286,14 +286,14 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 2,385개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 2,389개 항목):
 
 | 수트 | 항목 | 무엇을 못박는가 |
 |---|---:|---|
 | `smoke-test.sh` | 40 | 설치 · 인증 · 페이지 · 미디어 · 플러그인 로드 |
 | `smoke-member.sh` | 93 | 약관 강제 · 동의 이력 · 개인정보 파기 · 주문 보존 |
 | `smoke-helpdesk.sh` | 109 | 문의 열거 방지 · 비회원 조회 · 사이트맵 유출 |
-| `smoke-migrate.sh` | 151 | 덤프 파싱 · 레벨 매핑 · **비밀번호 보존** · 영카트 상품·주문 · 멱등성 |
+| `smoke-migrate.sh` | 155 | 덤프 파싱 · 레벨 매핑 · **비밀번호 보존** · 영카트 상품·주문 · 멱등성 |
 | `smoke-returns.sh` | 99 | 할인 안분 · 이중 재고 복원 방어 · 청약철회 기간 |
 | `smoke-storefront.sh` | 97 | 사업자번호 체크섬 · 위시리스트 격리 · 지역비 실수령 |
 | `smoke-poll.sh` | 100 | 중복 투표 · IP 해시 · 결과 공개 시점 · 집계 오염 |

@@ -43,6 +43,8 @@ export class MigrateController {
       members?: boolean;
       points?: boolean;
       shop?: boolean;
+      imageRewrite?: boolean;
+      oldBaseUrl?: string;
     },
   ) {
     const dump = readDump(body?.dump);
@@ -54,6 +56,9 @@ export class MigrateController {
       points: body?.points !== false,
       shop: body?.shop !== false,
       strictEmail: false,
+      // 본문 이미지 주소 변환 — 기본 켬. 리버스 프록시를 쓰는 운영자만 끈다
+      imageRewrite: body?.imageRewrite !== false,
+      oldBaseUrl: body?.oldBaseUrl ? String(body.oldBaseUrl) : undefined,
     };
 
     const result = await this.migrate.run(dump, plan);

@@ -7,7 +7,7 @@ import { PluginLoaderService } from "../plugins/plugin-loader.service.js";
 import { detectPrefix, parseTables, readRows, type DumpRow, type DumpTable } from "./dump-parser.js";
 import {
   DEFAULT_LEVEL_MAPPING, boardLevelToRole, convertContent, levelToRole, normalizeEmail,
-  normalizeSlug, parseGnuDate, wrapLegacyHash,
+  normalizeSlug, parseGnuDate, rewriteLegacyMediaUrls, wrapLegacyHash,
   type LevelMapping, type MigratePlan,
 } from "./gnuboard-map.js";
 import {
@@ -317,8 +317,8 @@ export class MigrateService {
         );
       }
       warnings.push(
-        "상품 이미지 파일은 DB에 없습니다. data/item/ 을 서버로 복사하고 " +
-          "/data/item/ 경로를 연결해야 이미지가 보입니다 (docs/migrate-gnuboard.md).",
+        "상품 이미지 파일은 DB에 없습니다. 옛 서버의 data/item/ 을 uploads/item/ 으로 " +
+          "복사해야 이미지가 보입니다 — 주소는 자동으로 바꿔 두었습니다 (docs/migrate-gnuboard.md).",
       );
     }
 
@@ -419,7 +419,7 @@ export class MigrateService {
     }
 
     if (plan.shop !== false && hasYoungcart(tables, prefix)) {
-      await this.importShop(dump, tables, prefix, memberMap, result, warnings);
+      await this.importShop(dump, tables, prefix, memberMap, result, warnings, plan);
     }
 
     result.durationMs = Date.now() - started;
@@ -576,7 +576,7 @@ export class MigrateService {
 
       const writeTable = `${prefix}write_${table}`;
       if (tables.has(writeTable)) {
-        await this.importPosts(dump, tables, writeTable, boardId, memberMap, result);
+        await this.importPosts(dump, tables, writeTable, boardId, memberMap, result, plan);
       }
     }
   }
@@ -595,7 +595,12 @@ export class MigrateService {
     boardId: string,
     memberMap: Map<string, string>,
     result: RunResult,
+    plan: MigratePlan,
   ): Promise<void> {
+    // 본문의 /data/ 이미지 주소를 /uploads/ 로 — 안 바꾸면 옮긴 사이트의
+    // 이미지가 전부 깨진다. 리버스 프록시를 쓰는 운영자만 끈다.
+    const fixMedia = (html: string): string =>
+      plan.imageRewrite === false ? html : rewriteLegacyMediaUrls(html, plan.oldBaseUrl);
     /** 그누보드 wr_id → Brick uuid */
     const postMap = new Map<string, string>();
 
@@ -619,7 +624,7 @@ export class MigrateService {
            ${authorId ? sql`${authorId}::uuid` : sql`NULL`},
            ${String(row.wr_name ?? "이름없음").slice(0, 100)},
            ${String(row.wr_subject ?? "(제목 없음)").slice(0, 300)},
-           ${convertContent(row.wr_content, row.wr_option)},
+           ${fixMedia(convertContent(row.wr_content, row.wr_option))},
            ${String(row.ca_name ?? "").slice(0, 50) || null},
            ${String(row.wr_option ?? "").includes("notice")},
            ${String(row.wr_option ?? "").includes("secret")},
@@ -748,7 +753,10 @@ export class MigrateService {
     memberMap: Map<string, string>,
     result: RunResult,
     warnings: string[],
+    plan: MigratePlan,
   ): Promise<void> {
+    const fixMedia = (html: string): string =>
+      plan.imageRewrite === false ? html : rewriteLegacyMediaUrls(html, plan.oldBaseUrl);
     if (!(await this.tableExists("shop_products"))) {
       warnings.push(
         "쇼핑몰 플러그인이 활성화되지 않아 상품·주문을 옮기지 않았습니다. " +
@@ -821,7 +829,8 @@ export class MigrateService {
       const custPrice = Math.floor(Number(row.it_cust_price ?? 0)) || 0;
       const listPrice = custPrice > price ? custPrice : null;
 
-      const images = itemImages(row as Record<string, string | null>);
+      // 상품 이미지(/data/item/*)와 상세 설명 속 이미지도 함께 바꾼다
+      const images = itemImages(row as Record<string, string | null>).map(fixMedia);
       const id = uuidv7();
 
       await this.db.execute(sql`
@@ -833,7 +842,7 @@ export class MigrateService {
           (${id}, ${slug}, ${name},
            ${catMap.get(String(row.ca_id ?? "")) ? sql`${catMap.get(String(row.ca_id))}::uuid` : sql`NULL`},
            ${String(row.it_basic ?? "").slice(0, 500) || null},
-           ${String(row.it_explan ?? "")},
+           ${fixMedia(String(row.it_explan ?? ""))},
            ${images[0] ?? null},
            ${JSON.stringify(images)}::jsonb,
            ${price}, ${listPrice},

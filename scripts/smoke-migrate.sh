@@ -90,7 +90,8 @@ for pl in brick-board brick-point brick-shop; do
 done
 
 echo "── 권한"
-make_body "$TMP/body.json"
+# oldBaseUrl — 본문의 절대주소 이미지(https://old.example.com/data/...)까지 잡는다
+make_body "$TMP/body.json" 'oldBaseUrl="https://old.example.com"'
 check "비관리자는 이전 불가" \
   "$(code -X POST "$MG/analyze" -H 'content-type: application/json' --data-binary "@$TMP/body.json")" "401"
 check "빈 덤프 거부" \
@@ -112,7 +113,7 @@ contains "레벨 10 → admin" "$AN" '{"level":10,"count":1,"role":"admin"}'
 contains "레벨 8 → manager" "$AN" '{"level":8,"count":1,"role":"manager"}'
 contains "레벨 2 → member" "$AN" '"role":"member"'
 contains "게시판 4개 감지" "$AN" '"title":"공지사항"'
-contains "글·댓글 수 집계" "$AN" '"posts":2'
+contains "글·댓글 수 집계" "$AN" '"posts":4'
 contains "읽기 권한 접힘 (레벨1 → guest)" "$AN" '"readRole":"guest"'
 contains "비밀게시판은 manager 이상" "$AN" '"readRole":"manager"'
 contains "글 테이블 없는 게시판 표시" "$AN" '"hasData":false'
@@ -141,9 +142,16 @@ echo "── 실제 이전"
 RUN="$(curl -s -b "$CK" -X POST "$MG/run" -H 'content-type: application/json' --data-binary "@$TMP/body.json")"
 contains "회원 이전" "$RUN" '"members":{"created":6'
 contains "게시판 4개 생성" "$RUN" '"boards":{"created":4'
-contains "글 이전" "$RUN" '"posts":{"created":5}'
+contains "글 이전" "$RUN" '"posts":{"created":6}'
 contains "댓글 이전" "$RUN" '"comments":{"created":2}'
 contains "포인트 이월" "$RUN" '"granted":2'
+
+echo "── 본문 이미지 주소 변환 (안 바꾸면 옮긴 사이트의 이미지가 전부 깨진다)"
+IMGPOST="$(psql_q "SELECT content FROM board_posts WHERE title='이미지가 있는 글'")"
+contains "첨부 경로 /data/file/ → /uploads/" "$IMGPOST" 'src="/uploads/free/photo.jpg"'
+contains "옛 절대주소 에디터 이미지도 잡는다" "$IMGPOST" 'src="/uploads/editor/pic.png"'
+absent  "옛 주소가 남지 않는다" "$IMGPOST" "old.example.com"
+contains "남의 CDN 이미지는 건드리지 않는다" "$IMGPOST" 'src="https://cdn.example.net/keep.png"'
 
 echo "── 회원 검증"
 ROLES="$(psql_q "SELECT email, role, is_active FROM users WHERE email LIKE '%old.test' OR email LIKE '%gnuboard.invalid' ORDER BY email")"
@@ -283,7 +291,7 @@ contains "한글 상품명은 id 로 slug 생성" "$SLUG" "item-"
 CAT_LINK="$(psql_q "SELECT c.name FROM shop_products p JOIN shop_categories c ON c.id = p.category_id WHERE p.name = '기본 티셔츠'")"
 check "상품이 분류에 연결" "$CAT_LINK" "상의"
 IMGS="$(psql_q "SELECT image_url, images FROM shop_products WHERE name = '기본 티셔츠'")"
-contains "대표 이미지 경로" "$IMGS" "/data/item/tshirt1.jpg"
+contains "대표 이미지 경로 (주소 변환됨)" "$IMGS" "/uploads/item/tshirt1.jpg"
 contains "추가 이미지도" "$IMGS" "tshirt2.jpg"
 HIT="$(psql_q "SELECT view_count FROM shop_products WHERE name = '기본 티셔츠'")"
 check "조회수 이어짐" "$HIT" "342"
