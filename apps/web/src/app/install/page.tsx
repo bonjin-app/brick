@@ -29,6 +29,15 @@ export default function InstallPage() {
     host: "localhost", port: 5432, database: "brick", user: "brick", password: "", ssl: false,
   });
   const [site, setSite] = useState({ siteName: "", adminEmail: "", adminPassword: "" });
+  // 사이트 유형 — 고르면 기본 구성(홈·페이지·게시판·메뉴)이 함께 만들어진다.
+  // 기본값은 커뮤니티: 빈 사이트를 기본으로 두면 대부분이 빈 화면에서 멈춘다.
+  const [starter, setStarter] = useState("community");
+  const [starters, setStarters] = useState<Array<{
+    code: string; label: string; description: string; creates: string[];
+  }>>([]);
+  useEffect(() => {
+    fetch("/api/install/starters").then((r) => r.json()).then((d) => setStarters(d.items ?? [])).catch(() => {});
+  }, []);
 
   const probeState = useCallback(async () => {
     const res = await fetch("/api/install/status");
@@ -83,7 +92,7 @@ export default function InstallPage() {
     setBusy(true);
     setError("");
     const res = await fetch("/api/install", {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(site),
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...site, starter }),
     });
     if (res.ok) setStage("done");
     else setError((await res.json().catch(() => ({}))).message ?? "설치에 실패했습니다.");
@@ -201,6 +210,28 @@ export default function InstallPage() {
             <input style={input} type="password" required minLength={8} value={site.adminPassword}
               onChange={(e) => setSite({ ...site, adminPassword: e.target.value })} />
           </label>
+
+          {/* 사이트 유형 — 설치가 끝나면 이미 돌아가는 사이트가 있게 */}
+          <div style={{ marginTop: 18 }}>
+            <div style={{ fontSize: 14, marginBottom: 6 }}>사이트 유형</div>
+            {starters.map((st) => (
+              <label key={st.code} style={{
+                display: "block", padding: "10px 12px", marginBottom: 6, cursor: "pointer",
+                border: `2px solid ${starter === st.code ? "#1a1a2e" : "#e5e5ea"}`,
+                borderRadius: 8, background: starter === st.code ? "#f7f8ff" : "#fff",
+              }}>
+                <input type="radio" name="starter" value={st.code} checked={starter === st.code}
+                  onChange={() => setStarter(st.code)} style={{ marginRight: 8 }} />
+                <strong style={{ fontSize: 14 }}>{st.label}</strong>
+                <div style={{ fontSize: 13, color: "#777", marginLeft: 22 }}>{st.description}</div>
+                {starter === st.code && st.creates.length > 0 && (
+                  <div style={{ fontSize: 12, color: "#4a5", marginLeft: 22, marginTop: 4 }}>
+                    만들어지는 것: {st.creates.join(" · ")}
+                  </div>
+                )}
+              </label>
+            ))}
+          </div>
           <button disabled={busy} style={{ width: "100%", padding: 13, marginTop: 22, cursor: "pointer", fontWeight: 700 }}>
             {busy ? "설치 중…" : "설치 완료"}
           </button>

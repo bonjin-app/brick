@@ -27,7 +27,7 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-2020%20passing-2ea043.svg" alt="스모크 테스트 2020개" />
+  <img src="https://img.shields.io/badge/E2E-2072%20passing-2ea043.svg" alt="스모크 테스트 2072개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
 </p>
 
@@ -83,6 +83,19 @@ docker compose up -d
 
 `http://localhost:3000` 접속 → 설치 마법사에서 **사이트 이름과 관리자 계정만** 입력하면 끝입니다.
 DB 접속 정보는 묻지 않습니다 — compose가 이미 주입했습니다.
+
+### 설치하면 기본 구성이 함께 만들어집니다
+
+설치할 때 사이트 유형을 고르면 홈·페이지·게시판·메뉴가 통째로 만들어집니다.
+
+| 유형 | 만들어지는 것 |
+|---|---|
+| 커뮤니티 | 홈(최신글 모아보기) · 소개 · 게시판 3개 · 메뉴 |
+| 쇼핑몰 | 홈(상품 목록+공지) · 이용 안내 · 공지사항 · 쇼핑몰 메뉴 |
+| 회사 홈페이지 | 홈 · 회사 소개 · 서비스 · 공지 · 1:1 문의 |
+| 빈 사이트 | 아무것도 — 처음부터 직접 |
+
+만들어진 것은 전부 일반 페이지·메뉴라서 페이지 빌더에서 그대로 수정합니다.
 
 ### FTP로 설치하기 (파일 업로드)
 
@@ -273,7 +286,7 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 2,020개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 2,072개 항목):
 
 | 수트 | 항목 | 무엇을 못박는가 |
 |---|---:|---|
@@ -291,6 +304,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `smoke-payments.sh` | 130 | 스텁 PG로 실제 나가는 금액 검증 · 멱등키 · 개인결제가 매출에 포함되는가 |
 | `smoke-search.sh` | 108 | 비밀글·비공개 게시판 미노출 · ILIKE 이스케이프 · total 정확성 · 0건 기록 |
 | `smoke-restock.sh` | 87 | 품절만 신청 · 옵션 단위 · 한 번만 발송 · 광고 아님 · 경로 무관 감지 |
+| `smoke-starter.sh` | 52 | 유형별 기본 구성 생성 · 홈 렌더 · 메뉴 링크 검증 · 일반 페이지로 수정 가능 |
 | `smoke-board.sh` | 85 | 권한 4단계 · 답변형 · 비밀글 · 첨부 원자성 · XSS |
 | `smoke-point.sh` | 53 | FIFO 소모 · 멱등 적립 · 만료 · 동시성 |
 | `smoke-memo.sh` | 72 | 프라이버시 · 차단 · 포인트 차감 트랜잭션 |

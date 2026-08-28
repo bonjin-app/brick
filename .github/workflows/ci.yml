@@ -113,6 +113,9 @@ jobs:
       - name: E2E 스모크 테스트 (재입고 알림)
         run: bash scripts/smoke-restock.sh
 
+      - name: E2E 스모크 테스트 (사이트 스타터)
+        run: bash scripts/smoke-starter.sh
+
       - name: E2E 스모크 테스트 (방문자·팝업)
         run: bash scripts/smoke-site.sh
 
