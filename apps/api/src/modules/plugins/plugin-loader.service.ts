@@ -1,5 +1,5 @@
 import { Injectable, Inject, Logger, OnModuleInit } from "@nestjs/common";
-import { readFile, readdir, mkdir, symlink, stat } from "node:fs/promises";
+import { readFile, readdir, mkdir, symlink, stat, lstat, rm, readlink, realpath } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -36,6 +36,8 @@ export class PluginLoaderService implements OnModuleInit {
     method: string;
     segments: string[]; // "/api/plugins/<plugin>/boards/:slug/posts" → 분해된 세그먼트
     handler: PluginRouteHandler;
+    /** API 문서용 설명 (선택 — 없어도 경로는 문서에 실린다) */
+    docs?: { summary?: string };
   }> = [];
 
   /**
@@ -279,13 +281,14 @@ export class PluginLoaderService implements OnModuleInit {
             .onConflictDoUpdate({ target: siteSettings.key, set: { value: value as never, updatedAt: new Date() } });
         },
       },
-      registerRoute: (method, path, handler) => {
+      registerRoute: (method, path, handler, docs) => {
         const clean = path.startsWith("/") ? path : `/${path}`;
         this.routes.push({
           plugin: pluginName,
           method,
           segments: `/api/plugins/${pluginName}${clean}`.split("/").filter(Boolean),
           handler,
+          docs,
         });
       },
       registerBlock: (block) => {
@@ -350,12 +353,19 @@ export class PluginLoaderService implements OnModuleInit {
     const SHARED = ["@brick/plugin-sdk", "@brick/core", "drizzle-orm", "uuidv7"];
 
     const pluginDir = join(this.pluginsDir, name);
-    const fromPlugin = createRequire(pathToFileURL(join(pluginDir, "noop.js")).href);
+
+    // 이미 자기 node_modules 를 가진 플러그인(개발용 워크스페이스)은 건드리지 않는다.
+    //
+    // 주의: 이 존재 확인은 **일반 fs 로만** 한다. createRequire().resolve() 로
+    // "해석되는지" 찔러보면 안 된다 — Node 24부터 모듈 해석기가 stat/파일 읽기
+    // 결과를 캐시하므로, 실패를 한 번 캐시한 경로는 **링크를 만든 뒤에도 계속
+    // 실패한다**. (Node 22 에서는 통과하고 24 에서만 죽는 형태로 나타났다)
+    const hasOwn = await lstat(join(pluginDir, "node_modules")).then(() => true).catch(() => false);
 
     // 해석 기준점들: API 자신, 그리고 다른 플러그인들.
     // API 는 @brick/plugin-sdk 에 의존하지 않으므로 (플러그인의 계약이지 API 의
     // 것이 아니다) API 컨텍스트만으로는 sdk 를 못 찾는다 — 동봉 플러그인의
-    // 컨텍스트가 폴백이다.
+    // 컨텍스트가 폴백이다. (호스트 쪽 경로 해석은 긍정 결과만 캐시되므로 안전하다)
     const resolverBases = [import.meta.url];
     const siblings = await readdir(this.pluginsDir, { withFileTypes: true }).catch(() => []);
     for (const e of siblings) {
@@ -365,11 +375,18 @@ export class PluginLoaderService implements OnModuleInit {
     }
 
     for (const pkg of SHARED) {
-      try {
-        fromPlugin.resolve(pkg);
-        continue; // 이미 해석된다 (개발용 워크스페이스 링크, 배포본 루트 등)
-      } catch {
-        // 링크가 필요하다
+      const linkPath = join(pluginDir, "node_modules", ...pkg.split("/"));
+      const linkStat = await lstat(linkPath).catch(() => null);
+      if (linkStat) {
+        // 있으면 존중한다 — 단, 깨진 링크(대상이 사라짐)는 다시 만든다
+        const alive = await stat(linkPath).catch(() => null);
+        if (alive) continue;
+        await rm(linkPath, { recursive: true, force: true });
+      } else if (hasOwn && !linkStat) {
+        // 자기 node_modules 가 있는데 이 패키지만 없다 — pnpm 워크스페이스가
+        // 관리하는 폴더에 우리가 끼어들면 다음 install 때 충돌한다. 워크스페이스
+        // 플러그인은 자기 package.json 에 의존성을 선언하는 것이 맞다.
+        continue;
       }
 
       let entry: string | null = null;
@@ -401,16 +418,23 @@ export class PluginLoaderService implements OnModuleInit {
         root = parent;
       }
 
-      const linkPath = join(pluginDir, "node_modules", ...pkg.split("/"));
       try {
         await mkdir(dirname(linkPath), { recursive: true });
-        const exists = await stat(linkPath).catch(() => null);
-        if (!exists) {
-          await symlink(root, linkPath, process.platform === "win32" ? "junction" : "dir");
-        }
+        await symlink(await realpath(root), linkPath, process.platform === "win32" ? "junction" : "dir");
         this.logger.log(`plugin "${name}": 공유 의존성 링크 ${pkg} → ${root.split(sep).slice(-3).join(sep)}`);
       } catch (err) {
         this.logger.warn(`plugin "${name}": ${pkg} 링크 실패 — ${err instanceof Error ? err.message : String(err)}`);
+        continue;
+      }
+
+      // 링크를 만들었다고 끝이 아니다 — 링크 너머에 진짜 패키지가 있는지 확인한다.
+      // 검증도 일반 fs 로 한다 (모듈 해석기를 부르면 캐시를 오염시킬 수 있다).
+      const pkgJson = await stat(join(linkPath, "package.json")).then(() => true).catch(() => false);
+      if (!pkgJson) {
+        const target = await readlink(linkPath).catch(() => "(링크 아님)");
+        this.logger.error(
+          `plugin "${name}": ${pkg} 링크가 패키지를 가리키지 않습니다 — 대상=${target}`,
+        );
       }
     }
   }
