@@ -127,6 +127,33 @@
 
   code.inline { background: var(--card); border: 1px solid var(--line); border-radius: 5px; padding: 2px 6px; font-size: 13px; font-family: ui-monospace, Menlo, monospace; }
 
+  /* ── 히어로 통계 줄 ── */
+  .stats { display: flex; gap: 28px; justify-content: center; flex-wrap: wrap; margin-top: 34px; }
+  .stats div { text-align: center; }
+  .stats strong { display: block; font-size: 26px; letter-spacing: -1px; color: #fff; }
+  .stats span { font-size: 13px; color: #9d9db4; }
+
+  /* ── 스타터 쇼케이스 ── */
+  .showcase { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+  .site-card { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--card); }
+  .site-card .browser { background: var(--code-bg); padding: 8px 12px; display: flex; gap: 5px; align-items: center; }
+  .site-card .browser i { width: 9px; height: 9px; border-radius: 50%; background: #4a4a63; display: inline-block; }
+  .site-card .browser em { font-style: normal; color: #8f8fa8; font-size: 11px; margin-left: 8px; font-family: ui-monospace, Menlo, monospace; }
+  .site-card .scr { padding: 16px 18px; font-size: 12.5px; line-height: 1.6; min-height: 132px; }
+  .site-card .scr .nav { display: flex; gap: 10px; color: var(--muted); font-size: 11px; border-bottom: 1px solid var(--line); padding-bottom: 8px; margin-bottom: 10px; }
+  .site-card .scr .row { display: flex; gap: 8px; margin-bottom: 5px; }
+  .site-card .scr .row i { font-style: normal; }
+  .site-card .scr .blockline { height: 8px; border-radius: 4px; background: var(--line); margin-bottom: 6px; }
+  .site-card .scr .blockline.b1 { width: 62%; }
+  .site-card .scr .blockline.b2 { width: 84%; }
+  .site-card .meta { padding: 14px 18px 18px; border-top: 1px solid var(--line); }
+  .site-card .meta h3 { margin: 0 0 4px; font-size: 16px; }
+  .site-card .meta p { margin: 0; color: var(--muted); font-size: 13.5px; }
+
+  /* ── 강조 문단 ── */
+  .callout { background: var(--brand-soft); border-radius: 12px; padding: 18px 22px; margin-top: 24px; font-size: 14.5px; }
+  .callout strong { color: var(--brand); }
+
   footer { padding: 44px 0 60px; text-align: center; color: var(--muted); font-size: 14px; }
   .badge { display: inline-block; background: var(--brand-soft); color: var(--brand); border-radius: 20px; padding: 4px 14px; font-size: 13px; font-weight: 600; margin-bottom: 14px; }
   .note { color: var(--muted); font-size: 13.5px; }
@@ -158,8 +185,98 @@ node server.js
       <a class="btn btn-primary" href="https://github.com/bonjin-app/brick">GitHub에서 보기</a>
       <a class="btn btn-ghost" href="https://github.com/bonjin-app/brick/blob/main/docs/installation.md">설치 가이드</a>
     </div>
+
+    <div class="stats">
+      <div><strong>2,072</strong><span>E2E 검증 항목 · 전부 통과</span></div>
+      <div><strong>8</strong><span>동봉 플러그인</span></div>
+      <div><strong>66</strong><span>기록된 설계 결정(ADR)</span></div>
+      <div><strong>MIT</strong><span>라이선스</span></div>
+    </div>
   </div>
 </header>
+
+<section>
+  <div class="wrap">
+    <span class="badge">설치하면 이미 사이트</span>
+    <h2>빈 화면이 아니라, 돌아가는 사이트로 시작합니다</h2>
+    <p class="lead">
+      설치할 때 사이트 유형을 고르면 홈·페이지·게시판·메뉴가 통째로 만들어집니다.
+      할 일은 내용을 자기 것으로 바꾸는 것뿐입니다.
+    </p>
+    <div class="showcase">
+      <div class="site-card">
+        <div class="browser"><i></i><i></i><i></i><em>mysite.com</em></div>
+        <div class="scr">
+          <div class="nav"><span>공지사항</span><span>자유게시판</span><span>질문답변</span><span>소개</span></div>
+          <div class="blockline b1"></div>
+          <div class="row"><i>📌</i><span>최신글 모아보기 3단</span></div>
+          <div class="blockline b2"></div>
+          <div class="blockline b1"></div>
+        </div>
+        <div class="meta">
+          <h3>커뮤니티</h3>
+          <p>게시판 3개 + 최신글 홈 + 메뉴가 연결된 채로 시작</p>
+        </div>
+      </div>
+      <div class="site-card">
+        <div class="browser"><i></i><i></i><i></i><em>myshop.com</em></div>
+        <div class="scr">
+          <div class="nav"><span>상품</span><span>공지사항</span><span>이용 안내</span><span>소개</span></div>
+          <div class="row"><i>🛍️</i><span>새로 나온 상품 4단</span></div>
+          <div class="blockline b2"></div>
+          <div class="row"><i>📢</i><span>공지사항 5건</span></div>
+          <div class="blockline b1"></div>
+        </div>
+        <div class="meta">
+          <h3>쇼핑몰</h3>
+          <p>상품 목록 홈 + 교환·반품 안내의 뼈대까지 함께</p>
+        </div>
+      </div>
+      <div class="site-card">
+        <div class="browser"><i></i><i></i><i></i><em>company.com</em></div>
+        <div class="scr">
+          <div class="nav"><span>회사 소개</span><span>서비스</span><span>공지사항</span><span>문의하기</span></div>
+          <div class="blockline b1"></div>
+          <div class="blockline b2"></div>
+          <div class="row"><i>💬</i><span>1:1 문의 접수 화면</span></div>
+        </div>
+        <div class="meta">
+          <h3>회사 홈페이지</h3>
+          <p>소개·서비스·공지·1:1 문의가 메뉴로 연결된 채로</p>
+        </div>
+      </div>
+    </div>
+    <p class="note" style="margin-top:14px">
+      만들어진 것은 전부 일반 페이지·게시판·메뉴입니다 — 페이지 빌더에서 그대로 수정합니다.
+      직접 만들고 싶다면 <strong>빈 사이트</strong>를 고르면 됩니다.
+    </p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <span class="badge">한국에서 운영해도 안전하게</span>
+    <h2>법을 시스템이 지킵니다</h2>
+    <p class="lead">
+      한국에서 사이트·쇼핑몰을 운영하면 지켜야 하는 것들이 있습니다.
+      Brick은 운영자가 실수로도 어길 수 없게 만들었습니다.
+    </p>
+    <div class="grid">
+      <div class="card"><span class="ico">📜</span><h3>약관 · 개인정보 동의</h3>
+        <p>가입 시 필수 동의, 개정 시 재동의, 동의 이력 보존. IP는 해시로만 저장합니다.</p></div>
+      <div class="card"><span class="ico">↩️</span><h3>청약철회 7일 · 반품</h3>
+        <p>사유별 반송비 부담(불량은 사업자 — 고객 청구는 위법), 물건을 받기 전에는 환불되지 않습니다.</p></div>
+      <div class="card"><span class="ico">📧</span><h3>광고 메일 규정</h3>
+        <p>광고는 동의자에게만 — 끌 수 없는 조건입니다. (광고) 표기 강제, 로그인 없는 수신거부, 발송 직전 동의 재확인.</p></div>
+      <div class="card"><span class="ico">🧾</span><h3>현금영수증 · 세금계산서</h3>
+        <p>카드 결제 이중 발급 거부, 면세 상품 금액 분해, 반품 시 증빙 자동 취소, 부가세 신고 자료.</p></div>
+      <div class="card"><span class="ico">🗑️</span><h3>회원 탈퇴 = 파기</h3>
+        <p>개인정보는 파기하고 법정 보존 의무가 있는 주문 기록만 작성자를 끊고 남깁니다.</p></div>
+      <div class="card"><span class="ico">🏢</span><h3>사업자정보 표시</h3>
+        <p>사업자등록번호 체크섬을 실제로 검증하고 테마가 자동으로 렌더합니다.</p></div>
+    </div>
+  </div>
+</section>
 
 <section>
   <div class="wrap">
@@ -209,7 +326,7 @@ node server.js
       <div class="card">
         <span class="ico">📐</span>
         <h3>결정의 이유가 남아 있다</h3>
-        <p>설계 결정 <strong>49건</strong>을 ADR로 기록했습니다. "왜 이렇게 되어 있나"에 답할 수 있는 코드가 오래 삽니다.</p>
+        <p>설계 결정 <strong>66건</strong>을 ADR로 기록했습니다. "왜 이렇게 되어 있나"에 답할 수 있는 코드가 오래 삽니다.</p>
       </div>
     </div>
   </div>
@@ -317,8 +434,8 @@ node server.js
       Brick은 초기 개발 단계입니다. 아래 기능은 동작하며, 프로덕션 사용 전 검토를 권합니다.
     </p>
     <div class="grid">
-      <div class="card"><h3>✅ 동작</h3><p>웹 설치 마법사 · 세션 인증 · 비밀번호 재설정 · 회원 · 페이지 빌더 · 미디어 · 메뉴 · 검색 · 플러그인/테마 ZIP 설치 · 게시판 · 쪽지 · 포인트 · 캡차 · <strong>소셜 로그인</strong> · 방문자 집계 · 팝업/배너 · <strong>쇼핑몰(상품 후기·문의·옵션)</strong> · <strong>약관 동의·이메일 인증·회원 탈퇴·휴면</strong> · <strong>1:1 문의·FAQ·설문조사</strong> · sitemap.xml · <strong>기존 PHP 게시판·쇼핑몰 데이터 이전</strong> · <strong>결제(토스페이먼츠)</strong> · <strong>취소·반품·교환</strong> · <strong>사업자정보</strong> · 위시리스트 · 지역별 배송비 · 감사 로그 · 자동 마이그레이션 · 백업 CLI</p></div>
-      <div class="card"><h3>🚧 예정</h3><p>회원 단체메일 · 관련 상품 · 판매 리포트 · 위시리스트 · 현금영수증 · OpenAPI 문서 — <a href="https://github.com/bonjin-app/brick/blob/main/docs/roadmap.md">로드맵</a></p></div>
+      <div class="card"><h3>✅ 동작</h3><p>설치 마법사(사이트 유형 스타터) · 회원(약관 동의 · 이메일 인증 · 탈퇴 · 휴면 · <strong>2단계 인증</strong> · 세션 관리) · 소셜 로그인 · 페이지 빌더 · 미디어 · 메뉴(연결 대상 선택) · <strong>통합검색 · 검색 분석</strong> · 게시판 · 쪽지 · 포인트 · 1:1 문의 · FAQ · 설문조사 · 방문자 집계 · 팝업/배너 · 단체메일 · <strong>쇼핑몰</strong>(후기 · 옵션 · 취소/반품/교환 · 위시리스트 · 지역별 배송비 · 관련 상품 · <strong>재입고 알림</strong>) · 결제(토스페이먼츠) · <strong>개인결제</strong> · <strong>판매 리포트</strong> · <strong>현금영수증 · 세금계산서 · 부가세 자료</strong> · 데이터 이전 · sitemap.xml · 감사 로그 · 자동 마이그레이션 · 백업 CLI</p></div>
+      <div class="card"><h3>🚧 1.0 까지</h3><p>서명 검증 + 원클릭 원격 업데이트 · 기획전 · 쿠폰 고도화 · 회원 등급 · 정기결제 · OpenAPI 문서 — <a href="https://github.com/bonjin-app/brick/blob/main/docs/roadmap.md">완성형 정의와 로드맵</a></p></div>
       <div class="card"><h3>🤝 함께</h3><p>설치가 안 되는 것이 가장 중요한 버그입니다.
         <a href="https://github.com/bonjin-app/brick/issues/new?template=bug_report.yml">버그 신고</a> ·
         <a href="https://github.com/bonjin-app/brick/issues/new?template=feature_request.yml">기능 제안</a> ·
