@@ -109,6 +109,8 @@ export class WithdrawalService {
           password_login_enabled = false,
           is_active = false,
           marketing_opt_in = false,
+          birth_month = NULL,
+          birth_day = NULL,
           withdrawn_at = now(),
           withdraw_reason = ${String(params.reason ?? "").slice(0, 300) || null},
           updated_at = now()

@@ -148,14 +148,38 @@ export class UsersController {
     return { id };
   }
 
-  /** 내 프로필 수정 (이름/비밀번호) */
+  /** 내 프로필 수정 (이름/비밀번호/생일) */
   @Put("me")
   @UseGuards(AuthGuard)
   async updateMe(
     @Req() req: FastifyRequest & { user: { id: string } },
-    @Body() body: { displayName?: string; currentPassword?: string; newPassword?: string },
+    @Body() body: {
+      displayName?: string; currentPassword?: string; newPassword?: string;
+      /** 생일 (선택 · 월/일만). 둘 다 null 이면 삭제 — 언제든 지울 수 있어야 한다 */
+      birthMonth?: number | null; birthDay?: number | null;
+    },
   ) {
     const patch: Record<string, unknown> = { updatedAt: new Date() };
+
+    // 생일 — 월·일이 함께 오거나 함께 null 이어야 한다 (반쪽 생일은 의미가 없다)
+    if (body.birthMonth !== undefined || body.birthDay !== undefined) {
+      const m = body.birthMonth ?? null;
+      const d = body.birthDay ?? null;
+      if (m === null && d === null) {
+        patch.birthMonth = null;
+        patch.birthDay = null;
+      } else {
+        const month = Math.floor(Number(m));
+        const day = Math.floor(Number(d));
+        const daysIn = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+        if (!Number.isFinite(month) || month < 1 || month > 12
+          || !Number.isFinite(day) || day < 1 || day > daysIn[month - 1]) {
+          throw new BadRequestException("생일 날짜가 올바르지 않습니다.");
+        }
+        patch.birthMonth = month;
+        patch.birthDay = day;
+      }
+    }
 
     if (body.displayName !== undefined) {
       const name = body.displayName.trim();

@@ -132,7 +132,7 @@ export class MembersController {
   async myProfile(@Req() req: AuthedRequest) {
     const { rows } = await this.db.execute(sql`
       SELECT id, email, display_name, role, email_verified_at, marketing_opt_in,
-             age_confirmed, last_login_at, created_at
+             age_confirmed, last_login_at, created_at, birth_month, birth_day
       FROM users WHERE id = ${req.user.id}::uuid LIMIT 1
     `);
     const me = rows[0];

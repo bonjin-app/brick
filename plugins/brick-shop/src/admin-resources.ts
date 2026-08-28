@@ -180,6 +180,9 @@ export const COUPON_RESOURCE: AdminResource = {
     { name: "requires_issue", label: "발급형", type: "boolean",
       help: "켜면 쿠폰함에 지급받은 회원만 씁니다 — 코드가 커뮤니티에 퍼져도 대상이 통제됩니다. " +
         "지급은 쿠폰 저장 후 발급 API(/admin/coupons/:id/issue)로 합니다." },
+    { name: "birthday_auto", label: "생일 자동 지급", type: "boolean",
+      help: "켜면 생일(월·일)을 등록한 회원의 쿠폰함에 생일날 자동 지급됩니다. 발급형이 함께 켜집니다. " +
+        "같은 쿠폰은 회원당 한 번 — 매년 주려면 해마다 쿠폰을 새로 만드세요." },
     { name: "used_count", label: "사용됨", type: "number", readOnly: true, inList: true },
     { name: "is_active", label: "활성", type: "boolean", inList: true },
   ],

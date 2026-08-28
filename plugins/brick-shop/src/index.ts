@@ -58,6 +58,7 @@ import {
   listBillingKeys, listBillingProviders, listMySubscriptions, listSubscriptionsAdmin,
   resumeSubscription, revokeBillingKey, subscribe, subscriptionEvents,
 } from "./subscriptions.js";
+import { BIRTHDAY_QUEUE_JOB, issueBirthdayCoupons } from "./birthday.js";
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,148}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -681,7 +682,7 @@ export default definePlugin(async (ctx) => {
     const { rows } = await db.execute(sql`
       SELECT id, code, name, discount_type, discount_value, min_amount, max_discount,
              usage_limit, used_count, is_active,
-             per_user_limit, first_purchase_only, grade_id, requires_issue
+             per_user_limit, first_purchase_only, grade_id, requires_issue, birthday_auto
       FROM shop_coupons ORDER BY created_at DESC LIMIT 100
     `);
     return { items: rows, total: rows.length };
@@ -695,10 +696,11 @@ export default definePlugin(async (ctx) => {
       await db.execute(sql`
         INSERT INTO shop_coupons
           (id, code, name, discount_type, discount_value, min_amount, max_discount, usage_limit,
-           is_active, per_user_limit, first_purchase_only, grade_id, requires_issue)
+           is_active, per_user_limit, first_purchase_only, grade_id, requires_issue, birthday_auto)
         VALUES (${id}, ${c.code}, ${c.name}, ${c.type}, ${c.value}, ${c.minAmount}, ${c.maxDiscount},
                 ${c.usageLimit}, ${c.isActive},
-                ${c.perUserLimit}, ${c.firstPurchaseOnly}, ${c.gradeId}::uuid, ${c.requiresIssue})
+                ${c.perUserLimit}, ${c.firstPurchaseOnly}, ${c.gradeId}::uuid, ${c.requiresIssue},
+                ${c.birthdayAuto})
       `);
     } catch (err) {
       if (isUniqueViolation(err, "shop_coupons_code")) {
@@ -717,7 +719,8 @@ export default definePlugin(async (ctx) => {
         discount_value = ${c.value}, min_amount = ${c.minAmount}, max_discount = ${c.maxDiscount},
         usage_limit = ${c.usageLimit}, is_active = ${c.isActive},
         per_user_limit = ${c.perUserLimit}, first_purchase_only = ${c.firstPurchaseOnly},
-        grade_id = ${c.gradeId}::uuid, requires_issue = ${c.requiresIssue}
+        grade_id = ${c.gradeId}::uuid, requires_issue = ${c.requiresIssue},
+        birthday_auto = ${c.birthdayAuto}
       WHERE id = ${req.params.id}::uuid
     `);
     return { ok: true };
@@ -1310,6 +1313,21 @@ export default definePlugin(async (ctx) => {
     await ctx.queue.enqueue(SUBSCRIPTION_QUEUE_JOB, {}, { delaySeconds: 600, maxAttempts: 3 });
   });
   await ctx.queue.enqueue(SUBSCRIPTION_QUEUE_JOB, {}, { delaySeconds: 90, maxAttempts: 3 });
+
+  // ── 생일 쿠폰 자동 지급 (birthday.ts) ────────────────
+  // 지급이 멱등하므로(쿠폰당 회원당 1회) 넉넉히 자주 돌아도 안전하다 —
+  // 자정 근처 한 번만 돌리려는 정밀함은 서버가 그 시각에 꺼져 있으면
+  // 그날 생일자를 통째로 놓친다.
+  ctx.registerRoute("POST", "/admin/coupons/birthday-sweep", async (req) => {
+    requireAdmin(req);
+    return await issueBirthdayCoupons(db);
+  });
+  ctx.queue.process(BIRTHDAY_QUEUE_JOB, async () => {
+    const result = await issueBirthdayCoupons(db);
+    if (result.issued > 0) ctx.logger.log(`생일 쿠폰: ${result.issued}장 지급`);
+    await ctx.queue.enqueue(BIRTHDAY_QUEUE_JOB, {}, { delaySeconds: 6 * 3600, maxAttempts: 3 });
+  });
+  await ctx.queue.enqueue(BIRTHDAY_QUEUE_JOB, {}, { delaySeconds: 120, maxAttempts: 3 });
 
   // ════════════════════════════════════════════════════
   //  개인결제 (주문서 없는 청구)
@@ -2246,7 +2264,12 @@ function validateCoupon(b: Record<string, unknown>) {
     perUserLimit,
     firstPurchaseOnly: b.first_purchase_only === true || b.first_purchase_only === "true",
     gradeId,
-    requiresIssue: b.requires_issue === true || b.requires_issue === "true",
+    // 생일 쿠폰은 발급형이어야 한다 — 코드형이면 "자동 지급"이 의미가 없다
+    // (코드를 아는 누구나 쓸 수 있으니). 켜면 발급형을 함께 켠다.
+    requiresIssue:
+      b.requires_issue === true || b.requires_issue === "true" ||
+      b.birthday_auto === true || b.birthday_auto === "true",
+    birthdayAuto: b.birthday_auto === true || b.birthday_auto === "true",
   };
 }
 

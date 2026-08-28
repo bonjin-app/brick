@@ -241,6 +241,50 @@ WD="$(curl -s -b "$C1" -X POST "$API/api/me/withdraw" -H 'content-type: applicat
 contains "탈퇴 성공" "$WD" '"ok":true'
 check "c1 쿠폰함 삭제 (c2 것만 남는다)" "$(psql_q "SELECT count(*) FROM shop_user_coupons")" "1"
 
+echo "── 생일 쿠폰 (월·일만 — 연도는 최소수집 원칙으로 받지 않는다)"
+# c2 가 생일을 등록한다 — 오늘(KST)로. 검증도 함께 본다.
+check "잘못된 날짜는 400 (2월 30일)" \
+  "$(code -b "$C2" -X PUT "$API/api/me" -H 'content-type: application/json' \
+      -d '{"birthMonth":2,"birthDay":30}')" "400"
+TODAY_MD="$(psql_q "SELECT EXTRACT(MONTH FROM now() AT TIME ZONE 'Asia/Seoul')::int || ',' || EXTRACT(DAY FROM now() AT TIME ZONE 'Asia/Seoul')::int")"
+TM="${TODAY_MD%,*}"; TD="${TODAY_MD#*,}"
+# 중첩 따옴표 JSON 은 bash 3.2 의 명령 치환 안에서 깨진다 — 파일로 보낸다
+printf '{"birthMonth":%s,"birthDay":%s}' "$TM" "$TD" > "$TMP/bday.json"
+contains "생일 등록" "$(curl -s -b "$C2" -X PUT "$API/api/me" -H 'content-type: application/json' \
+  --data-binary "@$TMP/bday.json")" '"ok":true'
+contains "프로필에서 보인다" "$(curl -s -b "$C2" "$API/api/me/profile")" "\"birth_month\":$TM"
+
+BDAY="$(curl -s -b "$CK" -X POST "$SHOP/admin/coupons" -H 'content-type: application/json' \
+  -d '{"code":"BDAY2026","name":"생일 축하","discount_type":"fixed","discount_value":3000,"birthday_auto":true}')"
+check "생일 쿠폰은 발급형이 강제된다" \
+  "$(psql_q "SELECT requires_issue || '|' || birthday_auto FROM shop_coupons WHERE code='BDAY2026'")" "true|true"
+
+SWEEP1="$(curl -s -b "$CK" -X POST "$SHOP/admin/coupons/birthday-sweep")"
+contains "오늘이 생일인 회원에게 지급" "$SWEEP1" '"issued":1'
+contains "쿠폰함에 담겼다" "$(curl -s -b "$C2" "$SHOP/me/coupons")" "BDAY2026"
+contains "다시 돌려도 두 장이 가지 않는다 (멱등)" \
+  "$(curl -s -b "$CK" -X POST "$SHOP/admin/coupons/birthday-sweep")" '"issued":0'
+
+# 생일이 다른 회원은 못 받는다 — c3 을 어제 생일로
+printf '{"email":"c3@cp.test","password":"password123",%s"displayName":"손님3"}' "$CONSENT" > "$TMP/r3.json"
+curl -s -X POST "$API/api/register" -H 'content-type: application/json' --data-binary "@$TMP/r3.json" >/dev/null
+curl -s -c "$TMP/c3.txt" -X POST "$API/api/auth/login" -H 'content-type: application/json' \
+  -d '{"email":"c3@cp.test","password":"password123"}' >/dev/null
+YEST="$(psql_q "SELECT EXTRACT(MONTH FROM (now() AT TIME ZONE 'Asia/Seoul') - interval '1 day')::int || ',' || EXTRACT(DAY FROM (now() AT TIME ZONE 'Asia/Seoul') - interval '1 day')::int")"
+curl -s -b "$TMP/c3.txt" -X PUT "$API/api/me" -H 'content-type: application/json' \
+  -d "{\"birthMonth\":${YEST%,*},\"birthDay\":${YEST#*,}}" >/dev/null
+contains "생일이 아닌 회원에게는 안 간다" \
+  "$(curl -s -b "$CK" -X POST "$SHOP/admin/coupons/birthday-sweep")" '"issued":0'
+
+echo "── 생일 삭제권과 탈퇴 파기"
+contains "회원이 스스로 지운다" "$(curl -s -b "$C2" -X PUT "$API/api/me" -H 'content-type: application/json' \
+  -d '{"birthMonth":null,"birthDay":null}')" '"ok":true'
+check "지워졌다" "$(psql_q "SELECT birth_month IS NULL FROM users WHERE email='c2@cp.test'")" "true"
+curl -s -b "$TMP/c3.txt" -X POST "$API/api/me/withdraw" -H 'content-type: application/json' \
+  -d '{"password":"password123"}' >/dev/null
+check "탈퇴하면 생일도 파기된다" \
+  "$(psql_q "SELECT birth_month IS NULL AND birth_day IS NULL FROM users WHERE display_name='탈퇴한 회원' ORDER BY updated_at DESC LIMIT 1" | head -1)" "true"
+
 echo
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 [[ $FAIL -eq 0 ]] || { echo; echo "── 서버 로그 ──"; tail -40 "$TMP/api.log"; exit 1; }

@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, timestamp, boolean, index } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, text, timestamp, boolean, index, smallint } from "drizzle-orm/pg-core";
 
 /** 회원. 비밀번호는 argon2id 해시만 저장 */
 export const users = pgTable(
@@ -21,6 +21,12 @@ export const users = pgTable(
     ageConfirmed: boolean("age_confirmed").notNull().default(true),
     /** 광고성 정보 수신 동의 (선택). 단체 메일 발송이 이 값을 존중해야 한다 */
     marketingOptIn: boolean("marketing_opt_in").notNull().default(false),
+    /**
+     * 생일 (선택 · 월/일만 — 연도는 받지 않는다: 최소수집).
+     * 회원이 마이페이지에서 스스로 입력하고 언제든 지운다. 탈퇴 시 파기.
+     */
+    birthMonth: smallint("birth_month"),
+    birthDay: smallint("birth_day"),
     /** 마지막 로그인 — 휴면 판정의 기준 */
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
     /** 휴면 전환 시점. NULL 이면 정상 계정 */
