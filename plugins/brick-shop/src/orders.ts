@@ -112,6 +112,8 @@ export async function createOrder(
     pointUsed: requestedPoint,
     // 등급 할인 — 장바구니 견적과 주문이 같은 등급을 봐야 금액이 일치한다
     grade: params.grade ?? null,
+    // 쿠폰의 회원 조건(1인 제한·첫 구매·등급·발급형)을 검사한다
+    userId: params.userId ?? null,
   });
   // pricing이 상한을 적용했을 수 있다 (상품금액 초과분은 쓰지 않는다)
   requestedPoint = q.pointUsed;
@@ -153,6 +155,25 @@ export async function createOrder(
         RETURNING id
       `);
       if (!rows.length) throw new ShopError(400, "쿠폰을 사용할 수 없습니다. 한도가 소진되었을 수 있습니다.");
+
+      // 발급형 쿠폰은 쿠폰함의 한 장을 소비한다.
+      // used_at IS NULL 조건의 UPDATE 라 동시 주문에서 같은 장이 두 번
+      // 쓰이지 않는다 (복구 코드 소비와 같은 방식 — ADR-55).
+      if (q.couponRequiresIssue && q.couponId && params.userId) {
+        const { rows: spent } = await tx.execute(sql`
+          UPDATE shop_user_coupons SET used_at = now(), used_order_no = ${orderNo}
+          WHERE id = (
+            SELECT id FROM shop_user_coupons
+            WHERE coupon_id = ${q.couponId}::uuid AND user_id = ${params.userId}::uuid
+              AND used_at IS NULL
+            LIMIT 1
+          )
+          RETURNING id
+        `);
+        if (!spent.length) {
+          throw new ShopError(400, "지급받은 쿠폰이 없거나 이미 사용되었습니다.");
+        }
+      }
     }
 
     // ── 3. 포인트 차감 ─────────────────────────────────
@@ -273,6 +294,24 @@ export async function changeOrderStatus(
           },
           tx,
         );
+      }
+    }
+
+    // 취소면 발급형 쿠폰을 쿠폰함에 되돌린다.
+    //
+    // 결제 실패로 주문이 취소되는 것은 흔한 일이고, 그때 지급받은 쿠폰이
+    // 사라지면 "쿠폰을 먹었다"는 문의가 된다. **환불(refunded)에는 되돌리지
+    // 않는다** — 물건을 받아보고 반품하며 쿠폰까지 돌려받으면, 쿠폰으로 산
+    // 것을 무한히 반복할 수 있다.
+    if (to === "cancelled") {
+      const { rows: order } = await tx.execute(sql`
+        SELECT order_no FROM shop_orders WHERE id = ${orderId}::uuid
+      `);
+      if (order[0]?.order_no) {
+        await tx.execute(sql`
+          UPDATE shop_user_coupons SET used_at = NULL, used_order_no = NULL
+          WHERE used_order_no = ${String(order[0].order_no)}
+        `);
       }
     }
 

@@ -252,6 +252,7 @@ export default definePlugin(async (ctx) => {
       postcode: body.postcode ?? null,
       // 장바구니 견적과 주문 생성이 **같은 등급**을 봐야 금액이 일치한다
       grade: await gradeOf(db, req.user?.id ?? null),
+      userId: req.user?.id ?? null,
     });
     return { ...q, pointsAvailable: Boolean(port) };
   });
@@ -670,7 +671,8 @@ export default definePlugin(async (ctx) => {
     requireAdmin(req);
     const { rows } = await db.execute(sql`
       SELECT id, code, name, discount_type, discount_value, min_amount, max_discount,
-             usage_limit, used_count, is_active
+             usage_limit, used_count, is_active,
+             per_user_limit, first_purchase_only, grade_id, requires_issue
       FROM shop_coupons ORDER BY created_at DESC LIMIT 100
     `);
     return { items: rows, total: rows.length };
@@ -683,9 +685,11 @@ export default definePlugin(async (ctx) => {
     try {
       await db.execute(sql`
         INSERT INTO shop_coupons
-          (id, code, name, discount_type, discount_value, min_amount, max_discount, usage_limit, is_active)
+          (id, code, name, discount_type, discount_value, min_amount, max_discount, usage_limit,
+           is_active, per_user_limit, first_purchase_only, grade_id, requires_issue)
         VALUES (${id}, ${c.code}, ${c.name}, ${c.type}, ${c.value}, ${c.minAmount}, ${c.maxDiscount},
-                ${c.usageLimit}, ${c.isActive})
+                ${c.usageLimit}, ${c.isActive},
+                ${c.perUserLimit}, ${c.firstPurchaseOnly}, ${c.gradeId}::uuid, ${c.requiresIssue})
       `);
     } catch (err) {
       if (isUniqueViolation(err, "shop_coupons_code")) {
@@ -702,7 +706,9 @@ export default definePlugin(async (ctx) => {
     await db.execute(sql`
       UPDATE shop_coupons SET code = ${c.code}, name = ${c.name}, discount_type = ${c.type},
         discount_value = ${c.value}, min_amount = ${c.minAmount}, max_discount = ${c.maxDiscount},
-        usage_limit = ${c.usageLimit}, is_active = ${c.isActive}
+        usage_limit = ${c.usageLimit}, is_active = ${c.isActive},
+        per_user_limit = ${c.perUserLimit}, first_purchase_only = ${c.firstPurchaseOnly},
+        grade_id = ${c.gradeId}::uuid, requires_issue = ${c.requiresIssue}
       WHERE id = ${req.params.id}::uuid
     `);
     return { ok: true };
@@ -924,6 +930,117 @@ export default definePlugin(async (ctx) => {
     await ctx.queue.enqueue(GRADE_RECOMPUTE_JOB, {}, { delaySeconds: 21600, maxAttempts: 3 });
   });
   await ctx.queue.enqueue(GRADE_RECOMPUTE_JOB, {}, { delaySeconds: 120, maxAttempts: 3 });
+
+  // ════════════════════════════════════════════════════
+  //  쿠폰함 — 발급형 쿠폰
+  // ════════════════════════════════════════════════════
+
+  /** 내 쿠폰함 — 지급받은 쿠폰과 사용 가능 여부 */
+  ctx.registerRoute("GET", "/me/coupons", async (req) => {
+    if (!req.user) throw new ShopError(401, "로그인이 필요합니다.");
+    const { rows } = await db.execute(sql`
+      SELECT uc.id, uc.issued_at, uc.used_at, uc.used_order_no,
+             c.code, c.name, c.discount_type, c.discount_value, c.min_amount,
+             c.max_discount, c.ends_at, c.is_active
+      FROM shop_user_coupons uc
+      JOIN shop_coupons c ON c.id = uc.coupon_id
+      WHERE uc.user_id = ${req.user.id}::uuid
+      ORDER BY (uc.used_at IS NOT NULL), c.ends_at NULLS LAST, uc.issued_at DESC
+      LIMIT 100
+    `);
+    const now = Date.now();
+    return {
+      items: rows.map((r) => {
+        const expired = r.ends_at !== null && new Date(r.ends_at as Date).getTime() < now;
+        return {
+          id: String(r.id),
+          code: String(r.code),
+          name: String(r.name),
+          discountType: String(r.discount_type),
+          discountValue: Number(r.discount_value),
+          minAmount: Number(r.min_amount),
+          maxDiscount: r.max_discount === null ? null : Number(r.max_discount),
+          endsAt: r.ends_at,
+          // 상태를 계산해서 준다 — 화면이 "왜 못 쓰는지"를 보여줘야 한다
+          status: r.used_at !== null ? "used" : expired ? "expired"
+            : r.is_active !== true ? "inactive" : "usable",
+          usedAt: r.used_at,
+          usedOrderNo: r.used_order_no ? String(r.used_order_no) : null,
+        };
+      }),
+    };
+  });
+
+  /**
+   * 쿠폰 발급 (관리자) — 특정 회원들 또는 등급 전체에.
+   *
+   * 이미 지급된 회원은 조용히 건너뛴다(ON CONFLICT DO NOTHING) — "골드 전체에
+   * 발급"을 두 번 누르면 두 장씩 가는 것이 아니라 빠진 사람만 채워져야 한다.
+   */
+  ctx.registerRoute("POST", "/admin/coupons/:id/issue", async (req) => {
+    requireAdmin(req);
+    const b = (req.body ?? {}) as { emails?: string[]; gradeId?: string; all?: boolean };
+
+    const { rows: coupon } = await db.execute(sql`
+      SELECT id, requires_issue FROM shop_coupons WHERE id = ${req.params.id}::uuid LIMIT 1
+    `);
+    if (!coupon[0]) throw new ShopError(404, "쿠폰을 찾을 수 없습니다.");
+    // 코드형 쿠폰의 "발급"은 의미가 없다 — 코드만 알면 누구나 쓰므로,
+    // 발급했다고 믿은 통제가 실제로는 없는 것이 된다
+    if (coupon[0].requires_issue !== true) {
+      throw new ShopError(400, "발급형 쿠폰이 아닙니다. 쿠폰 설정에서 '발급형'을 켜세요.");
+    }
+
+    let targets: string;
+    if (Array.isArray(b.emails) && b.emails.length) {
+      if (b.emails.length > 1000) throw new ShopError(400, "한 번에 1,000명까지 지급할 수 있습니다.");
+      const list = sql.join(b.emails.map((e) => sql`${String(e).toLowerCase()}`), sql`, `);
+      targets = "emails";
+      const { rows } = await db.execute(sql`
+        INSERT INTO shop_user_coupons (id, coupon_id, user_id)
+        SELECT gen_random_uuid(), ${req.params.id}::uuid, u.id
+        FROM users u
+        WHERE lower(u.email) IN (${list})
+          AND u.is_active = true AND u.withdrawn_at IS NULL
+        ON CONFLICT (coupon_id, user_id) DO NOTHING
+        RETURNING id
+      `);
+      return { issued: rows.length, targets };
+    }
+    if (b.gradeId) {
+      const { rows } = await db.execute(sql`
+        INSERT INTO shop_user_coupons (id, coupon_id, user_id)
+        SELECT gen_random_uuid(), ${req.params.id}::uuid, ug.user_id
+        FROM shop_user_grades ug
+        WHERE ug.grade_id = ${String(b.gradeId)}::uuid
+        ON CONFLICT (coupon_id, user_id) DO NOTHING
+        RETURNING id
+      `);
+      return { issued: rows.length, targets: "grade" };
+    }
+    if (b.all === true) {
+      const { rows } = await db.execute(sql`
+        INSERT INTO shop_user_coupons (id, coupon_id, user_id)
+        SELECT gen_random_uuid(), ${req.params.id}::uuid, u.id
+        FROM users u
+        WHERE u.is_active = true AND u.withdrawn_at IS NULL
+        ON CONFLICT (coupon_id, user_id) DO NOTHING
+        RETURNING id
+      `);
+      return { issued: rows.length, targets: "all" };
+    }
+    throw new ShopError(400, "emails, gradeId, all 중 하나를 지정해주세요.");
+  });
+
+  /** 등급 선택지 — 쿠폰 폼의 grade_id 필드가 읽는다 */
+  ctx.registerRoute("GET", "/admin/options/grades", async (req) => {
+    requireAdmin(req);
+    const grades = await listGrades(db);
+    return grades.map((g) => ({
+      value: g.id,
+      label: `${g.name} (${g.minAmount.toLocaleString("ko-KR")}원~)`,
+    }));
+  });
 
   // ════════════════════════════════════════════════════
   //  재입고 알림
@@ -1651,6 +1768,11 @@ export default definePlugin(async (ctx) => {
       done.push(...(await eraseRestockAlerts(tx, userId)));
       // 등급 배정 — 실적 원본(주문)이 남으므로 배정만 지우면 된다
       done.push(...(await eraseGrade(tx, userId)));
+      // 쿠폰함 — 보존 의무가 없다
+      const { rows: wallet } = await tx.execute(sql`
+        DELETE FROM shop_user_coupons WHERE user_id = ${userId}::uuid RETURNING id
+      `);
+      if (wallet.length) done.push(`쿠폰함 ${wallet.length}장 삭제`);
 
       // 장바구니는 구매 전 데이터 — 보존 의무가 없다.
       // 소유자는 shop_carts 에 있다 (shop_cart_items 에는 user_id 가 없다).
@@ -1913,6 +2035,12 @@ function validateCoupon(b: Record<string, unknown>) {
   if (type === "percent" && value > 100) throw new ShopError(400, "정률 할인은 100%를 넘을 수 없습니다.");
 
   const num = (v: unknown) => (v === null || v === undefined || v === "" ? null : Math.floor(Number(v)));
+  const perUserLimit = num(b.per_user_limit);
+  if (perUserLimit !== null && perUserLimit < 1) {
+    throw new ShopError(400, "1인당 한도는 1 이상이어야 합니다.");
+  }
+  const gradeId = String(b.grade_id ?? "").trim() || null;
+  if (gradeId && !UUID_RE.test(gradeId)) throw new ShopError(400, "등급이 올바르지 않습니다.");
   return {
     code,
     name: String(b.name ?? "").trim() || code,
@@ -1922,6 +2050,10 @@ function validateCoupon(b: Record<string, unknown>) {
     maxDiscount: num(b.max_discount),
     usageLimit: num(b.usage_limit),
     isActive: b.is_active !== false,
+    perUserLimit,
+    firstPurchaseOnly: b.first_purchase_only === true || b.first_purchase_only === "true",
+    gradeId,
+    requiresIssue: b.requires_issue === true || b.requires_issue === "true",
   };
 }
 

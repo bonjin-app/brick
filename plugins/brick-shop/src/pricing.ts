@@ -39,6 +39,9 @@ export interface Quote {
   discount: number;
   /** 분해 — 내역 화면이 "무엇이 얼마였는지"를 보여줘야 한다 */
   couponDiscount: number;
+  /** 발급형 쿠폰이면 주문 생성이 쿠폰함 사용 처리에 쓴다 */
+  couponId: string | null;
+  couponRequiresIssue: boolean;
   gradeDiscount: number;
   gradeName: string | null;
   /** 포인트로 결제한 금액 (brick-point가 설치된 경우) */
@@ -76,6 +79,11 @@ export interface QuoteOptions {
    */
   grade?: { name: string; discountRate: number } | null;
   /**
+   * 주문자 회원 id — 쿠폰의 회원 조건(1인 제한·첫 구매·등급·발급형)을
+   * 검사하는 데 쓴다. 비회원이면 null 이고, 그 조건이 있는 쿠폰은 거절된다.
+   */
+  userId?: string | null;
+  /**
    * 포인트 사용 요청액. 실제 사용 가능액은 호출자가 포인트 서비스로 검증해 넘긴다.
    * (pricing은 금액 계산만 하고 포인트 잔액을 모른다 — 관심사 분리)
    */
@@ -108,7 +116,8 @@ export async function quote(
   if (!items.length) {
     if (strict) throw new ShopError(400, "주문할 상품이 없습니다.");
     return {
-      lines: [], subtotal: 0, discount: 0, couponDiscount: 0, gradeDiscount: 0,
+      lines: [], subtotal: 0, discount: 0, couponDiscount: 0, couponId: null,
+      couponRequiresIssue: false, gradeDiscount: 0,
       gradeName: null, pointUsed: 0, shippingFee: 0,
       zoneFee: 0, zoneName: null, total: 0,
       couponCode: null, hasUnavailable: false,
@@ -185,11 +194,15 @@ export async function quote(
 
   let couponDiscount = 0;
   let appliedCode: string | null = null;
+  let couponId: string | null = null;
+  let couponRequiresIssue = false;
   let couponError: string | undefined;
   try {
-    const applied = await applyCoupon(db, subtotal, couponCode);
+    const applied = await applyCoupon(db, subtotal, couponCode, opts.userId ?? null);
     couponDiscount = applied.discount;
     appliedCode = applied.code;
+    couponId = applied.couponId;
+    couponRequiresIssue = applied.requiresIssue;
   } catch (err) {
     if (strict) throw err;
     // 장바구니 조회에서는 쿠폰 문제로 화면이 깨지지 않게 한다
@@ -234,6 +247,8 @@ export async function quote(
     subtotal,
     discount,
     couponDiscount,
+    couponId,
+    couponRequiresIssue,
     gradeDiscount,
     gradeName: gradeDiscount > 0 || opts.grade ? (opts.grade?.name ?? null) : null,
     pointUsed,
@@ -259,18 +274,76 @@ async function applyCoupon(
   db: Db,
   subtotal: number,
   code?: string | null,
-): Promise<{ discount: number; code: string | null }> {
+  userId?: string | null,
+): Promise<{ discount: number; code: string | null; couponId: string | null; requiresIssue: boolean }> {
   const trimmed = (code ?? "").trim().toUpperCase();
-  if (!trimmed) return { discount: 0, code: null };
+  if (!trimmed) return { discount: 0, code: null, couponId: null, requiresIssue: false };
 
   const { rows } = await db.execute(sql`
-    SELECT code, discount_type, discount_value, min_amount, max_discount, usage_limit, used_count,
-           starts_at, ends_at, is_active
+    SELECT id, code, discount_type, discount_value, min_amount, max_discount, usage_limit, used_count,
+           starts_at, ends_at, is_active,
+           per_user_limit, first_purchase_only, grade_id, requires_issue
     FROM shop_coupons WHERE upper(code) = ${trimmed} LIMIT 1
   `);
   const c = rows[0];
   if (!c) throw new ShopError(400, "존재하지 않는 쿠폰입니다.");
   if (!c.is_active) throw new ShopError(400, "사용할 수 없는 쿠폰입니다.");
+
+  // ── 회원 조건 ──
+  // 비회원은 신원을 셀 수 없다. 1인 제한·첫 구매·등급·발급형은 전부
+  // "누구인가"를 전제하므로 로그인 없이는 판정 자체가 불가능하다.
+  const memberOnly =
+    c.per_user_limit !== null || c.first_purchase_only === true ||
+    c.grade_id !== null || c.requires_issue === true;
+  if (memberOnly && !userId) {
+    throw new ShopError(401, "로그인 후 사용할 수 있는 쿠폰입니다.");
+  }
+
+  if (userId && c.per_user_limit !== null) {
+    // 별도 카운터가 아니라 주문 이력으로 센다 — 카운터는 취소 때 되돌리는 것을
+    // 잊는 순간부터 어긋난다. 취소된 주문은 사용으로 치지 않는다.
+    const { rows: used } = await db.execute(sql`
+      SELECT count(*) AS n FROM shop_orders
+      WHERE user_id = ${userId}::uuid AND upper(coupon_code) = ${trimmed}
+        AND status <> 'cancelled'
+    `);
+    if (Number(used[0]?.n ?? 0) >= Number(c.per_user_limit)) {
+      throw new ShopError(400, "이 쿠폰의 1인당 사용 한도를 모두 사용하셨습니다.");
+    }
+  }
+
+  if (userId && c.first_purchase_only === true) {
+    const { rows: paid } = await db.execute(sql`
+      SELECT 1 FROM shop_orders
+      WHERE user_id = ${userId}::uuid AND paid_at IS NOT NULL LIMIT 1
+    `);
+    if (paid.length) throw new ShopError(400, "첫 구매 고객만 사용할 수 있는 쿠폰입니다.");
+  }
+
+  if (userId && c.grade_id !== null) {
+    const { rows: g } = await db.execute(sql`
+      SELECT 1 FROM shop_user_grades
+      WHERE user_id = ${userId}::uuid AND grade_id = ${String(c.grade_id)}::uuid LIMIT 1
+    `);
+    if (!g.length) {
+      const { rows: gname } = await db.execute(sql`
+        SELECT name FROM shop_grades WHERE id = ${String(c.grade_id)}::uuid LIMIT 1
+      `);
+      throw new ShopError(400, `${String(gname[0]?.name ?? "특정")} 등급 전용 쿠폰입니다.`);
+    }
+  }
+
+  if (userId && c.requires_issue === true) {
+    const { rows: wallet } = await db.execute(sql`
+      SELECT 1 FROM shop_user_coupons
+      WHERE coupon_id = ${String(c.id)}::uuid AND user_id = ${userId}::uuid
+        AND used_at IS NULL
+      LIMIT 1
+    `);
+    if (!wallet.length) {
+      throw new ShopError(400, "지급받은 회원만 사용할 수 있는 쿠폰입니다.");
+    }
+  }
 
   const now = Date.now();
   if (c.starts_at && new Date(String(c.starts_at)).getTime() > now) {
@@ -294,5 +367,10 @@ async function applyCoupon(
   // 할인이 상품 금액을 넘어 총액이 음수가 되지 않게 한다
   discount = Math.min(discount, subtotal);
 
-  return { discount, code: String(c.code) };
+  return {
+    discount,
+    code: String(c.code),
+    couponId: String(c.id),
+    requiresIssue: c.requires_issue === true,
+  };
 }
