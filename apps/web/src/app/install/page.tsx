@@ -16,7 +16,7 @@ interface SetupStatus {
  *
  * 두 가지 경로를 모두 지원한다:
  *  - Docker: DATABASE_URL이 이미 있으므로 DB 단계를 건너뛰고 사이트 정보만 입력
- *  - FTP 업로드: DB 정보부터 입력받아 설정 파일을 쓴다 (그누보드식)
+ *  - FTP 업로드: DB 정보부터 입력받아 설정 파일을 쓴다
  */
 export default function InstallPage() {
   const [stage, setStage] = useState<Stage>("loading");

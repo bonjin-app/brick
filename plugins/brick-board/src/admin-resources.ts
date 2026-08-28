@@ -9,7 +9,7 @@ const ROLE_OPTIONS = [
 
 /**
  * 게시판 설정 화면.
- * 그누보드의 "게시판 관리"에 대응한다 — 권한·분류·기능 토글을 여기서 정한다.
+ * 게시판 하나의 권한·분류·기능 토글을 여기서 정한다.
  */
 export const BOARD_RESOURCE: AdminResource = {
   name: "boards",
@@ -38,7 +38,7 @@ export const BOARD_RESOURCE: AdminResource = {
     { name: "page_size", label: "페이지당 글 수", type: "number", help: "5~100" },
 
     { name: "allow_reply", label: "답변형 허용", type: "boolean",
-      help: "글에 답변을 달아 계층으로 표시합니다 (그누보드의 답변)." },
+      help: "글에 답변을 달아 계층으로 표시합니다." },
     { name: "allow_secret", label: "비밀글 허용", type: "boolean" },
     { name: "allow_vote", label: "추천/비추천 허용", type: "boolean" },
     { name: "allow_upload", label: "파일 첨부 허용", type: "boolean" },

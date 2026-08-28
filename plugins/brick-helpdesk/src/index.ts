@@ -16,7 +16,7 @@ import { FAQ_RESOURCE, FAQ_CATEGORY_RESOURCE, TICKET_RESOURCE } from "./admin-re
 import { registerHelpdeskBlocks } from "./blocks.js";
 
 /**
- * brick-helpdesk — 1:1 문의 + FAQ (그누보드의 Q&A · FAQ에 대응).
+ * brick-helpdesk — 1:1 문의 + FAQ.
  *
  * 왜 게시판으로 하지 않았나: 게시판은 **기본이 공개**다. 문의는 반대여야 한다.
  * 비밀글 옵션을 켜서 쓰면 실수로 공개 글을 쓰는 순간 주문번호·연락처가 노출된다.

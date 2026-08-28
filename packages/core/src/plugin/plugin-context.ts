@@ -127,12 +127,48 @@ export interface PluginContext {
   registerSitemapSource(source: SitemapSource): void;
 
   /**
+   * 연결할 수 있는 주소를 등록한다.
+   *
+   * 메뉴·팝업·버튼에 링크를 넣을 때 **주소를 직접 타이핑하지 않게** 하는 것이
+   * 목적이다. 지금까지 운영자는 만든 게시판의 slug 를 외워서 `/board/free` 를
+   * 손으로 적어야 했고, 오타가 나도 저장은 되고 눌러야 404 를 본다.
+   *
+   * 등록하지 않으면 그 플러그인의 화면은 **선택 목록에 나오지 않는다** —
+   * 운영자는 그 기능으로 가는 링크를 만들 수 없다고 느낀다.
+   */
+  registerLinkTarget(source: LinkTargetSource): void;
+
+  /**
    * 통합검색 공급자를 등록한다.
    *
    * 없으면 그 플러그인의 내용은 **검색되지 않는다.** 코어는 페이지만 알므로
    * 게시글과 상품은 각 플러그인이 등록해야 찾을 수 있다.
    */
   registerSearchSource(source: SearchSource): void;
+}
+
+/** 연결할 수 있는 주소 하나 */
+export interface LinkTarget {
+  /** 사이트 루트 기준 경로 (예: "/board/free") */
+  path: string;
+  /** 목록에 보여줄 이름 (예: "자유게시판") */
+  label: string;
+  /** 구분에 도움이 되는 부가 설명 (같은 이름이 여럿일 때) */
+  hint?: string | null;
+}
+
+/**
+ * 연결 대상 공급자.
+ *
+ * 목록이 길어질 수 있으므로(게시판 50개, 분류 200개) **상한을 두고**
+ * 이름으로 좁힐 수 있게 `query` 를 받는다. 전부 내보내면 화면이 멈춘다.
+ */
+export interface LinkTargetSource {
+  /** 선택 목록의 그룹 이름 (예: "게시판") */
+  label: string;
+  code: string;
+  order?: number;
+  list(params: { query: string; limit: number }): Promise<LinkTarget[]>;
 }
 
 /** 통합검색 결과 한 건 */

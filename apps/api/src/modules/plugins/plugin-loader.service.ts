@@ -7,7 +7,7 @@ import type { BrickDb } from "@brick/database";
 import { installedPlugins, siteSettings } from "@brick/database";
 import type { PluginManifest } from "@brick/shared";
 import type { PluginContext, PluginInstance, BlockDefinition, PluginRouteHandler, PluginDb, AdminResource, HookBus, CacheProvider, QueueProvider, StorageProvider, MailProvider, CaptchaProvider, PersonalDataEraser, SitemapSource,
-  SearchSource } from "@brick/core";
+  SearchSource, LinkTargetSource } from "@brick/core";
 import { DB, HOOKS, CACHE, QUEUE, STORAGE, MAIL, CAPTCHA, ENV } from "../../runtime.module.js";
 import type { BrickEnv } from "../../config/env.js";
 
@@ -92,6 +92,8 @@ export class PluginLoaderService implements OnModuleInit {
   readonly sitemapSources: Array<SitemapSource & { plugin: string }> = [];
   /** 통합검색 공급자 — 등록하지 않으면 그 플러그인의 내용은 검색되지 않는다 */
   readonly searchSources: Array<SearchSource & { plugin: string }> = [];
+  /** 연결 대상 공급자 — 메뉴·팝업에서 주소를 직접 타이핑하지 않게 한다 */
+  readonly linkTargets: Array<LinkTargetSource & { plugin: string }> = [];
   /**
    * 플러그인 간 서비스 레지스트리.
    * 훅으로 표현할 수 없는 협력(호출자 트랜잭션 참여 등)에 쓴다.
@@ -223,6 +225,9 @@ export class PluginLoaderService implements OnModuleInit {
     for (let i = this.searchSources.length - 1; i >= 0; i--) {
       if (this.searchSources[i].plugin === name) this.searchSources.splice(i, 1);
     }
+    for (let i = this.linkTargets.length - 1; i >= 0; i--) {
+      if (this.linkTargets[i].plugin === name) this.linkTargets.splice(i, 1);
+    }
     this.logger.log(`plugin "${name}" deactivated`);
   }
 
@@ -314,6 +319,10 @@ export class PluginLoaderService implements OnModuleInit {
       registerSearchSource: (source) => {
         this.searchSources.push({ ...source, plugin: pluginName });
         this.logger.log(`plugin "${pluginName}" registers search source "${source.label}"`);
+      },
+      registerLinkTarget: (source) => {
+        this.linkTargets.push({ ...source, plugin: pluginName });
+        this.logger.log(`plugin "${pluginName}" registers link target "${source.label}"`);
       },
     };
   }

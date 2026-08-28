@@ -27,7 +27,7 @@ const KIND_LABEL: Record<string, string> = {
 };
 
 /**
- * brick-point — 그누보드식 포인트.
+ * brick-point — 활동·구매 적립 포인트.
  *
  * 이 플러그인이 보여주는 것: **플러그인 간 협력**.
  *  - `provideService("points")` 로 서비스를 공개한다 → 쇼핑몰이 주문 트랜잭션 안에서 차감한다
@@ -206,7 +206,8 @@ export default definePlugin(async (ctx) => {
     const s = await settings();
     const orderAmount = Math.max(0, Math.floor(Number(req.query.amount ?? 0)));
     const balance = await points.balance(req.user.id);
-    // 주문금액의 일정 비율까지만 사용 가능 (그누보드/영카트의 관례)
+    // 주문금액의 일정 비율까지만 사용 가능 — 적립금으로 전액 결제되면
+    // 실매출이 0이 되는 주문이 생겨 정산이 어려워진다
     const cap = orderAmount > 0 ? Math.floor((orderAmount * s.maxUseRate) / 100) : balance;
     const usable = Math.min(balance, cap);
     return {

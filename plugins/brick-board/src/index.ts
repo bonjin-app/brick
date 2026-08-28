@@ -13,9 +13,9 @@ import { registerBoardBlocks } from "./blocks.js";
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,50}$/;
 
 /**
- * brick-board — 게시판 (그누보드 게시판에 대응).
+ * brick-board — 게시판.
  *
- * 그누보드에서 옮겨오는 사람이 기대하는 것을 갖춘다:
+ * 기존 PHP 게시판에서 옮겨오는 사람이 기대하는 것을 갖춘다:
  *  다중 게시판 · 등급별 권한 · 분류 · 답변형(계층) · 비밀글 · 첨부파일 ·
  *  추천/비추천 · 비회원 글쓰기 · 검색 · 도배 방지 · RSS
  */
@@ -763,6 +763,34 @@ ${items}
       AND (p.title ILIKE ${like} OR p.content ILIKE ${like})
     `;
   };
+
+  /**
+   * 연결 대상 — 게시판 목록.
+   *
+   * 이것이 없으면 운영자는 메뉴에 `/board/free` 를 손으로 적어야 한다.
+   * slug 를 외워야 하고, 오타가 나도 저장은 되고 눌러야 404 를 본다.
+   */
+  ctx.registerLinkTarget({
+    label: "게시판",
+    code: "boards",
+    order: 10,
+    async list({ query, limit }) {
+      const like = `%${query.replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
+      const { rows } = await db.execute(sql`
+        SELECT slug, title, read_role FROM board_boards
+        ${query ? sql`WHERE title ILIKE ${like} OR slug ILIKE ${like}` : sql``}
+        ORDER BY title
+        LIMIT ${limit}
+      `);
+      return rows.map((r) => ({
+        path: `/board/${String(r.slug)}`,
+        label: String(r.title),
+        // 비공개 게시판을 메뉴에 넣으면 손님이 눌러서 권한 오류를 본다.
+        // 막지는 않는다(운영진 메뉴를 따로 두는 경우가 있다) — 알려준다.
+        hint: String(r.read_role) === "guest" ? null : `${String(r.read_role)} 이상만 읽을 수 있음`,
+      }));
+    },
+  });
 
   ctx.registerSearchSource({
     label: "게시글",

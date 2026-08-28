@@ -7,7 +7,7 @@ Brick은 **Node 런타임이 있는 환경**이 필요합니다.
 | 방식 | 요구사항 | 추천 대상 |
 |---|---|---|
 | Docker (권장) | Docker 20+ · Docker Compose v2 | 대부분의 경우 |
-| **배포본 업로드 (FTP)** | Node.js 20.11+ 지원 호스팅 · PostgreSQL 14+ | 그누보드처럼 올려서 쓰고 싶을 때 |
+| **배포본 업로드 (FTP)** | Node.js 20.11+ 지원 호스팅 · PostgreSQL 14+ | 파일을 올려서 쓰고 싶을 때 |
 | 소스 빌드 | Node.js 20.11+ · pnpm 9 · PostgreSQL 14+ | 개발 |
 
 최소 사양: **RAM 1GB, 디스크 2GB** (Brick + PostgreSQL 기준).
@@ -49,7 +49,7 @@ curl localhost:3000/api/install/status
 
 ## 방법 2 — 배포본 업로드 (FTP/SFTP)
 
-그누보드처럼 **파일을 올리고 브라우저에서 설치**하는 방식입니다.
+**파일을 올리고 브라우저에서 설치**하는 방식입니다.
 빌드도 `npm install` 도 필요 없습니다 — 배포본에 모두 포함되어 있습니다.
 
 ### 1. 배포본 받기

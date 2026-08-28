@@ -145,7 +145,7 @@ export function registerBoardBlocks(ctx: PluginContext, db: Db): void {
 
   // ── 최신글 모아보기 (여러 게시판) ───────────────────
   //
-  // 그누보드 메인 화면의 핵심이다. latest() 를 게시판마다 호출해 상자를 여러 개
+  // 메인 화면의 핵심이다. latest() 를 게시판마다 호출해 상자를 여러 개
   // 늘어놓는 그 구조 — 이게 없으면 메인 페이지를 만들 수 없어서 블록을 손으로
   // 여러 개 배치해야 하고, 게시판을 추가할 때마다 페이지를 고쳐야 한다.
   ctx.registerBlock({

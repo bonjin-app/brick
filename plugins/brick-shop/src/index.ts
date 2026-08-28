@@ -1681,6 +1681,43 @@ export default definePlugin(async (ctx) => {
     `;
   };
 
+  /**
+   * 연결 대상 — 쇼핑몰 화면과 상품 분류.
+   *
+   * 분류가 200개인 사이트가 있으므로 상한과 검색을 지킨다. 전부 내보내면
+   * 선택 목록이 멈춘다.
+   */
+  ctx.registerLinkTarget({
+    label: "쇼핑몰",
+    code: "shop",
+    order: 20,
+    async list({ query, limit }) {
+      const like = `%${query.replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
+      // 고정 화면 — 분류보다 먼저 보여준다. 메뉴에 가장 많이 넣는 것이다.
+      const fixed = [
+        { path: "/shop", label: "상품 목록 (전체)", hint: null },
+        { path: "/shop/cart", label: "장바구니", hint: null },
+        { path: "/shop/orders", label: "주문 조회", hint: null },
+      ].filter((f) => !query || f.label.includes(query) || f.path.includes(query));
+
+      const { rows } = await db.execute(sql`
+        SELECT slug, name FROM shop_categories
+        WHERE is_visible = true
+          ${query ? sql`AND (name ILIKE ${like} OR slug ILIKE ${like})` : sql``}
+        ORDER BY sort_order, name
+        LIMIT ${Math.max(1, limit - fixed.length)}
+      `);
+      return [
+        ...fixed,
+        ...rows.map((r) => ({
+          path: `/shop?category=${encodeURIComponent(String(r.slug))}`,
+          label: String(r.name),
+          hint: "상품 분류",
+        })),
+      ];
+    },
+  });
+
   ctx.registerSearchSource({
     label: "상품",
     code: "products",

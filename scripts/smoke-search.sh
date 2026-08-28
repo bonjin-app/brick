@@ -19,6 +19,12 @@
 #   - 치환 규칙이 동작하는가
 #   - 검색어 로그에 IP 원본이 남지 않는가
 #
+# 연결 대상 선택기도 여기서 본다 (같은 레지스트리 방식이다):
+#   - 만들어 둔 페이지·게시판·쇼핑몰 화면이 목록에 나오는가
+#   - home 이 / 로 나오는가 (/home 으로 링크하면 404 다)
+#   - 임시 저장·비공개를 표시해 주는가
+#   - 관리자만 볼 수 있는가 (임시 페이지의 존재가 새어 나간다)
+#
 # 사용법: DATABASE_URL=postgresql://... bash scripts/smoke-search.sh
 set -euo pipefail
 
@@ -394,6 +400,87 @@ row=next((x for x in items if '우산 고르는' in x['title']), None)
 print(row['excerpt'] if row else 'none')" <<< "$PAGES")"
 contains "검색어 주변을 잘라 준다" "$EXCERPT" "우산"
 absent "HTML 태그가 섞이지 않는다" "$EXCERPT" "<p>"
+
+echo "══ 연결 대상 선택 (메뉴에 주소를 타이핑하지 않게) ══"
+# 전에는 메뉴가 "이름 + 주소 직접 입력"이라, 만든 게시판의 slug 를 외워
+# /board/free 를 손으로 적어야 했다. 오타가 나도 저장되고 눌러야 404 를 본다.
+LT="$(curl -s -b "$CK" "$API/api/admin/link-targets")"
+contains "페이지 그룹" "$LT" '"code":"pages"'
+contains "게시판 그룹 (플러그인이 등록)" "$LT" '"code":"boards"'
+contains "쇼핑몰 그룹 (플러그인이 등록)" "$LT" '"code":"shop"'
+contains "직접 입력도 된다고 안내" "$LT" "직접 입력할 수 있습니다"
+
+echo "── 만들어 둔 것이 목록에 나온다"
+contains "게시판 이름" "$LT" "공개게시판"
+contains "게시판 주소" "$LT" '"path":"/board/open"'
+contains "페이지 이름" "$LT" "우산 고르는 방법"
+contains "페이지 주소" "$LT" '"path":"/umbrella-guide"'
+contains "쇼핑몰 고정 화면" "$LT" '"path":"/shop"'
+contains "장바구니" "$LT" "장바구니"
+
+echo "── 눌러서 문제가 될 것은 알려준다"
+# 비공개 게시판을 메뉴에 넣으면 손님이 권한 오류를 본다. 막지는 않되 알린다.
+STAFF_HINT="$(python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+g = next(x for x in d['groups'] if x['code'] == 'boards')
+row = next((i for i in g['items'] if i['label'] == '운영진게시판'), None)
+print(row['hint'] if row else 'none')" <<< "$LT")"
+contains "비공개 게시판임을 알려준다" "$STAFF_HINT" "manager"
+OPEN_HINT="$(python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+g = next(x for x in d['groups'] if x['code'] == 'boards')
+row = next((i for i in g['items'] if i['label'] == '공개게시판'), None)
+print(row['hint'] if row else 'none')" <<< "$LT")"
+check "공개 게시판에는 경고가 없다" "$OPEN_HINT" "None"
+
+echo "── 임시 저장 페이지도 보여주되 표시한다"
+# 곧 공개할 페이지를 미리 메뉴에 넣는 것이 실제 순서다. 숨기면 "왜 목록에 없나"로 헤맨다.
+DRAFT_HINT="$(python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+g = next(x for x in d['groups'] if x['code'] == 'pages')
+row = next((i for i in g['items'] if i['label'] == '임시 우산 문서'), None)
+print(row['hint'] if row else 'none')" <<< "$LT")"
+contains "임시 저장임을 알려준다" "$DRAFT_HINT" "아직 공개되지 않음"
+
+echo "── home 은 사이트 루트로 준다"
+curl -s -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' \
+  -d '{"slug":"home","title":"홈","blocks":[],"status":"published"}' >/dev/null
+HOME_PATH="$(curl -s -b "$CK" "$API/api/admin/link-targets" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+g = next(x for x in d['groups'] if x['code'] == 'pages')
+row = next((i for i in g['items'] if i['label'] == '홈'), None)
+print(row['path'] if row else 'none')")"
+check "/home 이 아니라 / (그대로 링크하면 404 다)" "$HOME_PATH" "/"
+
+echo "── 이름으로 좁힌다 (게시판 50개인 사이트가 있다)"
+NARROW="$(curl -s -b "$CK" -G "$API/api/admin/link-targets" --data-urlencode "q=운영진")"
+contains "찾는 게시판" "$NARROW" "운영진게시판"
+absent "다른 게시판은 빠진다" "$NARROW" "공개게시판"
+EMPTY_GROUPS="$(curl -s -b "$CK" -G "$API/api/admin/link-targets" --data-urlencode "q=존재하지않는이름zzz" \
+  | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+print(sum(len(g['items']) for g in d['groups']))")"
+check "없으면 0건 (직접 입력하라고 안내한다)" "$EMPTY_GROUPS" "0"
+
+echo "── 목록은 관리자만 (임시 페이지·비공개 게시판이 새어 나간다)"
+check "비로그인 401" "$(code "$API/api/admin/link-targets")" "401"
+check "일반 회원 403" "$(code -b "$M1" "$API/api/admin/link-targets")" "403"
+
+echo "── 공급자 하나가 죽어도 나머지는 보여준다"
+psql_q "ALTER TABLE board_boards RENAME COLUMN title TO title_tmp" >/dev/null
+BROKEN_LT="$(curl -s -b "$CK" "$API/api/admin/link-targets")"
+contains "페이지는 여전히 나온다" "$BROKEN_LT" '"code":"pages"'
+absent "실패한 공급자는 빠진다" "$(python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+print(','.join(g['code'] for g in d['groups']))" <<< "$BROKEN_LT")" "boards"
+psql_q "ALTER TABLE board_boards RENAME COLUMN title_tmp TO title" >/dev/null
+contains "고치면 다시 나온다" "$(curl -s -b "$CK" "$API/api/admin/link-targets")" '"code":"boards"'
 
 echo
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"

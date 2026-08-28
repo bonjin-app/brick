@@ -6,7 +6,7 @@ import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
  * 회원 비밀번호는 코어가 argon2로 처리하지만, 플러그인에 argon2 의존성을 추가하면
  * 배포본이 무거워지고 네이티브 빌드가 필요해진다(FTP 배포와 충돌).
  * 그래서 Node 내장 scrypt를 쓴다 — argon2보다 약하지만 게시글 비밀번호에는 충분하고,
- * 무엇보다 **평문으로 저장하지 않는다**(그누보드의 오래된 관행).
+ * 무엇보다 **평문으로 저장하지 않는다** — 오래된 PHP 게시판들의 관행이었다.
  */
 const KEYLEN = 32;
 const SCRYPT_COST = 16384; // N — 기본값. 게시글 비밀번호 용도로 적절한 수준

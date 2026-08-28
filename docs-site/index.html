@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Brick — 설치형 오픈소스 CMS</title>
-<meta name="description" content="그누보드·워드프레스의 쉬운 설치를 현대 스택으로. Docker 한 번으로 설치하고, ZIP 업로드로 확장하는 오픈소스 CMS. Next.js + NestJS + PostgreSQL." />
+<meta name="description" content="파일만 올리면 돌아가는 오픈소스 CMS. Docker 한 줄 또는 FTP 업로드로 설치하고, ZIP 업로드로 확장합니다. Next.js + NestJS + PostgreSQL." />
 <link rel="canonical" href="https://bonjin-app.github.io/brick/" />
 <meta name="theme-color" content="#12141c" />
 
@@ -16,13 +16,13 @@
 -->
 <meta property="og:site_name" content="Brick" />
 <meta property="og:title" content="Brick — 설치형 오픈소스 CMS" />
-<meta property="og:description" content="설치는 그누보드처럼 쉽게, 속은 현대적으로. Docker 한 줄 또는 FTP 업로드로 설치하는 오픈소스 CMS. Next.js + NestJS + PostgreSQL." />
+<meta property="og:description" content="파일만 올리면 돌아갑니다. Docker 한 줄 또는 FTP 업로드로 설치하는 오픈소스 CMS. Next.js + NestJS + PostgreSQL." />
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://bonjin-app.github.io/brick/" />
 <meta property="og:image" content="https://bonjin-app.github.io/brick/social-preview.png" />
 <meta property="og:image:width" content="1280" />
 <meta property="og:image:height" content="640" />
-<meta property="og:image:alt" content="Brick — 설치는 그누보드처럼 쉽게, 속은 현대적으로" />
+<meta property="og:image:alt" content="Brick — 파일만 올리면 돌아가는 오픈소스 CMS" />
 <meta property="og:locale" content="ko_KR" />
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="Brick — 설치형 오픈소스 CMS" />
@@ -38,7 +38,7 @@
   "name": "Brick",
   "applicationCategory": "DeveloperApplication",
   "operatingSystem": "Linux, macOS, Windows (Docker)",
-  "description": "설치는 그누보드처럼 쉽게, 속은 현대적으로. Docker 한 줄 또는 FTP 업로드로 설치하는 오픈소스 CMS.",
+  "description": "파일만 올리면 돌아갑니다. Docker 한 줄 또는 FTP 업로드로 설치하는 오픈소스 CMS.",
   "url": "https://bonjin-app.github.io/brick/",
   "codeRepository": "https://github.com/bonjin-app/brick",
   "programmingLanguage": "TypeScript",
@@ -138,7 +138,7 @@
   <div class="wrap">
     <img class="mark" src="logo.svg" alt="Brick" width="88" height="88" />
     <h1>Brick</h1>
-    <p class="tag">설치는 그누보드처럼 쉽게, 속은 현대적으로.<br />Docker 한 줄, 또는 FTP 업로드로 설치하는 오픈소스 CMS.</p>
+    <p class="tag">파일만 올리면 돌아갑니다. 속은 현대적으로.<br />Docker 한 줄, 또는 FTP 업로드로 설치하는 오픈소스 CMS.</p>
     <p class="sub">Next.js · NestJS · PostgreSQL · TypeScript</p>
 
     <div class="install">
@@ -166,7 +166,7 @@ node server.js
     <span class="badge">왜 만들었나</span>
     <h2>PHP CMS의 장점은 언어가 아니라 <em>배포 편의성</em>이었다</h2>
     <p class="lead">
-      그누보드와 워드프레스가 오래 살아남은 이유는 PHP가 좋아서가 아니라,
+      오래 살아남은 CMS 들의 공통점은 언어가 좋아서가 아니라,
       <strong>파일을 올리면 그냥 돌아갔기</strong> 때문입니다.
       현대 스택은 강력하지만 설치가 어려워졌습니다. Brick은 그 편의성을 되찾는 프로젝트입니다.
     </p>
@@ -174,7 +174,7 @@ node server.js
       <div class="card">
         <span class="ico">📦</span>
         <h3>설치 방법이 두 가지</h3>
-        <p><strong>Docker</strong>는 <code class="inline">docker compose up -d</code> 한 줄. <strong>FTP</strong>는 파일을 올리고 브라우저에서 DB 정보만 입력하면 됩니다 — 그누보드와 같은 방식입니다.</p>
+        <p><strong>Docker</strong>는 <code class="inline">docker compose up -d</code> 한 줄. <strong>FTP</strong>는 파일을 올리고 브라우저에서 DB 정보만 입력하면 됩니다.</p>
       </div>
       <div class="card">
         <span class="ico">🔄</span>
@@ -204,7 +204,7 @@ node server.js
       <div class="card">
         <span class="ico">🧪</span>
         <h3>실제 서버로 검증</h3>
-        <p><strong>E2E 스모크 1,998개</strong>가 실제 PostgreSQL과 실제 서버 프로세스를 띄워 돕니다. 재고 동시성·금액 위조·저장형 XSS·로그인 CSRF처럼 <strong>틀리면 돈이나 계정을 잃는</strong> 경로를 항목으로 못박아 두었습니다.</p>
+        <p><strong>E2E 스모크 2,020개</strong>가 실제 PostgreSQL과 실제 서버 프로세스를 띄워 돕니다. 재고 동시성·금액 위조·저장형 XSS·로그인 CSRF처럼 <strong>틀리면 돈이나 계정을 잃는</strong> 경로를 항목으로 못박아 두었습니다.</p>
       </div>
       <div class="card">
         <span class="ico">📐</span>
@@ -223,7 +223,7 @@ node server.js
       <table>
         <thead>
           <tr>
-            <th>항목</th><th>그누보드 / 제로보드</th><th>WordPress</th><th class="brick">Brick</th>
+            <th>항목</th><th>기존 PHP 게시판</th><th>WordPress</th><th class="brick">Brick</th>
           </tr>
         </thead>
         <tbody>
@@ -235,8 +235,8 @@ node server.js
           <tr><td>테마</td><td>스킨(PHP)</td><td>테마(PHP)</td><td class="brick">런타임 템플릿(빌드 없음)</td></tr>
           <tr><td>페이지 빌더</td><td>없음</td><td>Gutenberg</td><td class="brick">코어 기본 제공</td></tr>
           <tr><td>게시판</td><td>핵심 기능</td><td>플러그인</td><td class="brick">첨부 · 권한 · 답변형 · 비밀글</td></tr>
-          <tr><td>쇼핑몰</td><td>영카트(별도)</td><td>WooCommerce</td><td class="brick">플러그인 기본 동봉</td></tr>
-          <tr><td>상품 후기</td><td>영카트에 있음</td><td>플러그인</td><td class="brick">구매 검증 · 판매자 답변</td></tr>
+          <tr><td>쇼핑몰</td><td>별도 설치</td><td>WooCommerce</td><td class="brick">플러그인 기본 동봉</td></tr>
+          <tr><td>상품 후기</td><td>쇼핑몰 패키지에 포함</td><td>플러그인</td><td class="brick">구매 검증 · 판매자 답변</td></tr>
           <tr><td>포인트 · 적립금</td><td>둘로 나뉘어 있음</td><td>플러그인</td><td class="brick">한 원장에서 · 만료 · FIFO</td></tr>
           <tr><td>소셜 로그인</td><td>플러그인</td><td>플러그인</td><td class="brick">코어 내장 (5종 + 사내 SSO)</td></tr>
           <tr><td>방문자 집계</td><td>있음 (IP 원문 저장)</td><td>플러그인</td><td class="brick">있음 (IP를 해시로만 저장)</td></tr>
@@ -246,10 +246,10 @@ node server.js
           <tr><td>FAQ</td><td>있음</td><td>플러그인</td><td class="brick">검색 · 조회수 · 유용성 평가</td></tr>
           <tr><td>설문조사</td><td>있음</td><td>플러그인</td><td class="brick">IP를 해시로만 · 결과 공개 시점 선택</td></tr>
           <tr><td>사업자정보 표시</td><td>있음</td><td>플러그인</td><td class="brick">사업자번호 체크섬 검증 · 테마 자동 렌더</td></tr>
-          <tr><td>위시리스트</td><td>영카트 보관함</td><td>플러그인</td><td class="brick">비회원도 사용 · 로그인 시 이어받기</td></tr>
+          <tr><td>위시리스트</td><td>보관함</td><td>플러그인</td><td class="brick">비회원도 사용 · 로그인 시 이어받기</td></tr>
           <tr><td>지역별 배송비</td><td>있음</td><td>플러그인</td><td class="brick">우편번호 구간 (주소 문자열 아님)</td></tr>
-          <tr><td>주문 취소·반품·교환</td><td>영카트에 있음</td><td>WooCommerce</td><td class="brick">상품 단위 · 할인 안분 · 청약철회 7일</td></tr>
-          <tr><td>그누보드 데이터 이전</td><td>—</td><td>—</td><td class="brick">회원·게시글·상품·주문 · 비밀번호 보존</td></tr>
+          <tr><td>주문 취소·반품·교환</td><td>쇼핑몰 패키지에 포함</td><td>WooCommerce</td><td class="brick">상품 단위 · 할인 안분 · 청약철회 7일</td></tr>
+          <tr><td>기존 사이트 데이터 이전</td><td>—</td><td>—</td><td class="brick">회원·게시글·상품·주문 · 비밀번호 보존</td></tr>
           <tr><td>sitemap.xml</td><td>별도 플러그인</td><td>플러그인(Yoast 등)</td><td class="brick">코어 내장 · 플러그인이 URL 제공</td></tr>
           <tr><td>SSR / SEO</td><td>기본</td><td>기본</td><td class="brick">Next.js SSR + ISR</td></tr>
           <tr><td>타입 안전성</td><td>없음</td><td>없음</td><td class="brick">전 구간 strict</td></tr>
@@ -317,7 +317,7 @@ node server.js
       Brick은 초기 개발 단계입니다. 아래 기능은 동작하며, 프로덕션 사용 전 검토를 권합니다.
     </p>
     <div class="grid">
-      <div class="card"><h3>✅ 동작</h3><p>웹 설치 마법사 · 세션 인증 · 비밀번호 재설정 · 회원 · 페이지 빌더 · 미디어 · 메뉴 · 검색 · 플러그인/테마 ZIP 설치 · 게시판 · 쪽지 · 포인트 · 캡차 · <strong>소셜 로그인</strong> · 방문자 집계 · 팝업/배너 · <strong>쇼핑몰(상품 후기·문의·옵션)</strong> · <strong>약관 동의·이메일 인증·회원 탈퇴·휴면</strong> · <strong>1:1 문의·FAQ·설문조사</strong> · sitemap.xml · <strong>그누보드·영카트 데이터 이전</strong> · <strong>결제(토스페이먼츠)</strong> · <strong>취소·반품·교환</strong> · <strong>사업자정보</strong> · 위시리스트 · 지역별 배송비 · 감사 로그 · 자동 마이그레이션 · 백업 CLI</p></div>
+      <div class="card"><h3>✅ 동작</h3><p>웹 설치 마법사 · 세션 인증 · 비밀번호 재설정 · 회원 · 페이지 빌더 · 미디어 · 메뉴 · 검색 · 플러그인/테마 ZIP 설치 · 게시판 · 쪽지 · 포인트 · 캡차 · <strong>소셜 로그인</strong> · 방문자 집계 · 팝업/배너 · <strong>쇼핑몰(상품 후기·문의·옵션)</strong> · <strong>약관 동의·이메일 인증·회원 탈퇴·휴면</strong> · <strong>1:1 문의·FAQ·설문조사</strong> · sitemap.xml · <strong>기존 PHP 게시판·쇼핑몰 데이터 이전</strong> · <strong>결제(토스페이먼츠)</strong> · <strong>취소·반품·교환</strong> · <strong>사업자정보</strong> · 위시리스트 · 지역별 배송비 · 감사 로그 · 자동 마이그레이션 · 백업 CLI</p></div>
       <div class="card"><h3>🚧 예정</h3><p>회원 단체메일 · 관련 상품 · 판매 리포트 · 위시리스트 · 현금영수증 · OpenAPI 문서 — <a href="https://github.com/bonjin-app/brick/blob/main/docs/roadmap.md">로드맵</a></p></div>
       <div class="card"><h3>🤝 함께</h3><p>설치가 안 되는 것이 가장 중요한 버그입니다.
         <a href="https://github.com/bonjin-app/brick/issues/new?template=bug_report.yml">버그 신고</a> ·
