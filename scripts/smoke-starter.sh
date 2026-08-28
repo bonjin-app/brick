@@ -145,8 +145,8 @@ check "공지사항 쓰기는 manager (아무나 쓰면 공지가 아니다)" \
   "$(psql_q "SELECT write_role FROM board_boards WHERE slug='notice'")" "manager"
 check "자유게시판 쓰기는 member" \
   "$(psql_q "SELECT write_role FROM board_boards WHERE slug='free'")" "member"
-check "페이지 2개 (홈·소개)" "$(psql_q "SELECT count(*) FROM pages")" "2"
-check "전부 공개 상태" "$(psql_q "SELECT count(*) FROM pages WHERE status='published'")" "2"
+check "페이지 3개 (홈·소개·게시판)" "$(psql_q "SELECT count(*) FROM pages")" "3"
+check "전부 공개 상태" "$(psql_q "SELECT count(*) FROM pages WHERE status='published'")" "3"
 
 echo "── 홈이 실제로 렌더된다 (블록 이름이 틀리면 조용히 주석이 된다)"
 HOME="$(curl -s "$API/api/render/page?path=")"
@@ -159,8 +159,14 @@ echo "── 메뉴가 만들어진 것들을 가리킨다"
 MENU="$(curl -s "$API/api/menus/header")"
 contains "공지사항 링크" "$MENU" '"url":"/board/notice"'
 contains "소개 링크" "$MENU" '"url":"/about"'
-# 메뉴의 모든 내부 링크가 실제로 열린다 — 끊어진 링크는 첫인상을 망친다
-python3 -c "
+# 메뉴의 **모든** 내부 링크가 실제 렌더로 200 인지 본다 — 예외 없이.
+#
+# 처음에는 게시판 경로를 "게시판 존재"로 우회했는데, 그 우회가 진짜 구멍을
+# 가렸다: /board/notice 를 렌더할 board 페이지를 아무도 안 만들어서
+# **스타터의 메뉴가 404 를 가리키고 있었다.** 링크 검증은 사용자가 누르는
+# 것과 같은 방식이어야 한다.
+verify_menu_links() {  # verify_menu_links <menu json>
+  python3 -c "
 import json, sys, urllib.request
 menu = json.loads(sys.argv[1])
 bad = []
@@ -170,21 +176,19 @@ for item in menu['items']:
     try:
         req = urllib.request.Request('$API/api/render/page?path=' + url.lstrip('/'))
         with urllib.request.urlopen(req) as r:
-            if r.status != 200: bad.append((url, r.status))
+            body = json.loads(r.read())
+            if body.get('status') != 200:
+                bad.append((url, body.get('status')))
     except Exception as e:
-        # 게시판 경로는 페이지 렌더가 아니라 게시판 화면이다 — 게시판 존재로 확인
-        if url.startswith('/board/'):
-            continue
         bad.append((url, str(e)))
 print('끊어진 링크: ' + (', '.join(f'{u} ({c})' for u, c in bad) if bad else '없음'))
-" "$MENU" > "$TMP/links.txt"
-check "페이지 링크가 전부 열린다" "$(cat "$TMP/links.txt")" "끊어진 링크: 없음"
-# 게시판 링크는 게시판 존재로 확인한다
-for slug in notice free qna; do
-  FOUND="$(psql_q "SELECT count(*) FROM board_boards WHERE slug='$slug'")"
-  [[ "$FOUND" == "1" ]] || bad "메뉴가 가리키는 게시판 $slug 이 없다"
-done
-ok "메뉴가 가리키는 게시판이 전부 있다"
+" "$1"
+}
+check "메뉴의 모든 링크가 렌더된다 (게시판 포함, 우회 없이)" \
+  "$(verify_menu_links "$MENU")" "끊어진 링크: 없음"
+BOARD_PAGE="$(curl -s "$API/api/render/page?path=board/notice")"
+contains "게시판이 실제로 그려진다" "$BOARD_PAGE" "공지사항"
+contains "/board 루트는 게시판 목록" "$(curl -s "$API/api/render/page?path=board")" "자유게시판"
 
 echo "── 만들어진 것은 일반 페이지다 (특별 취급이 없다)"
 curl -s -c "$CK" -X POST "$API/api/auth/login" -H 'content-type: application/json' \
@@ -205,13 +209,18 @@ R="$(fresh_install shop "달빛상점")"
 contains "설치 성공" "$R" '"ok":true'
 contains "쇼핑몰 플러그인 활성화" "$R" "플러그인 brick-shop"
 check "게시판은 공지 하나" "$(psql_q "SELECT count(*) FROM board_boards")" "1"
-check "페이지 3개 (홈·소개·이용안내)" "$(psql_q "SELECT count(*) FROM pages")" "3"
+check "페이지 5개 (홈·소개·이용안내·게시판·쇼핑몰)" "$(psql_q "SELECT count(*) FROM pages")" "5"
 HOME="$(curl -s "$API/api/render/page?path=")"
 contains "상품 목록 블록이 렌더됨 (상품이 없어도 깨지지 않는다)" "$HOME" "달빛상점"
 absent "깨진 블록이 없다" "$HOME" "unknown block"
 MENU="$(curl -s "$API/api/menus/header")"
 contains "상품 링크" "$MENU" '"url":"/shop"'
 contains "이용 안내 링크" "$MENU" '"url":"/guide"'
+check "쇼핑몰 메뉴도 전부 렌더된다" "$(verify_menu_links "$MENU")" "끊어진 링크: 없음"
+SHOP_PAGE="$(curl -s "$API/api/render/page?path=shop")"
+contains "/shop 이 뜬다 (상품이 없으면 빈 안내)" "$SHOP_PAGE" "등록된 상품이 없습니다"
+contains "/shop/cart 가 장바구니를 그린다" "$(curl -s "$API/api/render/page?path=shop/cart")" "brick-cart"
+contains "/shop/event 가 기획전 목록을 그린다" "$(curl -s "$API/api/render/page?path=shop/event")" "기획전"
 GUIDE="$(curl -s "$API/api/render/page?path=guide")"
 contains "교환·반품 안내가 있다 (표시 의무의 출발점)" "$GUIDE" "교환과 반품"
 
@@ -221,17 +230,21 @@ curl -s -c "$CK" -X POST "$API/api/auth/login" -H 'content-type: application/jso
 curl -s -b "$CK" -X POST "$API/api/plugins/brick-shop/admin/products" -H 'content-type: application/json' \
   -d '{"slug":"first","name":"첫 상품","price":10000,"stock":5,"status":"selling"}' >/dev/null
 contains "홈에 첫 상품이 나온다" "$(curl -s "$API/api/render/page?path=")" "첫 상품"
+contains "/shop 목록에도 나온다" "$(curl -s "$API/api/render/page?path=shop")" "첫 상품"
+contains "/shop/first 상세도 그려진다 (storefront 라우팅)" \
+  "$(curl -s "$API/api/render/page?path=shop/first")" "brick-buy-form"
 
 echo "══ 회사 홈페이지 스타터 ══"
 R="$(fresh_install company "본진테크")"
 contains "설치 성공" "$R" '"ok":true'
 contains "헬프데스크 활성화" "$R" "플러그인 brick-helpdesk"
-check "페이지 4개 (홈·소개·서비스·문의)" "$(psql_q "SELECT count(*) FROM pages")" "4"
+check "페이지 5개 (홈·소개·서비스·문의·게시판)" "$(psql_q "SELECT count(*) FROM pages")" "5"
 SUPPORT="$(curl -s "$API/api/render/page?path=support")"
 contains "문의 화면이 렌더됨" "$SUPPORT" "문의하기"
 absent "깨진 블록이 없다" "$SUPPORT" "unknown block"
 MENU="$(curl -s "$API/api/menus/header")"
 contains "문의하기 메뉴" "$MENU" '"url":"/support"'
+check "회사 메뉴도 전부 렌더된다" "$(verify_menu_links "$MENU")" "끊어진 링크: 없음"
 # 메뉴가 가리키는 페이지가 전부 있다
 MISSING="$(python3 -c "
 import json, sys

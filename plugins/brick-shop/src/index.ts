@@ -7,7 +7,7 @@ import { quote } from "./pricing.js";
 import { addToCart, clearCart, getCartItems, updateCartItem, type CartOwner } from "./cart.js";
 import { changeOrderStatus, createOrder, type PointsPort } from "./orders.js";
 import { bankTransferGateway, confirmPayment, gateways, refundPayment, registerGateway } from "./payments.js";
-import { CASH_RECEIPT_RESOURCE, CATEGORY_RESOURCE, GRADE_RESOURCE, COUPON_RESOURCE, INQUIRY_RESOURCE,
+import { CASH_RECEIPT_RESOURCE, CATEGORY_RESOURCE, COLLECTION_RESOURCE, GRADE_RESOURCE, COUPON_RESOURCE, INQUIRY_RESOURCE,
          ORDER_RESOURCE, PRODUCT_RESOURCE, RETURN_RESOURCE, REVIEW_RESOURCE,
          PAYMENT_REQUEST_RESOURCE, SHIPPING_ZONE_RESOURCE,
          TAX_INVOICE_RESOURCE } from "./admin-resources.js";
@@ -27,6 +27,10 @@ import {
   cancelPaymentRequest, createPaymentRequest, listPaymentRequests,
   markRequestPaid, prepareOrderForRequest, viewPaymentRequest,
 } from "./direct-payment.js";
+import {
+  activeCollections, createCollection, deleteCollection, listCollectionsAdmin,
+  updateCollection, viewCollection,
+} from "./collections.js";
 import {
   GRADE_RECOMPUTE_JOB, createGrade, deleteGrade, eraseGrade, gradeOf, listGrades,
   myGrade, recomputeGrades, updateGrade,
@@ -930,6 +934,43 @@ export default definePlugin(async (ctx) => {
     await ctx.queue.enqueue(GRADE_RECOMPUTE_JOB, {}, { delaySeconds: 21600, maxAttempts: 3 });
   });
   await ctx.queue.enqueue(GRADE_RECOMPUTE_JOB, {}, { delaySeconds: 120, maxAttempts: 3 });
+
+  // ════════════════════════════════════════════════════
+  //  기획전 — 상품을 묶어 보여주는 진열
+  // ════════════════════════════════════════════════════
+
+  ctx.registerRoute("GET", "/collections", async () => {
+    return { items: await activeCollections(db) };
+  });
+
+  ctx.registerRoute("GET", "/collections/:slug", async (req) => {
+    const c = await viewCollection(db, req.params.slug);
+    if (!c) throw new ShopError(404, "기획전을 찾을 수 없습니다.");
+    return c;
+  });
+
+  ctx.registerRoute("GET", "/admin/collections", async (req) => {
+    requireAdmin(req);
+    return await listCollectionsAdmin(db, Number(req.query.page ?? 1));
+  });
+  ctx.registerRoute("POST", "/admin/collections", async (req) => {
+    requireAdmin(req);
+    const result = await createCollection(db, req.body as Record<string, unknown>);
+    await ctx.cache.invalidateTag("pages");
+    return result;
+  });
+  ctx.registerRoute("PUT", "/admin/collections/:id", async (req) => {
+    requireAdmin(req);
+    const result = await updateCollection(db, req.params.id, req.body as Record<string, unknown>);
+    await ctx.cache.invalidateTag("pages");
+    return result;
+  });
+  ctx.registerRoute("DELETE", "/admin/collections/:id", async (req) => {
+    requireAdmin(req);
+    const result = await deleteCollection(db, req.params.id);
+    await ctx.cache.invalidateTag("pages");
+    return result;
+  });
 
   // ════════════════════════════════════════════════════
   //  쿠폰함 — 발급형 쿠폰
@@ -1847,6 +1888,7 @@ export default definePlugin(async (ctx) => {
   ctx.registerAdminResource(TAX_INVOICE_RESOURCE);
   ctx.registerAdminResource(PAYMENT_REQUEST_RESOURCE);
   ctx.registerAdminResource(GRADE_RESOURCE);
+  ctx.registerAdminResource(COLLECTION_RESOURCE);
 
   /**
    * 사이트맵: 판매 중인 상품 주소.
@@ -1884,11 +1926,24 @@ export default definePlugin(async (ctx) => {
     async list({ query, limit }) {
       const like = `%${query.replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
       // 고정 화면 — 분류보다 먼저 보여준다. 메뉴에 가장 많이 넣는 것이다.
+      // /shop/orders 를 넣었다가 뺐다 — 그 주소를 그리는 화면이 없어서
+      // 메뉴에 넣으면 404 였다. **링크 목록은 실제로 렌더되는 주소만** 담는다.
       const fixed = [
         { path: "/shop", label: "상품 목록 (전체)", hint: null },
         { path: "/shop/cart", label: "장바구니", hint: null },
-        { path: "/shop/orders", label: "주문 조회", hint: null },
+        { path: "/shop/event", label: "기획전 목록", hint: null },
       ].filter((f) => !query || f.label.includes(query) || f.path.includes(query));
+
+      // 진행 중 기획전 — 메뉴에 가장 많이 붙는 것이다
+      const cols = await activeCollections(db);
+      const collectionTargets = cols
+        .filter((c) => !query || c.title.includes(query) || c.slug.includes(query))
+        .slice(0, 10)
+        .map((c) => ({
+          path: `/shop/event/${encodeURIComponent(c.slug)}`,
+          label: c.title,
+          hint: "기획전",
+        }));
 
       const { rows } = await db.execute(sql`
         SELECT slug, name FROM shop_categories
@@ -1899,6 +1954,7 @@ export default definePlugin(async (ctx) => {
       `);
       return [
         ...fixed,
+        ...collectionTargets,
         ...rows.map((r) => ({
           path: `/shop?category=${encodeURIComponent(String(r.slug))}`,
           label: String(r.name),

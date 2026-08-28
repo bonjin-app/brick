@@ -394,3 +394,34 @@ export const GRADE_RESOURCE: AdminResource = {
     { name: "members", label: "인원", type: "number", readOnly: true, inList: true },
   ],
 };
+
+/**
+ * 기획전.
+ *
+ * 상품 지정은 관련 상품과 같은 줄바꿈 slug 방식이다 — 없는 slug 는 저장할 때
+ * 오류로 알려준다.
+ */
+export const COLLECTION_RESOURCE: AdminResource = {
+  name: "collections",
+  title: "기획전",
+  itemLabel: "기획전",
+  basePath: "/admin/collections",
+  order: 11,
+  description:
+    "상품을 묶어 보여주는 진열입니다. 주소는 /shop/event/<slug> 이고, 메뉴의 '연결 대상 선택'에도 나옵니다. " +
+    "기간을 지정하면 끝난 뒤 목록에서 빠지고, 직접 열면 '종료' 안내가 보입니다.",
+  fields: [
+    { name: "title", label: "제목", type: "text", required: true, inList: true },
+    { name: "slug", label: "주소(slug)", type: "text", required: true, inList: true },
+    { name: "state_label", label: "상태", type: "text", readOnly: true, inList: true },
+    { name: "description", label: "소개 문구", type: "textarea",
+      help: "기획전 상단에 보입니다." },
+    { name: "products_text", label: "상품", type: "textarea", required: true,
+      help: "상품 주소(slug)를 한 줄에 하나씩, 진열 순서대로. 최대 200개." },
+    { name: "product_count", label: "상품 수", type: "number", readOnly: true, inList: true },
+    { name: "starts_at", label: "시작", type: "date", help: "비우면 즉시" },
+    { name: "ends_at", label: "종료", type: "date", help: "비우면 상시" },
+    { name: "is_visible", label: "노출", type: "boolean", inList: true },
+    { name: "sort_order", label: "순서", type: "number" },
+  ],
+};

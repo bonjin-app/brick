@@ -212,6 +212,27 @@ function starterPages(code: string, siteName: string): Array<{
   const p = (text: string): Node => ({ block: "core/paragraph", props: { text } });
   const spacer = (): Node => ({ block: "core/spacer", props: {} });
 
+  /**
+   * 라우팅 페이지 — 메뉴가 가리키는 주소가 실제로 렌더되게 한다.
+   *
+   * /board/notice 는 slug "board" 페이지의 board 블록이 pathTail 로
+   * 라우팅해야 뜬다. 이 페이지가 없으면 **스타터의 메뉴가 404 를 가리킨다** —
+   * 실제로 그랬고, 스모크가 게시판 경로 검증을 우회해서 놓쳤었다.
+   */
+  const boardRouter = {
+    slug: "board",
+    title: "게시판",
+    blocks: [{ block: "brick-board/board", props: {} }],
+    plainText: "게시판",
+  };
+  const shopRouter = {
+    slug: "shop",
+    title: "쇼핑몰",
+    // storefront 블록이 목록·상세·장바구니·기획전을 URL 로 전환한다
+    blocks: [{ block: "brick-shop/storefront", props: {} }],
+    plainText: "쇼핑몰 상품",
+  };
+
   // 소개 페이지 — 모든 유형에 있다. 자리표시 문구는 실제로 쓸 법한 예문으로.
   const about = {
     slug: "about",
@@ -240,6 +261,7 @@ function starterPages(code: string, siteName: string): Array<{
           plainText: `${siteName} 커뮤니티 최신글`,
         },
         about,
+        boardRouter,
       ];
     case "shop":
       return [
@@ -271,6 +293,8 @@ function starterPages(code: string, siteName: string): Array<{
           ],
           plainText: "이용 안내 주문 배송 교환 반품",
         },
+        boardRouter,
+        shopRouter,
       ];
     case "company":
       return [
@@ -307,6 +331,7 @@ function starterPages(code: string, siteName: string): Array<{
           ],
           plainText: "문의하기 1:1 문의",
         },
+        boardRouter,
       ];
     default:
       return [];

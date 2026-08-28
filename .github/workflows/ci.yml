@@ -125,6 +125,9 @@ jobs:
       - name: E2E 스모크 테스트 (쿠폰 고도화)
         run: bash scripts/smoke-coupons.sh
 
+      - name: E2E 스모크 테스트 (기획전)
+        run: bash scripts/smoke-collections.sh
+
       - name: E2E 스모크 테스트 (방문자·팝업)
         run: bash scripts/smoke-site.sh
 

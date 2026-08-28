@@ -38,17 +38,37 @@ export function registerBoardBlocks(ctx: PluginContext, db: Db): void {
       properties: {
         board: {
           type: "string",
-          title: "게시판 slug",
-          description: "페이지 주소를 'board/<slug>' 로 만들면 목록·상세·글쓰기가 모두 동작합니다",
+          title: "게시판 slug (비우면 주소에서)",
+          description:
+            "지정하면 이 페이지가 그 게시판 전용이 됩니다. 비우면 주소의 다음 " +
+            "구간을 게시판 slug 로 씁니다 — 'board' 페이지 하나로 모든 게시판이 동작합니다.",
         },
       },
     },
     render: async (props, ctx) => {
-      const slug = String(props.board ?? "");
+      /**
+       * 게시판 결정 — 고정(prop) 또는 주소에서(pathTail 라우팅).
+       *
+       * 고정 방식만 있으면 **게시판마다 페이지를 만들어야** 하고, 스타터와
+       * 메뉴가 가리키는 /board/notice 는 board/notice 페이지가 없으면 404 다.
+       * pathTail 라우팅이면 'board' 페이지 하나로 모든 게시판이 열린다.
+       * prop 을 지정한 기존 페이지는 그대로 동작한다 (tail 전체가 글 경로).
+       */
+      let slug = String(props.board ?? "");
+      let tail = ctx.pathTail;
+      if (!slug) {
+        const segments = ctx.pathTail.split("/").filter(Boolean);
+        slug = segments[0] ?? "";
+        tail = segments.slice(1).join("/");
+        if (!slug) {
+          // /board 루트 — 게시판 목록을 보여준다 (빈 화면보다 낫다)
+          return renderBoardIndex(db);
+        }
+      }
       const board = await findBoard(slug);
       if (!board) {
         return `<div class="brick-board"><p class="brick-board-empty">
-  게시판을 찾을 수 없습니다. 블록 설정에서 slug를 확인하세요.</p></div>${BOARD_CSS}`;
+  게시판을 찾을 수 없습니다. 주소 또는 블록 설정의 slug 를 확인하세요.</p></div>${BOARD_CSS}`;
       }
 
       // 읽기 권한을 통과하지 못하면 내용을 서버 렌더에 담지 않는다.
@@ -61,7 +81,7 @@ export function registerBoardBlocks(ctx: PluginContext, db: Db): void {
 </div>${BOARD_CSS}`;
       }
 
-      const { view, postId } = resolveView(ctx.pathTail);
+      const { view, postId } = resolveView(tail);
       let html: string;
       if (view === "detail" && postId) {
         html = await renderDetail(db, board, postId, ctx);
@@ -73,6 +93,26 @@ export function registerBoardBlocks(ctx: PluginContext, db: Db): void {
       return `${html}${BOARD_SCRIPT}${BOARD_CSS}`;
     },
   });
+
+  /** /board 루트 — 열람 가능한 게시판 목록 */
+  async function renderBoardIndex(database: Db): Promise<string> {
+    const { rows } = await database.execute(sql`
+      SELECT slug, title, description FROM board_boards ORDER BY title
+    `);
+    if (!rows.length) {
+      return `<div class="brick-board"><p class="brick-board-empty">아직 게시판이 없습니다.</p></div>${BOARD_CSS}`;
+    }
+    const items = rows
+      .map((b) => `<a class="brick-board-index-item" href="/board/${encodeURIComponent(String(b.slug))}">
+  <strong>${escapeHtml(b.title)}</strong>
+  ${b.description ? `<span>${escapeHtml(b.description)}</span>` : ""}
+</a>`)
+      .join("");
+    return `<div class="brick-board"><div class="brick-board-index">${items}</div></div>
+<style>.brick-board-index{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.brick-board-index-item{display:block;padding:16px;border:1px solid var(--brick-border,#e5e5ea);border-radius:10px;text-decoration:none;color:inherit}
+.brick-board-index-item span{display:block;color:#888;font-size:13px;margin-top:4px}</style>${BOARD_CSS}`;
+  }
 
   // ── 게시판 목록 (카드) ─────────────────────────────
   ctx.registerBlock({

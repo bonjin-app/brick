@@ -3,6 +3,7 @@ import type { PluginContext } from "@brick/plugin-sdk";
 import { escapeHtml, won, type Db, type ShopSettings } from "./types.js";
 import { reviewSection } from "./reviews-view.js";
 import { RELATED_LIMIT, listRelated, type RelatedProduct } from "./related.js";
+import { activeCollections, viewCollection } from "./collections.js";
 
 /**
  * 스토어프론트 블록.
@@ -18,7 +19,7 @@ export function registerStorefrontBlocks(
   settings: () => Promise<ShopSettings>,
 ): void {
   // ── 상품 목록 ─────────────────────────────────────
-  ctx.registerBlock({
+  const productListBlock: Parameters<PluginContext["registerBlock"]>[0] = {
     name: "product-list",
     displayName: "상품 목록",
     propsSchema: {
@@ -80,10 +81,11 @@ export function registerStorefrontBlocks(
       const heading = props.title ? `<h2 class="brick-shop-heading">${escapeHtml(props.title)}</h2>` : "";
       return `${heading}<div class="brick-product-grid" style="--brick-cols:${columns}">${cards}\n</div>${STOREFRONT_CSS}`;
     },
-  });
+  };
+  ctx.registerBlock(productListBlock);
 
   // ── 상품 상세 ─────────────────────────────────────
-  ctx.registerBlock({
+  const productDetailBlock: Parameters<PluginContext["registerBlock"]>[0] = {
     name: "product-detail",
     displayName: "상품 상세",
     propsSchema: {
@@ -228,7 +230,100 @@ ${reviewSection({ id: String(p.id), reviewCount, ratingAvg, inquiryCount: Number
 <script type="application/ld+json">${jsonLd}</script>
 ${BUY_SCRIPT}${GALLERY_SCRIPT}${RESTOCK_SCRIPT}${STOREFRONT_CSS}`;
     },
+  };
+  ctx.registerBlock(productDetailBlock);
+
+  // ── 스토어프론트 (URL 라우팅) ──────────────────────
+  //
+  // 'shop' 페이지 하나로 쇼핑몰 전체가 동작한다:
+  //   /shop              → 분류 내비 + 상품 목록 (?category= 필터)
+  //   /shop/cart         → 장바구니
+  //   /shop/event        → 진행 중 기획전 목록
+  //   /shop/event/<slug> → 기획전 상세
+  //   /shop/<slug>       → 상품 상세
+  //
+  // 게시판(board 블록)과 같은 방식이다. 이것이 없으면 운영자가 화면마다
+  // 페이지를 만들어야 하고, 스타터·메뉴가 가리키는 주소가 404 가 된다.
+  ctx.registerBlock({
+    name: "storefront",
+    displayName: "쇼핑몰 (목록·상세·장바구니·기획전을 URL로 전환)",
+    propsSchema: {
+      type: "object",
+      properties: {
+        limit: { type: "number", title: "목록의 상품 수", default: 24 },
+        columns: { type: "number", title: "열 수", default: 4 },
+      },
+    },
+    render: async (props, blockCtx) => {
+      const tail = String(blockCtx.pathTail ?? "").replace(/^\/+|\/+$/g, "");
+      const seg = tail.split("/").filter(Boolean);
+
+      if (!tail) {
+        // 목록 — 분류 내비 + 상품 그리드. ?category= 로 좁힌다.
+        const category = String(blockCtx.query?.category ?? "");
+        const nav = await categoryListBlock.render({}, blockCtx);
+        const list = await productListBlock.render(
+          { limit: props.limit ?? 24, columns: props.columns ?? 4, category },
+          blockCtx,
+        );
+        return `${nav}\n${list}`;
+      }
+      if (seg[0] === "cart") return cartBlock.render({}, blockCtx);
+      if (seg[0] === "event") {
+        return seg[1] ? renderCollectionPage(seg[1]) : renderCollectionIndex();
+      }
+      // 그 외는 상품 상세 — 상세 블록이 없는 slug 는 "찾을 수 없습니다"를 그린다
+      return productDetailBlock.render({ slug: seg[0] }, blockCtx);
+    },
   });
+
+  /** 진행 중 기획전 목록 */
+  async function renderCollectionIndex(): Promise<string> {
+    const items = await activeCollections(db);
+    if (!items.length) {
+      return `<div class="brick-shop-empty">진행 중인 기획전이 없습니다.</div>${STOREFRONT_CSS}`;
+    }
+    const cards = items
+      .map((c) => `<a class="brick-collection-card" href="/shop/event/${encodeURIComponent(c.slug)}">
+  <strong>${escapeHtml(c.title)}</strong>
+  ${c.description ? `<p>${escapeHtml(c.description)}</p>` : ""}
+  <span>${c.productCount}개 상품${c.endsAt ? ` · ${shortDateKo(c.endsAt)} 까지` : ""}</span>
+</a>`)
+      .join("");
+    return `<div class="brick-collection-list"><h1>기획전</h1>${cards}</div>${COLLECTION_CSS}${STOREFRONT_CSS}`;
+  }
+
+  /** 기획전 상세 — 종료돼도 404 대신 안내를 보여준다 (공유된 링크로 온 손님) */
+  async function renderCollectionPage(slug: string): Promise<string> {
+    const c = await viewCollection(db, slug);
+    if (!c) return `<div class="brick-shop-empty">기획전을 찾을 수 없습니다.</div>${STOREFRONT_CSS}`;
+
+    const notice =
+      c.state === "ended" ? `<p class="brick-collection-notice">종료된 기획전입니다.</p>`
+      : c.state === "upcoming" ? `<p class="brick-collection-notice">아직 시작하지 않은 기획전입니다.</p>`
+      : "";
+    const cards = c.products
+      .map((p) => `<a class="brick-product-card" href="/shop/${encodeURIComponent(p.slug)}">
+  <span class="brick-product-thumb">${
+    p.imageUrl
+      ? `<img src="${escapeHtml(p.imageUrl)}" alt="${escapeHtml(p.name)}" loading="lazy" />`
+      : `<span class="brick-noimg">이미지 없음</span>`
+  }${p.soldout ? `<span class="brick-badge-soldout">품절</span>` : ""}</span>
+  <span class="brick-product-name">${escapeHtml(p.name)}</span>
+  <span class="brick-product-price">${
+    p.listPrice && p.listPrice > p.price ? `<del>${won(p.listPrice)}</del> ` : ""
+  }<strong>${won(p.price)}</strong></span>
+</a>`)
+      .join("");
+    return `<div class="brick-collection">
+  <h1>${escapeHtml(c.title)}</h1>
+  ${c.description ? `<p class="brick-collection-desc">${escapeHtml(c.description)}</p>` : ""}
+  ${notice}
+  ${c.products.length
+    ? `<div class="brick-product-grid" style="--brick-cols:4">${cards}</div>`
+    : `<p class="brick-shop-empty">진열된 상품이 없습니다.</p>`}
+</div>${COLLECTION_CSS}${STOREFRONT_CSS}`;
+  }
 
   // ── 관련 상품 (독립 블록) ──────────────────────────
   //
@@ -259,7 +354,7 @@ ${BUY_SCRIPT}${GALLERY_SCRIPT}${RESTOCK_SCRIPT}${STOREFRONT_CSS}`;
   });
 
   // ── 분류 목록 ─────────────────────────────────────
-  ctx.registerBlock({
+  const categoryListBlock: Parameters<PluginContext["registerBlock"]>[0] = {
     name: "category-list",
     displayName: "상품 분류 목록",
     render: async () => {
@@ -274,10 +369,11 @@ ${BUY_SCRIPT}${GALLERY_SCRIPT}${RESTOCK_SCRIPT}${STOREFRONT_CSS}`;
         .join("");
       return `<nav class="brick-category-list">${items}</nav>${STOREFRONT_CSS}`;
     },
-  });
+  };
+  ctx.registerBlock(categoryListBlock);
 
   // ── 장바구니 ──────────────────────────────────────
-  ctx.registerBlock({
+  const cartBlock: Parameters<PluginContext["registerBlock"]>[0] = {
     name: "cart",
     displayName: "장바구니",
     render: async () => `
@@ -285,7 +381,8 @@ ${BUY_SCRIPT}${GALLERY_SCRIPT}${RESTOCK_SCRIPT}${STOREFRONT_CSS}`;
   <p class="brick-cart-loading">장바구니를 불러오는 중…</p>
 </div>
 ${CART_SCRIPT}${STOREFRONT_CSS}`,
-  });
+  };
+  ctx.registerBlock(cartBlock);
 }
 
 /**
@@ -401,6 +498,23 @@ const RESTOCK_SCRIPT = `
   }
 })();
 </script>`;
+
+/** 기획전 카드용 짧은 날짜 */
+function shortDateKo(d: Date | string): string {
+  const t = new Date(d);
+  return `${t.getMonth() + 1}월 ${t.getDate()}일`;
+}
+
+const COLLECTION_CSS = `
+<style>
+.brick-collection-list h1,.brick-collection h1{font-size:24px;letter-spacing:-.5px}
+.brick-collection-card{display:block;padding:20px;margin-bottom:12px;border:1px solid var(--brick-border,#e5e5ea);border-radius:12px;text-decoration:none;color:inherit}
+.brick-collection-card strong{font-size:17px}
+.brick-collection-card p{margin:6px 0 0;color:#777;font-size:14px}
+.brick-collection-card span{display:block;margin-top:8px;color:#999;font-size:12.5px}
+.brick-collection-desc{color:#666}
+.brick-collection-notice{padding:10px 14px;background:var(--brick-surface,#f7f7fa);border-radius:8px;color:#a55;font-weight:600}
+</style>`;
 
 /* ── 스토어프론트 CSS ────────────────────────────────
    테마가 빌드를 타지 않으므로 블록이 자기 스타일을 함께 낸다.
