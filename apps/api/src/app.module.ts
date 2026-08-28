@@ -7,6 +7,7 @@ import { ExtensionsModule } from "./modules/extensions/extensions.module.js";
 import { HealthModule } from "./modules/health/health.module.js";
 import { InstallModule } from "./modules/install/install.module.js";
 import { MaintenanceModule } from "./modules/maintenance/maintenance.module.js";
+import { MailingModule } from "./modules/mailing/mailing.module.js";
 import { MediaModule } from "./modules/media/media.module.js";
 import { MembersModule } from "./modules/members/members.module.js";
 import { MigrateModule } from "./modules/migrate/migrate.module.js";
@@ -29,6 +30,7 @@ import { UsersModule } from "./modules/users/users.module.js";
     MaintenanceModule,
     InstallModule,
     UsersModule,
+    MailingModule,
     MediaModule,
     MembersModule,
     MigrateModule,

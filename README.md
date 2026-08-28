@@ -27,7 +27,7 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-1246%20passing-2ea043.svg" alt="스모크 테스트 1246개" />
+  <img src="https://img.shields.io/badge/E2E-1342%20passing-2ea043.svg" alt="스모크 테스트 1342개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
 </p>
 
@@ -273,7 +273,7 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 1,246개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 1,342개 항목):
 
 | 수트 | 항목 | 무엇을 못박는가 |
 |---|---:|---|
@@ -284,6 +284,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `smoke-returns.sh` | 99 | 할인 안분 · 이중 재고 복원 방어 · 청약철회 기간 |
 | `smoke-storefront.sh` | 94 | 사업자번호 체크섬 · 위시리스트 격리 · 지역비 실수령 |
 | `smoke-poll.sh` | 100 | 중복 투표 · IP 해시 · 결과 공개 시점 · 집계 오염 |
+| `smoke-mailing.sh` | 96 | (광고) 강제 표기 · 동의자만 발송 · 발송 직전 동의 재확인 · 실제 발송 내용 |
 | `smoke-board.sh` | 85 | 권한 4단계 · 답변형 · 비밀글 · 첨부 원자성 · XSS |
 | `smoke-point.sh` | 53 | FIFO 소모 · 멱등 적립 · 만료 · 동시성 |
 | `smoke-memo.sh` | 72 | 프라이버시 · 차단 · 포인트 차감 트랜잭션 |
@@ -363,6 +364,7 @@ docker/           Dockerfile, entrypoint
 | [게시판](docs/board.md) | 권한·분류·답변형·첨부파일, 그누보드와의 차이 |
 | [포인트](docs/point.md) | 적립 정책, 원장 설계, 플러그인 간 협력 방법 |
 | [회원 생애주기](docs/members.md) | 약관 동의·이메일 인증·탈퇴·휴면, 법적 요건과 설계 |
+| [단체메일](docs/mailing.md) | 공지와 광고의 차이, 정보통신망법 제50조 요건, 수신거부 |
 | [문의·FAQ·설문·SEO](docs/helpdesk.md) | 1:1 문의 설계, FAQ, 설문조사, 사이트맵 |
 | [사업자정보 표시](docs/business-info.md) | 전자상거래법 제13조, 사업자번호 검증, 테마 렌더 |
 | [그누보드·영카트 이전](docs/migrate-gnuboard.md) | 덤프 만들기, 리허설, 레벨 매핑, 비밀번호 보존, 상품·주문 |

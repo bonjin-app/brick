@@ -74,6 +74,9 @@ jobs:
       - name: E2E 스모크 테스트 (설문조사)
         run: bash scripts/smoke-poll.sh
 
+      - name: E2E 스모크 테스트 (회원 단체메일)
+        run: bash scripts/smoke-mailing.sh
+
       - name: E2E 스모크 테스트 (게시판)
         run: bash scripts/smoke-board.sh
 
