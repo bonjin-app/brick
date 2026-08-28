@@ -113,21 +113,37 @@ pids_on_port() {
 }
 
 echo "── 스텁 시작 (PG · SMTP)"
-for p in $(pids_on_port "$PG_PORT"); do kill -9 "$p" 2>/dev/null || true; done
-for p in $(pids_on_port "$SMTP_PORT"); do kill -9 "$p" 2>/dev/null || true; done
-node "$ROOT/scripts/pg-stub.mjs" --port "$PG_PORT" --out "$PGLOG" > "$TMP/pg.log" 2>&1 &
-PG_PID=$!
-node "$ROOT/scripts/smtp-sink.mjs" --port "$SMTP_PORT" --out "$MAILBOX" > "$TMP/sink.log" 2>&1 &
-SINK_PID=$!
-for i in $(seq 1 30); do
-  grep -q 'listening' "$TMP/pg.log" 2>/dev/null && grep -q 'listening' "$TMP/sink.log" 2>/dev/null && break
-  sleep 0.3
-done
-if [[ "$(pids_on_port "$PG_PORT")" == *"$PG_PID"* && "$(pids_on_port "$SMTP_PORT")" == *"$SINK_PID"* ]]; then
-  ok "스텁 2개 시작 (우리 프로세스가 듣고 있다)"
-else
-  bad "스텁 시작 실패 ($(tail -2 "$TMP/pg.log" 2>/dev/null) / $(tail -2 "$TMP/sink.log" 2>/dev/null))"
-fi
+# 고정 포트가 리눅스 임시포트 범위(32768–60999) 안이라 드물게 다른 프로세스의
+# 나가는 소켓과 충돌한다 — CI 에서 실제로 났다. 죽으면 다음 포트로 재시도한다.
+start_stub() {  # start_stub <스크립트> <시작포트> <로그> <out인자...> → "포트 PID" 를 stdout 으로
+  local script="$1" base="$2" log="$3"; shift 3
+  local port pid
+  for offset in 0 1 2 3 4; do
+    port=$((base + offset))
+    for p in $(pids_on_port "$port"); do kill -9 "$p" 2>/dev/null || true; done
+    node "$ROOT/$script" --port "$port" "$@" > "$log" 2>&1 &
+    pid=$!
+    for i in $(seq 1 20); do
+      grep -q 'listening' "$log" 2>/dev/null && break
+      kill -0 "$pid" 2>/dev/null || break
+      sleep 0.3
+    done
+    if kill -0 "$pid" 2>/dev/null && [[ "$(pids_on_port "$port")" == *"$pid"* ]]; then
+      echo "$port $pid"
+      return 0
+    fi
+    kill "$pid" 2>/dev/null || true
+  done
+  return 1
+}
+
+PG_INFO="$(start_stub scripts/pg-stub.mjs "$PG_PORT" "$TMP/pg.log" --out "$PGLOG")" \
+  || { bad "PG 스텁 시작 실패: $(tail -5 "$TMP/pg.log" 2>/dev/null)"; exit 1; }
+PG_PORT="${PG_INFO% *}"; PG_PID="${PG_INFO#* }"
+SMTP_INFO="$(start_stub scripts/smtp-sink.mjs "$SMTP_PORT" "$TMP/sink.log" --out "$MAILBOX")" \
+  || { bad "SMTP 스텁 시작 실패: $(tail -5 "$TMP/sink.log" 2>/dev/null)"; exit 1; }
+SMTP_PORT="${SMTP_INFO% *}"; SINK_PID="${SMTP_INFO#* }"
+ok "스텁 2개 시작 (PG :$PG_PORT · SMTP :$SMTP_PORT — 우리 프로세스가 듣고 있다)"
 
 export BRICK_PLUGINS_DIR="$ROOT/plugins"
 export BRICK_THEMES_DIR="$ROOT/themes"
