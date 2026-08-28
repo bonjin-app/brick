@@ -1,0 +1,16 @@
+{
+  "name": "create-brick-plugin",
+  "version": "0.1.0",
+  "description": "Brick 플러그인 개발 템플릿 생성기 — npm create brick-plugin <이름>",
+  "type": "module",
+  "bin": {
+    "create-brick-plugin": "./index.mjs"
+  },
+  "files": [
+    "index.mjs"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}

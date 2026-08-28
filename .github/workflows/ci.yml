@@ -131,6 +131,9 @@ jobs:
       - name: E2E 스모크 테스트 (정기결제)
         run: bash scripts/smoke-subscriptions.sh
 
+      - name: E2E 스모크 테스트 (플러그인 개발 템플릿)
+        run: bash scripts/smoke-create-plugin.sh
+
       - name: E2E 스모크 테스트 (방문자·팝업)
         run: bash scripts/smoke-site.sh
 

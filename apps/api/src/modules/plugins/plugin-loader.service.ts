@@ -1,6 +1,7 @@
 import { Injectable, Inject, Logger, OnModuleInit } from "@nestjs/common";
-import { readFile, readdir } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { readFile, readdir, mkdir, symlink, stat } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { dirname, join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { eq, sql } from "drizzle-orm";
 import type { BrickDb } from "@brick/database";
@@ -151,6 +152,9 @@ export class PluginLoaderService implements OnModuleInit {
   async activate(name: string, opts = { skipMigrations: false }): Promise<void> {
     if (this.instances.has(name)) return;
     const manifest = await this.readManifest(name);
+
+    // ZIP 으로 설치된 플러그인은 node_modules 가 없다 — 공유 의존성 링크를 보증한다
+    await this.ensureSharedDependencies(name);
 
     if (!opts.skipMigrations && manifest.migrations) {
       await this.runPluginMigrations(name, join(this.pluginsDir, name, manifest.migrations));
@@ -325,6 +329,90 @@ export class PluginLoaderService implements OnModuleInit {
         this.logger.log(`plugin "${pluginName}" registers link target "${source.label}"`);
       },
     };
+  }
+
+  /**
+   * ZIP 으로 설치된 플러그인의 공유 의존성 해석을 보증한다.
+   *
+   * 왜 필요한가: ZIP 에는 node_modules 가 없다. 배포본은 모든 의존성이 루트
+   * node_modules 에 있어 우연히 해석되지만, pnpm 모노레포(개발)에서는 루트에
+   * 링크가 없어 `Cannot find package '@brick/plugin-sdk'` 로 활성화가 죽는다 —
+   * create-brick-plugin 스모크가 잡았다. "배치에 따라 우연히 되는 것"은
+   * 계약이 아니므로, 로더가 명시적으로 보증한다.
+   *
+   * 방법: 플러그인 폴더에서 해석해 보고, 실패한 패키지만 API 가 쓰는 사본으로
+   * 심볼릭 링크를 만든다. **API 와 같은 사본을 가리키는 것이 목적이기도 하다** —
+   * drizzle-orm 이 다른 사본이면 플러그인의 sql 객체를 서버가 알아보지 못한다.
+   */
+  private async ensureSharedDependencies(name: string): Promise<void> {
+    // 플러그인이 import 해도 되는, Brick 이 함께 설치하는 패키지들.
+    // @brick/core 는 plugin-sdk 가 re-export 하므로 함께 보증한다.
+    const SHARED = ["@brick/plugin-sdk", "@brick/core", "drizzle-orm", "uuidv7"];
+
+    const pluginDir = join(this.pluginsDir, name);
+    const fromPlugin = createRequire(pathToFileURL(join(pluginDir, "noop.js")).href);
+
+    // 해석 기준점들: API 자신, 그리고 다른 플러그인들.
+    // API 는 @brick/plugin-sdk 에 의존하지 않으므로 (플러그인의 계약이지 API 의
+    // 것이 아니다) API 컨텍스트만으로는 sdk 를 못 찾는다 — 동봉 플러그인의
+    // 컨텍스트가 폴백이다.
+    const resolverBases = [import.meta.url];
+    const siblings = await readdir(this.pluginsDir, { withFileTypes: true }).catch(() => []);
+    for (const e of siblings) {
+      if (e.isDirectory() && e.name !== name) {
+        resolverBases.push(pathToFileURL(join(this.pluginsDir, e.name, "noop.js")).href);
+      }
+    }
+
+    for (const pkg of SHARED) {
+      try {
+        fromPlugin.resolve(pkg);
+        continue; // 이미 해석된다 (개발용 워크스페이스 링크, 배포본 루트 등)
+      } catch {
+        // 링크가 필요하다
+      }
+
+      let entry: string | null = null;
+      for (const base of resolverBases) {
+        try {
+          entry = createRequire(base).resolve(pkg);
+          break;
+        } catch {
+          // 다음 기준점
+        }
+      }
+      if (!entry) {
+        this.logger.warn(`plugin "${name}": 공유 의존성 "${pkg}" 를 호스트에서 찾지 못했습니다`);
+        continue;
+      }
+
+      // 해석된 파일 → 패키지 루트: 가장 가까운, 이름이 일치하는 package.json 을 찾는다.
+      // (경로 문자열 추측은 pnpm 의 .pnpm 레이아웃과 워크스페이스 링크 양쪽에서 깨진다)
+      let root = dirname(entry);
+      for (let i = 0; i < 10; i += 1) {
+        try {
+          const pkgJson = JSON.parse(await readFile(join(root, "package.json"), "utf8")) as { name?: string };
+          if (pkgJson.name === pkg) break;
+        } catch {
+          // package.json 없음 — 위로
+        }
+        const parent = dirname(root);
+        if (parent === root) break;
+        root = parent;
+      }
+
+      const linkPath = join(pluginDir, "node_modules", ...pkg.split("/"));
+      try {
+        await mkdir(dirname(linkPath), { recursive: true });
+        const exists = await stat(linkPath).catch(() => null);
+        if (!exists) {
+          await symlink(root, linkPath, process.platform === "win32" ? "junction" : "dir");
+        }
+        this.logger.log(`plugin "${name}": 공유 의존성 링크 ${pkg} → ${root.split(sep).slice(-3).join(sep)}`);
+      } catch (err) {
+        this.logger.warn(`plugin "${name}": ${pkg} 링크 실패 — ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
   }
 
   private async readManifest(name: string): Promise<PluginManifest> {

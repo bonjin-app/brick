@@ -27,7 +27,7 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-2300%20passing-2ea043.svg" alt="스모크 테스트 2300개" />
+  <img src="https://img.shields.io/badge/E2E-2338%20passing-2ea043.svg" alt="스모크 테스트 2338개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
 </p>
 
@@ -286,7 +286,7 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 2,300개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 2,338개 항목):
 
 | 수트 | 항목 | 무엇을 못박는가 |
 |---|---:|---|
@@ -317,7 +317,8 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `smoke-site.sh` | 73 | 방문자 집계(IP 해시) · 팝업 노출 규칙 |
 | `smoke-social.sh` | 76 | state 쿠키 결속 · 코드 1회성 · 계정 탈취 경로 |
 | `smoke-security.sh` | 50 | 캡차 · 레이트리밋 · 결제 위조 · 권한 우회 |
-| `smoke-release.sh` | 49 | FTP 설치 경로 · 동봉 플러그인 · 고아 프로세스 정리 |
+| `smoke-release.sh` | 53 | FTP 설치 경로 · 동봉 플러그인 · 고아 프로세스 정리 |
+| `smoke-create-plugin.sh` | 38 | 템플릿 생성→빌드→ZIP 설치→계약 전부 실사용 · escapeHtml · 실제 탈퇴로 파기 검증 |
 
 
 ```bash
