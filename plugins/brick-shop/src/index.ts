@@ -946,7 +946,7 @@ export default definePlugin(async (ctx) => {
 
   ctx.registerRoute("GET", "/collections", async () => {
     return { items: await activeCollections(db) };
-  });
+  }, { summary: "진행 중 기획전 목록" });
 
   ctx.registerRoute("GET", "/collections/:slug", async (req) => {
     const c = await viewCollection(db, req.params.slug);

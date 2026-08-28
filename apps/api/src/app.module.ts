@@ -11,6 +11,7 @@ import { MailingModule } from "./modules/mailing/mailing.module.js";
 import { MediaModule } from "./modules/media/media.module.js";
 import { MembersModule } from "./modules/members/members.module.js";
 import { MigrateModule } from "./modules/migrate/migrate.module.js";
+import { OpenApiModule } from "./modules/openapi/openapi.module.js";
 import { PagesModule } from "./modules/pages/pages.module.js";
 import { PluginsModule } from "./modules/plugins/plugins.module.js";
 import { SeoModule } from "./modules/seo/seo.module.js";
@@ -35,6 +36,7 @@ import { UsersModule } from "./modules/users/users.module.js";
     MediaModule,
     MembersModule,
     MigrateModule,
+    OpenApiModule,
     SeoModule,
     SiteModule,
     SearchModule,

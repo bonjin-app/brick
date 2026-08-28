@@ -65,7 +65,16 @@ export interface PluginContext {
     name(): Promise<string>;
   };
   /** REST 라우트 등록: /api/plugins/<pluginName>/ 아래에 마운트된다 */
-  registerRoute(method: "GET" | "POST" | "PUT" | "DELETE", path: string, handler: PluginRouteHandler): void;
+  registerRoute(
+    method: "GET" | "POST" | "PUT" | "DELETE",
+    path: string,
+    handler: PluginRouteHandler,
+    /**
+     * API 문서(/api/openapi.json)에 실을 설명 (선택).
+     * 없어도 경로·메서드는 자동으로 실린다 — summary 는 사람을 위한 한 줄이다.
+     */
+    docs?: PluginRouteDocs,
+  ): void;
   /** 페이지 빌더에서 쓸 수 있는 Block 등록 */
   registerBlock(block: BlockDefinition): void;
   /** 관리자 메뉴 항목 등록 */
@@ -362,6 +371,12 @@ export interface PluginUploadedFile {
   fileName: string;
   contentType: string;
   buffer: Buffer;
+}
+
+/** 플러그인 라우트의 API 문서 메타 (전부 선택) */
+export interface PluginRouteDocs {
+  /** 사람이 읽는 한 줄 요약. 예: "상품 목록" */
+  summary?: string;
 }
 
 export type PluginRouteHandler = (req: {

@@ -50,7 +50,9 @@ my-plugin/
 import { definePlugin } from "@brick/plugin-sdk";
 
 export default definePlugin((ctx) => {
-  // REST API: /api/plugins/my-plugin/items/:id 로 마운트됨
+  // REST API: /api/plugins/my-plugin/items/:id 로 마운트됨.
+  // 마지막 인자(docs)는 선택 — /api/docs 의 API 문서에 한 줄 요약으로 실립니다.
+  // 없어도 경로·메서드는 자동으로 문서에 실립니다.
   ctx.registerRoute("GET", "/items/:id", async (req) => {
     // req.params.id, req.query, req.body, req.user(세션 사용자 | null)
     return { id: req.params.id };

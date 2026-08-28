@@ -192,13 +192,14 @@ export default definePlugin(async (ctx) => {
   };
 
   // ── 공개 라우트: /api/plugins/${name}/entries ──────
+  // 마지막 인자(docs)는 선택이다 — /api/docs 의 API 문서에 한 줄 요약으로 실린다.
   ctx.registerRoute("GET", "/entries", async () => {
     const { rows } = await db.execute(sql\`
       SELECT id, author_name, message, created_at
       FROM ${table}_entries ORDER BY created_at DESC LIMIT 50
     \`);
     return { items: rows };
-  });
+  }, { summary: "최근 방명록 글" });
 
   ctx.registerRoute("POST", "/entries", async (req) => {
     if (!req.user) throw new PluginError(401, "로그인이 필요합니다.");

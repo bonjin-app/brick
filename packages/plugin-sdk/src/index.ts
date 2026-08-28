@@ -15,7 +15,7 @@
  *   });
  */
 export type {
-  PluginContext, PluginInstance, BlockDefinition, PluginRouteHandler,
+  PluginContext, PluginInstance, BlockDefinition, PluginRouteHandler, PluginRouteDocs,
   AdminResource, AdminField, PluginDb,
   StorageProvider, StoredFile, CacheProvider, QueueProvider, MailProvider, HookBus,
   PluginUploadedFile, PluginRawResponse, BlockRenderContext,
