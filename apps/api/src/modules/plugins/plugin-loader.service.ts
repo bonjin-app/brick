@@ -2,13 +2,14 @@ import { Injectable, Inject, Logger, OnModuleInit } from "@nestjs/common";
 import { readFile, readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { BrickDb } from "@brick/database";
 import { installedPlugins, siteSettings } from "@brick/database";
 import type { PluginManifest } from "@brick/shared";
 import type { PluginContext, PluginInstance, BlockDefinition, PluginRouteHandler, PluginDb, AdminResource, HookBus, CacheProvider, QueueProvider, StorageProvider, MailProvider, CaptchaProvider, PersonalDataEraser, SitemapSource,
   SearchSource } from "@brick/core";
-import { DB, HOOKS, CACHE, QUEUE, STORAGE, MAIL, CAPTCHA } from "../../runtime.module.js";
+import { DB, HOOKS, CACHE, QUEUE, STORAGE, MAIL, CAPTCHA, ENV } from "../../runtime.module.js";
+import type { BrickEnv } from "../../config/env.js";
 
 /**
  * PluginLoader — Brick 런타임 아키텍처의 심장.
@@ -105,6 +106,7 @@ export class PluginLoaderService implements OnModuleInit {
     @Inject(STORAGE) private readonly storage: StorageProvider,
     @Inject(MAIL) private readonly mail: MailProvider,
     @Inject(CAPTCHA) private readonly captcha: CaptchaProvider,
+    @Inject(ENV) private readonly env: BrickEnv,
   ) {}
 
   /**
@@ -234,6 +236,22 @@ export class PluginLoaderService implements OnModuleInit {
       storage: this.storage,
       mail: this.mail,
       captcha: this.captcha,
+      logger: {
+        log: (m: string) => this.logger.log(`[${pluginName}] ${m}`),
+        warn: (m: string) => this.logger.warn(`[${pluginName}] ${m}`),
+        error: (m: string) => this.logger.error(`[${pluginName}] ${m}`),
+      },
+      site: {
+        url: this.env.siteUrl,
+        // 매번 읽는다 — 운영자가 사이트 이름을 바꾸면 다음 메일부터 반영되어야 한다
+        name: async () => {
+          const { rows } = await this.db.execute(
+            sql`SELECT value FROM site_settings WHERE key = 'site.name' LIMIT 1`,
+          );
+          const raw = rows[0]?.value;
+          return typeof raw === "string" && raw.trim() ? raw.trim() : "Brick";
+        },
+      },
       // Drizzle 핸들은 execute/transaction을 모두 제공하므로 PluginDb 계약을 충족한다
       db: this.db as unknown as PluginDb,
       settings: {

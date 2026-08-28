@@ -1,6 +1,6 @@
 import { BadRequestException, Inject, Injectable, Logger } from "@nestjs/common";
 // HTML 제거는 코어의 것을 쓴다 — 검색 발췌와 같은 규칙이어야 한다
-import { stripHtml } from "@brick/core";
+import { maskEmail, stripHtml } from "@brick/core";
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import { randomBytes } from "node:crypto";
@@ -527,17 +527,6 @@ function normalizeFilters(raw: Filters | undefined): Filters {
   };
 }
 
-/**
- * 주소 가리기.
- *
- * 발송 이력·실패 목록에 회원 주소가 그대로 뜰 이유가 없다.
- * 운영자가 필요한 것은 "누가 못 받았는지 알아볼 수 있는 정도"다.
- */
-function maskEmail(email: string): string {
-  const [local, domain] = String(email).split("@");
-  if (!domain) return "***";
-  const head = local.slice(0, 2);
-  return `${head}${"*".repeat(Math.max(1, local.length - 2))}@${domain}`;
-}
+
 
 

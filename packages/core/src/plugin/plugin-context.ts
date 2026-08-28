@@ -34,6 +34,36 @@ export interface PluginContext {
   };
   /** DB 핸들 (플러그인 마이그레이션은 로더가 활성화 시점에 실행) */
   readonly db: PluginDb;
+
+  /**
+   * 사이트 정보 — 메일에 넣을 링크와 이름.
+   *
+   * 플러그인이 `process.env` 를 직접 읽으면 코어의 검증(형식·후행 슬래시
+   * 정리)을 우회하고, 플러그인마다 다르게 처리하게 된다. 메일에 링크를 넣는
+   * 플러그인이 여럿이므로 계약으로 준다.
+   */
+  /**
+   * 로그.
+   *
+   * 플러그인이 로그를 남길 방법이 없었다. 요청 처리 중 오류는 코어가 잡아
+   * 응답으로 만들지만, **백그라운드 작업(큐 워커·스윕)의 실패는 아무도 모른다.**
+   * 조용히 실패하는 배경 작업은 없는 기능과 같다.
+   *
+   * 메시지에 플러그인 이름이 자동으로 붙는다 — 어느 플러그인이 낸 로그인지
+   * 모르면 여러 플러그인이 도는 사이트에서 추적할 수 없다.
+   */
+  readonly logger: {
+    log(message: string): void;
+    warn(message: string): void;
+    error(message: string): void;
+  };
+
+  readonly site: {
+    /** 후행 슬래시 없는 사이트 주소 */
+    readonly url: string;
+    /** 설정된 사이트 이름 (메일 본문·제목에 쓴다) */
+    name(): Promise<string>;
+  };
   /** REST 라우트 등록: /api/plugins/<pluginName>/ 아래에 마운트된다 */
   registerRoute(method: "GET" | "POST" | "PUT" | "DELETE", path: string, handler: PluginRouteHandler): void;
   /** 페이지 빌더에서 쓸 수 있는 Block 등록 */

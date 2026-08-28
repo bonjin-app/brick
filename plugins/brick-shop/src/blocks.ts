@@ -131,6 +131,15 @@ export function registerStorefrontBlocks(
       const reviewCount = Number(p.review_count ?? 0);
       const ratingAvg = reviewCount > 0 ? Number(p.rating_sum) / reviewCount : 0;
 
+      /**
+       * 품절 옵션 — 재입고 알림 대상이다.
+       *
+       * **옵션 하나만 품절인 경우가 대부분이다**("M 사이즈만 품절"). 그때 상품은
+       * 여전히 selling 이라 품절 화면이 뜨지 않으므로, 살 수 있는 상품에도
+       * 품절 옵션이 있으면 알림 폼을 보여줘야 한다.
+       */
+      const soldoutOptions = options.filter((o) => o.stock !== null && Number(o.stock) <= 0);
+
       const optionSelect = options.length
         ? `<label class="brick-field">옵션
     <select id="brick-opt">
@@ -186,7 +195,10 @@ export function registerStorefrontBlocks(
       <dt>재고</dt>
       <dd>${p.stock === null ? "구매 가능" : soldout ? "품절" : `${Number(p.stock)}개 남음`}</dd>
     </dl>
-    ${soldout ? `<div class="brick-soldout-notice">품절된 상품입니다.</div>` : `
+    ${soldout ? `<div class="brick-soldout-notice">
+      <p>품절된 상품입니다.</p>
+      ${restockForm(String(p.slug), soldoutOptions)}
+    </div>` : `
     <form class="brick-buy-form" data-product="${escapeHtml(p.id)}">
       ${optionSelect}
       <label class="brick-field">수량
@@ -201,11 +213,20 @@ export function registerStorefrontBlocks(
   </div>
 </div>
 <div class="brick-detail-description">${String(p.description ?? "")}</div>
+${
+  // 상품은 팔지만 일부 옵션이 품절인 경우 — 가장 흔한 상황이다
+  !soldout && soldoutOptions.length
+    ? `<div class="brick-partial-soldout">
+        <p>품절된 옵션이 있습니다.</p>
+        ${restockForm(String(p.slug), soldoutOptions)}
+      </div>`
+    : ""
+}
 ${relatedHtml}
 <a id="brick-reviews"></a>
 ${reviewSection({ id: String(p.id), reviewCount, ratingAvg, inquiryCount: Number(p.inquiry_count ?? 0) })}
 <script type="application/ld+json">${jsonLd}</script>
-${BUY_SCRIPT}${GALLERY_SCRIPT}${STOREFRONT_CSS}`;
+${BUY_SCRIPT}${GALLERY_SCRIPT}${RESTOCK_SCRIPT}${STOREFRONT_CSS}`;
     },
   });
 
@@ -303,11 +324,95 @@ function relatedSection(items: RelatedProduct[], title = "관련 상품"): strin
 </section>`;
 }
 
+/**
+ * 재입고 알림 신청 폼.
+ *
+ * 품절 옵션이 여럿이면 고르게 한다. 하나면 숨겨진 값으로 넣는다 — 선택지가
+ * 하나뿐인 드롭다운은 누르게 만들 이유가 없다.
+ */
+function restockForm(
+  slug: string,
+  soldoutOptions: Array<Record<string, unknown>>,
+): string {
+  const picker =
+    soldoutOptions.length > 1
+      ? `<label class="brick-field">품절된 옵션
+      <select name="optionId">
+        ${soldoutOptions
+          .map((o) => `<option value="${escapeHtml(o.id)}">${escapeHtml(o.name)}</option>`)
+          .join("")}
+      </select>
+    </label>`
+      : soldoutOptions.length === 1
+        ? `<input type="hidden" name="optionId" value="${escapeHtml(soldoutOptions[0].id)}" />`
+        : "";
+
+  return `<form class="brick-restock-form" data-slug="${escapeHtml(slug)}">
+    ${picker}
+    <label class="brick-field">재입고 알림 받을 이메일
+      <input type="email" name="email" placeholder="name@example.com" required />
+    </label>
+    <button type="button" data-act="restock">재입고 알림 신청</button>
+    <p class="brick-restock-msg" role="status"></p>
+    <p class="brick-restock-note">재입고되면 1회 알려드립니다. 광고 메일이 아닙니다.</p>
+  </form>`;
+}
+
+/**
+ * 재입고 알림 신청 스크립트.
+ *
+ * 품절 화면에서만 렌더되므로 항상 붙여도 부담이 없다.
+ * 옵션이 있는 상품은 선택된 옵션을 함께 보낸다 — "M 사이즈만 품절"이 대부분이다.
+ */
+const RESTOCK_SCRIPT = `
+<script>
+(function () {
+  // 폼이 둘일 수 있다 (품절 상품 + 품절 옵션). 각각 붙인다.
+  Array.prototype.forEach.call(document.querySelectorAll(".brick-restock-form"), attach);
+
+  function attach(form) {
+  var btn = form.querySelector('[data-act="restock"]');
+  var msg = form.querySelector(".brick-restock-msg");
+  btn.addEventListener("click", function () {
+    var email = form.querySelector('input[name="email"]').value.trim();
+    if (!email) { msg.textContent = "이메일을 입력해주세요."; return; }
+    // 옵션은 이 폼 안에서 읽는다 — 구매용 드롭다운을 읽으면 다른 옵션이 섞인다
+    var opt = form.querySelector('[name="optionId"]');
+    var body = { email: email };
+    if (opt && opt.value) body.optionId = opt.value;
+    btn.disabled = true;
+    msg.textContent = "신청 중…";
+    fetch("/api/plugins/brick-shop/products/" + encodeURIComponent(form.dataset.slug) + "/restock-alert", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        // 실패 이유를 그대로 보여준다 — "이미 신청했습니다"를 감추면 손님이 계속 누른다
+        msg.textContent = res.ok
+          ? "신청되었습니다. 재입고되면 " + res.d.email + " 으로 알려드립니다."
+          : (res.d.message || "신청에 실패했습니다.");
+        if (res.ok) form.querySelector('input[name="email"]').value = "";
+      })
+      .catch(function () { msg.textContent = "신청에 실패했습니다."; })
+      .finally(function () { btn.disabled = false; });
+  });
+  }
+})();
+</script>`;
+
 /* ── 스토어프론트 CSS ────────────────────────────────
    테마가 빌드를 타지 않으므로 블록이 자기 스타일을 함께 낸다.
    CSS 변수는 테마 토큰을 우선 사용해 테마 디자인과 어울리게 한다. */
 const STOREFRONT_CSS = `
 <style>
+.brick-partial-soldout{margin-top:28px;padding:16px;background:var(--brick-surface,#f7f7fa);border-radius:10px}
+.brick-partial-soldout>p{margin:0 0 4px;font-weight:600}
+.brick-restock-form{margin-top:12px;display:flex;flex-direction:column;gap:8px;max-width:360px}
+.brick-restock-form button{padding:10px 16px;cursor:pointer;border-radius:8px;border:1px solid var(--brick-border,#ddd);background:#fff}
+.brick-restock-msg{margin:0;font-size:13px;color:var(--brick-accent,#0a7)}
+.brick-restock-note{margin:0;font-size:12px;color:#888}
 .brick-related{margin:48px 0 0}
 .brick-related h2{font-size:19px;margin:0 0 4px;padding-top:24px;border-top:1px solid var(--brick-border,#e5e5ea)}
 .brick-product-grid{display:grid;grid-template-columns:repeat(var(--brick-cols,4),1fr);gap:20px;margin:20px 0}

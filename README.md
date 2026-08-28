@@ -27,7 +27,7 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-1911%20passing-2ea043.svg" alt="스모크 테스트 1911개" />
+  <img src="https://img.shields.io/badge/E2E-1998%20passing-2ea043.svg" alt="스모크 테스트 1998개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
 </p>
 
@@ -273,7 +273,7 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 1,911개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 1,998개 항목):
 
 | 수트 | 항목 | 무엇을 못박는가 |
 |---|---:|---|
@@ -290,6 +290,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `smoke-account-security.sh` | 102 | RFC 6238 표준 벡터 · 비밀번호만으로 세션 불가 · 코드 재사용 차단 · 강제 시 잠기지 않음 |
 | `smoke-payments.sh` | 130 | 스텁 PG로 실제 나가는 금액 검증 · 멱등키 · 개인결제가 매출에 포함되는가 |
 | `smoke-search.sh` | 86 | 비밀글·비공개 게시판 미노출 · ILIKE 이스케이프 · total 정확성 · 0건 기록 |
+| `smoke-restock.sh` | 87 | 품절만 신청 · 옵션 단위 · 한 번만 발송 · 광고 아님 · 경로 무관 감지 |
 | `smoke-board.sh` | 85 | 권한 4단계 · 답변형 · 비밀글 · 첨부 원자성 · XSS |
 | `smoke-point.sh` | 53 | FIFO 소모 · 멱등 적립 · 만료 · 동시성 |
 | `smoke-memo.sh` | 72 | 프라이버시 · 차단 · 포인트 차감 트랜잭션 |
@@ -376,6 +377,7 @@ docker/           Dockerfile, entrypoint
 | [계정 보안](docs/account-security.md) | 2단계 인증, 접속 기기 관리, 감사 로그 |
 | [개인결제](docs/direct-payment.md) | 주문서 없는 청구, 결제 링크, 매출 반영 |
 | [통합검색](docs/search.md) | 무엇이 검색되나, 권한, 검색 분석과 규칙 |
+| [재입고 알림](docs/restock.md) | 품절 손님 회수, 옵션 단위 신청, 광고와의 구분 |
 | [문의·FAQ·설문·SEO](docs/helpdesk.md) | 1:1 문의 설계, FAQ, 설문조사, 사이트맵 |
 | [사업자정보 표시](docs/business-info.md) | 전자상거래법 제13조, 사업자번호 검증, 테마 렌더 |
 | [그누보드·영카트 이전](docs/migrate-gnuboard.md) | 덤프 만들기, 리허설, 레벨 매핑, 비밀번호 보존, 상품·주문 |

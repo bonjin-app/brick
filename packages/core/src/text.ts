@@ -60,3 +60,19 @@ export function escapeHtml(value: unknown): string {
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!,
   );
 }
+
+/**
+ * 이메일 가리기.
+ *
+ * 목록·응답·로그에 주소를 그대로 내보내면 개인정보가 새어 나간다. 본인이
+ * 자기 것인지 알아볼 수 있을 만큼만 남긴다.
+ *
+ * 앞 2자만 남기는 이유: 한 글자만 남기면 `a***@x.com` 처럼 되어 본인도
+ * 구분하지 못하고, 절반을 남기면 짧은 주소가 거의 그대로 노출된다.
+ */
+export function maskEmail(email: string): string {
+  const [local, domain] = String(email ?? "").split("@");
+  if (!domain) return "***";
+  const head = local.slice(0, 2);
+  return `${head}${"*".repeat(Math.max(1, local.length - 2))}@${domain}`;
+}

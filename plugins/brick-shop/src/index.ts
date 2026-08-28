@@ -1,4 +1,4 @@
-import { definePlugin, isUniqueViolation, isValidBusinessNo, rawResponse, searchExcerpt } from "@brick/plugin-sdk";
+import { definePlugin, isUniqueViolation, isValidBusinessNo, maskEmail, rawResponse, searchExcerpt } from "@brick/plugin-sdk";
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import { DEFAULT_SETTINGS, ShopError, STATUS_LABEL, escapeHtml, won,
@@ -27,6 +27,10 @@ import {
   cancelPaymentRequest, createPaymentRequest, listPaymentRequests,
   markRequestPaid, prepareOrderForRequest, viewPaymentRequest,
 } from "./direct-payment.js";
+import {
+  RESTOCK_QUEUE_JOB, cancelRestockAlert, eraseRestockAlerts, listMyRestockAlerts,
+  listRestockDemand, requestRestockAlert, sendRestockNotifications, sweepRestock,
+} from "./restock.js";
 import {
   RECEIPT_KINDS, RECEIPT_KIND_LABEL, VAT_PERIODS, cancelCashReceipt, cancelReceiptsForOrder,
   listCashReceiptGateways, listCashReceipts, listTaxInvoices, markCashReceiptIssued,
@@ -857,6 +861,105 @@ export default definePlugin(async (ctx) => {
   });
 
   // ════════════════════════════════════════════════════
+  //  재입고 알림
+  // ════════════════════════════════════════════════════
+  //
+  // 품절 상품을 찾아온 손님에게 지금은 할 수 있는 것이 없다 — 그 손님은
+  // 다시 오지 않고, 팔 수 있었던 것을 못 판다.
+
+  ctx.registerRoute("POST", "/products/:slug/restock-alert", async (req) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const result = await requestRestockAlert(db, {
+      productSlug: req.params.slug,
+      optionId: b.optionId ? String(b.optionId) : null,
+      email: b.email ? String(b.email) : undefined,
+      user: req.user ? { id: req.user.id, email: req.user.email } : null,
+      ip: req.ip,
+    });
+    return {
+      ...result,
+      // 주소를 그대로 되돌려주지 않는다 — 남의 주소로 신청했는지 확인하는
+      // 수단이 되면 안 된다
+      email: maskEmail(result.email),
+      notice: "재입고되면 1회 알려드립니다. 광고 메일이 아닙니다.",
+    };
+  });
+
+  /** 내 신청 목록 */
+  ctx.registerRoute("GET", "/me/restock-alerts", async (req) => {
+    if (!req.user) throw new ShopError(401, "로그인이 필요합니다.");
+    return await listMyRestockAlerts(db, req.user.id);
+  });
+
+  /** 해지 — 로그인 없이 토큰으로 (비회원도 신청할 수 있다) */
+  ctx.registerRoute("POST", "/restock-alerts/cancel/:token", async (req) => {
+    await cancelRestockAlert(db, req.params.token);
+    return { ok: true, message: "재입고 알림이 해지되었습니다." };
+  });
+
+  /** 어떤 상품을 기다리는 사람이 많은지 — 재입고 우선순위의 근거 */
+  ctx.registerRoute("GET", "/admin/restock-demand", async (req) => {
+    requireAdmin(req);
+    return await listRestockDemand(db, { page: Number(req.query.page ?? 1) });
+  });
+
+  /**
+   * 재입고 스윕을 지금 돌린다 (관리자).
+   *
+   * 정기 스윕을 기다리지 않고 확인하고 싶을 때 쓴다. 재입고 직후 운영자가
+   * "알림이 갔나"를 확인할 방법이 없으면 불안해서 수동으로 메일을 보낸다.
+   */
+  ctx.registerRoute("POST", "/admin/restock-sweep", async (req) => {
+    requireAdmin(req);
+    return await runRestockSweep();
+  });
+
+  /**
+   * 재입고 스윕.
+   *
+   * 재고가 오르는 지점이 여러 곳(반품·취소·관리자 수정·이전 도구)이라
+   * 각각에 알림을 붙이면 반드시 하나를 빠뜨린다. 주기적으로 "대기자가 있는데
+   * 재고가 있는 조합"을 찾으면 경로와 무관하게 잡힌다 (restock.ts).
+   */
+  const runRestockSweep = async (): Promise<{ groups: number; sent: number; failed: number }> => {
+    const targets = await sweepRestock(db);
+    if (!targets.length) return { groups: 0, sent: 0, failed: 0 };
+
+    const siteName = await ctx.site.name();
+    let sent = 0;
+    let failed = 0;
+    for (const t of targets) {
+      const result = await sendRestockNotifications(db, {
+        productId: t.productId,
+        optionId: t.optionId,
+        siteUrl: ctx.site.url,
+        siteName,
+        send: (msg) => ctx.mail.send(msg),
+        log: (m) => ctx.logger.warn(m),
+      });
+      sent += result.sent;
+      failed += result.failed;
+    }
+    return { groups: targets.length, sent, failed };
+  };
+
+  // 큐 워커가 스윕을 돌리고 **스스로 다시 예약한다.**
+  //
+  // 큐에는 반복 실행 기능이 없다. setInterval 을 쓰면 플러그인을 비활성화해도
+  // 계속 돌고, 서버가 여러 대면 모두가 돌아서 같은 일을 중복한다.
+  // 큐를 쓰면 잡이 한 워커에서만 실행된다.
+  ctx.queue.process(RESTOCK_QUEUE_JOB, async () => {
+    const result = await runRestockSweep();
+    if (result.sent > 0 || result.failed > 0) {
+      ctx.logger.log(`재입고 알림: ${result.sent}건 발송, ${result.failed}건 실패`);
+    }
+    // 다음 스윕을 예약한다. 실패해도 큐가 재시도하므로 사슬이 끊기지 않는다.
+    await ctx.queue.enqueue(RESTOCK_QUEUE_JOB, {}, { delaySeconds: 300, maxAttempts: 3 });
+  });
+  // 활성화 직후 한 번 예약한다 (이미 예약된 것이 있어도 스윕은 멱등하다)
+  await ctx.queue.enqueue(RESTOCK_QUEUE_JOB, {}, { delaySeconds: 60, maxAttempts: 3 });
+
+  // ════════════════════════════════════════════════════
   //  개인결제 (주문서 없는 청구)
   // ════════════════════════════════════════════════════
   //
@@ -1478,6 +1581,9 @@ export default definePlugin(async (ctx) => {
     order: 30,
     async erase({ tx, userId }) {
       const done: string[] = [];
+
+      // 재입고 알림 신청 — 보존 의무가 없다
+      done.push(...(await eraseRestockAlerts(tx, userId)));
 
       // 장바구니는 구매 전 데이터 — 보존 의무가 없다.
       // 소유자는 shop_carts 에 있다 (shop_cart_items 에는 user_id 가 없다).
