@@ -29,9 +29,18 @@ CK="$TMP/admin.txt"
 PASS=0; FAIL=0
 
 cleanup() {
-  if [[ -n "${API_PID:-}" ]]; then kill "$API_PID" 2>/dev/null; wait "$API_PID" 2>/dev/null; fi
+  # 진입 시점의 종료 코드를 보존한다.
+  #
+  # kill 한 백그라운드 프로세스를 `wait` 하면 그 종료 코드(143 = SIGTERM)가
+  # **스크립트의 종료 코드가 된다** — 항목이 전부 통과했는데도 CI 가 실패로 본다.
+  # 놀랍게도 뒤에서 `exit 0` 을 해도 덮이지 않으므로 `|| true` 로 흡수해야 한다.
+  #
+  # 앞의 "스모크가 자기 실패를 숨겼다"와 짝을 이루는 반대 방향의 버그다.
+  # 하네스는 양쪽 다 정확해야 한다.
+  local rc=$?
+  if [[ -n "${API_PID:-}" ]]; then kill "$API_PID" 2>/dev/null; wait "$API_PID" 2>/dev/null || true; fi
   rm -rf "$TMP"
-  return 0
+  exit "$rc"
 }
 trap cleanup EXIT
 

@@ -148,6 +148,20 @@ SELECT id, name::text AS path FROM categories WHERE parent_id IS NULL
 회원이 탈퇴한 뒤에도 데이터가 남아 위법 상태가 됩니다. 코어는 플러그인 테이블
 이름을 모르므로 대신 지워줄 수 없습니다 (ADR-38).
 
+**정리 트랩의 `wait` 에는 `|| true` 를 붙이세요.** kill 한 백그라운드 프로세스를
+`wait` 하면 그 종료 코드(143 = SIGTERM)가 스크립트의 종료 코드가 되고, **뒤에서
+`exit 0` 을 해도 덮이지 않습니다.** 항목이 전부 통과했는데 CI 가 실패로 봅니다.
+
+```bash
+# ✗ 전부 통과해도 CI 가 실패한다
+cleanup() { kill "$API_PID" 2>/dev/null; wait "$API_PID" 2>/dev/null; }
+# ✓
+cleanup() { local rc=$?; kill "$API_PID" 2>/dev/null; wait "$API_PID" 2>/dev/null || true; exit "$rc"; }
+```
+
+**하네스를 고쳤으면 양방향을 확인하세요.** 항목을 일부러 실패시켜 종료 코드가
+1이 되는지도 봐야 합니다 — 통과 경로만 고치고 실패 감지가 죽으면 최악입니다.
+
 **트랜잭션을 `execute("BEGIN")` 으로 열지 마세요.** 풀에서 매번 다른 커넥션이
 나오므로 BEGIN 과 COMMIT 이 다른 커넥션에 갈 수 있습니다. `db.transaction()` 을
 쓰세요 (ADR-13).

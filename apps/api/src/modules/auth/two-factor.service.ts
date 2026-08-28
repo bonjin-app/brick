@@ -254,11 +254,20 @@ export class TwoFactorService {
     const userId = String(ch.user_id);
     const raw = String(params.code ?? "");
 
-    // 복구 코드인지 먼저 본다 — 형태가 다르다(문자 포함, 10자)
+    // TOTP 코드인지 복구 코드인지 **길이로 구분한다.**
+    //
+    // 처음에는 "숫자만 남겼을 때 6자리면 TOTP" 로 판단했는데 틀렸다.
+    // base32 알파벳에는 숫자 2~7 이 있어서, 10자 복구 코드에 숫자가 정확히
+    // 6개 들어가는 경우가 **0.4% 확률로 생긴다**(사용자 10명 중 4명은 못 쓰는
+    // 코드를 하나 갖는다). 그러면 복구 코드가 TOTP 로 오인되어 거절되고,
+    // 그 사실은 **휴대폰을 잃어 복구 코드를 쓰는 순간에만** 드러난다.
+    //
+    // 구분자를 떼면 TOTP 는 6자, 복구 코드는 10자다. 길이는 겹치지 않는다.
+    const compact = raw.toUpperCase().replace(/[\s-]/g, "");
+    const isTotpCode = /^\d{6}$/.test(compact);
     const normalized = normalizeRecoveryCode(raw);
-    const looksLikeRecovery = normalized.length === 10 && !/^\d{6}$/.test(raw.replace(/\D/g, ""));
 
-    if (looksLikeRecovery) {
+    if (!isTotpCode) {
       const used = await this.consumeRecoveryCode(userId, normalized);
       if (used) {
         await this.db.execute(sql`DELETE FROM totp_challenges WHERE id = ${String(ch.id)}::uuid`);
