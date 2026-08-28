@@ -116,6 +116,9 @@ jobs:
       - name: E2E 스모크 테스트 (사이트 스타터)
         run: bash scripts/smoke-starter.sh
 
+      - name: E2E 스모크 테스트 (원클릭 업데이트 · 서명 검증)
+        run: bash scripts/smoke-updates.sh
+
       - name: E2E 스모크 테스트 (방문자·팝업)
         run: bash scripts/smoke-site.sh
 

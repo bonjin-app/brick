@@ -8,6 +8,7 @@ import { PluginLoaderService } from "./plugin-loader.service.js";
 import { AdminGuard } from "../auth/auth.guard.js";
 import { AuthService } from "../auth/auth.service.js";
 import { ExtensionInstallerService } from "../extensions/extension-installer.service.js";
+import { ExtensionUpdaterService } from "../extensions/extension-updater.service.js";
 import { AuditService } from "../audit/audit.service.js";
 
 @Controller("api")
@@ -16,6 +17,7 @@ export class PluginsController {
     private readonly loader: PluginLoaderService,
     private readonly auth: AuthService,
     private readonly installer: ExtensionInstallerService,
+    private readonly updater: ExtensionUpdaterService,
     private readonly audit: AuditService,
   ) {}
 
@@ -150,6 +152,43 @@ export class PluginsController {
     const found = this.loader.adminResources.find((r) => r.plugin === plugin && r.name === name);
     if (!found) throw new NotFoundException(`unknown admin resource: ${plugin}/${name}`);
     return found;
+  }
+
+  /**
+   * 업데이트 확인 — 설치된 확장의 업데이트 매니페스트를 조회한다.
+   *
+   * 자동으로 적용하지 않는다. 무엇이 바뀌는지 보여주고 운영자가 누른다 —
+   * 자동 적용은 새벽에 사이트가 바뀌는 것이고, 그것을 원하는 운영자는 없다.
+   */
+  @Get("admin/updates")
+  @UseGuards(AdminGuard)
+  async checkUpdates() {
+    return this.updater.check();
+  }
+
+  /** 업데이트 적용 — 서명 검증을 통과해야만 설치된다 (extension-updater.service.ts) */
+  @Post("admin/updates/:kind/:name/apply")
+  @UseGuards(AdminGuard)
+  async applyUpdate(
+    @Param("kind") kind: string,
+    @Param("name") name: string,
+    @Req() req: FastifyRequest,
+  ) {
+    if (kind !== "plugin" && kind !== "theme") {
+      throw new BadRequestException("kind 는 plugin 또는 theme 이어야 합니다.");
+    }
+    const result = await this.updater.apply(kind, name);
+    // 활성 플러그인이면 새 코드로 재적재 — 새 마이그레이션이 여기서 적용된다
+    if (kind === "plugin" && this.loader.isActive(name)) {
+      await this.loader.reload(name);
+    }
+    await this.audit.fromRequest(req as never, {
+      action: "extension.update",
+      targetType: kind,
+      targetId: name,
+      summary: `${name} ${result.from} → ${result.to} (원클릭 업데이트)`,
+    });
+    return { ...result, reloaded: kind === "plugin" && this.loader.isActive(name) };
   }
 
   /** 페이지 빌더가 사용할 블록 카탈로그 */

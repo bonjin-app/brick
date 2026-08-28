@@ -23,6 +23,18 @@ export interface PluginManifest {
   settingsSchema?: Record<string, unknown>;
   /** 의존하는 다른 플러그인 */
   dependencies?: Record<string, string>;
+  /**
+   * 원클릭 업데이트 정보.
+   *
+   * `updates` — 업데이트 매니페스트 JSON 의 주소 (https 필수).
+   * `publisherKey` — 배포자의 Ed25519 공개키 (base64).
+   *
+   * 공개키는 **처음 설치할 때 고정(pin)된다.** 이후 업데이트 ZIP 은 그 키의
+   * 서명이 있어야만 설치된다 — 매니페스트 주소가 탈취되어도 다른 키로 서명한
+   * ZIP 은 거부된다 (TOFU: trust on first use).
+   */
+  updates?: string;
+  publisherKey?: string;
 }
 
 export type PluginStatus = "installed" | "active" | "inactive" | "error";

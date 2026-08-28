@@ -25,5 +25,8 @@ export interface ThemeManifest {
   /** 디자인 토큰: CSS 변수로 주입된다 */
   tokens?: Record<string, string>;
   /** 정적 자산 디렉터리. 예: "assets" → /themes/<name>/assets/* 로 서빙 */
-  assets?: string;
+  assets?: string;  /** 업데이트 매니페스트 주소 (https). 플러그인과 같은 서명 규칙을 쓴다 */
+  updates?: string;
+  /** 배포자 Ed25519 공개키 (base64) — 처음 설치할 때 고정된다 */
+  publisherKey?: string;
 }

@@ -235,3 +235,50 @@ ctx.registerSitemapSource({
 검색 결과에 노출되고, 그 자체가 유출입니다.
 
 자세한 내용은 [문의·FAQ·SEO 문서](helpdesk.md)에 있습니다.
+
+
+## 원클릭 업데이트 배포하기
+
+사용자가 관리자 화면에서 버튼 하나로 새 버전을 받게 하려면:
+
+### 1. 키 만들기 (한 번만)
+
+```bash
+node scripts/sign-extension.mjs keygen --out my-key
+```
+
+`my-key.private.pem` 은 **비밀**입니다. 잃으면 기존 사용자에게 업데이트를
+보낼 수 없습니다 (사용자가 새 ZIP 을 직접 올려야 합니다).
+
+### 2. 매니페스트에 넣기
+
+```json
+{
+  "name": "my-plugin",
+  "publisherKey": "<my-key.public.txt 내용>",
+  "updates": "https://example.com/my-plugin.update.json"
+}
+```
+
+`updates` 는 **https** 여야 합니다.
+
+### 3. 새 버전을 서명해서 올리기
+
+```bash
+node scripts/sign-extension.mjs sign \
+  --zip my-plugin-1.2.0.zip \
+  --key my-key.private.pem \
+  --url https://example.com/my-plugin-1.2.0.zip \
+  --notes "버그 수정" \
+  --out my-plugin.update.json
+```
+
+ZIP 과 `my-plugin.update.json` 을 서버에 올리면 끝입니다. 사용자의
+"업데이트 확인"이 그 JSON 을 읽습니다.
+
+### 지켜지는 것
+
+- 사용자가 **처음 설치할 때** 공개키가 고정됩니다. 이후 다른 키로 서명한
+  ZIP 은 서버가 뚫려도 설치되지 않습니다.
+- 버전은 semver 숫자 비교입니다. 낮은 버전은 업데이트로 제시되지 않습니다.
+- ZIP 은 50MB 상한입니다.
