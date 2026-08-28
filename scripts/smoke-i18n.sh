@@ -128,12 +128,27 @@ contains "목록 헤더가 영어" "$LIST_EN" ">Title</th>"
 contains "빈 목록 안내가 영어" "$LIST_EN" "Be the first to write a post."
 contains "글 수가 영어" "$LIST_EN" "0 posts"
 
+echo "── 플러그인(쇼핑몰)도 언어를 따라간다"
+curl -s -b "$CK" -X POST "$API/api/plugins/brick-shop/activate" >/dev/null
+curl -s -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' \
+  -d '{"slug":"shop","title":"쇼핑몰","status":"published","blocks":[{"block":"brick-shop/storefront","props":{}}]}' >/dev/null
+SHOP_EN="$(curl -s "$API/api/render/page?path=shop")"
+contains "빈 상품 안내가 영어" "$SHOP_EN" "No products yet."
+contains "기획전 목록도 영어" "$(curl -s "$API/api/render/page?path=shop/event")" "No events running."
+curl -s -b "$CK" -X POST "$API/api/plugins/brick-shop/admin/products" -H 'content-type: application/json' \
+  -d '{"slug":"tea","name":"Green Tea","price":9000,"stock":0,"status":"selling","free_shipping":true}' >/dev/null
+DETAIL_EN="$(curl -s "$API/api/render/page?path=shop/tea")"
+contains "품절 배지가 영어" "$DETAIL_EN" "Sold out"
+contains "재입고 폼이 영어" "$DETAIL_EN" "Notify me on restock"
+contains "후기 탭이 영어" "$DETAIL_EN" "Reviews"
+
 echo "── 한국어로 복귀"
 curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' \
   -d '{"site.locale":"ko"}' >/dev/null
 BACK="$(curl -s "$API/api/render/page?path=no-such-page")"
 contains "다시 한국어" "$BACK" "페이지를 찾을 수 없습니다"
 contains "게시판도 한국어 복귀" "$(curl -s "$API/api/render/page?path=board/news")" "첫 글을 작성해보세요."
+contains "쇼핑몰도 한국어 복귀" "$(curl -s "$API/api/render/page?path=shop/tea")" "재입고 알림 신청"
 contains "lang 복귀" "$BACK" 'lang=\"ko\"'
 
 echo

@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { PluginContext } from "@brick/plugin-sdk";
 import { escapeHtml, won, type Db, type ShopSettings } from "./types.js";
+import { bindI18n, t } from "./i18n.js";
 import { reviewSection } from "./reviews-view.js";
 import { RELATED_LIMIT, listRelated, type RelatedProduct } from "./related.js";
 import { activeCollections, viewCollection } from "./collections.js";
@@ -18,6 +19,7 @@ export function registerStorefrontBlocks(
   db: Db,
   settings: () => Promise<ShopSettings>,
 ): void {
+  bindI18n(ctx);
   // ── 상품 목록 ─────────────────────────────────────
   const productListBlock: Parameters<PluginContext["registerBlock"]>[0] = {
     name: "product-list",
@@ -53,7 +55,7 @@ export function registerStorefrontBlocks(
       `);
 
       if (!rows.length) {
-        return `<div class="brick-shop-empty">등록된 상품이 없습니다.</div>`;
+        return `<div class="brick-shop-empty">${escapeHtml(t("list.empty"))}</div>`;
       }
 
       const cards = rows.map((p) => {
@@ -65,8 +67,8 @@ export function registerStorefrontBlocks(
         return `
   <a class="brick-product-card${soldout ? " is-soldout" : ""}" href="/shop/${encodeURIComponent(String(p.slug))}">
     <div class="brick-product-thumb">
-      ${p.image_url ? `<img src="${escapeHtml(p.image_url)}" alt="${escapeHtml(p.name)}" loading="lazy" />` : `<span class="brick-noimg">이미지 없음</span>`}
-      ${soldout ? `<span class="brick-badge-soldout">품절</span>` : ""}
+      ${p.image_url ? `<img src="${escapeHtml(p.image_url)}" alt="${escapeHtml(p.name)}" loading="lazy" />` : `<span class="brick-noimg">${escapeHtml(t("common.noImage"))}</span>`}
+      ${soldout ? `<span class="brick-badge-soldout">${escapeHtml(t("common.soldout"))}</span>` : ""}
     </div>
     <div class="brick-product-name">${escapeHtml(p.name)}</div>
     ${Number(p.review_count) > 0 ? `<div class="brick-card-rating"><span class="brick-stars">${"★".repeat(Math.round(Number(p.rating_sum) / Number(p.review_count)))}</span> <span>(${Number(p.review_count)})</span></div>` : ""}
@@ -100,7 +102,7 @@ export function registerStorefrontBlocks(
     },
     render: async (props) => {
       const slug = String(props.slug ?? props.__pathTail ?? "");
-      if (!slug) return `<div class="brick-shop-empty">상품을 지정해주세요.</div>`;
+      if (!slug) return `<div class="brick-shop-empty">${escapeHtml(t("detail.pickProduct"))}</div>`;
 
       const { rows } = await db.execute(sql`
         SELECT id, slug, name, summary, description, image_url, images, price, list_price,
@@ -108,7 +110,7 @@ export function registerStorefrontBlocks(
         FROM shop_products WHERE slug = ${slug} AND status IN ('selling', 'soldout') LIMIT 1
       `);
       const p = rows[0];
-      if (!p) return `<div class="brick-shop-empty">상품을 찾을 수 없습니다.</div>`;
+      if (!p) return `<div class="brick-shop-empty">${escapeHtml(t("detail.notFound"))}</div>`;
 
       // 관련 상품 — 실패해도 상품 상세는 떠야 한다.
       // 추천은 부가 기능이고, 이것 때문에 상품을 못 팔면 안 된다.
@@ -143,12 +145,12 @@ export function registerStorefrontBlocks(
       const soldoutOptions = options.filter((o) => o.stock !== null && Number(o.stock) <= 0);
 
       const optionSelect = options.length
-        ? `<label class="brick-field">옵션
+        ? `<label class="brick-field">${escapeHtml(t("detail.option"))}
     <select id="brick-opt">
       ${options.map((o) => {
         const oSoldout = o.stock !== null && Number(o.stock) <= 0;
         const extra = Number(o.extra_price) > 0 ? ` (+${won(Number(o.extra_price))})` : "";
-        return `<option value="${escapeHtml(o.id)}"${oSoldout ? " disabled" : ""}>${escapeHtml(o.name)}${extra}${oSoldout ? " - 품절" : ""}</option>`;
+        return `<option value="${escapeHtml(o.id)}"${oSoldout ? " disabled" : ""}>${escapeHtml(o.name)}${extra}${oSoldout ? escapeHtml(t("detail.optionSoldout")) : ""}</option>`;
       }).join("")}
     </select>
   </label>`
@@ -177,38 +179,38 @@ export function registerStorefrontBlocks(
 <div class="brick-product-detail">
   <div>
     <div class="brick-detail-media">
-      ${gallery.length ? `<img id="brick-main-img" src="${escapeHtml(gallery[0])}" alt="${escapeHtml(p.name)}" />` : `<span class="brick-noimg">이미지 없음</span>`}
+      ${gallery.length ? `<img id="brick-main-img" src="${escapeHtml(gallery[0])}" alt="${escapeHtml(p.name)}" />` : `<span class="brick-noimg">${escapeHtml(t("common.noImage"))}</span>`}
     </div>
     ${gallery.length > 1 ? `<div class="brick-gallery">${gallery.map((u, i) =>
-      `<button type="button" class="${i === 0 ? "is-on" : ""}" data-src="${escapeHtml(u)}" aria-label="이미지 ${i + 1}"><img src="${escapeHtml(u)}" alt="" loading="lazy" /></button>`,
+      `<button type="button" class="${i === 0 ? "is-on" : ""}" data-src="${escapeHtml(u)}" aria-label="${escapeHtml(t("detail.imageN", { n: i + 1 }))}"><img src="${escapeHtml(u)}" alt="" loading="lazy" /></button>`,
     ).join("")}</div>` : ""}
   </div>
   <div class="brick-detail-info">
     <h1>${escapeHtml(p.name)}</h1>
-    ${reviewCount > 0 ? `<p class="brick-detail-rating"><span class="brick-stars">${"★".repeat(Math.round(ratingAvg))}${"☆".repeat(5 - Math.round(ratingAvg))}</span> <strong>${ratingAvg.toFixed(1)}</strong> <a href="#brick-reviews">후기 ${reviewCount}개</a></p>` : ""}
+    ${reviewCount > 0 ? `<p class="brick-detail-rating"><span class="brick-stars">${"★".repeat(Math.round(ratingAvg))}${"☆".repeat(5 - Math.round(ratingAvg))}</span> <strong>${ratingAvg.toFixed(1)}</strong> <a href="#brick-reviews">${escapeHtml(t("detail.reviewsLink", { n: reviewCount }))}</a></p>` : ""}
     ${p.summary ? `<p class="brick-detail-summary">${escapeHtml(p.summary)}</p>` : ""}
     <div class="brick-detail-price">
       ${p.list_price && Number(p.list_price) > Number(p.price) ? `<del>${won(Number(p.list_price))}</del>` : ""}
       <strong>${won(Number(p.price))}</strong>
     </div>
     <dl class="brick-detail-meta">
-      <dt>배송비</dt>
-      <dd>${p.free_shipping ? "무료배송" : `${won(s.shippingFee)}${s.freeShippingOver > 0 ? ` (${won(s.freeShippingOver)} 이상 무료)` : ""}`}</dd>
-      <dt>재고</dt>
-      <dd>${p.stock === null ? "구매 가능" : soldout ? "품절" : `${Number(p.stock)}개 남음`}</dd>
+      <dt>${escapeHtml(t("detail.shipping"))}</dt>
+      <dd>${p.free_shipping ? escapeHtml(t("detail.freeShipping")) : `${won(s.shippingFee)}${s.freeShippingOver > 0 ? escapeHtml(t("detail.freeOver", { amount: won(s.freeShippingOver) })) : ""}`}</dd>
+      <dt>${escapeHtml(t("detail.stock"))}</dt>
+      <dd>${p.stock === null ? escapeHtml(t("detail.canBuy")) : soldout ? escapeHtml(t("common.soldout")) : escapeHtml(t("detail.stockLeft", { n: Number(p.stock) }))}</dd>
     </dl>
     ${soldout ? `<div class="brick-soldout-notice">
-      <p>품절된 상품입니다.</p>
+      <p>${escapeHtml(t("detail.soldoutNotice"))}</p>
       ${restockForm(String(p.slug), soldoutOptions)}
     </div>` : `
     <form class="brick-buy-form" data-product="${escapeHtml(p.id)}">
       ${optionSelect}
-      <label class="brick-field">수량
+      <label class="brick-field">${escapeHtml(t("detail.qty"))}
         <input id="brick-qty" type="number" value="1" min="1" max="999" />
       </label>
       <div class="brick-buy-actions">
-        <button type="button" data-act="cart">장바구니</button>
-        <button type="button" data-act="buy" class="brick-primary">바로 구매</button>
+        <button type="button" data-act="cart">${escapeHtml(t("detail.cartBtn"))}</button>
+        <button type="button" data-act="buy" class="brick-primary">${escapeHtml(t("detail.buyBtn"))}</button>
       </div>
       <p class="brick-buy-msg" role="status"></p>
     </form>`}
@@ -219,7 +221,7 @@ ${
   // 상품은 팔지만 일부 옵션이 품절인 경우 — 가장 흔한 상황이다
   !soldout && soldoutOptions.length
     ? `<div class="brick-partial-soldout">
-        <p>품절된 옵션이 있습니다.</p>
+        <p>${escapeHtml(t("detail.partialSoldout"))}</p>
         ${restockForm(String(p.slug), soldoutOptions)}
       </div>`
     : ""
@@ -228,7 +230,7 @@ ${relatedHtml}
 <a id="brick-reviews"></a>
 ${reviewSection({ id: String(p.id), reviewCount, ratingAvg, inquiryCount: Number(p.inquiry_count ?? 0) })}
 <script type="application/ld+json">${jsonLd}</script>
-${BUY_SCRIPT}${GALLERY_SCRIPT}${RESTOCK_SCRIPT}${STOREFRONT_CSS}`;
+${buyScript()}${GALLERY_SCRIPT}${restockScript()}${STOREFRONT_CSS}`;
     },
   };
   ctx.registerBlock(productDetailBlock);
@@ -281,34 +283,34 @@ ${BUY_SCRIPT}${GALLERY_SCRIPT}${RESTOCK_SCRIPT}${STOREFRONT_CSS}`;
   async function renderCollectionIndex(): Promise<string> {
     const items = await activeCollections(db);
     if (!items.length) {
-      return `<div class="brick-shop-empty">진행 중인 기획전이 없습니다.</div>${STOREFRONT_CSS}`;
+      return `<div class="brick-shop-empty">${escapeHtml(t("collection.empty"))}</div>${STOREFRONT_CSS}`;
     }
     const cards = items
       .map((c) => `<a class="brick-collection-card" href="/shop/event/${encodeURIComponent(c.slug)}">
   <strong>${escapeHtml(c.title)}</strong>
   ${c.description ? `<p>${escapeHtml(c.description)}</p>` : ""}
-  <span>${c.productCount}개 상품${c.endsAt ? ` · ${shortDateKo(c.endsAt)} 까지` : ""}</span>
+  <span>${escapeHtml(t("collection.products", { n: c.productCount }))}${c.endsAt ? escapeHtml(t("collection.until", { date: shortDateLocalized(c.endsAt) })) : ""}</span>
 </a>`)
       .join("");
-    return `<div class="brick-collection-list"><h1>기획전</h1>${cards}</div>${COLLECTION_CSS}${STOREFRONT_CSS}`;
+    return `<div class="brick-collection-list"><h1>${escapeHtml(t("collection.index"))}</h1>${cards}</div>${COLLECTION_CSS}${STOREFRONT_CSS}`;
   }
 
   /** 기획전 상세 — 종료돼도 404 대신 안내를 보여준다 (공유된 링크로 온 손님) */
   async function renderCollectionPage(slug: string): Promise<string> {
     const c = await viewCollection(db, slug);
-    if (!c) return `<div class="brick-shop-empty">기획전을 찾을 수 없습니다.</div>${STOREFRONT_CSS}`;
+    if (!c) return `<div class="brick-shop-empty">${escapeHtml(t("collection.notFound"))}</div>${STOREFRONT_CSS}`;
 
     const notice =
-      c.state === "ended" ? `<p class="brick-collection-notice">종료된 기획전입니다.</p>`
-      : c.state === "upcoming" ? `<p class="brick-collection-notice">아직 시작하지 않은 기획전입니다.</p>`
+      c.state === "ended" ? `<p class="brick-collection-notice">${escapeHtml(t("collection.ended"))}</p>`
+      : c.state === "upcoming" ? `<p class="brick-collection-notice">${escapeHtml(t("collection.upcoming"))}</p>`
       : "";
     const cards = c.products
       .map((p) => `<a class="brick-product-card" href="/shop/${encodeURIComponent(p.slug)}">
   <span class="brick-product-thumb">${
     p.imageUrl
       ? `<img src="${escapeHtml(p.imageUrl)}" alt="${escapeHtml(p.name)}" loading="lazy" />`
-      : `<span class="brick-noimg">이미지 없음</span>`
-  }${p.soldout ? `<span class="brick-badge-soldout">품절</span>` : ""}</span>
+      : `<span class="brick-noimg">${escapeHtml(t("common.noImage"))}</span>`
+  }${p.soldout ? `<span class="brick-badge-soldout">${escapeHtml(t("common.soldout"))}</span>` : ""}</span>
   <span class="brick-product-name">${escapeHtml(p.name)}</span>
   <span class="brick-product-price">${
     p.listPrice && p.listPrice > p.price ? `<del>${won(p.listPrice)}</del> ` : ""
@@ -321,7 +323,7 @@ ${BUY_SCRIPT}${GALLERY_SCRIPT}${RESTOCK_SCRIPT}${STOREFRONT_CSS}`;
   ${notice}
   ${c.products.length
     ? `<div class="brick-product-grid" style="--brick-cols:4">${cards}</div>`
-    : `<p class="brick-shop-empty">진열된 상품이 없습니다.</p>`}
+    : `<p class="brick-shop-empty">${escapeHtml(t("collection.noProducts"))}</p>`}
 </div>${COLLECTION_CSS}${STOREFRONT_CSS}`;
   }
 
@@ -349,7 +351,7 @@ ${BUY_SCRIPT}${GALLERY_SCRIPT}${RESTOCK_SCRIPT}${STOREFRONT_CSS}`;
       if (!rows[0]) return "";
       const limit = Number(props.limit ?? RELATED_LIMIT);
       const related = await listRelated(db, String(rows[0].id), limit);
-      return relatedSection(related, String(props.title ?? "관련 상품"));
+      return relatedSection(related, props.title ? String(props.title) : undefined);
     },
   });
 
@@ -378,9 +380,9 @@ ${BUY_SCRIPT}${GALLERY_SCRIPT}${RESTOCK_SCRIPT}${STOREFRONT_CSS}`;
     displayName: "장바구니",
     render: async () => `
 <div class="brick-cart" id="brick-cart">
-  <p class="brick-cart-loading">장바구니를 불러오는 중…</p>
+  <p class="brick-cart-loading">${escapeHtml(t("cart.loading"))}</p>
 </div>
-${CART_SCRIPT}${STOREFRONT_CSS}`,
+${cartScript()}${STOREFRONT_CSS}`,
   };
   ctx.registerBlock(cartBlock);
 }
@@ -395,15 +397,16 @@ ${CART_SCRIPT}${STOREFRONT_CSS}`,
  * 함께 구매로 채워진 것에는 표시를 붙이지 않는다 — 손님에게 "이건 자동
  * 추천입니다"는 정보가 아니다. 운영자는 관리 화면에서 구분할 수 있다.
  */
-function relatedSection(items: RelatedProduct[], title = "관련 상품"): string {
+function relatedSection(items: RelatedProduct[], title?: string): string {
+  const heading = title ?? t("related.title");
   if (!items.length) return "";
   const cards = items
     .map((r) => {
       const href = `/shop/${encodeURIComponent(r.slug)}`;
       const thumb = r.imageUrl
         ? `<img src="${escapeHtml(r.imageUrl)}" alt="${escapeHtml(r.name)}" loading="lazy" />`
-        : `<span class="brick-noimg">이미지 없음</span>`;
-      const soldout = r.status === "soldout" ? `<span class="brick-badge-soldout">품절</span>` : "";
+        : `<span class="brick-noimg">${escapeHtml(t("common.noImage"))}</span>`;
+      const soldout = r.status === "soldout" ? `<span class="brick-badge-soldout">${escapeHtml(t("common.soldout"))}</span>` : "";
       const list =
         r.listPrice && r.listPrice > r.price
           ? `<del>${won(r.listPrice)}</del> `
@@ -416,7 +419,7 @@ function relatedSection(items: RelatedProduct[], title = "관련 상품"): strin
     })
     .join("");
   return `<section class="brick-related">
-  <h2>${escapeHtml(title)}</h2>
+  <h2>${escapeHtml(heading)}</h2>
   <div class="brick-product-grid" style="--brick-cols:4">${cards}</div>
 </section>`;
 }
@@ -433,7 +436,7 @@ function restockForm(
 ): string {
   const picker =
     soldoutOptions.length > 1
-      ? `<label class="brick-field">품절된 옵션
+      ? `<label class="brick-field">${escapeHtml(t("restock.soldoutOption"))}
       <select name="optionId">
         ${soldoutOptions
           .map((o) => `<option value="${escapeHtml(o.id)}">${escapeHtml(o.name)}</option>`)
@@ -446,12 +449,12 @@ function restockForm(
 
   return `<form class="brick-restock-form" data-slug="${escapeHtml(slug)}">
     ${picker}
-    <label class="brick-field">재입고 알림 받을 이메일
+    <label class="brick-field">${escapeHtml(t("restock.email"))}
       <input type="email" name="email" placeholder="name@example.com" required />
     </label>
-    <button type="button" data-act="restock">재입고 알림 신청</button>
+    <button type="button" data-act="restock">${escapeHtml(t("restock.submit"))}</button>
     <p class="brick-restock-msg" role="status"></p>
-    <p class="brick-restock-note">재입고되면 1회 알려드립니다. 광고 메일이 아닙니다.</p>
+    <p class="brick-restock-note">${escapeHtml(t("restock.note"))}</p>
   </form>`;
 }
 
@@ -461,7 +464,7 @@ function restockForm(
  * 품절 화면에서만 렌더되므로 항상 붙여도 부담이 없다.
  * 옵션이 있는 상품은 선택된 옵션을 함께 보낸다 — "M 사이즈만 품절"이 대부분이다.
  */
-const RESTOCK_SCRIPT = `
+const restockScript = () => `
 <script>
 (function () {
   // 폼이 둘일 수 있다 (품절 상품 + 품절 옵션). 각각 붙인다.
@@ -472,13 +475,13 @@ const RESTOCK_SCRIPT = `
   var msg = form.querySelector(".brick-restock-msg");
   btn.addEventListener("click", function () {
     var email = form.querySelector('input[name="email"]').value.trim();
-    if (!email) { msg.textContent = "이메일을 입력해주세요."; return; }
+    if (!email) { msg.textContent = ${JSON.stringify(t("restock.emailRequired"))}; return; }
     // 옵션은 이 폼 안에서 읽는다 — 구매용 드롭다운을 읽으면 다른 옵션이 섞인다
     var opt = form.querySelector('[name="optionId"]');
     var body = { email: email };
     if (opt && opt.value) body.optionId = opt.value;
     btn.disabled = true;
-    msg.textContent = "신청 중…";
+    msg.textContent = ${JSON.stringify(t("restock.submitting"))};
     fetch("/api/plugins/brick-shop/products/" + encodeURIComponent(form.dataset.slug) + "/restock-alert", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -488,21 +491,21 @@ const RESTOCK_SCRIPT = `
       .then(function (res) {
         // 실패 이유를 그대로 보여준다 — "이미 신청했습니다"를 감추면 손님이 계속 누른다
         msg.textContent = res.ok
-          ? "신청되었습니다. 재입고되면 " + res.d.email + " 으로 알려드립니다."
-          : (res.d.message || "신청에 실패했습니다.");
+          ? ${JSON.stringify(t("restock.done"))}.replace("{email}", res.d.email)
+          : (res.d.message || ${JSON.stringify(t("restock.fail"))});
         if (res.ok) form.querySelector('input[name="email"]').value = "";
       })
-      .catch(function () { msg.textContent = "신청에 실패했습니다."; })
+      .catch(function () { msg.textContent = ${JSON.stringify(t("restock.fail"))}; })
       .finally(function () { btn.disabled = false; });
   });
   }
 })();
 </script>`;
 
-/** 기획전 카드용 짧은 날짜 */
-function shortDateKo(d: Date | string): string {
-  const t = new Date(d);
-  return `${t.getMonth() + 1}월 ${t.getDate()}일`;
+/** 기획전 카드용 짧은 날짜 — 형식도 언어를 따라간다 */
+function shortDateLocalized(d: Date | string): string {
+  const at = new Date(d);
+  return t("date.short", { m: at.getMonth() + 1, d: at.getDate() });
 }
 
 const COLLECTION_CSS = `
@@ -597,7 +600,7 @@ const GALLERY_SCRIPT = `
 
 /* ── 장바구니 담기 / 바로 구매 스크립트 ──────────────
    비회원 장바구니 토큰은 localStorage에 보관한다. */
-const BUY_SCRIPT = `
+const buyScript = () => `
 <script>
 (function(){
   var form = document.currentScript.parentNode.querySelector('.brick-buy-form');
@@ -614,24 +617,24 @@ const BUY_SCRIPT = `
   }
   form.querySelectorAll('button[data-act]').forEach(function(btn){
     btn.addEventListener('click', function(){
-      msg.textContent = '처리 중…';
+      msg.textContent = ${JSON.stringify(t("buy.processing"))};
       fetch('/api/plugins/brick-shop/cart', {
         method: 'POST', headers: {'content-type':'application/json'}, body: JSON.stringify(payload())
       }).then(function(r){ return r.json().then(function(d){ return {ok:r.ok, d:d}; }); })
         .then(function(res){
-          if (!res.ok) { msg.textContent = res.d.message || '담기에 실패했습니다.'; return; }
+          if (!res.ok) { msg.textContent = res.d.message || ${JSON.stringify(t("buy.addFail"))}; return; }
           if (res.d.guestToken) localStorage.setItem('brick_shop_guest', res.d.guestToken);
           if (btn.dataset.act === 'buy') { location.href = '/cart'; return; }
-          msg.textContent = '장바구니에 담았습니다.';
+          msg.textContent = ${JSON.stringify(t("buy.added"))};
         })
-        .catch(function(){ msg.textContent = '오류가 발생했습니다.'; });
+        .catch(function(){ msg.textContent = ${JSON.stringify(t("buy.error"))}; });
     });
   });
 })();
 </script>`;
 
 /* ── 장바구니 화면 스크립트 ─────────────────────────── */
-const CART_SCRIPT = `
+const cartScript = () => `
 <script>
 (function(){
   var root = document.getElementById('brick-cart');
@@ -645,7 +648,7 @@ const CART_SCRIPT = `
 
   function render(d){
     if (!d.items || !d.items.length) {
-      root.innerHTML = '<p class="brick-shop-empty">장바구니가 비어 있습니다.</p>';
+      root.innerHTML = '<p class="brick-shop-empty">' + ${JSON.stringify(t("cart.empty"))} + '</p>';
       return;
     }
     var rows = d.items.map(function(it){
@@ -654,19 +657,19 @@ const CART_SCRIPT = `
         '<td>' + fmt(it.unitPrice) + '</td>' +
         '<td><input class="brick-cart-qty" type="number" min="1" max="999" value="' + Number(it.quantity) + '" /></td>' +
         '<td>' + fmt(it.lineTotal) + '</td>' +
-        '<td><button data-remove>삭제</button></td></tr>';
+        '<td><button data-remove>' + ${JSON.stringify(t("common.delete"))} + '</button></td></tr>';
     }).join('');
 
     root.innerHTML =
-      '<table><thead><tr><th>상품</th><th>단가</th><th>수량</th><th>합계</th><th></th></tr></thead>' +
+      '<table><thead><tr><th>' + ${JSON.stringify(t("cart.colProduct"))} + '</th><th>' + ${JSON.stringify(t("cart.colUnit"))} + '</th><th>' + ${JSON.stringify(t("cart.colQty"))} + '</th><th>' + ${JSON.stringify(t("cart.colSum"))} + '</th><th></th></tr></thead>' +
       '<tbody>' + rows + '</tbody></table>' +
       '<div class="brick-cart-total"><dl>' +
-      '<dt>상품 금액</dt><dd>' + fmt(d.subtotal) + '</dd>' +
-      (d.discount ? '<dt>할인</dt><dd>-' + fmt(d.discount) + '</dd>' : '') +
-      '<dt>배송비</dt><dd>' + (d.shippingFee ? fmt(d.shippingFee) : '무료') + '</dd>' +
-      '<dt class="brick-grand">결제 예정 금액</dt><dd class="brick-grand">' + fmt(d.total) + '</dd>' +
+      '<dt>' + ${JSON.stringify(t("cart.subtotal"))} + '</dt><dd>' + fmt(d.subtotal) + '</dd>' +
+      (d.discount ? '<dt>' + ${JSON.stringify(t("cart.discount"))} + '</dt><dd>-' + fmt(d.discount) + '</dd>' : '') +
+      '<dt>' + ${JSON.stringify(t("cart.shipping"))} + '</dt><dd>' + (d.shippingFee ? fmt(d.shippingFee) : ${JSON.stringify(t("cart.free"))}) + '</dd>' +
+      '<dt class="brick-grand">' + ${JSON.stringify(t("cart.grand"))} + '</dt><dd class="brick-grand">' + fmt(d.total) + '</dd>' +
       '</dl><div class="brick-buy-actions"><a class="brick-primary" href="/checkout" ' +
-      'style="flex:1;padding:14px;border-radius:8px;text-align:center;text-decoration:none">주문하기</a></div></div>';
+      'style="flex:1;padding:14px;border-radius:8px;text-align:center;text-decoration:none">' + ${JSON.stringify(t("cart.order"))} + '</a></div></div>';
 
     root.querySelectorAll('tr[data-item]').forEach(function(tr){
       var id = tr.dataset.item;
@@ -688,7 +691,7 @@ const CART_SCRIPT = `
     fetch('/api/plugins/brick-shop/cart' + qs)
       .then(function(r){ return r.json(); })
       .then(render)
-      .catch(function(){ root.innerHTML = '<p class="brick-shop-empty">장바구니를 불러올 수 없습니다.</p>'; });
+      .catch(function(){ root.innerHTML = '<p class="brick-shop-empty">' + ${JSON.stringify(t("cart.loadFail"))} + '</p>'; });
   }
   load();
 })();

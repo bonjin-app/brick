@@ -1,4 +1,5 @@
 import { escapeHtml } from "./types.js";
+import { t } from "./i18n.js";
 
 /**
  * 상품 상세의 후기·문의 영역.
@@ -19,10 +20,10 @@ export function reviewSection(product: {
 <section class="brick-pd-tabs" data-product="${escapeHtml(product.id)}">
   <nav class="brick-pd-tabnav" role="tablist">
     <button type="button" data-tab="reviews" class="is-on" role="tab">
-      상품후기 <span>${product.reviewCount}</span>
+      ${escapeHtml(t("tab.reviews"))} <span>${product.reviewCount}</span>
     </button>
     <button type="button" data-tab="inquiries" role="tab">
-      상품문의 <span>${product.inquiryCount}</span>
+      ${escapeHtml(t("tab.inquiries"))} <span>${product.inquiryCount}</span>
     </button>
   </nav>
 
@@ -30,21 +31,21 @@ export function reviewSection(product: {
     <div class="brick-review-summary">
       <div class="brick-review-score">
         <strong>${product.ratingAvg ? product.ratingAvg.toFixed(1) : "-"}</strong>
-        <div class="brick-stars" aria-label="평균 별점 ${product.ratingAvg}점">${stars}</div>
-        <small>후기 ${product.reviewCount}개</small>
+        <div class="brick-stars" aria-label="${escapeHtml(t("reviews.avgAria", { n: product.ratingAvg }))}">${stars}</div>
+        <small>${escapeHtml(t("reviews.count", { n: product.reviewCount }))}</small>
       </div>
       <div class="brick-review-dist" data-dist></div>
     </div>
     <div data-review-form></div>
-    <div data-review-list><p class="brick-shop-empty">불러오는 중…</p></div>
+    <div data-review-list><p class="brick-shop-empty">${escapeHtml(t("common.loading"))}</p></div>
   </div>
 
   <div class="brick-pd-panel" data-panel="inquiries" hidden>
     <div data-inquiry-form></div>
-    <div data-inquiry-list><p class="brick-shop-empty">불러오는 중…</p></div>
+    <div data-inquiry-list><p class="brick-shop-empty">${escapeHtml(t("common.loading"))}</p></div>
   </div>
 </section>
-${REVIEW_CSS}${REVIEW_SCRIPT}`;
+${REVIEW_CSS}${reviewScript()}`;
 }
 
 /** 반개는 표현하지 않는다 — 텍스트 별은 반개가 오히려 읽기 어렵다 */
@@ -107,7 +108,7 @@ const REVIEW_CSS = `
  * 프레임워크 없이 쓴다 — 테마는 빌드를 타지 않으므로 어떤 테마에서도 그대로 동작해야 한다.
  * 서버가 준 데이터만 그리고, HTML은 전부 이스케이프한다(저장형 XSS 방어).
  */
-const REVIEW_SCRIPT = `
+const reviewScript = () => `
 <script>
 (function(){
   var root = document.currentScript.parentNode.querySelector('.brick-pd-tabs');
@@ -129,7 +130,7 @@ const REVIEW_SCRIPT = `
   }
   function reply(text){
     if (!text) return '';
-    return '<div class="brick-admin-reply"><b>판매자 답변</b>' + esc(text) + '</div>';
+    return '<div class="brick-admin-reply"><b>' + ${JSON.stringify(t("reviews.sellerReply"))} + '</b>' + esc(text) + '</div>';
   }
   function get(el, sel){ return el.querySelector(sel); }
 
@@ -160,7 +161,7 @@ const REVIEW_SCRIPT = `
     for (var r = 5; r >= 1; r--) {
       var n = Number((data.distribution||{})[r] || 0);
       var pct = max ? Math.round(n / max * 100) : 0;
-      html += '<div class="brick-dist-row"><span>' + r + '점</span>' +
+      html += '<div class="brick-dist-row"><span>' + ${JSON.stringify(t("reviews.point"))}.replace('{n}', r) + '</span>' +
         '<span class="brick-dist-bar"><i style="width:' + pct + '%"></i></span>' +
         '<span>' + n + '</span></div>';
     }
@@ -171,7 +172,7 @@ const REVIEW_SCRIPT = `
     renderDist(data);
     var list = get(root, '[data-review-list]');
     if (!data.items.length) {
-      list.innerHTML = '<p class="brick-shop-empty">첫 후기를 남겨주세요.</p>';
+      list.innerHTML = '<p class="brick-shop-empty">' + ${JSON.stringify(t("reviews.empty"))} + '</p>';
       return;
     }
     list.innerHTML = data.items.map(function(r){
@@ -179,19 +180,19 @@ const REVIEW_SCRIPT = `
         '<div class="brick-review-head">' +
           '<span class="brick-stars">' + stars(r.rating) + '</span>' +
           '<strong>' + esc(r.author_name) + '</strong>' +
-          (r.verified ? '<span class="brick-verified">구매확인</span>' : '') +
-          (r.is_visible === false ? '<span class="brick-hidden-flag">숨김</span>' : '') +
+          (r.verified ? '<span class="brick-verified">' + ${JSON.stringify(t("reviews.verified"))} + '</span>' : '') +
+          (r.is_visible === false ? '<span class="brick-hidden-flag">' + ${JSON.stringify(t("reviews.hiddenFlag"))} + '</span>' : '') +
           '<time>' + day(r.created_at) + '</time>' +
         '</div>' +
         '<p class="brick-review-body">' + esc(r.content) + '</p>' +
         photos(r.images) + reply(r.admin_reply) +
-        (r.mine ? '<div class="brick-row-actions"><button data-del-review>삭제</button></div>' : '') +
+        (r.mine ? '<div class="brick-row-actions"><button data-del-review>' + ${JSON.stringify(t("common.delete"))} + '</button></div>' : '') +
       '</article>';
     }).join('') + more(data, 'reviews');
 
     list.querySelectorAll('[data-del-review]').forEach(function(btn){
       btn.addEventListener('click', function(){
-        if (!confirm('후기를 삭제할까요?')) return;
+        if (!confirm(${JSON.stringify(t("reviews.deleteConfirm"))})) return;
         var id = btn.closest('[data-id]').dataset.id;
         json(API + '/reviews/' + id, { method: 'DELETE' }).then(function(){ loadReviews(1); loadForm(); });
       });
@@ -202,7 +203,7 @@ const REVIEW_SCRIPT = `
   function more(data, kind){
     var shown = data.page * data.pageSize;
     if (shown >= data.total) return '';
-    return '<button class="brick-pd-more" data-more="' + kind + '">더 보기 (' + (data.total - shown) + '개 남음)</button>';
+    return '<button class="brick-pd-more" data-more="' + kind + '">' + ${JSON.stringify(t("common.more"))}.replace('{n}', data.total - shown) + '</button>';
   }
   function bindMore(list, kind, loader){
     var btn = list.querySelector('[data-more]');
@@ -212,7 +213,7 @@ const REVIEW_SCRIPT = `
   function loadReviews(page, append){
     state.reviews = page || 1;
     json(API + '/products/' + pid + '/reviews?page=' + state.reviews).then(function(res){
-      if (!res.ok) { get(root, '[data-review-list]').innerHTML = '<p class="brick-shop-empty">후기를 불러올 수 없습니다.</p>'; return; }
+      if (!res.ok) { get(root, '[data-review-list]').innerHTML = '<p class="brick-shop-empty">' + ${JSON.stringify(t("reviews.loadFail"))} + '</p>'; return; }
       if (append) {
         // 더 보기: 기존 목록 뒤에 이어 붙인다
         var holder = document.createElement('div');
@@ -234,9 +235,9 @@ const REVIEW_SCRIPT = `
     json(API + '/products/' + pid + '/reviews/eligibility').then(function(res){
       var d = res.d || {};
       if (d.canWrite) { box.innerHTML = writeForm(); bindWrite(box); return; }
-      var note = d.reason === 'login' ? '로그인하고 구매하신 상품에 후기를 남길 수 있습니다.'
-        : d.reason === 'already_written' ? '이미 이 상품에 후기를 작성하셨습니다.'
-        : '구매하신 고객만 후기를 작성할 수 있습니다.';
+      var note = d.reason === 'login' ? ${JSON.stringify(t("reviews.noteLogin"))}
+        : d.reason === 'already_written' ? ${JSON.stringify(t("reviews.noteAlready"))}
+        : ${JSON.stringify(t("reviews.noteBuyers"))};
       box.innerHTML = '<p class="brick-write-note">' + note + '</p>';
     });
   }
@@ -244,10 +245,10 @@ const REVIEW_SCRIPT = `
   function writeForm(){
     var picks = '';
     for (var i = 1; i <= 5; i++) picks += '<b data-star="' + i + '">★</b>';
-    return '<div class="brick-write-box"><h3>후기 작성</h3>' +
+    return '<div class="brick-write-box"><h3>' + ${JSON.stringify(t("reviews.writeTitle"))} + '</h3>' +
       '<div class="brick-rating-pick" data-rating>' + picks + '</div>' +
-      '<textarea data-content placeholder="상품은 어떠셨나요? (5자 이상)"></textarea>' +
-      '<div class="brick-write-actions"><button data-submit>등록</button>' +
+      '<textarea data-content placeholder="' + ${JSON.stringify(t("reviews.placeholder"))}.replace(/"/g, '&quot;') + '"></textarea>' +
+      '<div class="brick-write-actions"><button data-submit>' + ${JSON.stringify(t("common.submit"))} + '</button>' +
       '<span class="brick-write-msg" data-msg></span></div></div>';
   }
 
@@ -270,7 +271,7 @@ const REVIEW_SCRIPT = `
         method: 'POST', headers: {'content-type':'application/json'},
         body: JSON.stringify({ rating: state.myRating, content: get(box, '[data-content]').value })
       }).then(function(res){
-        if (!res.ok) { msg.textContent = res.d.message || '등록에 실패했습니다.'; return; }
+        if (!res.ok) { msg.textContent = res.d.message || ${JSON.stringify(t("common.submitFail"))}; return; }
         loadReviews(1); loadForm();
       });
     });
@@ -280,29 +281,29 @@ const REVIEW_SCRIPT = `
   function renderInquiries(data){
     var list = get(root, '[data-inquiry-list]');
     if (!data.items.length) {
-      list.innerHTML = '<p class="brick-shop-empty">등록된 문의가 없습니다.</p>';
+      list.innerHTML = '<p class="brick-shop-empty">' + ${JSON.stringify(t("inquiries.empty"))} + '</p>';
       return;
     }
     list.innerHTML = data.items.map(function(q){
       var locked = q.content === null;
       return '<article class="brick-inquiry-item" data-id="' + esc(q.id) + '">' +
         '<div class="brick-review-head">' +
-          (q.is_secret ? '<span class="brick-verified">비밀</span>' : '') +
+          (q.is_secret ? '<span class="brick-verified">' + ${JSON.stringify(t("inquiries.secret"))} + '</span>' : '') +
           '<strong>' + esc(q.title) + '</strong>' +
           '<span>' + esc(q.author_name) + '</span>' +
           '<time>' + day(q.created_at) + '</time>' +
           '<span class="brick-stars" style="font-size:12px;letter-spacing:0">' +
-            (q.status === 'answered' ? '답변완료' : '답변대기') + '</span>' +
+            (q.status === 'answered' ? ${JSON.stringify(t("inquiries.answered"))} : ${JSON.stringify(t("inquiries.waiting"))}) + '</span>' +
         '</div>' +
         (locked ? '' : '<p class="brick-review-body">' + esc(q.content) + '</p>') +
         (locked ? '' : reply(q.admin_reply)) +
-        (q.mine ? '<div class="brick-row-actions"><button data-del-inq>삭제</button></div>' : '') +
+        (q.mine ? '<div class="brick-row-actions"><button data-del-inq>' + ${JSON.stringify(t("common.delete"))} + '</button></div>' : '') +
       '</article>';
     }).join('') + more(data, 'inquiries');
 
     list.querySelectorAll('[data-del-inq]').forEach(function(btn){
       btn.addEventListener('click', function(){
-        if (!confirm('문의를 삭제할까요?')) return;
+        if (!confirm(${JSON.stringify(t("inquiries.deleteConfirm"))})) return;
         var id = btn.closest('[data-id]').dataset.id;
         json(API + '/inquiries/' + id, { method: 'DELETE' }).then(function(){ loadInquiries(1); });
       });
@@ -313,7 +314,7 @@ const REVIEW_SCRIPT = `
   function loadInquiries(page, append){
     state.inquiries = page || 1;
     json(API + '/products/' + pid + '/inquiries?page=' + state.inquiries).then(function(res){
-      if (!res.ok) { get(root, '[data-inquiry-list]').innerHTML = '<p class="brick-shop-empty">문의를 불러올 수 없습니다.</p>'; return; }
+      if (!res.ok) { get(root, '[data-inquiry-list]').innerHTML = '<p class="brick-shop-empty">' + ${JSON.stringify(t("inquiries.loadFail"))} + '</p>'; return; }
       if (append) {
         var prev = get(root, '[data-inquiry-list]');
         var oldItems = prev.querySelectorAll('.brick-inquiry-item');
@@ -331,15 +332,15 @@ const REVIEW_SCRIPT = `
     // 로그인 여부는 자격 확인 응답을 재사용한다 (요청 하나를 아낀다)
     json(API + '/products/' + pid + '/reviews/eligibility').then(function(res){
       if ((res.d || {}).reason === 'login') {
-        box.innerHTML = '<p class="brick-write-note">문의를 남기려면 로그인해주세요.</p>';
+        box.innerHTML = '<p class="brick-write-note">' + ${JSON.stringify(t("inquiries.loginNote"))} + '</p>';
         return;
       }
-      box.innerHTML = '<div class="brick-write-box"><h3>상품 문의</h3>' +
-        '<input type="text" data-title placeholder="제목" />' +
-        '<textarea data-content placeholder="궁금하신 점을 남겨주세요."></textarea>' +
+      box.innerHTML = '<div class="brick-write-box"><h3>' + ${JSON.stringify(t("inquiries.writeTitle"))} + '</h3>' +
+        '<input type="text" data-title placeholder="' + ${JSON.stringify(t("inquiries.titlePh"))}.replace(/"/g,'&quot;') + '" />' +
+        '<textarea data-content placeholder="' + ${JSON.stringify(t("inquiries.contentPh"))}.replace(/"/g,'&quot;') + '"></textarea>' +
         '<label class="brick-secret-label"><input type="checkbox" data-secret />' +
-        '비밀글로 문의 (작성자와 판매자만 볼 수 있습니다)</label>' +
-        '<div class="brick-write-actions"><button data-submit>등록</button>' +
+        ${JSON.stringify(t("inquiries.secretLabel"))} + '</label>' +
+        '<div class="brick-write-actions"><button data-submit>' + ${JSON.stringify(t("common.submit"))} + '</button>' +
         '<span class="brick-write-msg" data-msg></span></div></div>';
 
       get(box, '[data-submit]').addEventListener('click', function(){
@@ -353,7 +354,7 @@ const REVIEW_SCRIPT = `
             isSecret: get(box, '[data-secret]').checked
           })
         }).then(function(res){
-          if (!res.ok) { msg.textContent = res.d.message || '등록에 실패했습니다.'; return; }
+          if (!res.ok) { msg.textContent = res.d.message || ${JSON.stringify(t("common.submitFail"))}; return; }
           get(box, '[data-title]').value = '';
           get(box, '[data-content]').value = '';
           loadInquiries(1);
