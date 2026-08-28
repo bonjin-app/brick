@@ -35,7 +35,12 @@ export interface PricedLine {
 export interface Quote {
   lines: PricedLine[];
   subtotal: number;
+  /** 총 할인 = couponDiscount + gradeDiscount. 주문의 discount 컬럼에 그대로 간다 */
   discount: number;
+  /** 분해 — 내역 화면이 "무엇이 얼마였는지"를 보여줘야 한다 */
+  couponDiscount: number;
+  gradeDiscount: number;
+  gradeName: string | null;
   /** 포인트로 결제한 금액 (brick-point가 설치된 경우) */
   pointUsed: number;
   shippingFee: number;
@@ -63,6 +68,13 @@ export interface QuoteOptions {
    * 필수로 만들지 않는다 — 대신 주소를 넣으면 금액이 갱신된다.
    */
   postcode?: string | null;
+  /**
+   * 회원 등급 혜택 — 호출자가 grades.gradeOf() 로 읽어 넘긴다.
+   *
+   * pricing 은 회원 테이블을 모른다(포인트와 같은 관심사 분리). 여기서
+   * 조회까지 하면 장바구니 견적마다 회원 조인이 돌고, 비회원 경로가 지저분해진다.
+   */
+  grade?: { name: string; discountRate: number } | null;
   /**
    * 포인트 사용 요청액. 실제 사용 가능액은 호출자가 포인트 서비스로 검증해 넘긴다.
    * (pricing은 금액 계산만 하고 포인트 잔액을 모른다 — 관심사 분리)
@@ -96,7 +108,8 @@ export async function quote(
   if (!items.length) {
     if (strict) throw new ShopError(400, "주문할 상품이 없습니다.");
     return {
-      lines: [], subtotal: 0, discount: 0, pointUsed: 0, shippingFee: 0,
+      lines: [], subtotal: 0, discount: 0, couponDiscount: 0, gradeDiscount: 0,
+      gradeName: null, pointUsed: 0, shippingFee: 0,
       zoneFee: 0, zoneName: null, total: 0,
       couponCode: null, hasUnavailable: false,
     };
@@ -170,18 +183,28 @@ export async function quote(
   const payable = lines.filter((l) => l.available);
   const subtotal = payable.reduce((sum, l) => sum + l.lineTotal, 0);
 
-  let discount = 0;
+  let couponDiscount = 0;
   let appliedCode: string | null = null;
   let couponError: string | undefined;
   try {
     const applied = await applyCoupon(db, subtotal, couponCode);
-    discount = applied.discount;
+    couponDiscount = applied.discount;
     appliedCode = applied.code;
   } catch (err) {
     if (strict) throw err;
     // 장바구니 조회에서는 쿠폰 문제로 화면이 깨지지 않게 한다
     couponError = err instanceof Error ? err.message : String(err);
   }
+
+  // 등급 할인 — 상품 금액 기준. 쿠폰과 **각각 subtotal 에서** 계산한다.
+  // 순차 적용(쿠폰 후 잔액에 등급율)은 적용 순서에 따라 금액이 달라져
+  // "왜 이 금액인가"를 설명할 수 없다. 합이 상품 금액을 넘으면 잘라낸다.
+  const gradeRate = Math.max(0, Math.min(50, Number(opts.grade?.discountRate ?? 0)));
+  const gradeDiscount = Math.min(
+    Math.floor((subtotal * gradeRate) / 100),
+    Math.max(0, subtotal - couponDiscount),
+  );
+  const discount = couponDiscount + gradeDiscount;
 
   const shippingFee = payable.length ? calcShipping(payable, subtotal - discount, settings) : 0;
 
@@ -210,6 +233,9 @@ export async function quote(
     lines,
     subtotal,
     discount,
+    couponDiscount,
+    gradeDiscount,
+    gradeName: gradeDiscount > 0 || opts.grade ? (opts.grade?.name ?? null) : null,
     pointUsed,
     shippingFee,
     zoneFee,

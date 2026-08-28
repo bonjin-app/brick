@@ -356,3 +356,30 @@ export const PAYMENT_REQUEST_RESOURCE: AdminResource = {
     { name: "memo", label: "메모", type: "textarea" },
   ],
 };
+
+/**
+ * 회원 등급.
+ *
+ * 역할(권한)과 별개다 — 등급은 할인 같은 혜택만 준다 (ADR-25).
+ */
+export const GRADE_RESOURCE: AdminResource = {
+  name: "grades",
+  title: "회원 등급",
+  itemLabel: "등급",
+  basePath: "/admin/grades",
+  order: 10,
+  description:
+    "최근 3개월 구매 실적(반품 제외)으로 등급이 자동 배정됩니다. 6시간마다 재계산되고, " +
+    "만들거나 바꾼 직후에는 '지금 재계산'을 부르세요. 기준 금액 0원인 등급이 기본 등급입니다.",
+  can: { delete: true },
+  fields: [
+    { name: "name", label: "등급 이름", type: "text", required: true, inList: true },
+    { name: "min_amount", label: "기준 금액 (최근 3개월 순구매액)", type: "money", required: true, inList: true,
+      help: "이 금액 이상 구매한 회원이 이 등급이 됩니다. 0원이 기본 등급입니다." },
+    { name: "discount_rate", label: "상품 할인율 (%)", type: "number", inList: true,
+      help: "0~50%. 쿠폰과 함께 쓸 수 있고, 합쳐서 상품 금액을 넘지 않습니다." },
+    { name: "description", label: "안내 문구", type: "textarea",
+      help: "마이페이지의 등급 안내에 보입니다." },
+    { name: "members", label: "인원", type: "number", readOnly: true, inList: true },
+  ],
+};

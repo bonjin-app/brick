@@ -61,6 +61,8 @@ export async function createOrder(
     pointUsed?: number;
     /** 포인트 서비스 (brick-point 미설치 시 null) */
     pointsPort?: PointsPort | null;
+    /** 회원 등급 혜택 (grades.gradeOf 결과). 라우트가 읽어서 넘긴다 */
+    grade?: { name: string; discountRate: number } | null;
   },
 ): Promise<{ id: string; orderNo: string; total: number; guestToken: string | null }> {
   const { orderer } = params;
@@ -108,6 +110,8 @@ export async function createOrder(
     // 빠뜨리면 주문서에는 6,000원으로 보이고 실제로는 3,000원만 받는다.
     postcode: params.orderer.postcode,
     pointUsed: requestedPoint,
+    // 등급 할인 — 장바구니 견적과 주문이 같은 등급을 봐야 금액이 일치한다
+    grade: params.grade ?? null,
   });
   // pricing이 상한을 적용했을 수 있다 (상품금액 초과분은 쓰지 않는다)
   requestedPoint = q.pointUsed;
@@ -178,7 +182,8 @@ export async function createOrder(
         payment_method, payment_status,
         orderer_name, orderer_phone, orderer_email,
         receiver_name, receiver_phone, postcode, address1, address2, delivery_memo,
-        guest_token, idempotency_key
+        guest_token, idempotency_key,
+        grade_discount, grade_name
       ) VALUES (
         ${orderId}, ${orderNo}, ${params.userId ?? null}::uuid, 'pending',
         ${q.subtotal}, ${q.discount}, ${q.shippingFee}, ${q.zoneFee}, ${q.zoneName},
@@ -187,7 +192,8 @@ export async function createOrder(
         ${orderer.ordererName}, ${orderer.ordererPhone}, ${orderer.ordererEmail ?? null},
         ${orderer.receiverName || orderer.ordererName}, ${orderer.receiverPhone || orderer.ordererPhone},
         ${orderer.postcode}, ${orderer.address1}, ${orderer.address2 ?? null}, ${orderer.deliveryMemo ?? null},
-        ${guestToken}, ${idemKey}
+        ${guestToken}, ${idemKey},
+        ${q.gradeDiscount}, ${q.gradeDiscount > 0 ? q.gradeName : null}
       )
     `);
 

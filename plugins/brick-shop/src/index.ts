@@ -7,7 +7,7 @@ import { quote } from "./pricing.js";
 import { addToCart, clearCart, getCartItems, updateCartItem, type CartOwner } from "./cart.js";
 import { changeOrderStatus, createOrder, type PointsPort } from "./orders.js";
 import { bankTransferGateway, confirmPayment, gateways, refundPayment, registerGateway } from "./payments.js";
-import { CASH_RECEIPT_RESOURCE, CATEGORY_RESOURCE, COUPON_RESOURCE, INQUIRY_RESOURCE,
+import { CASH_RECEIPT_RESOURCE, CATEGORY_RESOURCE, GRADE_RESOURCE, COUPON_RESOURCE, INQUIRY_RESOURCE,
          ORDER_RESOURCE, PRODUCT_RESOURCE, RETURN_RESOURCE, REVIEW_RESOURCE,
          PAYMENT_REQUEST_RESOURCE, SHIPPING_ZONE_RESOURCE,
          TAX_INVOICE_RESOURCE } from "./admin-resources.js";
@@ -27,6 +27,10 @@ import {
   cancelPaymentRequest, createPaymentRequest, listPaymentRequests,
   markRequestPaid, prepareOrderForRequest, viewPaymentRequest,
 } from "./direct-payment.js";
+import {
+  GRADE_RECOMPUTE_JOB, createGrade, deleteGrade, eraseGrade, gradeOf, listGrades,
+  myGrade, recomputeGrades, updateGrade,
+} from "./grades.js";
 import {
   RESTOCK_QUEUE_JOB, cancelRestockAlert, eraseRestockAlerts, listMyRestockAlerts,
   listRestockDemand, requestRestockAlert, sendRestockNotifications, sweepRestock,
@@ -246,6 +250,8 @@ export default definePlugin(async (ctx) => {
     const q = await quote(db, items, await settings(), body.couponCode, {
       pointUsed,
       postcode: body.postcode ?? null,
+      // 장바구니 견적과 주문 생성이 **같은 등급**을 봐야 금액이 일치한다
+      grade: await gradeOf(db, req.user?.id ?? null),
     });
     return { ...q, pointsAvailable: Boolean(port) };
   });
@@ -275,6 +281,7 @@ export default definePlugin(async (ctx) => {
       idempotencyKey: body.idempotencyKey ?? null,
       pointUsed: body.pointUsed,
       pointsPort: pointsPort(),
+      grade: await gradeOf(db, req.user?.id ?? null),
     });
 
     // 주문한 상품을 장바구니에서 비운다 (직접 구매가 아니라 장바구니 주문일 때만)
@@ -859,6 +866,64 @@ export default definePlugin(async (ctx) => {
     requireAdmin(req);
     return await salesSummary(db, { period: parsePeriod(req.query) });
   });
+
+  // ════════════════════════════════════════════════════
+  //  회원 등급 — 구매 실적에 따른 혜택 (권한이 아니다)
+  // ════════════════════════════════════════════════════
+
+  ctx.registerRoute("GET", "/grades", async () => {
+    // 공개 — "얼마 사면 어떤 혜택"은 손님에게 보여줘야 의미가 있다
+    return { items: await listGrades(db), windowMonths: 3 };
+  });
+
+  ctx.registerRoute("GET", "/me/grade", async (req) => {
+    if (!req.user) throw new ShopError(401, "로그인이 필요합니다.");
+    return await myGrade(db, req.user.id);
+  });
+
+  ctx.registerRoute("GET", "/admin/grades", async (req) => {
+    requireAdmin(req);
+    // 등급별 인원도 보여준다 — 경계를 조정할 때 필요한 정보다
+    const grades = await listGrades(db);
+    const { rows: counts } = await db.execute(sql`
+      SELECT grade_id, count(*) AS n FROM shop_user_grades GROUP BY grade_id
+    `);
+    const byId = new Map(counts.map((r) => [String(r.grade_id), Number(r.n)]));
+    return { items: grades.map((g) => ({ ...g, members: byId.get(g.id) ?? 0 })) };
+  });
+
+  ctx.registerRoute("POST", "/admin/grades", async (req) => {
+    requireAdmin(req);
+    return await createGrade(db, req.body as Record<string, unknown>);
+  });
+
+  ctx.registerRoute("PUT", "/admin/grades/:id", async (req) => {
+    requireAdmin(req);
+    return await updateGrade(db, req.params.id, req.body as Record<string, unknown>);
+  });
+
+  ctx.registerRoute("DELETE", "/admin/grades/:id", async (req) => {
+    requireAdmin(req);
+    return await deleteGrade(db, req.params.id);
+  });
+
+  /** 지금 재계산 — 등급을 만들거나 경계를 바꾼 직후 확인하는 데 쓴다 */
+  ctx.registerRoute("POST", "/admin/grades/recompute", async (req) => {
+    requireAdmin(req);
+    return await recomputeGrades(db);
+  });
+
+  // 주기 재계산 — 재입고 스윕과 같은 자기 재예약 방식 (ADR-64).
+  // 등급은 실시간일 필요가 없다: "이번 기간의 내 등급"으로 안내되는 값이고,
+  // 주문 중에 바뀌면 장바구니와 결제 화면의 할인이 달라져 혼란스럽다.
+  ctx.queue.process(GRADE_RECOMPUTE_JOB, async () => {
+    const result = await recomputeGrades(db);
+    if (result.assigned > 0) {
+      ctx.logger.log(`회원 등급 재계산: ${result.assigned}명 배정`);
+    }
+    await ctx.queue.enqueue(GRADE_RECOMPUTE_JOB, {}, { delaySeconds: 21600, maxAttempts: 3 });
+  });
+  await ctx.queue.enqueue(GRADE_RECOMPUTE_JOB, {}, { delaySeconds: 120, maxAttempts: 3 });
 
   // ════════════════════════════════════════════════════
   //  재입고 알림
@@ -1584,6 +1649,8 @@ export default definePlugin(async (ctx) => {
 
       // 재입고 알림 신청 — 보존 의무가 없다
       done.push(...(await eraseRestockAlerts(tx, userId)));
+      // 등급 배정 — 실적 원본(주문)이 남으므로 배정만 지우면 된다
+      done.push(...(await eraseGrade(tx, userId)));
 
       // 장바구니는 구매 전 데이터 — 보존 의무가 없다.
       // 소유자는 shop_carts 에 있다 (shop_cart_items 에는 user_id 가 없다).
@@ -1657,6 +1724,7 @@ export default definePlugin(async (ctx) => {
   ctx.registerAdminResource(CASH_RECEIPT_RESOURCE);
   ctx.registerAdminResource(TAX_INVOICE_RESOURCE);
   ctx.registerAdminResource(PAYMENT_REQUEST_RESOURCE);
+  ctx.registerAdminResource(GRADE_RESOURCE);
 
   /**
    * 사이트맵: 판매 중인 상품 주소.
