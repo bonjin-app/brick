@@ -56,6 +56,48 @@ export interface PaymentGateway {
    * 것처럼 보이고, 그 손님은 다시 오지 않는다.
    */
   isReady?(): Promise<boolean>;
+  /**
+   * 정기결제 — 빌링키 발급 (선택 구현).
+   *
+   * 카드 등록은 PG 의 화면에서 일어난다. 우리는 그 결과(authKey)를 받아
+   * PG 에 빌링키 발급을 요청할 뿐 — **카드번호는 이 시스템을 지나가지 않는다.**
+   * 두 메서드를 모두 구현한 게이트웨이만 정기결제를 지원한다.
+   */
+  issueBillingKey?(params: {
+    /** PG 카드 등록 화면이 돌려준 1회용 키 */
+    authKey: string;
+    /** 우리가 회원에게 발급한 PG용 고객 식별자 */
+    customerKey: string;
+  }): Promise<{
+    ok: boolean;
+    billingKey?: string;
+    /** "신한 ****1234" — 회원에게 보여줄 표시 */
+    cardLabel?: string;
+    failureReason?: string;
+  }>;
+  /**
+   * 빌링키로 청구한다. 반드시 PG 가 실제로 승인한 금액을 반환해야 한다 —
+   * 호출자가 주문 금액과 대조한다.
+   *
+   * `idempotencyKey` 는 회차 하나를 가리킨다 — 네트워크 재시도로 같은 회차가
+   * 두 번 청구되는 것을 PG 쪽에서도 막는다.
+   */
+  chargeBillingKey?(params: {
+    billingKey: string;
+    customerKey: string;
+    orderNo: string;
+    amount: number;
+    orderName: string;
+    idempotencyKey: string;
+  }): Promise<{
+    ok: boolean;
+    /** PG 가 발급한 거래 키 — 환불에 필요하다 */
+    providerTid?: string;
+    approvedAmount?: number;
+    method?: string;
+    raw?: unknown;
+    failureReason?: string;
+  }>;
   cancel(params: {
     providerTid: string;
     amount?: number;

@@ -142,6 +142,79 @@ export default definePlugin(async (ctx) => {
       };
     },
 
+    /**
+     * 정기결제 — 빌링키 발급.
+     *
+     * 카드 등록은 토스의 화면에서 일어나고 우리는 authKey 만 받는다.
+     * **카드번호는 이 서버를 지나가지 않는다.**
+     */
+    async issueBillingKey(params: { authKey: string; customerKey: string }) {
+      const cfg = await load();
+      if (!cfg.enabled || !cfg.secretKey) {
+        return { ok: false, failureReason: "토스페이먼츠가 설정되지 않았습니다." };
+      }
+      const res = await callToss(
+        "/billing/authorizations/issue",
+        { authKey: params.authKey, customerKey: params.customerKey },
+        cfg.secretKey,
+        // authKey 는 1회용이므로 그 자체가 요청을 유일하게 만든다
+        `billing-issue-${params.authKey}`,
+      );
+      if (!res.ok) {
+        return { ok: false, failureReason: String(res.data.message ?? "카드 등록 실패") };
+      }
+      const card = res.data.card as { issuerCode?: string; company?: string; number?: string } | undefined;
+      // 표시용 라벨 — 마스킹된 뒷자리만. 전체 번호는 응답에도 없다
+      const tail = String(card?.number ?? "").slice(-4);
+      return {
+        ok: true,
+        billingKey: String(res.data.billingKey),
+        cardLabel: [String(card?.company ?? res.data.cardCompany ?? "카드"), tail ? `****${tail}` : ""]
+          .filter(Boolean).join(" "),
+      };
+    },
+
+    /** 빌링키 청구 — 승인 금액을 그대로 반환한다 (호출자가 대조한다) */
+    async chargeBillingKey(params: {
+      billingKey: string;
+      customerKey: string;
+      orderNo: string;
+      amount: number;
+      orderName: string;
+      idempotencyKey: string;
+    }) {
+      const cfg = await load();
+      if (!cfg.enabled || !cfg.secretKey) {
+        return { ok: false, failureReason: "토스페이먼츠가 설정되지 않았습니다." };
+      }
+      const res = await callToss(
+        `/billing/${encodeURIComponent(params.billingKey)}`,
+        {
+          customerKey: params.customerKey,
+          amount: params.amount,
+          orderId: params.orderNo,
+          orderName: params.orderName.slice(0, 100),
+        },
+        cfg.secretKey,
+        // 호출자가 준 회차 키를 그대로 쓴다 — 같은 회차의 재시도는 PG 에서도 한 번이다
+        params.idempotencyKey,
+      );
+      if (!res.ok) {
+        return {
+          ok: false,
+          failureReason: String(res.data.message ?? `청구 실패 (HTTP ${res.status})`),
+          raw: sanitize(res.data),
+        };
+      }
+      return {
+        ok: true,
+        providerTid: String(res.data.paymentKey),
+        approvedAmount: Number(res.data.totalAmount),
+        method: String(res.data.method ?? "카드"),
+        raw: sanitize(res.data),
+      };
+    },
+
     async cancel(params: {
       providerTid: string;
       amount?: number;

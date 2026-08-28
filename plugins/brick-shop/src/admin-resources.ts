@@ -47,6 +47,13 @@ export const PRODUCT_RESOURCE: AdminResource = {
     // 도서·농수산물 등. 서점이 부가세를 붙여 증빙을 발급하면 잘못된 증빙이다
     { name: "tax_free", label: "면세 상품", type: "boolean",
       help: "도서·농수산물 등 부가세가 없는 상품. 현금영수증·세금계산서 금액 계산에 반영됩니다." },
+    { name: "sub_interval", label: "정기배송", type: "select",
+      options: [
+        { value: "", label: "안 함 (일반 상품)" },
+        { value: "week", label: "매주" },
+        { value: "month", label: "매월" },
+      ],
+      help: "주기를 정하면 회원이 카드를 등록하고 정기배송을 신청할 수 있습니다. 청구액은 가입 시점 금액으로 고정됩니다." },
     { name: "sort_order", label: "진열 순서", type: "number", help: "작을수록 먼저 표시됩니다." },
     { name: "sold_count", label: "판매수량", type: "number", readOnly: true, inList: true },
     { name: "rating_avg", label: "평점", type: "number", readOnly: true, inList: true },
@@ -423,5 +430,30 @@ export const COLLECTION_RESOURCE: AdminResource = {
     { name: "ends_at", label: "종료", type: "date", help: "비우면 상시" },
     { name: "is_visible", label: "노출", type: "boolean", inList: true },
     { name: "sort_order", label: "순서", type: "number" },
+  ],
+};
+
+export const SUBSCRIPTION_RESOURCE: AdminResource = {
+  name: "subscriptions",
+  title: "정기배송",
+  itemLabel: "구독",
+  basePath: "/admin/subscriptions",
+  order: 12,
+  // 구독은 회원의 계약이다 — 관리자가 금액·주기를 고치는 순간 합의가 깨진다.
+  // 그래서 수정 불가, 삭제 버튼만 남긴다 (삭제 = 해지: 청구가 멈추고 이력은 남는다).
+  can: { create: false, update: false, delete: true },
+  description:
+    "회원의 정기배송 구독입니다. 금액·주기는 가입 시점에 고정되어 수정할 수 없습니다. " +
+    "삭제는 해지입니다 — 다음 청구가 없어질 뿐, 결제 이력과 주문은 남습니다.",
+  fields: [
+    { name: "user_email", label: "회원", type: "text", readOnly: true, inList: true },
+    { name: "product_name", label: "상품", type: "text", readOnly: true, inList: true },
+    { name: "quantity", label: "수량", type: "number", readOnly: true },
+    { name: "interval_label", label: "주기", type: "text", readOnly: true, inList: true },
+    { name: "amount", label: "회당 금액", type: "money", readOnly: true, inList: true },
+    { name: "status_label", label: "상태", type: "text", readOnly: true, inList: true },
+    { name: "cycle_no", label: "결제 회차", type: "number", readOnly: true, inList: true },
+    { name: "next_charge_at", label: "다음 결제", type: "date", readOnly: true, inList: true },
+    { name: "created_at", label: "가입일", type: "date", readOnly: true },
   ],
 };

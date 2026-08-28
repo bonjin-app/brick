@@ -9,7 +9,7 @@ import { changeOrderStatus, createOrder, type PointsPort } from "./orders.js";
 import { bankTransferGateway, confirmPayment, gateways, refundPayment, registerGateway } from "./payments.js";
 import { CASH_RECEIPT_RESOURCE, CATEGORY_RESOURCE, COLLECTION_RESOURCE, GRADE_RESOURCE, COUPON_RESOURCE, INQUIRY_RESOURCE,
          ORDER_RESOURCE, PRODUCT_RESOURCE, RETURN_RESOURCE, REVIEW_RESOURCE,
-         PAYMENT_REQUEST_RESOURCE, SHIPPING_ZONE_RESOURCE,
+         PAYMENT_REQUEST_RESOURCE, SHIPPING_ZONE_RESOURCE, SUBSCRIPTION_RESOURCE,
          TAX_INVOICE_RESOURCE } from "./admin-resources.js";
 import { registerStorefrontBlocks } from "./blocks.js";
 import {
@@ -53,6 +53,11 @@ import {
   listWishlist, listZones, mergeGuestViews, mergeGuestWishlist, purgeOldViews,
   recordView, removeFromWishlist, updateZone, type Owner as WishOwner,
 } from "./wishlist.js";
+import {
+  SUBSCRIPTION_QUEUE_JOB, cancelSubscription, chargeDueSubscriptions, issueBillingKey,
+  listBillingKeys, listBillingProviders, listMySubscriptions, listSubscriptionsAdmin,
+  resumeSubscription, revokeBillingKey, subscribe, subscriptionEvents,
+} from "./subscriptions.js";
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,148}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -462,7 +467,7 @@ export default definePlugin(async (ctx) => {
     const { rows } = await db.execute(sql`
       SELECT p.id, p.slug, p.name, p.price, p.list_price, p.stock, p.status, p.image_url,
              p.summary, p.description, p.free_shipping, p.sort_order, p.sold_count,
-             p.category_id, p.tax_free, p.images, p.review_count, p.rating_sum,
+             p.category_id, p.tax_free, p.sub_interval, p.images, p.review_count, p.rating_sum,
              coalesce(
                (SELECT json_agg(json_build_object('name', o.name, 'extra_price', o.extra_price, 'stock', o.stock)
                                 ORDER BY o.sort_order, o.name)
@@ -513,12 +518,12 @@ export default definePlugin(async (ctx) => {
       await db.execute(sql`
         INSERT INTO shop_products
           (id, slug, name, price, list_price, stock, status, image_url, summary, description,
-           free_shipping, sort_order, images, category_id, tax_free)
+           free_shipping, sort_order, images, category_id, tax_free, sub_interval)
         VALUES
           (${id}, ${p.slug}, ${p.name}, ${p.price}, ${p.listPrice}, ${p.stock}, ${p.status},
            ${p.imageUrl ?? images[0] ?? null}, ${p.summary}, ${p.description},
            ${p.freeShipping}, ${p.sortOrder}, ${JSON.stringify(images)}::jsonb,
-           ${p.categoryId}::uuid, ${p.taxFree})
+           ${p.categoryId}::uuid, ${p.taxFree}, ${p.subInterval})
       `);
     } catch (err) {
       throw slugConflict(err, "상품");
@@ -544,7 +549,7 @@ export default definePlugin(async (ctx) => {
           image_url = ${p.imageUrl ?? images[0] ?? null}, summary = ${p.summary},
           description = ${p.description}, free_shipping = ${p.freeShipping}, sort_order = ${p.sortOrder},
           images = ${JSON.stringify(images)}::jsonb, category_id = ${p.categoryId}::uuid,
-          tax_free = ${p.taxFree}, updated_at = now()
+          tax_free = ${p.taxFree}, sub_interval = ${p.subInterval}, updated_at = now()
         WHERE id = ${req.params.id}::uuid RETURNING id
       `);
       if (!rows.length) throw new ShopError(404, "상품을 찾을 수 없습니다.");
@@ -1181,6 +1186,130 @@ export default definePlugin(async (ctx) => {
   });
   // 활성화 직후 한 번 예약한다 (이미 예약된 것이 있어도 스윕은 멱등하다)
   await ctx.queue.enqueue(RESTOCK_QUEUE_JOB, {}, { delaySeconds: 60, maxAttempts: 3 });
+
+  // ════════════════════════════════════════════════════
+  //  정기결제 — 카드는 PG 에, 해지는 한 클릭에 (subscriptions.ts)
+  // ════════════════════════════════════════════════════
+
+  const requireMember = (req: { user?: { id: string } | null }): string => {
+    if (!req.user) throw new ShopError(401, "로그인이 필요합니다.");
+    return req.user.id;
+  };
+
+  /** 정기결제를 지원하는 결제수단 (카드 등록 화면이 조회) */
+  ctx.registerRoute("GET", "/billing/providers", async () => {
+    return { providers: listBillingProviders() };
+  });
+
+  /**
+   * 카드 등록 준비 — PG 위젯에 넘길 고객 식별자를 발급한다.
+   * 회원 id 를 그대로 쓰지 않는다: PG 에 넘어가는 값에 내부 식별자를 싣지 않는다.
+   */
+  ctx.registerRoute("POST", "/me/billing-keys/prepare", async (req) => {
+    requireMember(req);
+    return { customerKey: `cust-${uuidv7().replace(/-/g, "")}` };
+  });
+
+  ctx.registerRoute("POST", "/me/billing-keys", async (req) => {
+    const userId = requireMember(req);
+    const b = req.body as Record<string, unknown>;
+    return await issueBillingKey(db, {
+      userId,
+      provider: String(b.provider ?? ""),
+      authKey: String(b.authKey ?? ""),
+      customerKey: String(b.customerKey ?? ""),
+    });
+  });
+
+  ctx.registerRoute("GET", "/me/billing-keys", async (req) => {
+    const userId = requireMember(req);
+    return { items: await listBillingKeys(db, userId) };
+  });
+
+  ctx.registerRoute("DELETE", "/me/billing-keys/:id", async (req) => {
+    const userId = requireMember(req);
+    return await revokeBillingKey(db, { userId, keyId: req.params.id });
+  });
+
+  /** 가입 — 첫 회차를 즉시 결제한다. 실패하면 가입도 없다 */
+  ctx.registerRoute("POST", "/subscriptions", async (req) => {
+    const userId = requireMember(req);
+    const b = req.body as Record<string, unknown>;
+    return await subscribe(db, {
+      userId,
+      productSlug: String(b.productSlug ?? b.product_slug ?? ""),
+      quantity: b.quantity === undefined ? 1 : Number(b.quantity),
+      billingKeyId: String(b.billingKeyId ?? b.billing_key_id ?? ""),
+      orderer: (b.orderer ?? {}) as Parameters<typeof subscribe>[1]["orderer"],
+      settings: await settings(),
+      pointsPort: pointsPort(),
+    });
+  });
+
+  ctx.registerRoute("GET", "/me/subscriptions", async (req) => {
+    const userId = requireMember(req);
+    return { items: await listMySubscriptions(db, userId) };
+  });
+
+  ctx.registerRoute("GET", "/me/subscriptions/:id/events", async (req) => {
+    const userId = requireMember(req);
+    return { items: await subscriptionEvents(db, req.params.id, userId) };
+  });
+
+  /** 해지 — 항상, 즉시, 조건 없이. 확인 절차를 여기에 쌓지 않는다 */
+  ctx.registerRoute("POST", "/me/subscriptions/:id/cancel", async (req) => {
+    const userId = requireMember(req);
+    return await cancelSubscription(db, { id: req.params.id, userId, actor: "member" });
+  });
+
+  ctx.registerRoute("POST", "/me/subscriptions/:id/resume", async (req) => {
+    const userId = requireMember(req);
+    const b = req.body as Record<string, unknown>;
+    return await resumeSubscription(db, {
+      id: req.params.id,
+      userId,
+      billingKeyId: b.billingKeyId ? String(b.billingKeyId) : null,
+    });
+  });
+
+  ctx.registerRoute("GET", "/admin/subscriptions", async (req) => {
+    requireAdmin(req);
+    return await listSubscriptionsAdmin(db, Number(req.query.page ?? 1));
+  });
+
+  /** 관리자 해지 (CS 전화 요청 등) — 삭제가 아니라 청구 중단이고, 이력은 남는다 */
+  ctx.registerRoute("DELETE", "/admin/subscriptions/:id", async (req) => {
+    requireAdmin(req);
+    return await cancelSubscription(db, { id: req.params.id, actor: "admin" });
+  });
+
+  const runSubscriptionSweep = async () => {
+    return await chargeDueSubscriptions(db, {
+      settings: await settings(),
+      pointsPort: pointsPort(),
+      notify: (msg) => ctx.mail.send({ to: msg.email, subject: msg.subject, text: msg.text }),
+      log: (m) => ctx.logger.warn(m),
+    });
+  };
+
+  /** 수동 스윕 (운영·테스트용) — 주기 스윕과 같은 코드를 돈다 */
+  ctx.registerRoute("POST", "/admin/subscriptions/sweep", async (req) => {
+    requireAdmin(req);
+    return await runSubscriptionSweep();
+  });
+
+  // 회차 청구도 재입고와 같은 자기 재예약 큐 잡이다 — 한 워커에서만 돌고,
+  // 플러그인을 비활성화하면 함께 멈춘다. setInterval 은 둘 다 못 한다.
+  ctx.queue.process(SUBSCRIPTION_QUEUE_JOB, async () => {
+    const result = await runSubscriptionSweep();
+    if (result.due > 0) {
+      ctx.logger.log(
+        `정기결제: 대상 ${result.due} · 성공 ${result.charged} · 실패 ${result.failed} · 중지 ${result.paused}`,
+      );
+    }
+    await ctx.queue.enqueue(SUBSCRIPTION_QUEUE_JOB, {}, { delaySeconds: 600, maxAttempts: 3 });
+  });
+  await ctx.queue.enqueue(SUBSCRIPTION_QUEUE_JOB, {}, { delaySeconds: 90, maxAttempts: 3 });
 
   // ════════════════════════════════════════════════════
   //  개인결제 (주문서 없는 청구)
@@ -1889,6 +2018,7 @@ export default definePlugin(async (ctx) => {
   ctx.registerAdminResource(PAYMENT_REQUEST_RESOURCE);
   ctx.registerAdminResource(GRADE_RESOURCE);
   ctx.registerAdminResource(COLLECTION_RESOURCE);
+  ctx.registerAdminResource(SUBSCRIPTION_RESOURCE);
 
   /**
    * 사이트맵: 판매 중인 상품 주소.
@@ -2076,6 +2206,13 @@ function validateProduct(b: Record<string, unknown>) {
     description: String(b.description ?? ""),
     freeShipping: b.free_shipping === true,
     sortOrder: Math.floor(Number(b.sort_order ?? 0)) || 0,
+    // 정기배송 주기. 빈 값이면 일반 상품
+    subInterval: ((): string | null => {
+      const v = String(b.sub_interval ?? "").trim();
+      if (!v) return null;
+      if (!["week", "month"].includes(v)) throw new ShopError(400, "정기배송 주기가 올바르지 않습니다.");
+      return v;
+    })(),
   };
 }
 
