@@ -107,6 +107,9 @@ jobs:
       - name: E2E 스모크 테스트 (결제 게이트웨이 · 개인결제)
         run: bash scripts/smoke-payments.sh
 
+      - name: E2E 스모크 테스트 (통합검색 · 검색 로그)
+        run: bash scripts/smoke-search.sh
+
       - name: E2E 스모크 테스트 (방문자·팝업)
         run: bash scripts/smoke-site.sh
 

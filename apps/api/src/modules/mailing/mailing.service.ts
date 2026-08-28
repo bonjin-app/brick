@@ -1,4 +1,6 @@
 import { BadRequestException, Inject, Injectable, Logger } from "@nestjs/common";
+// HTML 제거는 코어의 것을 쓴다 — 검색 발췌와 같은 규칙이어야 한다
+import { stripHtml } from "@brick/core";
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import { randomBytes } from "node:crypto";
@@ -538,16 +540,4 @@ function maskEmail(email: string): string {
   return `${head}${"*".repeat(Math.max(1, local.length - 2))}@${domain}`;
 }
 
-/** HTML 메일의 텍스트 대안 — HTML 만 보내면 스팸 판정을 받기 쉽다 */
-function stripHtml(html: string): string {
-  return String(html)
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/p>/gi, "\n\n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
+

@@ -95,6 +95,63 @@ export interface PluginContext {
    * 십만 건인 경우가 흔하고, 한 번에 다 읽으면 메모리가 터진다.
    */
   registerSitemapSource(source: SitemapSource): void;
+
+  /**
+   * 통합검색 공급자를 등록한다.
+   *
+   * 없으면 그 플러그인의 내용은 **검색되지 않는다.** 코어는 페이지만 알므로
+   * 게시글과 상품은 각 플러그인이 등록해야 찾을 수 있다.
+   */
+  registerSearchSource(source: SearchSource): void;
+}
+
+/** 통합검색 결과 한 건 */
+export interface SearchHit {
+  /** 사이트 루트 기준 경로 */
+  path: string;
+  title: string;
+  /** 검색어 주변 발췌. 없으면 화면이 제목만 보여준다 */
+  excerpt?: string | null;
+  /** 작성·등록 시각 — 최신순 정렬과 화면 표시에 쓴다 */
+  date?: Date | string | null;
+  /** 목록에 함께 보여줄 부가 정보 (게시판 이름, 가격 등) */
+  meta?: string | null;
+}
+
+/**
+ * 통합검색 공급자.
+ *
+ * ── 반드시 지켜야 하는 것 ────────────────────────────
+ *
+ * **볼 수 없는 것을 내보내지 않는다.** 비밀글, 비공개 게시판, 임시 상품,
+ * 남의 문의는 제외해야 한다. 검색은 권한 검사를 우회하는 가장 흔한 경로다 —
+ * 목록에 제목만 나와도 내용이 새어 나가는 경우가 있다.
+ *
+ * `count` 와 `search` 는 **같은 조건**을 써야 한다. 다르면 "37건" 이라고
+ * 표시하고 20건만 보여주거나, 마지막 페이지가 비어 나온다.
+ */
+export interface SearchSource {
+  /** 화면의 분류 탭에 쓰는 이름 (예: "게시글") */
+  label: string;
+  /** 분류 코드 — 특정 분류만 검색할 때 쓴다 (예: "posts") */
+  code: string;
+  /** 목록에서의 순서. 작을수록 먼저 */
+  order?: number;
+  /** 조건에 맞는 전체 개수. `search` 와 같은 조건이어야 한다 */
+  count(params: SearchParams): Promise<number>;
+  search(params: SearchParams & { offset: number; limit: number }): Promise<SearchHit[]>;
+}
+
+export interface SearchParams {
+  /** 다듬어진 검색어 */
+  query: string;
+  /**
+   * 검색하는 사람.
+   *
+   * 권한에 따라 결과가 달라져야 한다 — 로그인한 회원만 읽는 게시판, 자기
+   * 문의 등. null 이면 비회원이다.
+   */
+  viewer: { id: string; role: string } | null;
 }
 
 /** 사이트맵 항목 */

@@ -1,4 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
+// 이스케이프는 코어의 것을 쓴다 — null 안전하고, 구현이 갈라지면 안 된다
+import { escapeHtml } from "@brick/core";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { and, eq, gt, isNull, lt } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
@@ -156,6 +158,4 @@ export class PasswordResetService {
   }
 }
 
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
-}
+

@@ -1,7 +1,7 @@
-import { definePlugin, isUniqueViolation, rawResponse } from "@brick/plugin-sdk";
+import { definePlugin, searchExcerpt, isUniqueViolation, rawResponse } from "@brick/plugin-sdk";
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
-import { BoardError, escapeHtml, hasRole, type Db, type SessionUser } from "./types.js";
+import { BoardError, escapeHtml, hasRole, rankOf, type Db, type SessionUser } from "./types.js";
 import { hashGuestPassword } from "./guest.js";
 import { assertCanModify, canReadSecret, checkWriteInterval, loadBoard, requireRole } from "./access.js";
 import { attachFiles, claimDownload, deleteAttachments, listAttachments } from "./attachments.js";
@@ -732,6 +732,70 @@ ${items}
    * 정렬은 created_at + id 로 고정한다. 페이지를 나눠 읽는 동안 순서가 바뀌면
    * 어떤 글은 두 번 나오고 어떤 글은 빠진다.
    */
+  /**
+   * 통합검색 — 게시글.
+   *
+   * **권한이 가장 중요하다.** 검색은 권한 검사를 우회하는 가장 흔한 경로다.
+   * 제목만 목록에 나와도 내용이 새어 나가는 경우가 있다(비밀글 제목,
+   * 비공개 게시판의 존재).
+   *
+   * 거르는 것:
+   *   - 비밀글 — 작성자와 관리자만 본다. 검색 결과에서는 **전부 제외**한다.
+   *     작성자에게만 보여주는 것도 가능하지만, 검색 결과에 자기 비밀글이
+   *     섞이면 그것을 남에게 보여주며 화면을 공유할 때 새어 나간다.
+   *   - 읽기 권한이 부족한 게시판 — 등급으로 판단한다.
+   *
+   * `count` 와 `search` 가 **같은 조건**을 쓰도록 조건을 한 곳에 둔다 —
+   * 다르면 "37건" 이라 표시하고 20건만 보여주게 된다.
+   */
+  const postSearchWhere = (query: string, viewer: { role: string } | null) => {
+    const like = `%${query.replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
+    const rank = rankOf(viewer?.role ?? "guest");
+    return sql`
+      p.is_secret = false
+      -- 읽기 권한을 등급으로 비교한다. 문자열 비교로는 순서를 알 수 없다.
+      -- 모르는 값은 3(admin)으로 봐서 **막는 쪽으로** 실패한다 — 오타 하나로
+      -- 비공개 게시판이 열리면 안 된다.
+      AND CASE b.read_role
+            WHEN 'guest' THEN 0 WHEN 'member' THEN 1
+            WHEN 'manager' THEN 2 WHEN 'admin' THEN 3 ELSE 3
+          END <= ${rank}
+      AND (p.title ILIKE ${like} OR p.content ILIKE ${like})
+    `;
+  };
+
+  ctx.registerSearchSource({
+    label: "게시글",
+    code: "posts",
+    order: 10,
+    async count({ query, viewer }) {
+      const { rows } = await db.execute(sql`
+        SELECT count(*) AS n FROM board_posts p
+        JOIN board_boards b ON b.id = p.board_id
+        WHERE ${postSearchWhere(query, viewer)}
+      `);
+      return Number(rows[0]?.n ?? 0);
+    },
+    async search({ query, viewer, offset, limit }) {
+      const { rows } = await db.execute(sql`
+        SELECT p.id, p.title, p.content, p.created_at, b.slug AS board_slug, b.title AS board_title
+        FROM board_posts p
+        JOIN board_boards b ON b.id = p.board_id
+        WHERE ${postSearchWhere(query, viewer)}
+        -- 정렬을 고정한다 — 안 하면 페이지를 넘길 때 같은 글이 두 번 나온다
+        ORDER BY p.created_at DESC, p.id DESC
+        LIMIT ${limit} OFFSET ${offset}
+      `);
+      return rows.map((r) => ({
+        path: `/board/${String(r.board_slug)}/${String(r.id)}`,
+        title: String(r.title),
+        excerpt: searchExcerpt(String(r.content ?? ""), query),
+        date: r.created_at as Date,
+        meta: String(r.board_title),
+      }));
+    },
+  });
+
   ctx.registerSitemapSource({
     label: "게시글",
     async count() {

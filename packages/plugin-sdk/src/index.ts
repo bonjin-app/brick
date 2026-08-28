@@ -26,6 +26,8 @@ export type {
 export { rawResponse } from "@brick/core";
 // 한국 전용 검증 — 코어와 플러그인이 같은 규칙을 쓴다 (체크섬을 복제하면 갈라진다)
 export { isValidBusinessNo, formatBusinessNo } from "@brick/core";
+// 검색 발췌·HTML 제거 — 여러 플러그인이 같은 규칙을 써야 한다
+export { stripHtml, searchExcerpt, escapeHtml } from "@brick/core";
 // DB 오류 판별 — 중복 등록을 409로 돌려줄 때 쓴다.
 // 오류 문자열로 검사하면 드라이버가 메시지 형태를 바꿀 때 조용히 깨진다.
 export {

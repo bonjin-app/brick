@@ -15,6 +15,7 @@ import { PagesModule } from "./modules/pages/pages.module.js";
 import { PluginsModule } from "./modules/plugins/plugins.module.js";
 import { SeoModule } from "./modules/seo/seo.module.js";
 import { SiteModule } from "./modules/site/site.module.js";
+import { SearchModule } from "./modules/search/search.module.js";
 import { StaticModule } from "./modules/static/static.module.js";
 import { ThemesModule } from "./modules/themes/themes.module.js";
 import { UsersModule } from "./modules/users/users.module.js";
@@ -36,6 +37,7 @@ import { UsersModule } from "./modules/users/users.module.js";
     MigrateModule,
     SeoModule,
     SiteModule,
+    SearchModule,
     PluginsModule,
     ThemesModule,
     PagesModule,

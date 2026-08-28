@@ -1,4 +1,4 @@
-import { definePlugin, isUniqueViolation, isValidBusinessNo, rawResponse } from "@brick/plugin-sdk";
+import { definePlugin, isUniqueViolation, isValidBusinessNo, rawResponse, searchExcerpt } from "@brick/plugin-sdk";
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import { DEFAULT_SETTINGS, ShopError, STATUS_LABEL, escapeHtml, won,
@@ -1558,6 +1558,59 @@ export default definePlugin(async (ctx) => {
    * draft·hidden 은 제외한다. soldout 은 포함한다 — 품절이어도 상품 페이지는
    * 유효한 콘텐츠이고, 재입고되면 색인이 이미 되어 있는 것이 유리하다.
    */
+  /**
+   * 통합검색 — 상품.
+   *
+   * `draft`(작성 중)와 `hidden`(내린 상품)은 제외한다. draft 노출은 정보
+   * 유출이고(가격을 정하기 전의 상품, 미공개 신상품), hidden 은 눌러도
+   * 404 가 난다.
+   *
+   * `count` 와 `search` 가 같은 조건을 쓰도록 한 곳에 둔다.
+   */
+  const productSearchWhere = (query: string) => {
+    const like = `%${query.replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
+    return sql`
+      p.status IN ('selling', 'soldout')
+      AND (p.name ILIKE ${like} OR p.summary ILIKE ${like} OR p.description ILIKE ${like})
+    `;
+  };
+
+  ctx.registerSearchSource({
+    label: "상품",
+    code: "products",
+    order: 5,
+    async count({ query }) {
+      const { rows } = await db.execute(sql`
+        SELECT count(*) AS n FROM shop_products p WHERE ${productSearchWhere(query)}
+      `);
+      return Number(rows[0]?.n ?? 0);
+    },
+    async search({ query, offset, limit }) {
+      const { rows } = await db.execute(sql`
+        SELECT p.slug, p.name, p.summary, p.description, p.price, p.status, p.created_at,
+               c.name AS category_name
+        FROM shop_products p
+        LEFT JOIN shop_categories c ON c.id = p.category_id
+        WHERE ${productSearchWhere(query)}
+        -- 판매중을 품절보다 먼저. 눌러도 못 사는 것이 위에 오면 안 된다.
+        ORDER BY (p.status = 'selling') DESC, p.sold_count DESC, p.id DESC
+        LIMIT ${limit} OFFSET ${offset}
+      `);
+      return rows.map((r) => ({
+        path: `/shop/${String(r.slug)}`,
+        title: String(r.name),
+        // 짧은 설명이 있으면 그것을, 없으면 상세에서 발췌한다
+        excerpt: searchExcerpt(String(r.summary || r.description || ""), query),
+        date: r.created_at as Date,
+        meta: [
+          String(r.category_name ?? "") || null,
+          `${Number(r.price).toLocaleString("ko-KR")}원`,
+          String(r.status) === "soldout" ? "품절" : null,
+        ].filter(Boolean).join(" · "),
+      }));
+    },
+  });
+
   ctx.registerSitemapSource({
     label: "상품",
     async count() {
