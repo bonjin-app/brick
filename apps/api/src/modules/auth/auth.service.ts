@@ -24,7 +24,29 @@ export class AuthService {
 
   constructor(@Inject(DB) private readonly db: BrickDb) {}
 
+  /**
+   * 비밀번호 검증 — 세션은 발급하지 않는다.
+   *
+   * `login()` 에서 떼어낸 이유: 2단계 인증이 켜진 계정은 비밀번호가 맞아도
+   * **세션을 주면 안 된다.** 코드를 확인할 때까지 도전 토큰만 준다.
+   * 두 단계를 한 메서드에 두면 "비밀번호만으로 세션이 나가는" 경로가
+   * 실수로 되살아나기 쉽다.
+   */
+  async authenticate(email: string, password: string): Promise<SessionUser> {
+    const row = await this.verifyAndTouch(email, password);
+    return this.toSessionUser(row);
+  }
+
   async login(email: string, password: string): Promise<{ token: string; user: SessionUser }> {
+    const row = await this.verifyAndTouch(email, password);
+    return { token: await this.issueSession(row.id), user: this.toSessionUser(row) };
+  }
+
+  /** 비밀번호를 검증하고 마지막 로그인·휴면을 갱신한다. 세션은 만들지 않는다. */
+  private async verifyAndTouch(
+    email: string,
+    password: string,
+  ): Promise<typeof users.$inferSelect> {
     const [row] = await this.db.select().from(users).where(eq(users.email, email)).limit(1);
     // 사용자 부재와 비밀번호 불일치를 구분해 노출하지 않는다.
     // 소셜 전용 계정(passwordLoginEnabled=false)도 같은 응답으로 거절한다 —
@@ -80,7 +102,7 @@ export class AuthService {
       .set({ lastLoginAt: new Date(), dormantAt: null })
       .where(eq(users.id, row.id));
 
-    return { token: await this.issueSession(row.id), user: this.toSessionUser(row) };
+    return row;
   }
 
   /**
@@ -158,6 +180,11 @@ export class AuthService {
 
   private hash(token: string): string {
     return createHash("sha256").update(token).digest("hex");
+  }
+
+  /** 세션 목록에서 "지금 쓰는 기기"를 표시하는 데 쓴다 */
+  tokenHash(token: string): string {
+    return this.hash(token);
   }
 
   private toSessionUser(row: typeof users.$inferSelect): SessionUser {

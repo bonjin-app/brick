@@ -28,6 +28,9 @@ const EDITABLE_SETTINGS: Record<string, "string" | "boolean"> = {
   "site.registration_open": "boolean",
   // 검색 노출 차단 — robots.txt 가 읽는다 (SeoService)
   "site.seo_noindex": "boolean",
+  // 관리자·운영자에게 2단계 인증을 요구한다.
+  // 켜면 그 역할은 스스로 해제할 수 없다 — 해제할 수 있으면 강제가 아니다.
+  "security.require_2fa_for_staff": "boolean",
 };
 
 /** 사업자정보를 담는 설정 키 (단일 JSON) */

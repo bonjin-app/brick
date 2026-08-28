@@ -10,6 +10,7 @@ import { OAuthService, safeNext } from "./oauth.service.js";
 import type { HookBus } from "@brick/core";
 import { HOOKS } from "../../runtime.module.js";
 import { AuditService } from "../audit/audit.service.js";
+import { TwoFactorService } from "./two-factor.service.js";
 import { AdminGuard } from "./auth.guard.js";
 
 /** 소셜 로그인 state 쿠키 — 콜백 경로에서만 필요하므로 path를 좁힌다 */
@@ -28,6 +29,7 @@ export class AuthController {
     private readonly reset: PasswordResetService,
     private readonly audit: AuditService,
     private readonly oauth: OAuthService,
+    private readonly twoFactor: TwoFactorService,
     @Inject(HOOKS) private readonly hooks: HookBus,
   ) {}
 
@@ -56,9 +58,95 @@ export class AuthController {
       }
     }
 
-    const { token, user } = await this.auth.login(email, body?.password ?? "");
+    // 비밀번호만 먼저 검증한다 — 2단계 인증이 켜져 있으면 세션을 주지 않는다
+    const user = await this.auth.authenticate(email, body?.password ?? "");
     for (const { key } of keys) this.rateLimit.reset(key);
 
+    if (await this.twoFactor.isEnabled(user.id)) {
+      // 세션 쿠키를 심지 않는다. 도전 토큰은 코드 검증에만 쓴다.
+      const challenge = await this.twoFactor.createChallenge({ userId: user.id, ip: req.ip });
+      await this.audit.record({
+        action: "auth.totp_challenge_issued",
+        actor: user,
+        ip: req.ip,
+      });
+      return { twoFactorRequired: true, challengeToken: challenge };
+    }
+
+    const token = await this.auth.issueSession(user.id);
+    await this.setSessionCookie(reply, token);
+    await this.twoFactor.recordSessionContext({
+      tokenHash: this.auth.tokenHash(token),
+      ip: req.ip,
+      userAgent: req.headers["user-agent"],
+    });
+    // 출석 적립·접속 로그 등이 구독한다. 실패해도 로그인은 성공해야 하므로
+    // doAction 내부에서 예외를 삼킨다(HookBus의 계약).
+    await this.hooks.doAction("auth.login", { userId: user.id, email: user.email, ip: req.ip });
+    return { user };
+  }
+
+  /**
+   * 2단계 인증 코드 확인 — 여기서 세션이 발급된다.
+   *
+   * 도전 토큰과 코드를 함께 받는다. 코드만 받으면 어느 계정인지 알 수 없고,
+   * 이메일을 다시 받으면 그 값을 신뢰해야 한다.
+   */
+  @Post("login/2fa")
+  async loginTwoFactor(
+    @Body() body: { challengeToken: string; code: string },
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    // 도전 자체에 시도 한계가 있지만, 도전을 계속 새로 만드는 것도 막아야 한다
+    const { allowed, retryAfterSeconds } = this.rateLimit.consume(
+      `2fa:ip:${req.ip}`,
+      30,
+      15 * 60_000,
+    );
+    if (!allowed) {
+      throw new HttpException(
+        `너무 많이 시도했습니다. ${retryAfterSeconds}초 후 다시 시도해주세요.`,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    const result = await this.twoFactor.verifyChallenge({
+      token: String(body?.challengeToken ?? ""),
+      code: String(body?.code ?? ""),
+    });
+
+    const token = await this.auth.issueSession(result.userId);
+    await this.setSessionCookie(reply, token);
+    await this.twoFactor.recordSessionContext({
+      tokenHash: this.auth.tokenHash(token),
+      ip: req.ip,
+      userAgent: req.headers["user-agent"],
+    });
+
+    // 방금 만든 토큰으로 바로 해석한다.
+    // 가짜 request 객체를 만들어 resolveFromRequest 에 넘기면 안 된다 —
+    // 그 안에서 req.headers 를 읽으므로 undefined 로 터진다.
+    const user = await this.auth.resolve(token);
+
+    await this.audit.record({
+      action: result.usedRecoveryCode ? "auth.login_recovery_code" : "auth.login_2fa",
+      actor: user,
+      ip: req.ip,
+    });
+    if (user) {
+      await this.hooks.doAction("auth.login", { userId: user.id, email: user.email, ip: req.ip });
+    }
+
+    return {
+      user,
+      usedRecoveryCode: result.usedRecoveryCode,
+      // 복구 코드를 썼으면 남은 개수를 알려준다 — 다 쓰면 잠긴다
+      ...(result.usedRecoveryCode ? { recoveryCodesLeft: result.recoveryCodesLeft } : {}),
+    };
+  }
+
+  private async setSessionCookie(reply: FastifyReply, token: string): Promise<void> {
     reply.setCookie(SESSION_COOKIE, token, {
       path: "/",
       httpOnly: true,
@@ -66,10 +154,6 @@ export class AuthController {
       secure: process.env.NODE_ENV === "production",
       maxAge: 30 * 86400,
     });
-    // 출석 적립·접속 로그 등이 구독한다. 실패해도 로그인은 성공해야 하므로
-    // doAction 내부에서 예외를 삼킨다(HookBus의 계약).
-    await this.hooks.doAction("auth.login", { userId: user.id, email: user.email, ip: req.ip });
-    return { user };
   }
 
   @Post("logout")

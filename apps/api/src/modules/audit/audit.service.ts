@@ -20,6 +20,15 @@ export interface AuditEntry {
 const RETENTION_DAYS = 180;
 
 /**
+ * 날짜 경계를 자르는 시간대.
+ *
+ * 판매 리포트와 같은 값을 쓴다(ADR-51) — UTC 로 자르면 한국에서 오전 9시
+ * 이전 기록이 전날로 밀려서, 관리자가 "어제 무슨 일이 있었나"를 볼 때
+ * 엉뚱한 범위를 본다.
+ */
+const AUDIT_TZ = process.env.BRICK_TIMEZONE?.trim() || "Asia/Seoul";
+
+/**
  * 감사 로그.
  *
  * 원칙:
@@ -59,12 +68,43 @@ export class AuditService {
     await this.record({ ...entry, actor: req.user ?? null, ip: req.ip });
   }
 
-  async list(opts: { page?: number; action?: string; targetType?: string } = {}) {
+  /**
+   * 목록.
+   *
+   * 행위자와 기간으로 좁힐 수 있어야 한다 — **"누가 무엇을 했나"를
+   * 조사하는 것이 감사 로그의 용도**인데, 동작별 필터만으로는 사람을
+   * 따라갈 수 없다. 사고가 났을 때 수만 건을 넘겨보게 된다.
+   */
+  async list(
+    opts: {
+      page?: number;
+      action?: string;
+      targetType?: string;
+      /** 이메일 부분 일치 — 정확한 주소를 몰라도 찾을 수 있어야 한다 */
+      actor?: string;
+      /** YYYY-MM-DD (사이트 시간대). 이 날 0시부터 */
+      from?: string;
+      /** YYYY-MM-DD. **이 날 끝까지 포함** — 오늘까지 조회했는데 오늘이
+       *  빠지면 조용히 놓친다 */
+      to?: string;
+    } = {},
+  ) {
     const page = Math.max(1, opts.page ?? 1);
     const size = 50;
+    const dateShape = /^\d{4}-\d{2}-\d{2}$/;
     const filters = [
       ...(opts.action ? [eq(auditLogs.action, opts.action)] : []),
       ...(opts.targetType ? [eq(auditLogs.targetType, opts.targetType)] : []),
+      // ILIKE 는 대소문자를 무시한다. % 를 이스케이프해 와일드카드 주입을 막는다
+      ...(opts.actor
+        ? [sql`${auditLogs.actorEmail} ILIKE ${`%${opts.actor.replace(/[%_\\]/g, "\\$&")}%`}`]
+        : []),
+      ...(opts.from && dateShape.test(opts.from)
+        ? [sql`${auditLogs.createdAt} >= (${opts.from}::date::timestamp AT TIME ZONE ${AUDIT_TZ})`]
+        : []),
+      ...(opts.to && dateShape.test(opts.to)
+        ? [sql`${auditLogs.createdAt} < ((${opts.to}::date + 1)::timestamp AT TIME ZONE ${AUDIT_TZ})`]
+        : []),
     ];
     const where = filters.length ? and(...filters) : undefined;
 
@@ -78,7 +118,25 @@ export class AuditService {
         .offset((page - 1) * size),
       this.db.select({ value: sql<number>`count(*)` }).from(auditLogs).where(where),
     ]);
-    return { items, total: Number(total?.value ?? 0), page, pageSize: size };
+    return {
+      items,
+      total: Number(total?.value ?? 0),
+      page,
+      pageSize: size,
+      timezone: AUDIT_TZ,
+    };
+  }
+
+  /** 화면의 필터 목록을 채우는 데 쓴다 — 어떤 동작이 기록되는지 미리 알 수 없다 */
+  async actions(): Promise<Array<{ action: string; count: number }>> {
+    const { rows } = await this.db.execute(sql`
+      SELECT action, count(*) AS n FROM audit_logs
+      GROUP BY action ORDER BY n DESC LIMIT 100
+    `);
+    return rows.map((r: Record<string, unknown>) => ({
+      action: String(r.action),
+      count: Number(r.n),
+    }));
   }
 
   /** 보관 기간이 지난 기록 정리 (MaintenanceService가 호출) */
