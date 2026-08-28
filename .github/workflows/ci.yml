@@ -137,6 +137,9 @@ jobs:
       - name: E2E 스모크 테스트 (OpenAPI 문서)
         run: bash scripts/smoke-openapi.sh
 
+      - name: E2E 스모크 테스트 (플러그인 레지스트리)
+        run: bash scripts/smoke-registry.sh
+
       - name: E2E 스모크 테스트 (방문자·팝업)
         run: bash scripts/smoke-site.sh
 

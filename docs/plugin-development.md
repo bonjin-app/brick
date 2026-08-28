@@ -298,3 +298,30 @@ ZIP 과 `my-plugin.update.json` 을 서버에 올리면 끝입니다. 사용자�
   ZIP 은 서버가 뚫려도 설치되지 않습니다.
 - 버전은 semver 숫자 비교입니다. 낮은 버전은 업데이트로 제시되지 않습니다.
 - ZIP 은 50MB 상한입니다.
+
+## 레지스트리에 올리기
+
+레지스트리는 중앙 서버가 아니라 **정적 JSON** 입니다. 운영자의 관리 화면이
+그 목록을 읽고, 항목이 가리키는 업데이트 매니페스트(위 절의 그 JSON)로
+설치합니다 — 설치와 업데이트가 같은 서명 검증을 지납니다.
+
+공식 레지스트리(`docs-site/registry.json`)에 등재하려면 저장소에 PR 로
+항목을 추가하세요:
+
+```json
+{
+  "kind": "plugin",
+  "name": "my-plugin",
+  "displayName": "내 플러그인",
+  "description": "한 줄 소개",
+  "version": "1.0.0",
+  "updates": "https://내서버/my-plugin.update.json",
+  "publisherKey": "<my-key.public.txt 의 내용>",
+  "homepage": "https://github.com/me/my-plugin"
+}
+```
+
+레지스트리는 목록일 뿐 신뢰의 근거가 아닙니다 — 설치를 결정하는 것은
+매니페스트의 서명입니다. 회사 내부 레지스트리를 쓰려면 같은 형식의 JSON 을
+아무 곳(https)에나 올리고 관리자 설정의 `extensions.registry_url` 을
+바꾸면 됩니다.

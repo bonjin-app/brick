@@ -31,6 +31,9 @@ const EDITABLE_SETTINGS: Record<string, "string" | "boolean"> = {
   // 관리자·운영자에게 2단계 인증을 요구한다.
   // 켜면 그 역할은 스스로 해제할 수 없다 — 해제할 수 있으면 강제가 아니다.
   "security.require_2fa_for_staff": "boolean",
+  // 플러그인 레지스트리 주소. 비우면 공식 레지스트리.
+  // 주소 안전성(https 강제 등)은 읽는 쪽(ExtensionUpdaterService)이 검사한다.
+  "extensions.registry_url": "string",
 };
 
 /** 사업자정보를 담는 설정 키 (단일 JSON) */

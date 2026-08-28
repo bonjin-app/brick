@@ -32,7 +32,7 @@ import { BadRequestException, Inject, Injectable, Logger } from "@nestjs/common"
 import { createHash, verify as edVerify } from "node:crypto";
 import { eq } from "drizzle-orm";
 import type { BrickDb } from "@brick/database";
-import { installedPlugins, installedThemes } from "@brick/database";
+import { installedPlugins, installedThemes, siteSettings } from "@brick/database";
 import type { PluginManifest, ThemeManifest } from "@brick/shared";
 import { DB } from "../../runtime.module.js";
 import { ExtensionInstallerService } from "./extension-installer.service.js";
@@ -49,6 +49,27 @@ export interface UpdateManifest {
   signature: string;
   /** 변경 요약 (화면에 보여준다) */
   notes?: string;
+}
+
+/**
+ * 레지스트리 항목 — 레지스트리 JSON 의 items[] 하나.
+ *
+ * 레지스트리는 **목록일 뿐 신뢰의 근거가 아니다.** 설치를 결정하는 것은
+ * 항목이 가리키는 업데이트 매니페스트(ADR-67 형식)와 그 서명이다.
+ * 레지스트리가 주는 publisherKey 는 첫 설치 때 TOFU 로 고정된다 —
+ * 이후 업데이트에서 레지스트리가 키를 바꿔치기해도 소용없다.
+ */
+export interface RegistryItem {
+  kind: "plugin" | "theme";
+  name: string;
+  displayName: string;
+  description?: string;
+  version: string;
+  /** ADR-67 업데이트 매니페스트 주소 — 설치와 업데이트가 같은 길을 쓴다 */
+  updates: string;
+  /** 배포자 Ed25519 공개키 (base64 raw 32바이트) */
+  publisherKey: string;
+  homepage?: string;
 }
 
 export interface AvailableUpdate {
@@ -226,19 +247,163 @@ export class ExtensionUpdaterService {
     }
 
     // 새 매니페스트가 키를 바꿔치기하지 못하게 고정된 키를 되살린다.
-    // 키 교체는 운영자의 직접 업로드로만 된다.
-    await this.repinKey(kind, name, pinnedKey);
+    // 키 교체는 운영자의 직접 업로드로만 된다. 업데이트 주소도 함께 고정한다 —
+    // 새 ZIP 의 매니페스트에 updates 가 빠져 있으면(레지스트리 설치본 등)
+    // 이번 업데이트가 마지막 업데이트가 되어버린다.
+    await this.persistTrust(kind, name, { publisherKey: pinnedKey, updates: String(updatesUrl) });
 
     this.logger.log(`업데이트 적용: ${kind} ${name} ${row.version} → ${result.version}`);
     return { name, from: row.version, to: result.version };
   }
 
-  private async repinKey(kind: "plugin" | "theme", name: string, pinnedKey: string): Promise<void> {
+  /**
+   * 신뢰 정보를 설치 기록에 고정한다.
+   * ZIP 안의 매니페스트가 무엇을 주장하든, 키(그리고 레지스트리 설치라면
+   * 업데이트 주소)는 설치 시점에 확정된 값이 이긴다.
+   */
+  private async persistTrust(
+    kind: "plugin" | "theme",
+    name: string,
+    trust: { publisherKey: string; updates?: string },
+  ): Promise<void> {
     const table = kind === "plugin" ? installedPlugins : installedThemes;
     const [row] = await this.db.select().from(table).where(eq(table.name, name)).limit(1);
     if (!row) return;
-    const manifest = { ...(row.manifest as Record<string, unknown>), publisherKey: pinnedKey };
+    const manifest = {
+      ...(row.manifest as Record<string, unknown>),
+      publisherKey: trust.publisherKey,
+      ...(trust.updates ? { updates: trust.updates } : {}),
+    };
     await this.db.update(table).set({ manifest: manifest as never }).where(eq(table.name, name));
+  }
+
+  // ════════════════════════════════════════════════════
+  //  레지스트리 — 검색·설치. 신뢰는 서명이 결정한다 (ADR-74)
+  // ════════════════════════════════════════════════════
+
+  static readonly DEFAULT_REGISTRY_URL = "https://bonjin-app.github.io/brick/registry.json";
+
+  async registryUrl(): Promise<string> {
+    const [row] = await this.db
+      .select().from(siteSettings)
+      .where(eq(siteSettings.key, "extensions.registry_url")).limit(1);
+    const url = typeof row?.value === "string" ? row.value.trim() : "";
+    return url || ExtensionUpdaterService.DEFAULT_REGISTRY_URL;
+  }
+
+  /**
+   * 레지스트리 목록 — 설치 상태를 붙여 돌려준다.
+   *
+   * 형식이 깨진 항목은 전체를 죽이지 않고 건너뛰며 이유를 모은다 —
+   * 레지스트리의 항목 하나가 잘못됐다고 나머지를 못 보면 안 된다.
+   */
+  async listRegistry(): Promise<{
+    registryUrl: string;
+    registryName: string;
+    items: Array<RegistryItem & { state: "not_installed" | "installed" | "update"; currentVersion: string | null }>;
+    skipped: string[];
+  }> {
+    const url = await this.registryUrl();
+    const buf = await this.fetchWithLimit(assertSafeUrl(url), 1024 * 1024);
+    let json: { name?: unknown; items?: unknown };
+    try {
+      json = JSON.parse(buf.toString("utf8")) as { name?: unknown; items?: unknown };
+    } catch {
+      throw new BadRequestException("레지스트리 응답이 JSON 이 아닙니다.");
+    }
+    if (!Array.isArray(json.items)) {
+      throw new BadRequestException("레지스트리에 items 배열이 없습니다.");
+    }
+
+    const [plugins, themes] = await Promise.all([
+      this.db.select().from(installedPlugins),
+      this.db.select().from(installedThemes),
+    ]);
+    const installed = new Map<string, string>([
+      ...plugins.map((p) => [`plugin:${p.name}`, p.version] as const),
+      ...themes.map((t) => [`theme:${t.name}`, t.version] as const),
+    ]);
+
+    const NAME_RE = /^[a-z][a-z0-9-]{1,60}$/;
+    const items: Array<RegistryItem & { state: "not_installed" | "installed" | "update"; currentVersion: string | null }> = [];
+    const skipped: string[] = [];
+    for (const raw of json.items as Array<Record<string, unknown>>) {
+      const name = String(raw?.name ?? "");
+      const kind = raw?.kind === "theme" ? "theme" : raw?.kind === "plugin" ? "plugin" : null;
+      if (!kind || !NAME_RE.test(name) || !raw.version || !raw.updates || !raw.publisherKey) {
+        skipped.push(name || "(이름 없음)");
+        continue;
+      }
+      const current = installed.get(`${kind}:${name}`) ?? null;
+      items.push({
+        kind,
+        name,
+        displayName: String(raw.displayName ?? name),
+        description: raw.description ? String(raw.description) : undefined,
+        version: String(raw.version),
+        updates: String(raw.updates),
+        publisherKey: String(raw.publisherKey),
+        homepage: raw.homepage ? String(raw.homepage) : undefined,
+        currentVersion: current,
+        state: current === null
+          ? "not_installed"
+          : isNewerVersion(String(raw.version), current) ? "update" : "installed",
+      });
+    }
+    return { registryUrl: url, registryName: String(json.name ?? "레지스트리"), items, skipped };
+  }
+
+  /**
+   * 레지스트리에서 설치.
+   *
+   * 설치와 업데이트가 **같은 길**을 쓴다 — 항목이 가리키는 것은 ADR-67
+   * 업데이트 매니페스트이고, 검증 순서도 같다: 매니페스트 이름 대조 →
+   * sha256 → **레지스트리가 준 키로 서명 검증** → 설치 → 키·주소 고정.
+   *
+   * 이미 설치된 확장은 여기로 덮지 않는다 — 그것은 업데이트이고, 업데이트는
+   * **처음 설치 때 고정된 키**로 검증해야 한다(레지스트리가 키를 바꿔치기해도
+   * 소용없게). apply() 가 그 길이다.
+   */
+  async installFromRegistry(kind: "plugin" | "theme", name: string): Promise<{
+    name: string;
+    version: string;
+  }> {
+    const registry = await this.listRegistry();
+    const item = registry.items.find((i) => i.kind === kind && i.name === name);
+    if (!item) throw new BadRequestException(`레지스트리에 없는 확장입니다: ${name}`);
+    if (item.state !== "not_installed") {
+      throw new BadRequestException(
+        "이미 설치되어 있습니다. 새 버전은 원클릭 업데이트로 받으세요 — 처음 설치 때 고정된 키로 검증됩니다.",
+      );
+    }
+
+    const remote = await this.fetchManifest(item.updates, name);
+    const zip = await this.download(remote.url);
+
+    const digest = createHash("sha256").update(zip).digest("hex");
+    if (digest !== String(remote.sha256 ?? "").toLowerCase()) {
+      throw new BadRequestException("내려받은 파일이 매니페스트의 sha256 과 다릅니다.");
+    }
+    if (!this.verifySignature(zip, String(remote.signature ?? ""), item.publisherKey)) {
+      this.logger.warn(`레지스트리 설치 서명 검증 실패: ${name} — 레지스트리의 키와 서명이 맞지 않습니다`);
+      throw new BadRequestException("서명 검증에 실패했습니다. 레지스트리 항목이 잘못됐거나 변조된 파일입니다.");
+    }
+
+    const result = kind === "plugin"
+      ? await this.installer.installPlugin(zip)
+      : await this.installer.installTheme(zip);
+    if (result.name !== name) {
+      throw new BadRequestException(
+        `ZIP 안의 확장 이름(${result.name})이 요청한 이름(${name})과 다릅니다. 확인이 필요합니다.`,
+      );
+    }
+
+    // 키와 업데이트 주소를 설치 기록에 고정한다 — ZIP 매니페스트에 updates 가
+    // 없어도 이후 원클릭 업데이트가 동작하고, 키 교체는 직접 업로드로만 된다.
+    await this.persistTrust(kind, name, { publisherKey: item.publisherKey, updates: item.updates });
+
+    this.logger.log(`레지스트리 설치: ${kind} ${name}@${result.version} (${registry.registryUrl})`);
+    return { name, version: result.version };
   }
 
   private verifySignature(zip: Buffer, signatureB64: string, publicKeyB64: string): boolean {

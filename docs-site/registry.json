@@ -1,0 +1,5 @@
+{
+  "name": "Brick 공식 레지스트리",
+  "_readme": "Brick 관리자 화면의 '레지스트리'가 읽는 목록입니다. 항목 형식: {kind, name, displayName, description, version, updates(ADR-67 매니페스트 주소), publisherKey(Ed25519 base64), homepage}. 레지스트리는 목록일 뿐 신뢰는 서명이 결정합니다 — 등재를 원하면 저장소에 PR 을 보내주세요.",
+  "items": []
+}

@@ -191,6 +191,42 @@ export class PluginsController {
     return { ...result, reloaded: kind === "plugin" && this.loader.isActive(name) };
   }
 
+  /**
+   * 레지스트리 목록 — 설치 가능한 확장과 설치 상태.
+   * 레지스트리는 목록일 뿐, 신뢰는 서명이 결정한다 (ADR-74).
+   */
+  @Get("admin/registry")
+  @UseGuards(AdminGuard)
+  async registry() {
+    return this.updater.listRegistry();
+  }
+
+  /** 레지스트리에서 설치 — 서명 검증을 통과해야만 설치된다 */
+  @Post("admin/registry/:kind/:name/install")
+  @UseGuards(AdminGuard)
+  async installFromRegistry(
+    @Param("kind") kind: string,
+    @Param("name") name: string,
+    @Body() body: { activate?: boolean } | undefined,
+    @Req() req: FastifyRequest,
+  ) {
+    if (kind !== "plugin" && kind !== "theme") {
+      throw new BadRequestException("kind 는 plugin 또는 theme 이어야 합니다.");
+    }
+    const result = await this.updater.installFromRegistry(kind, name);
+    // "몇 번의 클릭"을 줄인다 — 설치 화면에서 바로 켤 수 있게 (선택)
+    if (kind === "plugin" && body?.activate === true) {
+      await this.loader.activate(name);
+    }
+    await this.audit.fromRequest(req as never, {
+      action: "extension.registry_install",
+      targetType: kind,
+      targetId: name,
+      summary: `${name}@${result.version} 레지스트리 설치`,
+    });
+    return { ...result, activated: kind === "plugin" && this.loader.isActive(name) };
+  }
+
   /** 페이지 빌더가 사용할 블록 카탈로그 */
   @Get("blocks")
   blocks() {

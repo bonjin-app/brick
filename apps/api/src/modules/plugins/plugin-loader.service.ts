@@ -174,13 +174,27 @@ export class PluginLoaderService implements OnModuleInit {
     const instance = (await activate(ctx)) ?? {};
     this.instances.set(name, instance);
 
-    // upsert: ZIP 설치를 거치지 않은 개발용 플러그인도 재부팅 시 복원되도록
+    // upsert: ZIP 설치를 거치지 않은 개발용 플러그인도 재부팅 시 복원되도록.
+    //
+    // 단, **신뢰 필드(publisherKey·updates)는 DB 의 기존 값이 이긴다.**
+    // 이 값들은 설치·업데이트 시점에 고정된 것이다(ADR-67/74) — 파일의
+    // 매니페스트로 무조건 덮으면, 유효하게 서명된 ZIP 이 자기 매니페스트에
+    // 다른 키를 적어 두는 것만으로 다음 업데이트의 검증 키를 갈아치운다.
+    // 키 교체는 운영자의 직접 업로드로만 된다.
+    const [prior] = await this.db
+      .select().from(installedPlugins).where(eq(installedPlugins.name, name)).limit(1);
+    const priorManifest = (prior?.manifest ?? {}) as Record<string, unknown>;
+    const stored = {
+      ...manifest,
+      ...(priorManifest.publisherKey ? { publisherKey: priorManifest.publisherKey } : {}),
+      ...(priorManifest.updates ? { updates: priorManifest.updates } : {}),
+    };
     await this.db
       .insert(installedPlugins)
-      .values({ name, version: manifest.version, manifest: manifest as never, isActive: true, activatedAt: new Date() })
+      .values({ name, version: manifest.version, manifest: stored as never, isActive: true, activatedAt: new Date() })
       .onConflictDoUpdate({
         target: installedPlugins.name,
-        set: { version: manifest.version, manifest: manifest as never, isActive: true, activatedAt: new Date() },
+        set: { version: manifest.version, manifest: stored as never, isActive: true, activatedAt: new Date() },
       });
     await this.hooks.doAction("plugin.activated", { name, version: manifest.version });
     await this.cache.invalidateTag("pages"); // 블록 구성이 바뀌었으므로 렌더 캐시 무효화
