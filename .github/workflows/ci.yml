@@ -104,6 +104,9 @@ jobs:
       - name: E2E 스모크 테스트 (계정 보안 · 2단계 인증)
         run: bash scripts/smoke-account-security.sh
 
+      - name: E2E 스모크 테스트 (결제 게이트웨이 · 개인결제)
+        run: bash scripts/smoke-payments.sh
+
       - name: E2E 스모크 테스트 (방문자·팝업)
         run: bash scripts/smoke-site.sh
 

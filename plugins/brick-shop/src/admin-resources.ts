@@ -317,3 +317,42 @@ export const TAX_INVOICE_RESOURCE: AdminResource = {
     { name: "reason", label: "거부 사유 입력", type: "textarea" },
   ],
 };
+
+/**
+ * 개인결제 청구.
+ *
+ * 금액을 고치는 수정은 두지 않았다 — 링크를 이미 보낸 뒤 금액이 바뀌면
+ * 손님이 어느 금액을 본 것인지 알 수 없다. 취소하고 새로 청구해야 한다.
+ */
+export const PAYMENT_REQUEST_RESOURCE: AdminResource = {
+  name: "payment-requests",
+  title: "개인결제 청구",
+  itemLabel: "청구",
+  basePath: "/admin/payment-requests",
+  order: 9,
+  description:
+    "전화·상담으로 받은 주문의 금액만 청구합니다. 만들면 결제 링크가 나오니 손님에게 보내세요. " +
+    "결제되면 주문이 자동으로 만들어져 매출과 세금 자료에 포함됩니다. " +
+    "금액을 바꾸려면 취소하고 새로 청구하세요 — 손님이 이미 본 금액이 달라지면 분쟁이 됩니다.",
+  can: { update: false, delete: false },
+  fields: [
+    { name: "request_no", label: "청구번호", type: "text", readOnly: true, inList: true },
+    { name: "created_at", label: "생성일", type: "date", readOnly: true, inList: true },
+    { name: "title", label: "청구 제목", type: "text", required: true, inList: true,
+      help: "손님에게 보이고, 매출 리포트의 상품명이 됩니다." },
+    { name: "amount", label: "청구 금액", type: "money", required: true, inList: true },
+    { name: "description", label: "설명", type: "textarea",
+      help: "손님이 청구서에서 봅니다. 무엇에 대한 청구인지 적으세요." },
+    { name: "expireDays", label: "유효 기간(일)", type: "number",
+      help: "비우면 7일. 기한이 지난 링크로는 결제할 수 없습니다." },
+    { name: "customer_name", label: "받는 분", type: "text", inList: true },
+    { name: "customer_phone", label: "연락처", type: "text" },
+    { name: "customer_email", label: "이메일", type: "text" },
+    { name: "status_label", label: "상태", type: "text", readOnly: true, inList: true },
+    { name: "pay_path", label: "결제 링크", type: "text", readOnly: true,
+      help: "이 주소를 손님에게 보내세요. 로그인 없이 결제할 수 있습니다." },
+    { name: "order_no", label: "생성된 주문", type: "text", readOnly: true, inList: true },
+    { name: "paid_at", label: "결제일", type: "date", readOnly: true },
+    { name: "memo", label: "메모", type: "textarea" },
+  ],
+};

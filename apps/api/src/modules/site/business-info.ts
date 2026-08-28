@@ -32,6 +32,16 @@ export interface BusinessInfo {
   privacyOfficer: string;
   /** 호스팅 서비스 제공자 — 전자상거래법 시행령상 표시 항목 */
   hostingProvider: string;
+  /**
+   * 결제대금예치(에스크로) 또는 소비자피해보상보험 안내.
+   *
+   * 전자상거래법 제24조: 선불식 통신판매업자는 결제대금예치나 소비자피해보상보험
+   * 계약을 체결하고 **그 사실을 표시**해야 한다(일정 거래는 면제).
+   *
+   * 자유 입력으로 둔다 — 가입한 기관과 형태가 사업자마다 다르고, 우리가
+   * 목록을 고정하면 없는 항목을 쓰는 사업자가 표시를 못 한다.
+   */
+  escrow: string;
 }
 
 // 체크섬은 코어에 있다 — 쇼핑몰 세금계산서 발급도 같은 규칙을 써야 한다
@@ -48,6 +58,7 @@ export const BUSINESS_INFO_KEYS = [
   "email",
   "privacyOfficer",
   "hostingProvider",
+  "escrow",
 ] as const;
 
 export const EMPTY_BUSINESS_INFO: BusinessInfo = {
@@ -60,6 +71,7 @@ export const EMPTY_BUSINESS_INFO: BusinessInfo = {
   email: "",
   privacyOfficer: "",
   hostingProvider: "",
+  escrow: "",
 };
 
 /** 화면에 보여줄 이름 — 관리 화면과 검증 메시지가 같은 문구를 쓴다 */
@@ -73,6 +85,7 @@ export const FIELD_LABEL: Record<keyof BusinessInfo, string> = {
   email: "이메일",
   privacyOfficer: "개인정보 보호책임자",
   hostingProvider: "호스팅 제공자",
+  escrow: "결제대금예치·피해보상보험",
 };
 
 /**

@@ -9,7 +9,8 @@ import { changeOrderStatus, createOrder, type PointsPort } from "./orders.js";
 import { bankTransferGateway, confirmPayment, gateways, refundPayment, registerGateway } from "./payments.js";
 import { CASH_RECEIPT_RESOURCE, CATEGORY_RESOURCE, COUPON_RESOURCE, INQUIRY_RESOURCE,
          ORDER_RESOURCE, PRODUCT_RESOURCE, RETURN_RESOURCE, REVIEW_RESOURCE,
-         SHIPPING_ZONE_RESOURCE, TAX_INVOICE_RESOURCE } from "./admin-resources.js";
+         PAYMENT_REQUEST_RESOURCE, SHIPPING_ZONE_RESOURCE,
+         TAX_INVOICE_RESOURCE } from "./admin-resources.js";
 import { registerStorefrontBlocks } from "./blocks.js";
 import {
   createInquiry, createReview, deleteInquiry, deleteReview, findPurchase,
@@ -22,6 +23,10 @@ import {
   requestReturn, updateReturnStatus,
 } from "./returns.js";
 import { RELATED_LIMIT, listRelated, syncRelated } from "./related.js";
+import {
+  cancelPaymentRequest, createPaymentRequest, listPaymentRequests,
+  markRequestPaid, prepareOrderForRequest, viewPaymentRequest,
+} from "./direct-payment.js";
 import {
   RECEIPT_KINDS, RECEIPT_KIND_LABEL, VAT_PERIODS, cancelCashReceipt, cancelReceiptsForOrder,
   listCashReceiptGateways, listCashReceipts, listTaxInvoices, markCashReceiptIssued,
@@ -355,7 +360,16 @@ export default definePlugin(async (ctx) => {
   ctx.registerRoute("GET", "/payment-methods", async () => {
     const s = await settings();
     return {
-      methods: [...gateways.values()].map((g) => ({ provider: g.provider, displayName: g.displayName })),
+      // 준비되지 않은 게이트웨이(키를 넣지 않은 PG)는 노출하지 않는다.
+      // 손님이 고르면 실패하고, 사이트가 고장난 것처럼 보인다.
+      methods: (
+        await Promise.all(
+          [...gateways.values()].map(async (g) => {
+            const ready = g.isReady ? await g.isReady().catch(() => false) : true;
+            return ready ? { provider: g.provider, displayName: g.displayName } : null;
+          }),
+        )
+      ).filter((m): m is { provider: string; displayName: string } => m !== null),
       bankAccount: s.bankAccount,
       // 포인트 플러그인이 활성화되어 있으면 주문서에 포인트 사용 UI를 띄운다
       pointsAvailable: Boolean(pointsPort()),
@@ -385,6 +399,12 @@ export default definePlugin(async (ctx) => {
       pointsPort: pointsPort(),
       // 포인트 적립 등이 이 훅을 구독한다
       onPaid: async (info) => {
+        // 개인결제 청구서였으면 결제완료로 표시한다.
+        //
+        // 훅(doAction)이 아니라 직접 부른다 — 훅은 플러그인별 예외를 삼키므로
+        // 실패해도 아무도 모르고, 손님은 결제했는데 청구서는 "대기"로 남는다.
+        // 같은 플러그인 안의 일이니 훅을 거칠 이유도 없다.
+        await markRequestPaid(db, info.orderNo);
         await ctx.hooks.doAction("shop.order.paid", info);
       },
     });
@@ -834,6 +854,76 @@ export default definePlugin(async (ctx) => {
   ctx.registerRoute("GET", "/admin/reports/summary", async (req) => {
     requireAdmin(req);
     return await salesSummary(db, { period: parsePeriod(req.query) });
+  });
+
+  // ════════════════════════════════════════════════════
+  //  개인결제 (주문서 없는 청구)
+  // ════════════════════════════════════════════════════
+  //
+  // 전화·상담으로 주문받고 금액만 청구한다. 결제하면 **주문을 만든다** —
+  // 주문 없는 결제는 매출 집계와 세금 신고에서 빠진다 (direct-payment.ts).
+
+  ctx.registerRoute("POST", "/admin/payment-requests", async (req) => {
+    requireAdmin(req);
+    const b = req.body as Record<string, unknown>;
+    const result = await createPaymentRequest(db, {
+      title: String(b.title ?? ""),
+      description: b.description ? String(b.description) : undefined,
+      amount: Number(b.amount ?? 0),
+      expireDays: b.expireDays === undefined ? undefined : Number(b.expireDays),
+      customerName: b.customerName ? String(b.customerName) : undefined,
+      customerPhone: b.customerPhone ? String(b.customerPhone) : undefined,
+      customerEmail: b.customerEmail ? String(b.customerEmail) : undefined,
+      memo: b.memo ? String(b.memo) : undefined,
+      createdBy: req.user!.id,
+    });
+    return {
+      ...result,
+      // 손님에게 보낼 링크. 토큰이 그대로 들어가므로 관리자에게만 보인다.
+      payPath: `/shop/pay/${result.token}`,
+    };
+  });
+
+  ctx.registerRoute("GET", "/admin/payment-requests", async (req) => {
+    requireAdmin(req);
+    return await listPaymentRequests(db, {
+      status: req.query.status ? String(req.query.status) : undefined,
+      page: Number(req.query.page ?? 1),
+    });
+  });
+
+  ctx.registerRoute("PUT", "/admin/payment-requests/:id", async (req) => {
+    requireAdmin(req);
+    const b = req.body as Record<string, unknown>;
+    if (String(b.status ?? "") !== "cancelled") {
+      throw new ShopError(400, "청구서는 취소만 할 수 있습니다. 금액을 바꾸려면 새로 청구하세요.");
+    }
+    return await cancelPaymentRequest(db, {
+      id: req.params.id,
+      reason: b.reason ? String(b.reason) : undefined,
+    });
+  });
+
+  /** 손님이 보는 청구서 — 로그인 불필요 (전화 주문 손님이 회원일 이유가 없다) */
+  ctx.registerRoute("GET", "/pay/:token", async (req) => {
+    return await viewPaymentRequest(db, req.params.token);
+  });
+
+  /**
+   * 결제 준비 — 청구서로 주문을 만든다.
+   *
+   * 이후 결제는 **일반 주문과 같은 경로**(`/payments/confirm`)를 쓴다.
+   * 별도 경로를 만들면 금액 위조 방어를 두 번 구현해야 한다.
+   */
+  ctx.registerRoute("POST", "/pay/:token/prepare", async (req) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    return await prepareOrderForRequest(db, {
+      token: req.params.token,
+      userId: req.user?.id ?? null,
+      ordererName: b.ordererName ? String(b.ordererName) : undefined,
+      ordererPhone: b.ordererPhone ? String(b.ordererPhone) : undefined,
+      ordererEmail: b.ordererEmail ? String(b.ordererEmail) : undefined,
+    });
   });
 
   // ════════════════════════════════════════════════════
@@ -1460,6 +1550,7 @@ export default definePlugin(async (ctx) => {
   ctx.registerAdminResource(SHIPPING_ZONE_RESOURCE);
   ctx.registerAdminResource(CASH_RECEIPT_RESOURCE);
   ctx.registerAdminResource(TAX_INVOICE_RESOURCE);
+  ctx.registerAdminResource(PAYMENT_REQUEST_RESOURCE);
 
   /**
    * 사이트맵: 판매 중인 상품 주소.

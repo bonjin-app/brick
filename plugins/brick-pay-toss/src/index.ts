@@ -1,6 +1,30 @@
 import { definePlugin } from "@brick/plugin-sdk";
 
-const TOSS_API = "https://api.tosspayments.com/v1";
+/**
+ * 토스페이먼츠 API 주소.
+ *
+ * `BRICK_TOSS_API_BASE` 로 바꿀 수 있다 — **테스트 전용**이다.
+ * 돈이 오가는 경로(부분 취소 금액이 정확히 전달되는가)를 실제 HTTP 로 검증하려면
+ * 스텁 PG 를 세워야 하는데, 주소가 상수면 그럴 수 없다.
+ *
+ * https 가 아닌 주소는 **localhost 일 때만** 허용한다. 운영 환경에서 이 변수가
+ * 잘못 설정되어 카드 정보가 평문으로 나가는 것을 막는다.
+ */
+const TOSS_API = resolveApiBase();
+
+function resolveApiBase(): string {
+  const DEFAULT = "https://api.tosspayments.com/v1";
+  const override = process.env.BRICK_TOSS_API_BASE?.trim();
+  if (!override) return DEFAULT;
+  try {
+    const url = new URL(override);
+    const isLocal = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+    if (url.protocol !== "https:" && !isLocal) return DEFAULT;
+    return override.replace(/\/$/, "");
+  } catch {
+    return DEFAULT;
+  }
+}
 
 interface TossSettings {
   secretKey: string;
@@ -70,6 +94,11 @@ export default definePlugin(async (ctx) => {
     provider: "toss",
     displayName: "카드·간편결제",
 
+    /** 키가 없거나 꺼져 있으면 결제수단으로 노출하지 않는다 */
+    async isReady() {
+      const cfg = await load();
+      return cfg.enabled === true && Boolean(cfg.secretKey) && Boolean(cfg.clientKey);
+    },
     async confirm(params: { orderNo: string; providerTid: string; claimedAmount: number }) {
       const cfg = await load();
       if (!cfg.enabled || !cfg.secretKey) {
@@ -87,7 +116,14 @@ export default definePlugin(async (ctx) => {
           amount: params.claimedAmount,
         },
         cfg.secretKey,
-        `confirm-${params.orderNo}`,
+        // 주문번호만 쓰면 **한 번 실패한 시도가 그 주문의 모든 재시도를 오염시킨다.**
+        // 토스는 같은 키에 저장된 응답을 그대로 돌려주므로, 금액이나 결제키가
+        // 잘못된 첫 시도의 실패 응답이 재생되어 손님이 그 주문을 영구히 결제할
+        // 수 없게 된다.
+        //
+        // 멱등성의 목적은 **같은 요청의 재시도**를 안전하게 하는 것이므로,
+        // 요청을 유일하게 만드는 값(결제키·금액)을 모두 넣는다.
+        `confirm-${params.orderNo}-${params.providerTid}-${params.claimedAmount}`,
       );
 
       if (!res.ok) {
@@ -106,7 +142,12 @@ export default definePlugin(async (ctx) => {
       };
     },
 
-    async cancel(params: { providerTid: string; amount?: number; reason: string }) {
+    async cancel(params: {
+      providerTid: string;
+      amount?: number;
+      reason: string;
+      idempotencyKey?: string;
+    }) {
       const cfg = await load();
       if (!cfg.secretKey) return { ok: false, failureReason: "토스페이먼츠가 설정되지 않았습니다." };
 
@@ -117,7 +158,14 @@ export default definePlugin(async (ctx) => {
           ...(params.amount ? { cancelAmount: params.amount } : {}),
         },
         cfg.secretKey,
-        `cancel-${params.providerTid}-${params.amount ?? "full"}`,
+        // 호출자(brick-shop)가 준 키를 쓴다.
+        //
+        // 여기서 `${providerTid}-${amount}` 로 만들면 **같은 금액의 서로 다른
+        // 취소가 하나로 합쳐진다** — 같은 가격 상품 두 개를 따로 반품하면
+        // 두 번째 환불이 PG 에서 재생되고, 우리는 환불했다고 기록한다.
+        // 돌려줘야 할 돈이 사업자에게 남는다. 취소 동작을 유일하게 아는 것은
+        // 누적 환불액을 가진 호출자다.
+        params.idempotencyKey ?? `cancel-${params.providerTid}-${params.amount ?? "full"}`,
       );
 
       if (!res.ok) {

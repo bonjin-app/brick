@@ -86,7 +86,16 @@ echo "── 결제 게이트웨이 등록 (플러그인 확장성)"
 contains "무통장입금 기본 내장" "$(curl -s "$SHOP/payment-methods")" "bank_transfer"
 absent   "토스는 아직 없음" "$(curl -s "$SHOP/payment-methods")" '"toss"'
 curl -s -b "$CK" -X POST "$API/api/plugins/brick-pay-toss/activate" >/dev/null
-contains "PG 플러그인이 훅으로 결제수단 추가" "$(curl -s "$SHOP/payment-methods")" '"toss"'
+# 활성화만으로는 노출되지 않는다 — 키를 넣지 않은 PG 를 손님에게 보여주면
+# 고르는 순간 실패하고, 사이트가 고장난 것처럼 보인다 (ADR-58)
+absent "활성화만으로는 노출되지 않는다 (설정 전)" "$(curl -s "$SHOP/payment-methods")" '"toss"'
+curl -s -b "$CK" -X PUT "$API/api/plugins/brick-pay-toss/admin/config" -H 'content-type: application/json' \
+  -d '{"secretKey":"test_sk_dummy","clientKey":"test_ck_dummy","enabled":true}' >/dev/null
+contains "PG 플러그인이 훅으로 결제수단 추가 (설정 후)" "$(curl -s "$SHOP/payment-methods")" '"toss"'
+# 껐다 켤 수 있어야 한다 — 점검 중에 결제를 막는 흔한 운영 작업이다
+curl -s -b "$CK" -X PUT "$API/api/plugins/brick-pay-toss/admin/config" -H 'content-type: application/json' \
+  -d '{"secretKey":"test_sk_dummy","clientKey":"test_ck_dummy","enabled":false}' >/dev/null
+absent "끄면 다시 사라진다" "$(curl -s "$SHOP/payment-methods")" '"toss"'
 absent   "시크릿 키가 공개 API에 노출되지 않음" "$(curl -s "$API/api/plugins/brick-pay-toss/config")" "secretKey"
 
 echo "── 주문 멱등성"

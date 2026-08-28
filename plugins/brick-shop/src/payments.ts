@@ -34,7 +34,34 @@ export interface PaymentGateway {
     failureReason?: string;
   }>;
   /** 취소/환불. amount를 주면 부분 환불 */
-  cancel(params: { providerTid: string; amount?: number; reason: string }): Promise<{
+  /**
+   * 취소/환불. amount를 주면 부분 환불.
+   *
+   * `idempotencyKey` 는 **이 취소 동작 하나를 가리키는 값**이다. 게이트웨이는
+   * 그것을 PG 의 멱등키로 넘겨야 한다 — 네트워크 재시도로 같은 취소가 두 번
+   * 처리되는 것을 PG 쪽에서도 막는다.
+   *
+   * 게이트웨이가 자기 마음대로 키를 만들면 안 된다. 금액만으로 만들면
+   * **같은 금액의 서로 다른 취소가 하나로 합쳐진다** — 같은 가격 상품 두 개를
+   * 따로 반품하면 두 번째 환불이 PG 에서 재생되고, 우리는 환불했다고 기록한다.
+   * 돌려줘야 할 돈이 사업자에게 남는다.
+   */
+  /**
+   * 결제수단으로 노출해도 되는 상태인가.
+   *
+   * 없으면 항상 준비된 것으로 본다(무통장입금 등).
+   *
+   * 이것이 없어서 **키를 넣지 않은 PG 가 주문서에 결제수단으로 떴다.**
+   * 손님이 그것을 고르면 "설정되지 않았습니다"로 실패한다 — 사이트가 고장난
+   * 것처럼 보이고, 그 손님은 다시 오지 않는다.
+   */
+  isReady?(): Promise<boolean>;
+  cancel(params: {
+    providerTid: string;
+    amount?: number;
+    reason: string;
+    idempotencyKey?: string;
+  }): Promise<{
     ok: boolean;
     raw?: unknown;
     failureReason?: string;
@@ -198,7 +225,19 @@ export async function refundPayment(
     actorId?: string | null;
     pointsPort?: PointsPort | null;
   },
-): Promise<{ ok: boolean; refunded: number; remaining: number }> {
+): Promise<{
+  ok: boolean;
+  /**
+   * 누적 환불액.
+   *
+   * `refundedNow` 와 구분해서 준다 — 하나만 주면 운영자가 "이번에 얼마가
+   * 나갔는가"와 "지금까지 얼마가 나갔는가"를 구분할 수 없다.
+   */
+  refunded: number;
+  /** 이번 요청으로 실제로 환불한 금액 */
+  refundedNow: number;
+  remaining: number;
+}> {
   const { rows } = await db.execute(sql`
     SELECT p.id, p.provider, p.provider_tid, p.amount, p.refunded_amount, o.id AS order_id, o.status
     FROM shop_payments p JOIN shop_orders o ON o.id = p.order_id
@@ -221,10 +260,19 @@ export async function refundPayment(
     throw new ShopError(400, `환불 가능 금액을 초과했습니다. (가능: ${remaining.toLocaleString("ko-KR")}원)`);
   }
 
+  // 이 취소 동작을 가리키는 멱등키.
+  //
+  // `already`(지금까지 환불한 누적액)를 넣는 것이 핵심이다. 같은 금액을 두 번
+  // 환불하는 경우(같은 가격 상품을 따로 반품)에도 누적액이 다르므로 키가
+  // 달라진다. 반대로 **커밋되지 않은 재시도**는 누적액이 그대로이므로 같은 키가
+  // 되어 PG 가 한 번만 처리한다 — 멱등성의 목적이 정확히 그것이다.
+  const idempotencyKey = `cancel-${String(payment.id)}-${already}-${amount}`;
+
   const result = await gateway.cancel({
     providerTid: String(payment.provider_tid),
     ...(amount < remaining ? { amount } : {}),
     reason: params.reason,
+    idempotencyKey,
   });
   if (!result.ok) throw new ShopError(402, result.failureReason ?? "환불 처리에 실패했습니다.");
 
@@ -251,7 +299,12 @@ export async function refundPayment(
     `);
   }
 
-  return { ok: true, refunded: totalRefunded, remaining: paid - totalRefunded };
+  return {
+    ok: true,
+    refunded: totalRefunded,
+    refundedNow: amount,
+    remaining: paid - totalRefunded,
+  };
 }
 
 /**

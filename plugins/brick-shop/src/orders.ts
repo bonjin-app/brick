@@ -337,7 +337,14 @@ export async function changeOrderStatus(
  * unique 제약에 걸린다(실제로 발생했던 버그). 시퀀스는 트랜잭션 롤백과 무관하게
  * 원자적으로 증가하므로 경합이 없다 — 번호가 건너뛸 수 있지만 중복은 없다.
  */
-async function nextOrderNo(db: Db): Promise<string> {
+/**
+ * 주문번호.
+ *
+ * export 하는 이유: 개인결제도 같은 형식·같은 시퀀스를 써야 한다.
+ * 따로 만들면 번호가 겹치거나 형식이 달라지고, 매출 집계가 주문을 두 종류로
+ * 보게 된다.
+ */
+export async function nextOrderNo(db: Db): Promise<string> {
   const { rows } = await db.execute(sql`
     SELECT to_char(now(), 'YYYYMMDD') AS day, nextval('shop_order_no_seq') AS seq
   `);

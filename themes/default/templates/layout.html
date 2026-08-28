@@ -37,6 +37,8 @@
       {{#if site.business.email}}<span>이메일 {{ site.business.email }}</span>{{/if}}
       {{#if site.business.privacyOfficer}}<span>개인정보 보호책임자 {{ site.business.privacyOfficer }}</span>{{/if}}
       {{#if site.business.hostingProvider}}<span>호스팅 {{ site.business.hostingProvider }}</span>{{/if}}
+      {{!-- 전자상거래법 제24조: 결제대금예치·소비자피해보상보험 가입 사실 표시 --}}
+      {{#if site.business.escrow}}<span>{{ site.business.escrow }}</span>{{/if}}
     </div>
     {{/if}}
     <div class="brick-footer-credit">

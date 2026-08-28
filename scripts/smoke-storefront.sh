@@ -112,7 +112,8 @@ cat > "$TMP/biz.json" <<'JSON'
 {"companyName":"본진주식회사","representative":"홍길동","businessNo":"2208162517",
  "mailOrderNo":"제2026-서울강남-01234호","address":"서울특별시 강남구 테헤란로 1",
  "phone":"02-1234-5678","email":"help@bonjin.test",
- "privacyOfficer":"김보호","hostingProvider":"본진클라우드"}
+ "privacyOfficer":"김보호","hostingProvider":"본진클라우드",
+ "escrow":"결제대금예치 가입 (본진에스크로)"}
 JSON
 SAVE="$(curl -s -b "$CK" -X PUT "$API/api/business-info" -H 'content-type: application/json' --data-binary "@$TMP/biz.json")"
 contains "저장 성공" "$SAVE" '"ok":true'
@@ -122,6 +123,9 @@ contains "하이픈 없이 넣어도 형식을 맞춰준다" "$GET" '"businessNo
 contains "통신판매업 신고번호" "$GET" "제2026-서울강남-01234호"
 contains "개인정보 보호책임자" "$GET" "김보호"
 contains "호스팅 제공자" "$GET" "본진클라우드"
+# 전자상거래법 제24조 — 결제대금예치·소비자피해보상보험 가입 사실 표시
+contains "결제대금예치 안내" "$GET" "본진에스크로"
+contains "항목 라벨을 준다" "$(curl -s -b "$CK" "$API/api/business-info")" "결제대금예치·피해보상보험"
 
 echo "── 일부만 채우면 경고 (표시 의무를 절반만 지킨 상태)"
 PARTIAL="$(curl -s -b "$CK" -X PUT "$API/api/business-info" -H 'content-type: application/json' \
@@ -140,6 +144,7 @@ contains "통신판매업 신고번호 렌더" "$HOME" "제2026-서울강남-012
 contains "대표자 렌더" "$HOME" "홍길동"
 contains "전화번호 렌더" "$HOME" "02-1234-5678"
 contains "전용 영역으로 감싸짐" "$HOME" "brick-business"
+contains "에스크로 안내가 화면에 나온다 (표시 의무)" "$HOME" "본진에스크로"
 # 값이 없으면 라벨만 남지 않아야 한다
 curl -s -b "$CK" -X PUT "$API/api/business-info" -H 'content-type: application/json' \
   -d '{"companyName":"이름만있음"}' >/dev/null
