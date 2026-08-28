@@ -3,6 +3,7 @@ import type { PluginContext } from "@brick/plugin-sdk";
 import { escapeHtml, hasRole, shortDate, type BoardRow, type Db } from "./types.js";
 import { BOARD_CSS, BOARD_SCRIPT } from "./client-script.js";
 import { renderDetail, renderList, renderWrite, resolveView } from "./views.js";
+import { bindI18n, t } from "./i18n.js";
 
 /**
  * 게시판 블록 — 페이지 빌더로 배치한다.
@@ -12,6 +13,8 @@ import { renderDetail, renderList, renderWrite, resolveView } from "./views.js";
  * 테마가 빌드를 타지 않으므로 프레임워크에 의존할 수 없다.
  */
 export function registerBoardBlocks(ctx: PluginContext, db: Db): void {
+  bindI18n(ctx);
+
   /** slug로 게시판 조회 (블록 렌더용 — 없으면 null) */
   async function findBoard(slug: string): Promise<BoardRow | null> {
     if (!slug) return null;
@@ -68,7 +71,7 @@ export function registerBoardBlocks(ctx: PluginContext, db: Db): void {
       const board = await findBoard(slug);
       if (!board) {
         return `<div class="brick-board"><p class="brick-board-empty">
-  게시판을 찾을 수 없습니다. 주소 또는 블록 설정의 slug 를 확인하세요.</p></div>${BOARD_CSS}`;
+  ${escapeHtml(t("board.notFound"))}</p></div>${BOARD_CSS}`;
       }
 
       // 읽기 권한을 통과하지 못하면 내용을 서버 렌더에 담지 않는다.
@@ -76,8 +79,8 @@ export function registerBoardBlocks(ctx: PluginContext, db: Db): void {
       if (!hasRole(ctx.user, board.read_role)) {
         return `<div class="brick-board">
   <div class="brick-board-head"><h2>${escapeHtml(board.title)}</h2></div>
-  <p class="brick-board-empty">이 게시판은 ${board.read_role === "member" ? "회원" : "운영자"}만 열람할 수 있습니다.
-    ${!ctx.user ? `<a href="/login">로그인</a>` : ""}</p>
+  <p class="brick-board-empty">${escapeHtml(board.read_role === "member" ? t("board.readMember") : t("board.readManager"))}
+    ${!ctx.user ? `<a href="/login">${escapeHtml(t("common.login"))}</a>` : ""}</p>
 </div>${BOARD_CSS}`;
       }
 
@@ -100,7 +103,7 @@ export function registerBoardBlocks(ctx: PluginContext, db: Db): void {
       SELECT slug, title, description FROM board_boards ORDER BY title
     `);
     if (!rows.length) {
-      return `<div class="brick-board"><p class="brick-board-empty">아직 게시판이 없습니다.</p></div>${BOARD_CSS}`;
+      return `<div class="brick-board"><p class="brick-board-empty">${escapeHtml(t("index.empty"))}</p></div>${BOARD_CSS}`;
     }
     const items = rows
       .map((b) => `<a class="brick-board-index-item" href="/board/${encodeURIComponent(String(b.slug))}">
@@ -126,13 +129,13 @@ export function registerBoardBlocks(ctx: PluginContext, db: Db): void {
       `);
       // 읽을 수 없는 게시판은 목록에서 감춘다
       const visible = rows.filter((b) => hasRole(ctx.user, String(b.read_role)));
-      if (!visible.length) return `<p class="brick-board-empty">공개된 게시판이 없습니다.</p>${BOARD_CSS}`;
+      if (!visible.length) return `<p class="brick-board-empty">${escapeHtml(t("cards.empty"))}</p>${BOARD_CSS}`;
 
       const items = visible
         .map(
           (b) => `  <a class="brick-board-card" href="/board/${encodeURIComponent(String(b.slug))}">
     <strong>${escapeHtml(b.title)}</strong>
-    <span class="brick-board-count">${Number(b.n)}개의 글</span>
+    <span class="brick-board-count">${escapeHtml(t("cards.count", { n: Number(b.n) }))}</span>
     ${b.description ? `<p>${escapeHtml(b.description)}</p>` : ""}
   </a>`,
         )
@@ -167,7 +170,7 @@ export function registerBoardBlocks(ctx: PluginContext, db: Db): void {
           AND (${slug} = '' OR b.slug = ${slug})
         ORDER BY p.created_at DESC LIMIT ${limit}
       `);
-      if (!rows.length) return `<p class="brick-board-empty">게시물이 없습니다.</p>${BOARD_CSS}`;
+      if (!rows.length) return `<p class="brick-board-empty">${escapeHtml(t("latest.empty"))}</p>${BOARD_CSS}`;
 
       const items = rows
         .map(

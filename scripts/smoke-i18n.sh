@@ -113,11 +113,27 @@ contains "전화 라벨" "$EN404" "Tel 02-1234-5678"
 absent  "값은 번역되지 않는다 (상호는 그대로)" "$EN404" "Brick Trading"
 absent  "한국어 라벨이 남지 않는다" "$EN404" "사업자등록번호"
 
+echo "── 플러그인(게시판)도 언어를 따라간다 — 동봉 카탈로그"
+curl -s -b "$CK" -X POST "$API/api/plugins/brick-board/activate" >/dev/null
+curl -s -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' \
+  -d '{"slug":"board","title":"게시판","status":"published","blocks":[{"block":"brick-board/board","props":{}}]}' >/dev/null
+BOARD_EN="$(curl -s "$API/api/render/page?path=board")"
+contains "게시판 빈 안내가 영어" "$BOARD_EN" "There are no boards yet."
+absent  "한국어가 남지 않는다" "$BOARD_EN" "아직 게시판이"
+# 게시판 하나 만들면 목록 헤더도 영어여야 한다
+curl -s -b "$CK" -X POST "$API/api/plugins/brick-board/admin/boards" -H 'content-type: application/json' \
+  -d '{"slug":"news","title":"News","read_role":"guest","write_role":"member"}' >/dev/null
+LIST_EN="$(curl -s "$API/api/render/page?path=board/news")"
+contains "목록 헤더가 영어" "$LIST_EN" ">Title</th>"
+contains "빈 목록 안내가 영어" "$LIST_EN" "Be the first to write a post."
+contains "글 수가 영어" "$LIST_EN" "0 posts"
+
 echo "── 한국어로 복귀"
 curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' \
   -d '{"site.locale":"ko"}' >/dev/null
 BACK="$(curl -s "$API/api/render/page?path=no-such-page")"
 contains "다시 한국어" "$BACK" "페이지를 찾을 수 없습니다"
+contains "게시판도 한국어 복귀" "$(curl -s "$API/api/render/page?path=board/news")" "첫 글을 작성해보세요."
 contains "lang 복귀" "$BACK" 'lang=\"ko\"'
 
 echo

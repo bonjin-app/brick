@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { BlockRenderContext } from "@brick/plugin-sdk";
 import { escapeHtml, hasRole, humanSize, shortDate, type BoardRow, type Db } from "./types.js";
+import { localeTag, t } from "./i18n.js";
 
 /**
  * 게시판 화면 렌더 — 목록 / 상세 / 글쓰기.
@@ -22,12 +23,12 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * 이미지는 클라이언트가 /api/captcha 로 받아 채운다 — 서버 렌더에 넣으면
  * 캐시된 페이지에 같은 문제가 박혀 무의미해진다.
  */
-const CAPTCHA_FIELD = `<div class="brick-field brick-captcha" data-captcha>
-      <span class="brick-label">자동입력 방지</span>
+const captchaField = () => `<div class="brick-field brick-captcha" data-captcha>
+      <span class="brick-label">${escapeHtml(t("captcha.label"))}</span>
       <div class="brick-captcha-row">
         <span class="brick-captcha-image" aria-live="polite"></span>
-        <button type="button" data-captcha-reload title="새로고침">&#8635;</button>
-        <input name="captchaAnswer" autocomplete="off" maxlength="10" placeholder="보이는 문자 입력" required />
+        <button type="button" data-captcha-reload title="${escapeHtml(t("captcha.reload"))}">&#8635;</button>
+        <input name="captchaAnswer" autocomplete="off" maxlength="10" placeholder="${escapeHtml(t("captcha.placeholder"))}" required />
       </div>
       <input type="hidden" name="captchaToken" value="" />
     </div>`;
@@ -107,13 +108,13 @@ export async function renderList(
     const depth = Number(p.depth ?? 0);
     const indent = depth > 0 ? `<span class="brick-reply-mark" style="--d:${depth}">&#8627;</span>` : "";
     return `      <tr${notice ? ' class="brick-notice"' : ""}>
-        <td class="brick-c-num">${notice ? "공지" : ""}</td>
+        <td class="brick-c-num">${notice ? escapeHtml(t("list.notice")) : ""}</td>
         <td class="brick-c-title">
           ${p.category ? `<span class="brick-cat">${escapeHtml(p.category)}</span>` : ""}${indent}
           <a href="${base}/${escapeHtml(p.id)}">${escapeHtml(p.title)}</a>
-          ${p.is_secret ? `<span class="brick-lock" title="비밀글">&#128274;</span>` : ""}
+          ${p.is_secret ? `<span class="brick-lock" title="${escapeHtml(t("list.secretTitle"))}">&#128274;</span>` : ""}
           ${Number(p.comment_count) > 0 ? `<span class="brick-cmt">[${Number(p.comment_count)}]</span>` : ""}
-          ${Number(p.file_count) > 0 ? `<span class="brick-clip" title="첨부파일">&#128206;</span>` : ""}
+          ${Number(p.file_count) > 0 ? `<span class="brick-clip" title="${escapeHtml(t("list.attachment"))}">&#128206;</span>` : ""}
         </td>
         <td class="brick-c-author">${escapeHtml(p.author_name ?? "-")}</td>
         <td class="brick-c-date">${shortDate(p.created_at)}</td>
@@ -124,7 +125,7 @@ export async function renderList(
   const cats = board.categories;
   const catNav = cats.length
     ? `  <nav class="brick-cat-nav">
-    <a href="${base}"${!category ? ' class="is-active"' : ""}>전체</a>
+    <a href="${base}"${!category ? ' class="is-active"' : ""}>${escapeHtml(t("list.all"))}</a>
     ${cats
       .map(
         (c) =>
@@ -150,32 +151,32 @@ export async function renderList(
   return `<div class="brick-board">
   <div class="brick-board-head">
     <h2>${escapeHtml(board.title)}</h2>
-    <span class="brick-board-total">${total}개의 글${q ? ` (검색: ${escapeHtml(q)})` : ""}</span>
+    <span class="brick-board-total">${t("list.total", { n: total })}${q ? escapeHtml(t("list.searchLabel", { q })) : ""}</span>
   </div>
   ${board.description && !q ? `<p class="brick-board-desc">${escapeHtml(board.description)}</p>` : ""}
 ${catNav}
   <table class="brick-board-table">
     <thead>
-      <tr><th class="brick-c-num"></th><th>제목</th><th class="brick-c-author">작성자</th>
-          <th class="brick-c-date">날짜</th><th class="brick-c-view">조회</th></tr>
+      <tr><th class="brick-c-num"></th><th>${escapeHtml(t("list.colTitle"))}</th><th class="brick-c-author">${escapeHtml(t("list.colAuthor"))}</th>
+          <th class="brick-c-date">${escapeHtml(t("list.colDate"))}</th><th class="brick-c-view">${escapeHtml(t("list.colView"))}</th></tr>
     </thead>
     <tbody>
 ${notices.map((p) => row(p, true)).join("\n")}
 ${items.map((p) => row(p, false)).join("\n")}
-${!notices.length && !items.length ? `      <tr><td colspan="5" class="brick-board-empty">${q ? "검색 결과가 없습니다." : "첫 글을 작성해보세요."}</td></tr>` : ""}
+${!notices.length && !items.length ? `      <tr><td colspan="5" class="brick-board-empty">${escapeHtml(q ? t("list.emptySearch") : t("list.emptyFirst"))}</td></tr>` : ""}
     </tbody>
   </table>
 ${pager}
   <form class="brick-board-search" method="get" action="${base}">
     <select name="in">
-      <option value="all"${searchIn === "all" ? " selected" : ""}>전체</option>
-      <option value="title"${searchIn === "title" ? " selected" : ""}>제목</option>
-      <option value="content"${searchIn === "content" ? " selected" : ""}>내용</option>
-      <option value="author"${searchIn === "author" ? " selected" : ""}>작성자</option>
+      <option value="all"${searchIn === "all" ? " selected" : ""}>${escapeHtml(t("list.all"))}</option>
+      <option value="title"${searchIn === "title" ? " selected" : ""}>${escapeHtml(t("list.colTitle"))}</option>
+      <option value="content"${searchIn === "content" ? " selected" : ""}>${escapeHtml(t("write.content"))}</option>
+      <option value="author"${searchIn === "author" ? " selected" : ""}>${escapeHtml(t("list.colAuthor"))}</option>
     </select>
-    <input type="search" name="q" value="${escapeHtml(q)}" placeholder="검색어" />
-    <button type="submit">검색</button>
-    ${canWrite ? `<a class="brick-write-btn" href="${base}/write">글쓰기</a>` : ""}
+    <input type="search" name="q" value="${escapeHtml(q)}" placeholder="${escapeHtml(t("list.searchPlaceholder"))}" />
+    <button type="submit">${escapeHtml(t("list.searchBtn"))}</button>
+    ${canWrite ? `<a class="brick-write-btn" href="${base}/write">${escapeHtml(t("list.writeBtn"))}</a>` : ""}
   </form>
 </div>`;
 }
@@ -185,7 +186,7 @@ function renderPager(current: number, totalPages: number, link: (n: number) => s
   const start = Math.max(1, current - Math.floor(window / 2));
   const end = Math.min(totalPages, start + window - 1);
   const parts: string[] = [];
-  if (current > 1) parts.push(`<a href="${link(current - 1)}">&#8249; 이전</a>`);
+  if (current > 1) parts.push(`<a href="${link(current - 1)}">&#8249; ${escapeHtml(t("pager.prev"))}</a>`);
   if (start > 1) parts.push(`<a href="${link(1)}">1</a>${start > 2 ? "<span>&hellip;</span>" : ""}`);
   for (let n = start; n <= end; n++) {
     parts.push(n === current ? `<strong>${n}</strong>` : `<a href="${link(n)}">${n}</a>`);
@@ -193,7 +194,7 @@ function renderPager(current: number, totalPages: number, link: (n: number) => s
   if (end < totalPages) {
     parts.push(`${end < totalPages - 1 ? "<span>&hellip;</span>" : ""}<a href="${link(totalPages)}">${totalPages}</a>`);
   }
-  if (current < totalPages) parts.push(`<a href="${link(current + 1)}">다음 &#8250;</a>`);
+  if (current < totalPages) parts.push(`<a href="${link(current + 1)}">${escapeHtml(t("pager.next"))} &#8250;</a>`);
   return `  <nav class="brick-pager">${parts.join("")}</nav>`;
 }
 
@@ -215,8 +216,8 @@ export async function renderDetail(
   `);
   const post = rows[0];
   if (!post) {
-    return `<div class="brick-board"><p class="brick-board-empty">글을 찾을 수 없습니다.
-      <a href="${base}">목록으로</a></p></div>`;
+    return `<div class="brick-board"><p class="brick-board-empty">${escapeHtml(t("detail.notFound"))}
+      <a href="${base}">${escapeHtml(t("common.toList"))}</a></p></div>`;
   }
 
   const isOwner = Boolean(ctx.user && ctx.user.id === post.author_id);
@@ -228,9 +229,9 @@ export async function renderDetail(
     return `<div class="brick-board">
   <div class="brick-post-head"><h2>${escapeHtml(post.title)}</h2></div>
   <div class="brick-secret-notice">
-    <p>&#128274; 비밀글입니다. 작성자와 운영자만 열람할 수 있습니다.</p>
-    ${!ctx.user ? `<p><a href="/login">로그인</a> 후 다시 시도해주세요.</p>` : ""}
-    <p><a href="${base}">목록으로</a></p>
+    <p>&#128274; ${escapeHtml(t("detail.secretNotice"))}</p>
+    ${!ctx.user ? `<p>${escapeHtml(t("detail.loginRetry", { link: "\u0000" })).replace("\u0000", `<a href="/login">${escapeHtml(t("common.login"))}</a>`)}</p>` : ""}
+    <p><a href="${base}">${escapeHtml(t("common.toList"))}</a></p>
   </div>
 </div>`;
   }
@@ -256,7 +257,7 @@ export async function renderDetail(
   const canDownload = hasRole(ctx.user, board.download_role);
   const filesHtml = files.length
     ? `  <div class="brick-files">
-    <strong>첨부파일 ${files.length}개</strong>
+    <strong>${escapeHtml(t("files.heading", { n: files.length }))}</strong>
     <ul>
 ${files
   .map(
@@ -264,9 +265,9 @@ ${files
         ${
           canDownload
             ? `<a href="#" data-file="${escapeHtml(f.id)}">${escapeHtml(f.file_name)}</a>`
-            : `<span class="brick-file-locked">${escapeHtml(f.file_name)} (다운로드 권한 없음)</span>`
+            : `<span class="brick-file-locked">${escapeHtml(f.file_name)} ${escapeHtml(t("files.noPermission"))}</span>`
         }
-        <span class="brick-file-meta">${humanSize(Number(f.size))} &middot; ${Number(f.download_count)}회</span>
+        <span class="brick-file-meta">${humanSize(Number(f.size))} &middot; ${escapeHtml(t("files.downloads", { n: Number(f.download_count) }))}</span>
       </li>`,
   )
   .join("\n")}
@@ -282,14 +283,14 @@ ${files
       <div class="brick-comment-head">
         <strong>${escapeHtml(c.author_name ?? "-")}</strong>
         <time>${shortDate(c.created_at)}</time>
-        ${c.is_secret ? `<span class="brick-lock" title="비밀 댓글">&#128274;</span>` : ""}
+        ${c.is_secret ? `<span class="brick-lock" title="${escapeHtml(t("comment.secretTitle"))}">&#128274;</span>` : ""}
       </div>
       <div class="brick-comment-body">${
-        hidden ? `<em class="brick-hidden">비밀 댓글입니다.</em>` : escapeHtml(c.content).replace(/\n/g, "<br />")
+        hidden ? `<em class="brick-hidden">${escapeHtml(t("comment.secret"))}</em>` : escapeHtml(c.content).replace(/\n/g, "<br />")
       }</div>
       <div class="brick-comment-actions">
-        <button type="button" data-reply="${escapeHtml(c.id)}">답글</button>
-        ${own ? `<button type="button" data-del-comment="${escapeHtml(c.id)}">삭제</button>` : ""}
+        <button type="button" data-reply="${escapeHtml(c.id)}">${escapeHtml(t("comment.reply"))}</button>
+        ${own ? `<button type="button" data-del-comment="${escapeHtml(c.id)}">${escapeHtml(t("common.delete"))}</button>` : ""}
       </div>
     </li>`;
     })
@@ -304,9 +305,9 @@ ${files
     <h2>${escapeHtml(post.title)}</h2>
     <div class="brick-post-meta">
       <span>${escapeHtml(post.author_name ?? "-")}</span>
-      <time>${new Date(String(post.created_at)).toLocaleString("ko-KR")}</time>
-      <span>조회 ${Number(post.view_count)}</span>
-      ${String(post.updated_at) !== String(post.created_at) ? `<span class="brick-edited">수정됨</span>` : ""}
+      <time>${new Date(String(post.created_at)).toLocaleString(localeTag())}</time>
+      <span>${escapeHtml(t("detail.views", { n: Number(post.view_count) }))}</span>
+      ${String(post.updated_at) !== String(post.created_at) ? `<span class="brick-edited">${escapeHtml(t("detail.edited"))}</span>` : ""}
     </div>
   </div>
 
@@ -318,7 +319,7 @@ ${filesHtml}
     ${
       board.allow_vote
         ? `<div class="brick-vote">
-      <button type="button" data-vote="1">&#128077; 추천 <span data-up>${Number(post.up_count)}</span></button>
+      <button type="button" data-vote="1">&#128077; ${escapeHtml(t("vote.up"))} <span data-up>${Number(post.up_count)}</span></button>
       <button type="button" data-vote="-1">&#128078; <span data-down>${Number(post.down_count)}</span></button>
     </div>`
         : ""
@@ -328,22 +329,22 @@ ${filesHtml}
         ? `<button type="button" class="brick-scrap${scrapped ? " is-on" : ""}" data-scrap
         aria-pressed="${scrapped ? "true" : "false"}">
       <span data-scrap-icon>${scrapped ? "&#9733;" : "&#9734;"}</span>
-      스크랩 <span data-scrap-count>${Number(post.scrap_count ?? 0)}</span>
+      ${escapeHtml(t("scrap.label"))} <span data-scrap-count>${Number(post.scrap_count ?? 0)}</span>
     </button>`
         : ""
     }
     <div class="brick-post-actions">
-      <a href="${base}">목록</a>
-      ${board.allow_reply && hasRole(ctx.user, board.write_role) ? `<a href="${base}/write?replyTo=${escapeHtml(post.id)}">답변</a>` : ""}
-      ${canModify ? `<a href="${base}/${escapeHtml(post.id)}/edit">수정</a>` : ""}
-      ${canModify ? `<button type="button" data-delete-post>삭제</button>` : ""}
+      <a href="${base}">${escapeHtml(t("common.list"))}</a>
+      ${board.allow_reply && hasRole(ctx.user, board.write_role) ? `<a href="${base}/write?replyTo=${escapeHtml(post.id)}">${escapeHtml(t("detail.replyBtn"))}</a>` : ""}
+      ${canModify ? `<a href="${base}/${escapeHtml(post.id)}/edit">${escapeHtml(t("common.edit"))}</a>` : ""}
+      ${canModify ? `<button type="button" data-delete-post>${escapeHtml(t("common.delete"))}</button>` : ""}
     </div>
   </div>
 
   <section class="brick-comments">
-    <h3>댓글 <span data-comment-count>${Number(post.comment_count)}</span></h3>
+    <h3>${escapeHtml(t("comments.heading"))} <span data-comment-count>${Number(post.comment_count)}</span></h3>
     <ul class="brick-comment-list">
-${commentsHtml || `      <li class="brick-board-empty">첫 댓글을 남겨보세요.</li>`}
+${commentsHtml || `      <li class="brick-board-empty">${escapeHtml(t("comment.first"))}</li>`}
     </ul>
     ${
       canComment
@@ -353,20 +354,20 @@ ${commentsHtml || `      <li class="brick-board-empty">첫 댓글을 남겨보�
         ctx.user
           ? ""
           : `<div class="brick-guest-fields">
-        <input name="guestName" placeholder="이름" maxlength="20" required />
-        <input name="guestPassword" type="password" placeholder="비밀번호" minlength="4" required />
+        <input name="guestName" placeholder="${escapeHtml(t("guest.name"))}" maxlength="20" required />
+        <input name="guestPassword" type="password" placeholder="${escapeHtml(t("guest.password"))}" minlength="4" required />
       </div>
-      ${CAPTCHA_FIELD}`
+      ${captchaField()}`
       }
-      <textarea name="content" rows="3" placeholder="댓글을 입력하세요" required></textarea>
+      <textarea name="content" rows="3" placeholder="${escapeHtml(t("comment.placeholder"))}" required></textarea>
       <div class="brick-comment-submit">
-        ${ctx.user ? `<label><input type="checkbox" name="isSecret" /> 비밀 댓글</label>` : ""}
-        <span class="brick-reply-to" hidden>답글 작성 중 <button type="button" data-cancel-reply>취소</button></span>
-        <button type="submit">등록</button>
+        ${ctx.user ? `<label><input type="checkbox" name="isSecret" /> ${escapeHtml(t("comment.secretOpt"))}</label>` : ""}
+        <span class="brick-reply-to" hidden>${escapeHtml(t("comment.replying"))} <button type="button" data-cancel-reply>${escapeHtml(t("common.cancel"))}</button></span>
+        <button type="submit">${escapeHtml(t("common.submit"))}</button>
       </div>
     </form>`
-        : `<p class="brick-board-empty">댓글을 작성할 권한이 없습니다.
-      ${!ctx.user ? `<a href="/login">로그인</a>` : ""}</p>`
+        : `<p class="brick-board-empty">${escapeHtml(t("comment.noPermission"))}
+      ${!ctx.user ? `<a href="/login">${escapeHtml(t("common.login"))}</a>` : ""}</p>`
     }
   </section>
 </div>`;
@@ -386,8 +387,8 @@ export async function renderWrite(
   if (!hasRole(ctx.user, board.write_role)) {
     return `<div class="brick-board">
   <div class="brick-board-head"><h2>${escapeHtml(board.title)}</h2></div>
-  <p class="brick-board-empty">글을 작성할 권한이 없습니다.
-    ${!ctx.user ? `<a href="/login">로그인</a>` : ""} <a href="${base}">목록으로</a></p>
+  <p class="brick-board-empty">${escapeHtml(t("write.noPermission"))}
+    ${!ctx.user ? `<a href="/login">${escapeHtml(t("common.login"))}</a>` : ""} <a href="${base}">${escapeHtml(t("common.toList"))}</a></p>
 </div>`;
   }
 
@@ -400,14 +401,14 @@ export async function renderWrite(
     `);
     editing = rows[0] ?? null;
     if (!editing) {
-      return `<div class="brick-board"><p class="brick-board-empty">수정할 글을 찾을 수 없습니다.
-        <a href="${base}">목록으로</a></p></div>`;
+      return `<div class="brick-board"><p class="brick-board-empty">${escapeHtml(t("write.editNotFound"))}
+        <a href="${base}">${escapeHtml(t("common.toList"))}</a></p></div>`;
     }
     const isOwner = Boolean(ctx.user && ctx.user.id === editing.author_id);
     // 비회원 글은 비밀번호로 확인하므로 폼은 보여주고 저장 시점에 검증한다
     if (editing.author_id && !isOwner && !hasRole(ctx.user, "manager")) {
-      return `<div class="brick-board"><p class="brick-board-empty">본인이 작성한 글만 수정할 수 있습니다.
-        <a href="${base}">목록으로</a></p></div>`;
+      return `<div class="brick-board"><p class="brick-board-empty">${escapeHtml(t("write.ownOnly"))}
+        <a href="${base}">${escapeHtml(t("common.toList"))}</a></p></div>`;
     }
   }
 
@@ -426,16 +427,16 @@ export async function renderWrite(
      ${editing ? `data-edit="${escapeHtml(editing.id)}"` : ""}
      ${replyTo && replyTitle ? `data-reply-to="${escapeHtml(replyTo)}"` : ""}>
   <div class="brick-board-head">
-    <h2>${editing ? "글 수정" : replyTitle ? "답변 쓰기" : "글쓰기"}</h2>
+    <h2>${escapeHtml(editing ? t("write.editTitle") : replyTitle ? t("write.replyTitle") : t("write.title"))}</h2>
   </div>
-  ${replyTitle ? `<p class="brick-board-desc">원글: ${escapeHtml(replyTitle)}</p>` : ""}
+  ${replyTitle ? `<p class="brick-board-desc">${escapeHtml(t("write.original", { title: replyTitle }))}</p>` : ""}
 
   <form class="brick-write-form">
     ${
       cats.length
-        ? `<label class="brick-field">분류
+        ? `<label class="brick-field">${escapeHtml(t("write.category"))}
       <select name="category">
-        <option value="">선택하지 않음</option>
+        <option value="">${escapeHtml(t("write.noCategory"))}</option>
         ${cats.map((c) => `<option value="${escapeHtml(c)}"${currentCat === c ? " selected" : ""}>${escapeHtml(c)}</option>`).join("\n        ")}
       </select>
     </label>`
@@ -446,61 +447,61 @@ export async function renderWrite(
       ctx.user
         ? ""
         : `<div class="brick-guest-fields">
-      <label class="brick-field">이름
+      <label class="brick-field">${escapeHtml(t("guest.name"))}
         <input name="guestName" maxlength="20" minlength="2" required />
       </label>
-      <label class="brick-field">비밀번호 <small>(수정·삭제에 사용)</small>
+      <label class="brick-field">${escapeHtml(t("guest.password"))} <small>${escapeHtml(t("write.guestPasswordHint"))}</small>
         <input name="guestPassword" type="password" minlength="4" required />
       </label>
     </div>`
     }
 
-    <label class="brick-field">제목
+    <label class="brick-field">${escapeHtml(t("write.subject"))}
       <input name="title" maxlength="500" required value="${escapeHtml(editing?.title ?? "")}" />
     </label>
 
     <div class="brick-field">
-      <span class="brick-label">내용</span>
+      <span class="brick-label">${escapeHtml(t("write.content"))}</span>
       <div class="brick-editor">
-        <div class="brick-toolbar" role="toolbar" aria-label="서식">
-          <button type="button" data-cmd="bold" title="굵게"><b>B</b></button>
-          <button type="button" data-cmd="italic" title="기울임"><i>I</i></button>
-          <button type="button" data-cmd="underline" title="밑줄"><u>U</u></button>
-          <button type="button" data-cmd="strikeThrough" title="취소선"><s>S</s></button>
+        <div class="brick-toolbar" role="toolbar" aria-label="${escapeHtml(t("editor.toolbar"))}">
+          <button type="button" data-cmd="bold" title="${escapeHtml(t("editor.bold"))}"><b>B</b></button>
+          <button type="button" data-cmd="italic" title="${escapeHtml(t("editor.italic"))}"><i>I</i></button>
+          <button type="button" data-cmd="underline" title="${escapeHtml(t("editor.underline"))}"><u>U</u></button>
+          <button type="button" data-cmd="strikeThrough" title="${escapeHtml(t("editor.strike"))}"><s>S</s></button>
           <span class="brick-sep"></span>
-          <button type="button" data-block="h3" title="제목">H</button>
-          <button type="button" data-cmd="insertUnorderedList" title="목록">&bull;</button>
-          <button type="button" data-cmd="insertOrderedList" title="번호 목록">1.</button>
-          <button type="button" data-block="blockquote" title="인용">&ldquo;</button>
+          <button type="button" data-block="h3" title="${escapeHtml(t("editor.heading"))}">H</button>
+          <button type="button" data-cmd="insertUnorderedList" title="${escapeHtml(t("editor.ul"))}">&bull;</button>
+          <button type="button" data-cmd="insertOrderedList" title="${escapeHtml(t("editor.ol"))}">1.</button>
+          <button type="button" data-block="blockquote" title="${escapeHtml(t("editor.quote"))}">&ldquo;</button>
           <span class="brick-sep"></span>
-          <button type="button" data-link title="링크">&#128279;</button>
-          <button type="button" data-cmd="removeFormat" title="서식 지우기">&#10006;</button>
+          <button type="button" data-link title="${escapeHtml(t("editor.link"))}">&#128279;</button>
+          <button type="button" data-cmd="removeFormat" title="${escapeHtml(t("editor.clear"))}">&#10006;</button>
         </div>
         <div class="brick-editor-body" contenteditable="true" role="textbox" aria-multiline="true"
-             data-placeholder="내용을 입력하세요">${String(editing?.content ?? "")}</div>
+             data-placeholder="${escapeHtml(t("write.contentPlaceholder"))}">${String(editing?.content ?? "")}</div>
       </div>
       <textarea name="content" hidden></textarea>
     </div>
 
     ${
       board.allow_upload && board.max_files > 0
-        ? `<label class="brick-field">첨부파일 <small>(최대 ${board.max_files}개)</small>
+        ? `<label class="brick-field">${escapeHtml(t("write.files"))} <small>${escapeHtml(t("write.filesMax", { n: board.max_files }))}</small>
       <input type="file" name="files" multiple />
     </label>`
         : ""
     }
 
-    ${ctx.user ? "" : CAPTCHA_FIELD}
+    ${ctx.user ? "" : captchaField()}
 
     <div class="brick-write-options">
-      ${board.allow_secret ? `<label><input type="checkbox" name="isSecret"${editing?.is_secret ? " checked" : ""} /> 비밀글</label>` : ""}
-      ${hasRole(ctx.user, "manager") ? `<label><input type="checkbox" name="isNotice" /> 공지로 등록</label>` : ""}
+      ${board.allow_secret ? `<label><input type="checkbox" name="isSecret"${editing?.is_secret ? " checked" : ""} /> ${escapeHtml(t("write.secret"))}</label>` : ""}
+      ${hasRole(ctx.user, "manager") ? `<label><input type="checkbox" name="isNotice" /> ${escapeHtml(t("write.notice"))}</label>` : ""}
     </div>
 
     <p class="brick-write-msg" role="status"></p>
     <div class="brick-write-actions">
-      <button type="submit" class="brick-primary">${editing ? "수정 완료" : "등록"}</button>
-      <a href="${base}">취소</a>
+      <button type="submit" class="brick-primary">${escapeHtml(editing ? t("write.submitEdit") : t("common.submit"))}</button>
+      <a href="${base}">${escapeHtml(t("common.cancel"))}</a>
     </div>
   </form>
 </div>`;
