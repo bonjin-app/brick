@@ -115,6 +115,32 @@ sql`WHERE slug = ANY(${slugs})`
 sql`WHERE slug IN (${sql.join(slugs.map((s) => sql`${s}`), sql`, `)})`
 ```
 
+**재귀 CTE 는 비재귀 항에서 컬럼 타입이 결정됩니다.** 문자열을 이어붙이며
+내려갈 때 `name AS path` 로 시작하면 `varchar(n)` 이 되고, 재귀 항의 concat 결과
+(`text`)와 타입이 달라 `has type character varying(n) ... but type text overall`
+로 실패합니다. 시작 항에서 캐스팅하세요.
+
+```sql
+-- ✗ 실행 시 실패
+SELECT id, name AS path FROM categories WHERE parent_id IS NULL
+-- ✓
+SELECT id, name::text AS path FROM categories WHERE parent_id IS NULL
+```
+
+**날짜 문자열을 `Date.parse` 로 검증하지 마세요.** JS 는 넘치는 날짜를 다음 달로
+굴립니다 — `Date.parse("2026-02-30T00:00:00Z")` 는 NaN 이 아니라 3월 2일입니다.
+검증을 통과한 뒤 PostgreSQL 이 던져서 400 이 아니라 500 이 납니다. 되돌려 찍어
+같은 문자열이 나오는지 확인하세요 (ADR-51).
+
+**기간 집계는 시간대를 정해서 자르세요.** UTC 로 `date_trunc` 하면 한국에서
+오전 9시 이전 결제가 전날로 밀립니다. `BRICK_TIMEZONE`(기본 `Asia/Seoul`)을
+쓰세요 (ADR-51).
+
+**컬럼을 추가했으면 관리 리소스 필드와 저장 쿼리도 확인하세요.** `parent_id` ·
+`category_id` 가 스키마에는 있는데 폼 필드와 INSERT/UPDATE 에는 없어서, 운영자가
+분류 계층을 만들 수도 상품에 분류를 지정할 수도 없었습니다. 스키마에 있는 것이
+기능이 있다는 뜻은 아닙니다 (ADR-52).
+
 **공개 URL을 만드는 플러그인은 `registerSitemapSource` 를 등록하세요.** 없으면
 검색엔진이 그 주소를 찾지 못합니다 (ADR-40).
 

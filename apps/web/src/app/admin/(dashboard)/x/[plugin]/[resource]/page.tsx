@@ -9,6 +9,8 @@ interface AdminField {
   label: string;
   type: "text" | "textarea" | "number" | "money" | "boolean" | "select" | "date" | "image" | "richtext";
   options?: Array<{ value: string; label: string }>;
+  /** 선택지를 이 경로(플러그인 기준)에서 가져온다 */
+  optionsFrom?: string;
   required?: boolean;
   help?: string;
   inList?: boolean;
@@ -54,6 +56,32 @@ export default function PluginResourcePage() {
     setError("");
     fetch(`/api/admin/resources/${params.plugin}/${params.resource}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("리소스를 찾을 수 없습니다."))))
+      .then(async (loaded: AdminResource) => {
+        // optionsFrom 이 있는 필드의 선택지를 라우트에서 채운다.
+        // 분류처럼 선택지가 테이블 행인 경우가 있다.
+        const dynamic = loaded.fields.filter((f) => f.optionsFrom);
+        if (dynamic.length === 0) return loaded;
+        const fetched = await Promise.all(
+          dynamic.map(async (f) => {
+            try {
+              const r = await fetch(`/api/plugins/${loaded.plugin}${f.optionsFrom}`);
+              if (!r.ok) return { name: f.name, options: [] };
+              const d = await r.json();
+              return { name: f.name, options: Array.isArray(d) ? d : [] };
+            } catch {
+              // 선택지를 못 가져와도 폼 전체를 막지 않는다 — 나머지는 편집할 수 있어야 한다
+              return { name: f.name, options: [] };
+            }
+          }),
+        );
+        const byName = new Map(fetched.map((x) => [x.name, x.options]));
+        return {
+          ...loaded,
+          fields: loaded.fields.map((f) =>
+            f.optionsFrom ? { ...f, options: [...(f.options ?? []), ...(byName.get(f.name) ?? [])] } : f,
+          ),
+        };
+      })
       .then(setRes)
       .catch((e: Error) => setError(e.message));
   }, [params.plugin, params.resource]);
@@ -106,7 +134,7 @@ export default function PluginResourcePage() {
     for (const f of res!.fields) {
       if (f.type === "boolean") row[f.name] = false;
       else if (f.type === "number" || f.type === "money") row[f.name] = 0;
-      else if (f.type === "select") row[f.name] = f.options?.[0]?.value ?? "";
+      else if (f.type === "select") row[f.name] = f.required ? (f.options?.[0]?.value ?? "") : "";
       else row[f.name] = "";
     }
     return row;
@@ -230,7 +258,10 @@ function FieldInput({ field, value, onChange }: { field: AdminField; value: unkn
       );
     case "select":
       return (
-        <select style={base} value={String(value ?? "")} onChange={(e) => onChange(e.target.value)}>
+        <select style={base} value={String(value ?? "")}
+          onChange={(e) => onChange(e.target.value === "" ? null : e.target.value)}>
+          {/* 필수가 아니면 비울 수 있어야 한다 — 분류를 지정하지 않은 상품이 있다 */}
+          {!field.required && <option value="">— 선택 없음 —</option>}
           {field.options?.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       );
@@ -267,7 +298,11 @@ function formatCell(v: unknown, f: AdminField): string {
   if (f.type === "money") return `${Number(v).toLocaleString("ko-KR")}원`;
   if (f.type === "boolean") return v ? "✓" : "—";
   if (f.type === "number") return Number(v).toLocaleString("ko-KR");
-  if (f.type === "select") return f.options?.find((o) => o.value === String(v))?.label ?? String(v);
+  if (f.type === "select") {
+    if (v === null || v === undefined || v === "") return "";
+    // 들여쓰기용 공백은 목록에서 떼고 보여준다
+    return (f.options?.find((o) => o.value === String(v))?.label ?? String(v)).replace(/^\u00a0+/, "");
+  }
   if (f.type === "date") return new Date(String(v)).toLocaleString("ko-KR");
   const s = String(v);
   return s.length > 60 ? `${s.slice(0, 60)}…` : s;

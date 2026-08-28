@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import type { PluginContext } from "@brick/plugin-sdk";
 import { escapeHtml, won, type Db, type ShopSettings } from "./types.js";
 import { reviewSection } from "./reviews-view.js";
+import { RELATED_LIMIT, listRelated, type RelatedProduct } from "./related.js";
 
 /**
  * 스토어프론트 블록.
@@ -107,6 +108,16 @@ export function registerStorefrontBlocks(
       const p = rows[0];
       if (!p) return `<div class="brick-shop-empty">상품을 찾을 수 없습니다.</div>`;
 
+      // 관련 상품 — 실패해도 상품 상세는 떠야 한다.
+      // 추천은 부가 기능이고, 이것 때문에 상품을 못 팔면 안 된다.
+      let relatedHtml = "";
+      try {
+        const related = await listRelated(db, String(p.id), RELATED_LIMIT);
+        relatedHtml = relatedSection(related);
+      } catch {
+        relatedHtml = "";
+      }
+
       const { rows: options } = await db.execute(sql`
         SELECT id, name, extra_price, stock FROM shop_product_options
         WHERE product_id = ${String(p.id)}::uuid AND is_active = true ORDER BY sort_order, name
@@ -190,10 +201,39 @@ export function registerStorefrontBlocks(
   </div>
 </div>
 <div class="brick-detail-description">${String(p.description ?? "")}</div>
+${relatedHtml}
 <a id="brick-reviews"></a>
 ${reviewSection({ id: String(p.id), reviewCount, ratingAvg, inquiryCount: Number(p.inquiry_count ?? 0) })}
 <script type="application/ld+json">${jsonLd}</script>
 ${BUY_SCRIPT}${GALLERY_SCRIPT}${STOREFRONT_CSS}`;
+    },
+  });
+
+  // ── 관련 상품 (독립 블록) ──────────────────────────
+  //
+  // 상품 상세에 이미 붙지만, 테마가 위치를 직접 정하고 싶을 수 있다
+  // (후기 위/아래, 사이드바 등).
+  ctx.registerBlock({
+    name: "related-products",
+    displayName: "관련 상품",
+    propsSchema: {
+      type: "object",
+      properties: {
+        slug: { type: "string", title: "상품 slug", description: "비우면 주소의 마지막 경로를 씁니다." },
+        limit: { type: "number", title: "표시 개수", default: RELATED_LIMIT },
+        title: { type: "string", title: "제목", default: "관련 상품" },
+      },
+    },
+    render: async (props) => {
+      const slug = String(props.slug ?? props.__pathTail ?? "");
+      if (!slug) return "";
+      const { rows } = await db.execute(sql`
+        SELECT id FROM shop_products WHERE slug = ${slug} AND status IN ('selling', 'soldout') LIMIT 1
+      `);
+      if (!rows[0]) return "";
+      const limit = Number(props.limit ?? RELATED_LIMIT);
+      const related = await listRelated(db, String(rows[0].id), limit);
+      return relatedSection(related, String(props.title ?? "관련 상품"));
     },
   });
 
@@ -227,11 +267,49 @@ ${CART_SCRIPT}${STOREFRONT_CSS}`,
   });
 }
 
+/**
+ * 관련 상품 섹션.
+ *
+ * 추천이 없으면 **아무것도 내지 않는다.** "관련 상품이 없습니다" 를 띄우면
+ * 빈 영역이 상세 페이지를 늘리기만 하고, 새 쇼핑몰에서는 모든 상품에
+ * 그것이 붙는다.
+ *
+ * 함께 구매로 채워진 것에는 표시를 붙이지 않는다 — 손님에게 "이건 자동
+ * 추천입니다"는 정보가 아니다. 운영자는 관리 화면에서 구분할 수 있다.
+ */
+function relatedSection(items: RelatedProduct[], title = "관련 상품"): string {
+  if (!items.length) return "";
+  const cards = items
+    .map((r) => {
+      const href = `/shop/${encodeURIComponent(r.slug)}`;
+      const thumb = r.imageUrl
+        ? `<img src="${escapeHtml(r.imageUrl)}" alt="${escapeHtml(r.name)}" loading="lazy" />`
+        : `<span class="brick-noimg">이미지 없음</span>`;
+      const soldout = r.status === "soldout" ? `<span class="brick-badge-soldout">품절</span>` : "";
+      const list =
+        r.listPrice && r.listPrice > r.price
+          ? `<del>${won(r.listPrice)}</del> `
+          : "";
+      return `<a class="brick-product-card" href="${href}">
+  <span class="brick-product-thumb">${thumb}${soldout}</span>
+  <span class="brick-product-name">${escapeHtml(r.name)}</span>
+  <span class="brick-product-price">${list}<strong>${won(r.price)}</strong></span>
+</a>`;
+    })
+    .join("");
+  return `<section class="brick-related">
+  <h2>${escapeHtml(title)}</h2>
+  <div class="brick-product-grid" style="--brick-cols:4">${cards}</div>
+</section>`;
+}
+
 /* ── 스토어프론트 CSS ────────────────────────────────
    테마가 빌드를 타지 않으므로 블록이 자기 스타일을 함께 낸다.
    CSS 변수는 테마 토큰을 우선 사용해 테마 디자인과 어울리게 한다. */
 const STOREFRONT_CSS = `
 <style>
+.brick-related{margin:48px 0 0}
+.brick-related h2{font-size:19px;margin:0 0 4px;padding-top:24px;border-top:1px solid var(--brick-border,#e5e5ea)}
 .brick-product-grid{display:grid;grid-template-columns:repeat(var(--brick-cols,4),1fr);gap:20px;margin:20px 0}
 @media(max-width:900px){.brick-product-grid{grid-template-columns:repeat(2,1fr)}}
 .brick-product-card{display:block;text-decoration:none;color:inherit}

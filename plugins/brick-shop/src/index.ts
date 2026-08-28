@@ -1,4 +1,4 @@
-import { definePlugin, isUniqueViolation } from "@brick/plugin-sdk";
+import { definePlugin, isUniqueViolation, rawResponse } from "@brick/plugin-sdk";
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import { DEFAULT_SETTINGS, ShopError, STATUS_LABEL, escapeHtml, won,
@@ -21,6 +21,11 @@ import {
   cancelRequest, getReturn, getReturnable, listAllReturns, listMyReturns,
   requestReturn, updateReturnStatus,
 } from "./returns.js";
+import { RELATED_LIMIT, listRelated, syncRelated } from "./related.js";
+import {
+  SITE_TZ, parseGroupBy, parsePeriod, salesByCategory, salesByPeriod,
+  salesByProduct, salesSummary, toCsv,
+} from "./reports.js";
 import {
   addToWishlist, createZone, deleteZone, findZoneFee, isInWishlist, listRecentViews,
   listWishlist, listZones, mergeGuestViews, mergeGuestWishlist, purgeOldViews,
@@ -28,6 +33,21 @@ import {
 } from "./wishlist.js";
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,148}$/;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** 폼의 "선택 없음"("")과 미지정을 모두 null 로 본다 */
+function parseParentId(raw: unknown): string | null {
+  if (raw === null || raw === undefined || String(raw).trim() === "") return null;
+  const v = String(raw).trim();
+  if (!UUID_RE.test(v)) throw new ShopError(400, "상위 분류가 올바르지 않습니다.");
+  return v;
+}
+
+/** 없는 분류를 부모로 지정하면 FK 위반 500 이 아니라 400 으로 알려준다 */
+async function requireCategory(db: Db, id: string): Promise<void> {
+  const { rows } = await db.execute(sql`SELECT 1 FROM shop_categories WHERE id = ${id}::uuid LIMIT 1`);
+  if (!rows.length) throw new ShopError(400, "상위 분류를 찾을 수 없습니다.");
+}
 
 /**
  * brick-shop — 커머스 플러그인 (영카트에 대응).
@@ -108,6 +128,8 @@ export default definePlugin(async (ctx) => {
       WHERE product_id = ${String(product.id)}::uuid AND is_active = true
       ORDER BY sort_order, name
     `);
+    // 관련 상품. 실패해도 상세는 응답해야 한다 (추천은 부가 기능이다)
+    const related = await listRelated(db, String(product.id), RELATED_LIMIT).catch(() => []);
     // 최근 본 상품에 기록한다. 실패해도 상세 화면은 떠야 하므로 예외를 삼킨다 —
     // 열람 기록은 부가 기능이고, 이것 때문에 상품을 못 보면 안 된다.
     let viewToken: string | null = null;
@@ -131,6 +153,7 @@ export default definePlugin(async (ctx) => {
             : 0,
       },
       options,
+      related,
     };
   });
 
@@ -404,7 +427,16 @@ export default definePlugin(async (ctx) => {
                                 ORDER BY o.sort_order, o.name)
                 FROM shop_product_options o WHERE o.product_id = p.id),
                '[]'
-             ) AS options
+             ) AS options,
+             -- 관련 상품도 폼에 되돌려 보여준다. 없으면 저장할 때 지워진 것으로
+             -- 오해해서, 상품을 수정할 때마다 관련 상품이 날아간다.
+             coalesce(
+               (SELECT string_agg(rp.slug, E'\n' ORDER BY r.sort_order, rp.name)
+                FROM shop_related_products r
+                JOIN shop_products rp ON rp.id = r.related_id
+                WHERE r.product_id = p.id),
+               ''
+             ) AS related_text
       FROM shop_products p ORDER BY p.sort_order, p.created_at DESC LIMIT 30 OFFSET ${(page - 1) * 30}
     `);
     const { rows: cnt } = await db.execute(sql`SELECT count(*) AS n FROM shop_products`);
@@ -440,16 +472,19 @@ export default definePlugin(async (ctx) => {
       await db.execute(sql`
         INSERT INTO shop_products
           (id, slug, name, price, list_price, stock, status, image_url, summary, description,
-           free_shipping, sort_order, images)
+           free_shipping, sort_order, images, category_id)
         VALUES
           (${id}, ${p.slug}, ${p.name}, ${p.price}, ${p.listPrice}, ${p.stock}, ${p.status},
            ${p.imageUrl ?? images[0] ?? null}, ${p.summary}, ${p.description},
-           ${p.freeShipping}, ${p.sortOrder}, ${JSON.stringify(images)}::jsonb)
+           ${p.freeShipping}, ${p.sortOrder}, ${JSON.stringify(images)}::jsonb,
+           ${p.categoryId}::uuid)
       `);
     } catch (err) {
       throw slugConflict(err, "상품");
     }
     if (options.length) await syncOptions(db, id, options);
+    // 관련 상품은 상품이 만들어진 뒤에 붙인다 (FK 때문에 순서가 중요하다)
+    await syncRelated(db, id, String(body.related_text ?? ""));
     await ctx.cache.invalidateTag("pages");
     return { id };
   });
@@ -467,7 +502,8 @@ export default definePlugin(async (ctx) => {
           stock = ${p.stock}, status = ${p.status},
           image_url = ${p.imageUrl ?? images[0] ?? null}, summary = ${p.summary},
           description = ${p.description}, free_shipping = ${p.freeShipping}, sort_order = ${p.sortOrder},
-          images = ${JSON.stringify(images)}::jsonb, updated_at = now()
+          images = ${JSON.stringify(images)}::jsonb, category_id = ${p.categoryId}::uuid,
+          updated_at = now()
         WHERE id = ${req.params.id}::uuid RETURNING id
       `);
       if (!rows.length) throw new ShopError(404, "상품을 찾을 수 없습니다.");
@@ -476,6 +512,7 @@ export default definePlugin(async (ctx) => {
     }
     // 옵션은 이름으로 짝지어 갱신한다 — 전부 지우면 장바구니의 옵션이 사라진다
     await syncOptions(db, req.params.id, options);
+    await syncRelated(db, req.params.id, String(body.related_text ?? ""));
     await ctx.cache.invalidateTag("pages");
     return { ok: true };
   });
@@ -502,11 +539,14 @@ export default definePlugin(async (ctx) => {
     const slug = String(b.slug ?? "").trim();
     if (!SLUG_RE.test(slug)) throw new ShopError(400, "주소(slug)는 영문 소문자/숫자/하이픈만 사용합니다.");
     if (!String(b.name ?? "").trim()) throw new ShopError(400, "분류명을 입력해주세요.");
+    const parentId = parseParentId(b.parent_id);
+    if (parentId) await requireCategory(db, parentId);
     const id = uuidv7();
     try {
       await db.execute(sql`
-        INSERT INTO shop_categories (id, slug, name, sort_order, is_visible)
-        VALUES (${id}, ${slug}, ${String(b.name).trim()}, ${Number(b.sort_order ?? 0)}, ${b.is_visible !== false})
+        INSERT INTO shop_categories (id, slug, name, sort_order, is_visible, parent_id)
+        VALUES (${id}, ${slug}, ${String(b.name).trim()}, ${Number(b.sort_order ?? 0)},
+                ${b.is_visible !== false}, ${parentId}::uuid)
       `);
     } catch (err) {
       throw slugConflict(err, "분류");
@@ -519,10 +559,27 @@ export default definePlugin(async (ctx) => {
     const b = req.body as Record<string, unknown>;
     const slug = String(b.slug ?? "").trim();
     if (!SLUG_RE.test(slug)) throw new ShopError(400, "주소(slug)는 영문 소문자/숫자/하이픈만 사용합니다.");
+    const parentId = parseParentId(b.parent_id);
+    // 순환을 막는다. 자기 자신이나 자기 자손을 부모로 지정하면 분류 트리를
+    // 훑는 재귀 쿼리가 끝나지 않는다 (선택지 목록·분류별 리포트가 멈춘다).
+    if (parentId) {
+      if (parentId === req.params.id) throw new ShopError(400, "자기 자신을 상위 분류로 지정할 수 없습니다.");
+      await requireCategory(db, parentId);
+      const { rows: cyc } = await db.execute(sql`
+        WITH RECURSIVE up AS (
+          SELECT id, parent_id FROM shop_categories WHERE id = ${parentId}::uuid
+          UNION ALL
+          SELECT c.id, c.parent_id FROM shop_categories c JOIN up ON up.parent_id = c.id
+        )
+        SELECT 1 FROM up WHERE id = ${req.params.id}::uuid LIMIT 1
+      `);
+      if (cyc.length) throw new ShopError(400, "하위 분류를 상위 분류로 지정할 수 없습니다.");
+    }
     try {
       await db.execute(sql`
         UPDATE shop_categories SET slug = ${slug}, name = ${String(b.name ?? "").trim()},
-          sort_order = ${Number(b.sort_order ?? 0)}, is_visible = ${b.is_visible !== false}
+          sort_order = ${Number(b.sort_order ?? 0)}, is_visible = ${b.is_visible !== false},
+          parent_id = ${parentId}::uuid
         WHERE id = ${req.params.id}::uuid
       `);
     } catch (err) {
@@ -622,22 +679,156 @@ export default definePlugin(async (ctx) => {
   });
 
   // ── 매출 통계 ───────────────────────────────────────
+  //
+  // 여기에 두 가지 버그가 있었다:
+  //   1. sum(total) 이라 **부분 환불을 빼지 않았다.** 주문 상태가 cancelled 로
+  //      바뀌는 것은 전체 취소뿐이어서, 두 개 중 하나를 반품한 주문은 전액이
+  //      매출로 남았다.
+  //   2. created_at 기준이고 서버 시간대라, 한국에서 1일 오전 9시 이전 결제가
+  //      전달 매출로 잡혔다.
+  // 이제 결제일(paid_at) · 사이트 시간대 · 환불 차감으로 센다 (reports.ts).
   ctx.registerRoute("GET", "/admin/stats", async (req) => {
     requireAdmin(req);
     const { rows } = await db.execute(sql`
+      WITH refunds AS (
+        SELECT order_id, sum(refund_amount) AS refunded
+        FROM shop_returns WHERE status = 'completed' GROUP BY order_id
+      )
       SELECT
-        count(*) FILTER (WHERE status = 'pending')                     AS pending_orders,
-        count(*) FILTER (WHERE status NOT IN ('cancelled','refunded')) AS valid_orders,
-        coalesce(sum(total) FILTER (WHERE status NOT IN ('pending','cancelled','refunded')), 0) AS revenue,
-        coalesce(sum(total) FILTER (WHERE status NOT IN ('pending','cancelled','refunded')
-                                     AND created_at >= date_trunc('month', now())), 0) AS revenue_this_month
-      FROM shop_orders
+        count(*) FILTER (WHERE o.status = 'pending')                     AS pending_orders,
+        count(*) FILTER (WHERE o.status NOT IN ('cancelled','refunded')) AS valid_orders,
+        coalesce(sum(o.total - coalesce(r.refunded, 0))
+                 FILTER (WHERE o.paid_at IS NOT NULL), 0)               AS revenue,
+        coalesce(sum(o.total - coalesce(r.refunded, 0))
+                 FILTER (WHERE o.paid_at IS NOT NULL
+                   AND o.paid_at >= (date_trunc('month', now() AT TIME ZONE ${SITE_TZ})
+                                     AT TIME ZONE ${SITE_TZ})), 0)      AS revenue_this_month
+      FROM shop_orders o
+      LEFT JOIN refunds r ON r.order_id = o.id
     `);
     const { rows: low } = await db.execute(sql`
       SELECT name, stock FROM shop_products
       WHERE status = 'selling' AND stock IS NOT NULL AND stock <= 5 ORDER BY stock LIMIT 10
     `);
-    return { ...rows[0], lowStock: low };
+    return { ...rows[0], timezone: SITE_TZ, lowStock: low };
+  });
+
+  // ── 판매 리포트 ─────────────────────────────────────
+  //
+  // 기간·상품·분류. 정의(무엇을 매출로 세는가)와 시간대 처리는 reports.ts
+  // 주석에 적어 두었다. CSV 는 운영자가 결국 엑셀에서 보기 때문에 필요하다.
+
+  /** 엑셀에서 열리는 CSV 첨부 응답 */
+  const csvReply = (
+    name: string,
+    headers: string[],
+    rows: Array<Array<string | number | null>>,
+  ) =>
+    rawResponse(toCsv(headers, rows), "text/csv; charset=utf-8", {
+      headers: { "content-disposition": `attachment; filename="${name}.csv"` },
+    });
+
+  /**
+   * 분류 선택지 — 상품 등록 화면의 `category_id` 필드가 읽는다.
+   *
+   * 계층을 공백으로 들여써서 보여준다. 평면 목록으로 주면 "상의"가
+   * 의류 아래인지 잡화 아래인지 알 수 없다.
+   */
+  ctx.registerRoute("GET", "/admin/options/categories", async (req) => {
+    requireAdmin(req);
+    const { rows } = await db.execute(sql`
+      WITH RECURSIVE tree AS (
+        -- path 를 text 로 캐스팅한다. 재귀 CTE 의 컬럼 타입은 **비재귀 항에서
+        -- 결정되므로**, name(varchar 200) 으로 두면 재귀 항의 concat 결과(text)와
+        -- 타입이 달라 "has type character varying(200) ... but type text overall"
+        -- 로 실패한다.
+        SELECT id, name, parent_id, 0 AS depth, name::text AS path
+        FROM shop_categories WHERE parent_id IS NULL
+        UNION ALL
+        SELECT c.id, c.name, c.parent_id, t.depth + 1, t.path || ' > ' || c.name
+        FROM shop_categories c JOIN tree t ON c.parent_id = t.id
+      )
+      SELECT id, name, depth FROM tree ORDER BY path
+    `);
+    return rows.map((r) => ({
+      value: String(r.id),
+      label: `${"\u00a0\u00a0".repeat(Number(r.depth))}${String(r.name)}`,
+    }));
+  });
+
+  /** 리포트 종류와 파라미터 안내 — 화면이 폼을 만드는 데 쓴다 */
+  ctx.registerRoute("GET", "/admin/reports", async (req) => {
+    requireAdmin(req);
+    return {
+      timezone: SITE_TZ,
+      basis: "결제일(paid_at) 기준입니다. 미결제 주문은 매출에 넣지 않습니다.",
+      netFormula: "순매출 = 받은 돈 − 완료된 반품의 환불액",
+      note: "신청만 하고 아직 입고되지 않은 반품은 차감하지 않습니다 — 실제로 나간 돈이 아닙니다.",
+      reports: [
+        { code: "sales", label: "기간별", params: ["from", "to", "groupBy(day|week|month)", "format=csv"] },
+        { code: "products", label: "상품별", params: ["from", "to", "sort(net|qty|orders)", "limit", "format=csv"] },
+        { code: "categories", label: "분류별", params: ["from", "to", "rollup(true=최상위로 합침)", "format=csv"] },
+        { code: "summary", label: "요약 (직전 동일 기간 대비)", params: ["from", "to"] },
+      ],
+    };
+  });
+
+  ctx.registerRoute("GET", "/admin/reports/sales", async (req) => {
+    requireAdmin(req);
+    const period = parsePeriod(req.query);
+    const groupBy = parseGroupBy(req.query.groupBy);
+    const result = await salesByPeriod(db, { period, groupBy });
+    if (String(req.query.format ?? "") === "csv") {
+      return csvReply(
+        `sales-${period.from}_${period.to}`,
+        ["기간", "주문수", "총매출", "할인", "배송비", "환불", "순매출"],
+        result.buckets.map((b) => [b.bucket, b.orders, b.gross, b.discount, b.shipping, b.refunded, b.net]),
+      );
+    }
+    return result;
+  });
+
+  ctx.registerRoute("GET", "/admin/reports/products", async (req) => {
+    requireAdmin(req);
+    const period = parsePeriod(req.query);
+    const result = await salesByProduct(db, {
+      period,
+      sort: req.query.sort as string | undefined,
+      limit: Number(req.query.limit ?? 50),
+    });
+    if (String(req.query.format ?? "") === "csv") {
+      return csvReply(
+        `products-${period.from}_${period.to}`,
+        ["상품명", "분류", "판매수량", "취소수량", "주문수", "총매출", "할인", "환불", "순매출"],
+        result.products.map((p) => [
+          p.productName, p.categoryName, p.qty, p.cancelledQty,
+          p.orders, p.gross, p.discount, p.refunded, p.net,
+        ]),
+      );
+    }
+    return result;
+  });
+
+  ctx.registerRoute("GET", "/admin/reports/categories", async (req) => {
+    requireAdmin(req);
+    const period = parsePeriod(req.query);
+    const result = await salesByCategory(db, {
+      period,
+      rollup: String(req.query.rollup ?? "") === "true",
+    });
+    if (String(req.query.format ?? "") === "csv") {
+      return csvReply(
+        `categories-${period.from}_${period.to}`,
+        ["분류", "판매수량", "주문수", "총매출", "환불", "순매출"],
+        result.categories.map((c) => [c.categoryName, c.qty, c.orders, c.gross, c.refunded, c.net]),
+      );
+    }
+    return result;
+  });
+
+  ctx.registerRoute("GET", "/admin/reports/summary", async (req) => {
+    requireAdmin(req);
+    return await salesSummary(db, { period: parsePeriod(req.query) });
   });
 
 
@@ -1195,8 +1386,18 @@ function validateProduct(b: Record<string, unknown>) {
     throw new ShopError(400, "판매 상태가 올바르지 않습니다.");
   }
 
+  // 분류는 없어도 된다 (미분류 상품이 있다). 빈 문자열은 null 로 본다 —
+  // 폼에서 "선택 없음"을 고르면 "" 가 온다.
+  const rawCategory = b.category_id;
+  const categoryId =
+    rawCategory === null || rawCategory === undefined || String(rawCategory).trim() === ""
+      ? null : String(rawCategory).trim();
+  if (categoryId !== null && !UUID_RE.test(categoryId)) {
+    throw new ShopError(400, "분류가 올바르지 않습니다.");
+  }
+
   return {
-    slug, name, price, listPrice, stock, status,
+    slug, name, price, listPrice, stock, status, categoryId,
     imageUrl: String(b.image_url ?? "").trim() || null,
     summary: String(b.summary ?? "").trim() || null,
     description: String(b.description ?? ""),

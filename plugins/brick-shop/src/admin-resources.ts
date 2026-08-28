@@ -20,6 +20,13 @@ export const PRODUCT_RESOURCE: AdminResource = {
     { name: "name", label: "상품명", type: "text", required: true, inList: true },
     { name: "slug", label: "주소(slug)", type: "text", required: true, inList: true,
       help: "영문 소문자/숫자/하이픈. 상품 페이지 주소가 됩니다: /shop/<slug>" },
+    // 선택지가 테이블 행이므로 라우트에서 가져온다.
+    // 이 필드가 없어서 **분류를 만들어도 상품에 지정할 방법이 없었다** —
+    // 이전 도구로 옮긴 상품에는 분류가 있는데 새로 등록한 상품에는 없어서
+    // 분류별 리포트가 반쪽이 되었다.
+    { name: "category_id", label: "분류", type: "select", inList: true,
+      optionsFrom: "/admin/options/categories",
+      help: "분류를 먼저 등록해야 선택할 수 있습니다." },
     { name: "price", label: "판매가", type: "money", required: true, inList: true },
     { name: "list_price", label: "정가", type: "money", help: "비워두면 할인 표시를 하지 않습니다." },
     { name: "stock", label: "재고", type: "number", inList: true,
@@ -31,6 +38,9 @@ export const PRODUCT_RESOURCE: AdminResource = {
       help: "한 줄에 이미지 주소 하나. 최대 20장. 상세 화면에서 갤러리로 보여집니다. 대표 이미지를 비우면 첫 줄이 대표가 됩니다." },
     { name: "options_text", label: "옵션", type: "textarea",
       help: "한 줄에 하나: 이름|추가금|재고 (예: 색상: 빨강|1000|10). 추가금·재고는 생략 가능하고, 재고를 비우면 무한입니다. 이름을 그대로 두면 장바구니에 담긴 옵션이 유지됩니다." },
+    // slug 로 지정한다 — uuid 는 운영자가 쓸 수 없고, 상품명은 중복될 수 있다
+    { name: "related_text", label: "관련 상품", type: "textarea",
+      help: "상품 주소(slug)를 한 줄에 하나씩. 비우면 함께 구매한 상품이 자동으로 표시됩니다." },
     { name: "summary", label: "짧은 설명", type: "textarea", help: "목록과 검색 결과에 노출됩니다." },
     { name: "description", label: "상세 설명", type: "richtext", help: "HTML을 사용할 수 있습니다." },
     { name: "free_shipping", label: "무료배송", type: "boolean" },
@@ -94,6 +104,11 @@ export const CATEGORY_RESOURCE: AdminResource = {
   fields: [
     { name: "name", label: "분류명", type: "text", required: true, inList: true },
     { name: "slug", label: "주소(slug)", type: "text", required: true, inList: true },
+    // 계층이 스키마에는 있는데 화면에 없어서 **운영자가 2단 분류를 만들 수
+    // 없었다.** 이전 도구로 옮긴 사이트에만 계층이 있는 상태였다.
+    { name: "parent_id", label: "상위 분류", type: "select", inList: true,
+      optionsFrom: "/admin/options/categories",
+      help: "비우면 최상위 분류가 됩니다." },
     { name: "sort_order", label: "순서", type: "number", inList: true },
     { name: "is_visible", label: "표시", type: "boolean", inList: true },
   ],

@@ -166,6 +166,21 @@ export interface AdminField {
   type: "text" | "textarea" | "number" | "money" | "boolean" | "select" | "date" | "image" | "richtext";
   /** select 타입의 선택지 */
   options?: Array<{ value: string; label: string }>;
+  /**
+   * 선택지를 **라우트에서 가져온다** (select 타입).
+   *
+   * 플러그인 기준 경로(예: `/admin/options/categories`)이고, 응답은
+   * `[{ value, label }]` 이어야 한다. `options` 와 함께 주면 라우트 결과가
+   * 뒤에 붙는다.
+   *
+   * 필요한 이유: 분류처럼 **선택지가 테이블 행인 경우** 정적 목록으로는
+   * 표현할 수 없다. 상품에 분류를 지정하는 화면이 없어서 분류를 만들어도
+   * 쓸 수 없던 것이 실제 문제였다.
+   *
+   * 값이 비어 있을 수 있는 필드(required 아님)에는 화면이 "선택 없음"을
+   * 맨 앞에 넣는다.
+   */
+  optionsFrom?: string;
   required?: boolean;
   help?: string;
   /** 목록 화면에 표시할지 (미지정 시 표시하지 않음) */
