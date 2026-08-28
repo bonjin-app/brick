@@ -91,6 +91,9 @@ if [[ "$(curl -s "$API/api/install/status")" == *not_installed* ]]; then
 fi
 curl -s -c "$CK" -X POST "$API/api/auth/login" -H 'content-type: application/json' \
   -d '{"email":"admin@ml.test","password":"adminpass123"}' >/dev/null
+# 대량 발송은 위험 작업 재인증(10분 승격)을 요구한다 — 세션마다 한 번
+curl -s -b "$CK" -X POST "$API/api/me/security/reauth" -H 'content-type: application/json' \
+  -d '{"password":"adminpass123"}' >/dev/null
 
 echo "── 회원 준비 (동의 여부를 나눠 만든다)"
 # 동의한 회원 2명
@@ -323,6 +326,9 @@ curl -fsS "$API/readyz" >/dev/null 2>&1 && ok "SMTP 설정으로 서버 재시�
   || bad "SMTP 설정으로 서버 재시작 ($(tail -3 "$TMP/api2.log" 2>/dev/null))"
 curl -s -c "$CK" -X POST "$API/api/auth/login" -H 'content-type: application/json' \
   -d '{"email":"admin@ml.test","password":"adminpass123"}' >/dev/null
+# 대량 발송은 위험 작업 재인증(10분 승격)을 요구한다 — 세션마다 한 번
+curl -s -b "$CK" -X POST "$API/api/me/security/reauth" -H 'content-type: application/json' \
+  -d '{"password":"adminpass123"}' >/dev/null
 
 mail_count() { [[ -s "$MAILBOX" ]] && wc -l < "$MAILBOX" | tr -d ' ' || echo 0; }
 mail_field() {  # mail_field <필드> <주소일부>

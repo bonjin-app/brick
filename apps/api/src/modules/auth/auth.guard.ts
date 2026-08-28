@@ -2,6 +2,7 @@ import { CanActivate, ExecutionContext, ForbiddenException, Inject, Injectable, 
 import type { FastifyRequest } from "fastify";
 import { sql } from "drizzle-orm";
 import { AuthService } from "./auth.service.js";
+import { ipAllowed } from "./ip-allowlist.js";
 import { DB } from "../../runtime.module.js";
 import type { BrickDb } from "@brick/database";
 
@@ -46,6 +47,7 @@ export class AdminGuard extends AuthGuard {
     const { rows } = await this.db.execute(sql`
       SELECT
         (SELECT value FROM site_settings WHERE key = 'security.require_2fa_for_staff') AS required,
+        (SELECT value FROM site_settings WHERE key = 'security.admin_ip_allowlist') AS ip_allowlist,
         EXISTS (SELECT 1 FROM user_totp
                 WHERE user_id = ${req.user.id}::uuid AND is_enabled = true) AS has_totp
     `);
@@ -54,6 +56,17 @@ export class AdminGuard extends AuthGuard {
       throw new ForbiddenException(
         "이 사이트는 관리자에게 2단계 인증을 요구합니다. 계정 보안 설정에서 먼저 등록해주세요.",
       );
+    }
+
+    // 관리자 IP 제한 (선택 — 고정 IP 사업장용).
+    // 비상 탈출: 서버 소유자는 BRICK_ADMIN_IP_LIMIT=off 로 끌 수 있다 —
+    // 서버에 접속할 수 있는 사람은 어차피 DB 도 만질 수 있으므로 새 권한이
+    // 아니고, 실수로 스스로 잠근 운영자를 재설치 없이 구한다.
+    const allowlist = typeof rows[0]?.ip_allowlist === "string" ? rows[0].ip_allowlist : "";
+    if (allowlist && process.env.BRICK_ADMIN_IP_LIMIT !== "off") {
+      if (!ipAllowed(req.ip, allowlist)) {
+        throw new ForbiddenException("이 IP 에서는 관리자 기능을 쓸 수 없습니다.");
+      }
     }
     return true;
   }

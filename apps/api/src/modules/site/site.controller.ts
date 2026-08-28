@@ -8,6 +8,7 @@ import type { BrickDb } from "@brick/database";
 import { menus, pages, siteSettings } from "@brick/database";
 import type { CacheProvider } from "@brick/core";
 import { AdminGuard } from "../auth/auth.guard.js";
+import { ipAllowed, parseAllowlist } from "../auth/ip-allowlist.js";
 import { AuditService } from "../audit/audit.service.js";
 import { CACHE, DB } from "../../runtime.module.js";
 import {
@@ -34,6 +35,9 @@ const EDITABLE_SETTINGS: Record<string, "string" | "boolean"> = {
   // 플러그인 레지스트리 주소. 비우면 공식 레지스트리.
   // 주소 안전성(https 강제 등)은 읽는 쪽(ExtensionUpdaterService)이 검사한다.
   "extensions.registry_url": "string",
+  // 관리자 IP 허용목록 (쉼표/줄바꿈 구분, IPv4/CIDR/IPv6). 비우면 제한 없음.
+  // 저장 시 아래 putSettings 가 자기잠금을 막는다.
+  "security.admin_ip_allowlist": "string",
 };
 
 /** 사업자정보를 담는 설정 키 (단일 JSON) */
@@ -126,6 +130,24 @@ export class SiteController {
       if (!type) throw new BadRequestException(`수정할 수 없는 설정입니다: ${key}`);
       if (type === "string" && typeof value !== "string") throw new BadRequestException(`${key}: 문자열이어야 합니다.`);
       if (type === "boolean" && typeof value !== "boolean") throw new BadRequestException(`${key}: true/false여야 합니다.`);
+
+      // 관리자 IP 제한 — 형식 오류와 **자기잠금**을 저장 시점에 막는다.
+      // 지금 접속한 IP 가 목록에 없으면 저장하는 순간 자신이 잠긴다.
+      if (key === "security.admin_ip_allowlist" && String(value).trim() !== "") {
+        const parsed = parseAllowlist(String(value));
+        if (parsed.invalid.length) {
+          throw new BadRequestException(
+            `IP 형식이 올바르지 않습니다: ${parsed.invalid.join(", ")} ` +
+              `(IPv4, IPv4 CIDR, IPv6 단일 주소만 받습니다)`,
+          );
+        }
+        if (!ipAllowed(req.ip, String(value))) {
+          throw new BadRequestException(
+            `지금 접속한 IP(${req.ip})가 목록에 없습니다 — 저장하면 스스로 잠깁니다. ` +
+              `현재 IP 를 목록에 추가해주세요.`,
+          );
+        }
+      }
       await this.db
         .insert(siteSettings)
         .values({ key, value: value as never })

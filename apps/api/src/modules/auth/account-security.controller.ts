@@ -16,6 +16,7 @@ import type { FastifyRequest } from "fastify";
 import { AuthGuard } from "./auth.guard.js";
 import { AuthService, SESSION_COOKIE } from "./auth.service.js";
 import { RateLimitService } from "./rate-limit.service.js";
+import { ReauthService } from "./reauth.service.js";
 import { TwoFactorService } from "./two-factor.service.js";
 import { AuditService } from "../audit/audit.service.js";
 import { sql } from "drizzle-orm";
@@ -31,8 +32,23 @@ export class AccountSecurityController {
     private readonly twoFactor: TwoFactorService,
     private readonly rateLimit: RateLimitService,
     private readonly audit: AuditService,
+    private readonly reauth: ReauthService,
     @Inject(DB) private readonly db: BrickDb,
   ) {}
+
+  /**
+   * 위험 작업 재인증 — 비밀번호를 다시 확인하면 이 세션이 10분간 승격된다.
+   * 회원 개인정보 열람·대량 발송 같은 작업이 승격을 요구한다.
+   */
+  @Post("reauth")
+  async reauthenticate(
+    @Req() req: FastifyRequest,
+    @Body() body: { password?: string },
+  ) {
+    await this.requirePassword(req, String(body?.password ?? ""));
+    const granted = this.reauth.grant(this.currentTokenHash(req));
+    return { ok: true, ...granted };
+  }
 
   /** site_settings 직접 조회 — 설정 서비스가 없다 (SeoService 도 같은 방식) */
   private async setting(key: string): Promise<unknown> {

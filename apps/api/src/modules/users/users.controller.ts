@@ -12,6 +12,7 @@ import type { HookBus } from "@brick/core";
 import { AdminGuard, AuthGuard } from "../auth/auth.guard.js";
 import { AuthService } from "../auth/auth.service.js";
 import { RateLimitService } from "../auth/rate-limit.service.js";
+import { ReauthService } from "../auth/reauth.service.js";
 import type { CaptchaProvider } from "@brick/core";
 import { AuditService } from "../audit/audit.service.js";
 import { CAPTCHA, DB, HOOKS } from "../../runtime.module.js";
@@ -29,6 +30,7 @@ export class UsersController {
     @Inject(HOOKS) private readonly hooks: HookBus,
     private readonly auth: AuthService,
     private readonly rateLimit: RateLimitService,
+    private readonly reauth: ReauthService,
     private readonly audit: AuditService,
     @Inject(CAPTCHA) private readonly captcha: CaptchaProvider,
     private readonly agreements: AgreementsService,
@@ -180,7 +182,10 @@ export class UsersController {
   // ── 관리자: 회원 관리 ──────────────────────────────
   @Get("users")
   @UseGuards(AdminGuard)
-  async list(@Query("page") pageParam?: string) {
+  async list(@Req() req: FastifyRequest, @Query("page") pageParam?: string) {
+    // 회원 개인정보(이메일) 열람 — 훔친 세션만으로는 못 본다.
+    // 최근 10분 내 비밀번호 재확인(POST /api/me/security/reauth)이 필요하다.
+    this.reauth.assertRequest(req as never);
     const page = Math.max(1, Number(pageParam ?? 1));
     const size = 30;
     const [items, [total]] = await Promise.all([

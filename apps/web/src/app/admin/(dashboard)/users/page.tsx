@@ -12,11 +12,66 @@ const ROLE_LABEL: Record<string, string> = { admin: "관리자", manager: "운�
 export default function AdminUsersPage() {
   const [data, setData] = useState<{ items: UserRow[]; total: number }>({ items: [], total: 0 });
   const [message, setMessage] = useState("");
+  // 회원 목록은 개인정보(이메일) 열람이라 최근 10분 내 비밀번호 재확인이 필요하다.
+  // 서버가 code: "reauth_required" 를 주면 비밀번호 창을 띄운다.
+  const [needReauth, setNeedReauth] = useState(false);
+  const [password, setPassword] = useState("");
+  const [reauthError, setReauthError] = useState("");
 
   const reload = useCallback(() => {
-    fetch("/api/users").then((r) => r.json()).then(setData);
+    fetch("/api/users").then(async (r) => {
+      const json = await r.json();
+      if (r.status === 403 && json?.code === "reauth_required") {
+        setNeedReauth(true);
+        return;
+      }
+      setNeedReauth(false);
+      setData(json);
+    });
   }, []);
   useEffect(reload, [reload]);
+
+  async function submitReauth(e: React.FormEvent) {
+    e.preventDefault();
+    const res = await fetch("/api/me/security/reauth", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+    if (!res.ok) {
+      setReauthError((await res.json()).message ?? "확인에 실패했습니다.");
+      return;
+    }
+    setPassword("");
+    setReauthError("");
+    reload();
+  }
+
+  if (needReauth) {
+    return (
+      <div style={{ maxWidth: 420 }}>
+        <h1>회원</h1>
+        <div style={{ background: "#fff", borderRadius: 8, padding: 24 }}>
+          <p style={{ marginTop: 0 }}>
+            회원 개인정보를 보는 화면입니다. <strong>비밀번호를 다시 확인</strong>해주세요.
+            (10분간 유지됩니다)
+          </p>
+          <form onSubmit={submitReauth} style={{ display: "flex", gap: 8 }}>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="비밀번호"
+              autoFocus
+              style={{ flex: 1, padding: 8 }}
+            />
+            <button type="submit" style={{ padding: "8px 16px", cursor: "pointer" }}>확인</button>
+          </form>
+          {reauthError && <p style={{ color: "#c00" }}>{reauthError}</p>}
+        </div>
+      </div>
+    );
+  }
 
   async function patch(id: string, body: Record<string, unknown>) {
     const res = await fetch(`/api/users/${id}`, {

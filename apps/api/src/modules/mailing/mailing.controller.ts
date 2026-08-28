@@ -4,6 +4,7 @@ import {
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { AdminGuard } from "../auth/auth.guard.js";
 import { AuditService } from "../audit/audit.service.js";
+import { ReauthService } from "../auth/reauth.service.js";
 import {
   CAMPAIGN_KINDS, KIND_LABEL, MailingService, type CampaignKind, type Filters,
 } from "./mailing.service.js";
@@ -19,6 +20,7 @@ export class MailingController {
   constructor(
     private readonly mailing: MailingService,
     private readonly audit: AuditService,
+    private readonly reauth: ReauthService,
   ) {}
 
   /** 발송 종류 — 화면이 선택지와 안내 문구를 만든다 */
@@ -95,6 +97,9 @@ export class MailingController {
     @Req() req: FastifyRequest & { user: { id: string } },
     @Param("id") id: string,
   ) {
+    // 대량 발송 — 훔친 세션만으로 회원 전체에게 메일을 쏘게 두지 않는다.
+    // 최근 10분 내 비밀번호 재확인이 필요하다.
+    this.reauth.assertRequest(req as never);
     const result = await this.mailing.start(id);
     await this.audit.record({
       action: "mail.campaign_started", targetType: "mail_campaign", targetId: id,

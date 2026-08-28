@@ -449,6 +449,40 @@ BADDATE="$(curl -s -b "$TMP/plain.txt" "$API/api/audit?from=nonsense")"
 [[ "$(echo "$BADDATE" | jq_get "['total']")" -ge 1 ]] && ok "잘못된 날짜는 무시한다 (500 이 아니다)" || bad "잘못된 날짜 처리"
 check "비관리자는 감사 로그를 볼 수 없다" "$(code "$API/api/audit")" "401"
 
+echo "── 위험 작업 재인증 (훔친 세션만으로는 개인정보를 못 본다)"
+RE1="$(curl -s -b "$TMP/plain.txt" "$API/api/users")"
+contains "회원 목록은 재인증 전 403" "$RE1" '"code":"reauth_required"'
+check "잘못된 비밀번호로는 승격 불가" \
+  "$(code -b "$TMP/plain.txt" -X POST "$API/api/me/security/reauth" -H 'content-type: application/json' \
+      -d '{"password":"wrong-password"}')" "401"
+contains "비밀번호 재확인으로 승격" \
+  "$(curl -s -b "$TMP/plain.txt" -X POST "$API/api/me/security/reauth" -H 'content-type: application/json' \
+      -d '{"password":"adminpass123"}')" '"ok":true'
+contains "승격 후 회원 목록이 열린다" "$(curl -s -b "$TMP/plain.txt" "$API/api/users")" "m@sec.test"
+# 승격은 세션 단위다 — 같은 계정의 다른 세션은 여전히 막힌다
+curl -s -c "$TMP/other.txt" -X POST "$API/api/auth/login" -H 'content-type: application/json' \
+  -d '{"email":"admin@sec.test","password":"adminpass123"}' >/dev/null
+contains "다른 세션은 여전히 403 (세션 단위 승격)" \
+  "$(curl -s -b "$TMP/other.txt" "$API/api/users")" '"code":"reauth_required"'
+
+echo "── 관리자 IP 제한 (자기잠금을 저장 시점에 막는다)"
+contains "형식 오류는 400" \
+  "$(curl -s -b "$TMP/plain.txt" -X PUT "$API/api/settings" -H 'content-type: application/json' \
+      -d '{"security.admin_ip_allowlist":"not-an-ip"}')" "형식"
+contains "자기 IP 가 없는 목록은 거부 (저장하면 스스로 잠긴다)" \
+  "$(curl -s -b "$TMP/plain.txt" -X PUT "$API/api/settings" -H 'content-type: application/json' \
+      -d '{"security.admin_ip_allowlist":"10.9.9.9"}')" "스스로 잠깁니다"
+contains "자기 IP 를 포함하면 저장된다" \
+  "$(curl -s -b "$TMP/plain.txt" -X PUT "$API/api/settings" -H 'content-type: application/json' \
+      -d '{"security.admin_ip_allowlist":"127.0.0.1, 10.0.0.0/8"}')" '"ok":true'
+check "허용 IP 에서는 정상" "$(code -b "$TMP/plain.txt" "$API/api/admin/nav")" "200"
+# 실제로 막는지는 DB 로 잠금을 강제해 본다 (API 는 자기잠금을 거부하므로)
+psql_q "UPDATE site_settings SET value = '\"10.0.0.0/8\"'::jsonb WHERE key = 'security.admin_ip_allowlist'" >/dev/null
+check "목록 밖 IP 는 관리자 기능 403" "$(code -b "$TMP/plain.txt" "$API/api/admin/nav")" "403"
+check "일반 화면은 영향 없다" "$(code "$API/api/render/page?path=")" "200"
+psql_q "DELETE FROM site_settings WHERE key = 'security.admin_ip_allowlist'" >/dev/null
+check "목록을 비우면 제한 없음" "$(code -b "$TMP/plain.txt" "$API/api/admin/nav")" "200"
+
 echo
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 [[ "$FAIL" -eq 0 ]]
