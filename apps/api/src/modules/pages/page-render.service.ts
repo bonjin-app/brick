@@ -1,6 +1,9 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 // 이스케이프는 코어의 것을 쓴다 — null 안전하고, 구현이 갈라지면 안 된다
-import { escapeHtml } from "@brick/core";
+import {
+  CORE_CATALOGS, CORE_MESSAGE_KEYS, catalogToTree, escapeHtml, makeTranslator, normalizeLocale,
+  type Locale,
+} from "@brick/core";
 import { and, eq } from "drizzle-orm";
 import type { BrickDb } from "@brick/database";
 import { menus, pages, siteSettings } from "@brick/database";
@@ -99,6 +102,21 @@ export class PageRenderService {
     user: RequestUser | null,
   ): Promise<RenderedPage> {
     const [site, nav] = await Promise.all([this.siteInfo(), this.menu("header")]);
+    // 블록 렌더 중에 플러그인이 ctx.t 를 부른다 — 언어 캐시를 갱신해 둔다
+    await this.loader.refreshLocale();
+
+    // 다국어 — locale 은 사이트 설정이고, 테마는 t 로 라벨을 받는다.
+    // siteInfo 가 매 렌더마다 설정을 읽으므로 locale 변경은 즉시 반영된다
+    // (렌더 캐시는 설정 저장 시 무효화된다).
+    const t = makeTranslator({
+      locale: site.locale,
+      catalogs: CORE_CATALOGS,
+      onMissing: (key, locale) => this.logger.warn(`번역 없음: ${key} (${locale})`),
+    });
+    const themeCommon = {
+      locale: site.locale,
+      t: catalogToTree(t, CORE_MESSAGE_KEYS),
+    };
 
     /**
      * 경로 매칭: 정확히 일치하는 페이지가 없으면 상위 경로를 순서대로 시도한다.
@@ -129,15 +147,16 @@ export class PageRenderService {
     if (!page) {
       // 홈 페이지가 없으면 테마의 home 슬롯으로 폴백 (설치 직후 상태)
       if (path === "home") {
-        const html = await this.themes.render("home", { site, menu: nav, pageTitle: site.name, seo: {} });
+        const html = await this.themes.render("home", { ...themeCommon, site, menu: nav, pageTitle: site.name, seo: {} });
         return { html, status: 200, slug: "home" };
       }
       const html = await this.themes.render("page", {
+        ...themeCommon,
         site,
         menu: nav,
-        pageTitle: `페이지를 찾을 수 없습니다 — ${site.name}`,
-        title: "페이지를 찾을 수 없습니다",
-        blocksHtml: `<p>요청하신 주소(/${escapeHtml(path)})에 해당하는 페이지가 없습니다.</p>`,
+        pageTitle: `${t("page.notFoundTitle")} — ${site.name}`,
+        title: t("page.notFoundTitle"),
+        blocksHtml: `<p>${escapeHtml(t("page.notFoundBody", { path }))}</p>`,
         seo: {},
       });
       return { html, status: 404 };
@@ -146,6 +165,7 @@ export class PageRenderService {
     const seo = (page.seo ?? {}) as { title?: string; description?: string };
     const blocksHtml = await this.renderNodes((page.blocks ?? []) as BlockNode[], blockCtx);
     const html = await this.themes.render("page", {
+      ...themeCommon,
       site,
       menu: nav,
       title: page.title,
@@ -192,6 +212,8 @@ export class PageRenderService {
      * 만들면 빠뜨린다 (docs/business-info.md).
      */
     business: Record<string, string> | null;
+    /** 사이트 언어 (site.locale) — 테마 lang 속성과 t 가 이것을 따른다 */
+    locale: Locale;
   }> {
     const rows = await this.db.select().from(siteSettings);
     const map = new Map(rows.map((r) => [r.key, r.value]));
@@ -200,6 +222,7 @@ export class PageRenderService {
       name: (map.get("site.name") as string) ?? "Brick",
       description: (map.get("site.description") as string) ?? "",
       business: toTemplateVars({ ...EMPTY_BUSINESS_INFO, ...stored }),
+      locale: normalizeLocale(map.get("site.locale")),
     };
   }
 

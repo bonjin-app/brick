@@ -8,7 +8,8 @@ import type { BrickDb } from "@brick/database";
 import { installedPlugins, siteSettings } from "@brick/database";
 import type { PluginManifest } from "@brick/shared";
 import type { PluginContext, PluginInstance, BlockDefinition, PluginRouteHandler, PluginDb, AdminResource, HookBus, CacheProvider, QueueProvider, StorageProvider, MailProvider, CaptchaProvider, PersonalDataEraser, SitemapSource,
-  SearchSource, LinkTargetSource } from "@brick/core";
+  SearchSource, LinkTargetSource, Locale, MessageCatalog } from "@brick/core";
+import { AVAILABLE_LOCALES, DEFAULT_LOCALE, makeTranslator, normalizeLocale } from "@brick/core";
 import { DB, HOOKS, CACHE, QUEUE, STORAGE, MAIL, CAPTCHA, ENV } from "../../runtime.module.js";
 import type { BrickEnv } from "../../config/env.js";
 
@@ -120,6 +121,12 @@ export class PluginLoaderService implements OnModuleInit {
    * 자동으로 비활성화한다 — 관리자가 화면에서 상황을 확인하고 재설치할 수 있다.
    */
   async onModuleInit(): Promise<void> {
+    // 설정이 바뀌면 언어 캐시를 즉시 버린다 — 운영자가 언어를 바꿨는데
+    // 10초 동안 옛 언어로 그리는 것은 "안 바뀌었다"로 보인다.
+    this.hooks.onAction("site.settings_changed", "__core__", () => {
+      this.localeCache = { ...this.localeCache, at: 0 };
+    });
+
     const actives = await this.db.select().from(installedPlugins).where(eq(installedPlugins.isActive, true));
     for (const p of actives) {
       try {
@@ -157,6 +164,11 @@ export class PluginLoaderService implements OnModuleInit {
 
     // ZIP 으로 설치된 플러그인은 node_modules 가 없다 — 공유 의존성 링크를 보증한다
     await this.ensureSharedDependencies(name);
+
+    // 다국어 — 플러그인 동봉 카탈로그(locales/*.json)와 현재 언어를 준비한다
+    await this.loadPluginCatalogs(name);
+    this.localeCache.at = 0; // 다음 refreshLocale 이 즉시 읽게
+    await this.refreshLocale();
 
     if (!opts.skipMigrations && manifest.migrations) {
       await this.runPluginMigrations(name, join(this.pluginsDir, name, manifest.migrations));
@@ -251,10 +263,75 @@ export class PluginLoaderService implements OnModuleInit {
     this.logger.log(`plugin "${name}" deactivated`);
   }
 
+  // ── 다국어 ──────────────────────────────────────────
+  /** 플러그인별 카탈로그 (locales/<locale>.json — 활성화 때 읽는다) */
+  private readonly pluginCatalogs = new Map<string, Partial<Record<Locale, MessageCatalog>>>();
+  /** 빠진 키는 한 번만 로그한다 — 렌더마다 찍히면 로그가 로그를 덮는다 */
+  private readonly missingKeyLogged = new Set<string>();
+  /**
+   * 사이트 locale 캐시 (TTL 10초).
+   *
+   * ctx.t 는 동기여야 한다(블록 렌더·라우트 본문 어디서든 부른다) — 그래서
+   * DB 를 직접 못 읽는다. 요청 처리 진입점(라우트 디스패치·페이지 렌더)이
+   * refreshLocale() 을 부르고, t 는 캐시를 읽는다. 운영자가 언어를 바꾸면
+   * 늦어도 10초 안에 플러그인 문자열이 따라온다.
+   */
+  private localeCache: { value: Locale; at: number } = { value: DEFAULT_LOCALE, at: 0 };
+
+  async refreshLocale(): Promise<void> {
+    if (Date.now() - this.localeCache.at < 10_000) return;
+    try {
+      const { rows } = await this.db.execute(
+        sql`SELECT value FROM site_settings WHERE key = 'site.locale' LIMIT 1`,
+      );
+      this.localeCache = { value: normalizeLocale(rows[0]?.value), at: Date.now() };
+    } catch {
+      this.localeCache = { ...this.localeCache, at: Date.now() };
+    }
+  }
+
+  private async loadPluginCatalogs(name: string): Promise<void> {
+    const dir = join(this.pluginsDir, name, "locales");
+    const catalogs: Partial<Record<Locale, MessageCatalog>> = {};
+    for (const locale of AVAILABLE_LOCALES) {
+      try {
+        const raw = await readFile(join(dir, `${locale}.json`), "utf8");
+        const parsed = JSON.parse(raw) as Record<string, unknown>;
+        catalogs[locale] = Object.fromEntries(
+          Object.entries(parsed).filter(([, v]) => typeof v === "string"),
+        ) as MessageCatalog;
+      } catch {
+        // 그 언어의 카탈로그가 없다 — ko 폴백 규칙이 처리한다
+      }
+    }
+    this.pluginCatalogs.set(name, catalogs);
+  }
+
   private buildContext(pluginName: string): PluginContext {
+    // 객체 리터럴의 게터 안에서 this 가 로더가 아니므로 별칭이 필요하다
+    const loader = this;
     const settingsKey = (k: string) => `plugin:${pluginName}:${k}`;
+    const translate = (key: string, params?: Record<string, string | number>): string => {
+      const locale = this.localeCache.value;
+      const t = makeTranslator({
+        locale,
+        catalogs: this.pluginCatalogs.get(pluginName) ?? {},
+        onMissing: (k, l) => {
+          const once = `${pluginName}:${l}:${k}`;
+          if (this.missingKeyLogged.has(once)) return;
+          this.missingKeyLogged.add(once);
+          this.logger.warn(`[${pluginName}] 번역 없음: ${k} (${l})`);
+        },
+      });
+      return t(key, params);
+    };
     return {
       pluginName,
+      get locale(): Locale {
+        // 게터 — 요청 사이에 언어가 바뀌어도 항상 현재 값을 본다
+        return loader.localeCache.value;
+      },
+      t: translate,
       hooks: this.hooks,
       cache: this.cache,
       queue: this.queue,

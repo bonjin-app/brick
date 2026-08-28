@@ -76,6 +76,8 @@ export class PluginsController {
     const url = req.url.split("?")[0];
     const match = this.loader.matchRoute(req.method, url);
     if (!match) throw new NotFoundException();
+    // ctx.t 가 읽는 사이트 언어 캐시를 갱신한다 (TTL 이라 사실상 공짜)
+    await this.loader.refreshLocale();
     const user = await this.auth.resolveFromRequest(req);
 
     try {

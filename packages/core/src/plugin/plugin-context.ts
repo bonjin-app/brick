@@ -65,6 +65,17 @@ export interface PluginContext {
     name(): Promise<string>;
   };
   /** REST 라우트 등록: /api/plugins/<pluginName>/ 아래에 마운트된다 */
+  /**
+   * 사이트 언어 (site.locale). 운영자가 바꾸면 몇 초 안에 따라온다.
+   * 손님별 언어가 아니라 **사이트의 언어**다 — 운영자가 정한다.
+   */
+  readonly locale: string;
+  /**
+   * 번역 — 플러그인 동봉 카탈로그(locales/<locale>.json)에서 찾는다.
+   * 없으면 ko → 키 순서로 폴백하고 로그에 남는다. "{name}" 파라미터 치환.
+   * 공개 화면(블록·라우트 응답)의 문자열에 쓴다.
+   */
+  t(key: string, params?: Record<string, string | number>): string;
   registerRoute(
     method: "GET" | "POST" | "PUT" | "DELETE",
     path: string,

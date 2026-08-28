@@ -60,6 +60,9 @@ my-theme/
 | `{{{ content }}}` | 슬롯(home/page)이 렌더된 결과 |
 | `{{{ themeTokens }}}` | tokens가 CSS 변수로 변환된 `<style>` 내용물 |
 | `themeAssets` | `/themes/<name>/assets` 경로 |
+| `locale` | 사이트 언어 (`site.locale` — `<html lang="{{ locale }}">` 에 쓰세요) |
+| `t.*` | 번역된 라벨 — 예: `{{ t.footer.company }}`(상호/Company). 값이 아니라 **라벨**만 번역됩니다 |
+| `site.business.*` | 사업자정보 (값 — 번역되지 않습니다) |
 
 page.html 슬롯은 추가로 `title`(페이지 제목), `{{{ blocksHtml }}}`(블록 트리 렌더 결과)를 받습니다.
 

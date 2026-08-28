@@ -52,7 +52,7 @@ check "잘못된 이름 거절 (한글)" "$($CREATE 방명록 --dir "$TMP" >/dev
 
 # 모노레포 **밖**에서 생성한다 — 외부 개발자의 경로를 그대로 밟는다
 $CREATE guestbook --display "방명록" --dir "$TMP" >/dev/null
-for f in brick.plugin.json package.json tsconfig.json src/index.ts migrations/0001_init.sql README.md; do
+for f in brick.plugin.json package.json tsconfig.json src/index.ts migrations/0001_init.sql locales/ko.json locales/en.json README.md; do
   [[ -f "$TMP/guestbook/$f" ]] && ok "생성: $f" || bad "생성: $f 없음"
 done
 check "이미 있으면 거절 (덮어쓰지 않는다)" "$($CREATE guestbook --dir "$TMP" >/dev/null 2>&1; echo $?)" "1"
@@ -78,7 +78,7 @@ fi
 [[ -f "$TMP/guestbook/dist/index.js" ]] && ok "dist/index.js 생성" || bad "dist/index.js 없음"
 
 echo "── ZIP 으로 묶기 (README 의 절차 그대로)"
-(cd "$TMP/guestbook" && zip -qr "$TMP/guestbook.zip" brick.plugin.json package.json migrations dist)
+(cd "$TMP/guestbook" && zip -qr "$TMP/guestbook.zip" brick.plugin.json package.json migrations locales dist)
 [[ -s "$TMP/guestbook.zip" ]] && ok "ZIP 생성" || bad "ZIP 생성 실패"
 
 echo "── 서버 기동"
@@ -166,6 +166,18 @@ contains "탈퇴 내역에 플러그인의 파기가 나온다" "$WD" "방명록
 AFTER="$(curl -s "$GB/entries")"
 contains "글은 남고 작성자는 익명" "$AFTER" "탈퇴한 회원"
 absent  "표시 이름이 사라졌다" "$AFTER" "방문자"
+
+echo "── ctx.t: 사이트 언어를 따라간다 (플러그인 동봉 카탈로그)"
+# 남은 글(익명화된 것)을 지워 빈 상태를 만든다
+LAST_ID="$(curl -s -b "$CK" "$GB/admin/entries" | jq_get "['items'][0]['id']")"
+curl -s -b "$CK" -X DELETE "$GB/admin/entries/$LAST_ID" >/dev/null
+contains "ko: 빈 안내" "$(curl -s "$API/api/render/page?path=guests")" "아직 글이 없습니다"
+curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' \
+  -d '{"site.locale":"en"}' >/dev/null
+contains "en: 플러그인 문자열도 영어" "$(curl -s "$API/api/render/page?path=guests")" "No entries yet."
+curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' \
+  -d '{"site.locale":"ko"}' >/dev/null
+contains "ko 복귀" "$(curl -s "$API/api/render/page?path=guests")" "아직 글이 없습니다"
 
 echo "── 비활성화하면 라우트가 닫힌다"
 curl -s -b "$CK" -X POST "$API/api/plugins/guestbook/deactivate" >/dev/null

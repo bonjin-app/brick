@@ -17,6 +17,27 @@ npm create brick-plugin my-plugin
 설치하므로 **번들하지 마세요** (특히 drizzle-orm — 다른 사본의 `sql` 객체는
 서버가 알아보지 못합니다). 그 외의 의존성은 dist 에 번들해야 합니다.
 
+## 다국어 (ctx.t)
+
+블록·라우트가 그리는 **공개 문자열**은 하드코딩하지 말고 카탈로그에 두세요:
+
+```
+my-plugin/
+├── locales/
+│   ├── ko.json    # { "entries.empty": "아직 글이 없습니다." }
+│   └── en.json    # { "entries.empty": "No entries yet." }
+```
+
+```ts
+ctx.t("entries.empty")            // 사이트 언어(site.locale)의 문구
+ctx.t("hello", { name: "홍" })    // "{name}" 치환
+ctx.locale                        // 현재 사이트 언어 ("ko" | "en")
+```
+
+요청 언어에 키가 없으면 ko → 키 자체 순서로 폴백하고 서버 로그에 남습니다 —
+번역이 빠지면 빠진 것이 보입니다. 템플릿(`npm create brick-plugin`)이 이
+구조를 그대로 시연합니다.
+
 ## 구조
 
 ```

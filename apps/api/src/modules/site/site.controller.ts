@@ -6,11 +6,12 @@ import { and, eq, sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import type { BrickDb } from "@brick/database";
 import { menus, pages, siteSettings } from "@brick/database";
-import type { CacheProvider } from "@brick/core";
+import type { CacheProvider, HookBus } from "@brick/core";
+import { AVAILABLE_LOCALES } from "@brick/core";
 import { AdminGuard } from "../auth/auth.guard.js";
 import { ipAllowed, parseAllowlist } from "../auth/ip-allowlist.js";
 import { AuditService } from "../audit/audit.service.js";
-import { CACHE, DB } from "../../runtime.module.js";
+import { CACHE, DB, HOOKS } from "../../runtime.module.js";
 import {
   EMPTY_BUSINESS_INFO, FIELD_LABEL, isCommerceReady, validateBusinessInfo,
   type BusinessInfo,
@@ -38,6 +39,8 @@ const EDITABLE_SETTINGS: Record<string, "string" | "boolean"> = {
   // 관리자 IP 허용목록 (쉼표/줄바꿈 구분, IPv4/CIDR/IPv6). 비우면 제한 없음.
   // 저장 시 아래 putSettings 가 자기잠금을 막는다.
   "security.admin_ip_allowlist": "string",
+  // 사이트 언어 — 공개 화면(테마·404 등)의 문자열이 이것을 따른다. 기본 ko.
+  "site.locale": "string",
 };
 
 /** 사업자정보를 담는 설정 키 (단일 JSON) */
@@ -48,6 +51,7 @@ export class SiteController {
   constructor(
     @Inject(DB) private readonly db: BrickDb,
     @Inject(CACHE) private readonly cache: CacheProvider,
+    @Inject(HOOKS) private readonly hooks: HookBus,
     private readonly audit: AuditService,
   ) {}
 
@@ -131,6 +135,14 @@ export class SiteController {
       if (type === "string" && typeof value !== "string") throw new BadRequestException(`${key}: 문자열이어야 합니다.`);
       if (type === "boolean" && typeof value !== "boolean") throw new BadRequestException(`${key}: true/false여야 합니다.`);
 
+      // 언어는 지원 목록만 받는다 — 없는 언어를 저장하면 "설정했는데 그대로
+      // 한국어"인 반쪽 상태가 된다. 거절하고 목록을 알려주는 것이 맞다.
+      if (key === "site.locale" && !(AVAILABLE_LOCALES as readonly string[]).includes(String(value))) {
+        throw new BadRequestException(
+          `지원하지 않는 언어입니다: ${String(value)} (지원: ${AVAILABLE_LOCALES.join(", ")})`,
+        );
+      }
+
       // 관리자 IP 제한 — 형식 오류와 **자기잠금**을 저장 시점에 막는다.
       // 지금 접속한 IP 가 목록에 없으면 저장하는 순간 자신이 잠긴다.
       if (key === "security.admin_ip_allowlist" && String(value).trim() !== "") {
@@ -154,6 +166,8 @@ export class SiteController {
         .onConflictDoUpdate({ target: siteSettings.key, set: { value: value as never, updatedAt: new Date() } });
     }
     await this.cache.invalidateTag("pages"); // 사이트명 등이 모든 페이지에 렌더된다
+    // 언어 등 설정 캐시를 가진 쪽(플러그인 로더)이 즉시 새로 읽게 알린다
+    await this.hooks.doAction("site.settings_changed", { keys: Object.keys(body ?? {}) });
     await this.audit.fromRequest(req as never, {
       action: "settings.update", targetType: "settings",
       summary: Object.keys(body ?? {}).join(", "),

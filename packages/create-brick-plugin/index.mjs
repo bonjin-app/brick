@@ -244,7 +244,7 @@ export default definePlugin(async (ctx) => {
         SELECT author_name, message, created_at
         FROM ${table}_entries ORDER BY created_at DESC LIMIT 10
       \`);
-      if (!rows.length) return \`<div class="brick-empty">아직 글이 없습니다.</div>\`;
+      if (!rows.length) return \`<div class="brick-empty">\${escapeHtml(ctx.t("entries.empty"))}</div>\`;
       const items = rows
         .map((r) => \`<li><strong>\${escapeHtml(String(r.author_name))}</strong> — \${escapeHtml(String(r.message))}</li>\`)
         .join("");
@@ -284,7 +284,7 @@ const readme = `# ${display}
 npm install
 npm run build
 # dist/ · migrations/ · brick.plugin.json 을 ZIP 으로 묶습니다
-zip -r ${name}.zip brick.plugin.json package.json migrations dist
+zip -r ${name}.zip brick.plugin.json package.json migrations locales dist
 \`\`\`
 
 관리자 → 플러그인 → ZIP 업로드 → 활성화. 그러면:
@@ -319,9 +319,21 @@ const gitignore = `node_modules/
 dist/
 `;
 
+// 다국어 — 블록·라우트가 그리는 공개 문자열은 locales/ 카탈로그에 둔다.
+// ctx.t("entries.empty") 가 사이트 언어(site.locale)에 맞는 문구를 돌려준다.
+const localeKo = `{
+  "entries.empty": "아직 글이 없습니다."
+}
+`;
+const localeEn = `{
+  "entries.empty": "No entries yet."
+}
+`;
+
 // ── 쓰기 ────────────────────────────────────────────
 mkdirSync(join(targetDir, "src"), { recursive: true });
 mkdirSync(join(targetDir, "migrations"), { recursive: true });
+mkdirSync(join(targetDir, "locales"), { recursive: true });
 writeFileSync(join(targetDir, "brick.plugin.json"), manifest);
 writeFileSync(join(targetDir, "package.json"), pkg);
 writeFileSync(join(targetDir, "tsconfig.json"), tsconfig);
@@ -329,12 +341,14 @@ writeFileSync(join(targetDir, "migrations", "0001_init.sql"), migration);
 writeFileSync(join(targetDir, "src", "index.ts"), src);
 writeFileSync(join(targetDir, "README.md"), readme);
 writeFileSync(join(targetDir, ".gitignore"), gitignore);
+writeFileSync(join(targetDir, "locales", "ko.json"), localeKo);
+writeFileSync(join(targetDir, "locales", "en.json"), localeEn);
 
 console.log(`✔ ${targetDir}
 
 다음 단계:
   cd ${name}
   ${inRepo ? "pnpm install && pnpm build" : "npm install && npm run build"}
-  zip -r ${name}.zip brick.plugin.json package.json migrations dist
+  zip -r ${name}.zip brick.plugin.json package.json migrations locales dist
   → 관리자 → 플러그인 → ZIP 업로드 → 활성화
 ${inRepo ? "\n(Brick 저장소 안입니다 — plugins/ 아래에 만들면 재부팅만으로도 로드됩니다)" : ""}`);
