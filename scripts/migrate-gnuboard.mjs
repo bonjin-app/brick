@@ -89,6 +89,21 @@ try {
       );
     }
     console.log(`\n포인트: ${r.points.members}명 · 합계 ${r.points.total.toLocaleString("ko-KR")}점`);
+
+    if (r.shop) {
+      console.log(`\n영카트 (쇼핑몰)`);
+      console.log(`  분류 ${r.shop.categories}개`);
+      console.log(
+        `  상품 ${r.shop.products}개 (판매중 ${r.shop.productStatus.selling} · ` +
+        `품절 ${r.shop.productStatus.soldout} · 숨김 ${r.shop.productStatus.hidden})`,
+      );
+      console.log(`  옵션 ${r.shop.options}개`);
+      console.log(`  주문 ${r.shop.orders}건 · 항목 ${r.shop.orderItems}개`);
+      for (const st of r.shop.orderStatus) {
+        console.log(`    ${st.from.padEnd(10)} → ${st.to.padEnd(10)} ${st.count}건`);
+      }
+      console.log(`  매출 ${r.shop.revenue.toLocaleString("ko-KR")}원 (취소·반품 제외)`);
+    }
     if (r.skipped.length) {
       console.log("\n옮기지 않는 것:");
       for (const s of r.skipped) console.log(`  - ${s}`);
@@ -106,6 +121,7 @@ try {
       boards: (arg("boards", "") || "").split(",").map((x) => x.trim()).filter(Boolean),
       members: !flag("no-members"),
       points: !flag("no-points"),
+      shop: !flag("no-shop"),
       strictEmail: false,
     });
     console.log(`회원   생성 ${r.members.created} · 건너뜀 ${r.members.skipped}`);
@@ -113,6 +129,12 @@ try {
     console.log(`글     ${r.posts.created}`);
     console.log(`댓글   ${r.comments.created}`);
     console.log(`포인트 ${r.points.granted}명 · ${r.points.total.toLocaleString("ko-KR")}점`);
+    if (r.shop.products || r.shop.orders) {
+      console.log(
+        `상품   ${r.shop.products} · 옵션 ${r.shop.options} · 분류 ${r.shop.categories}`,
+      );
+      console.log(`주문   ${r.shop.orders} · 항목 ${r.shop.orderItems}`);
+    }
     if (r.warnings.length) {
       console.log("\n⚠ 확인해주세요:");
       for (const w of r.warnings) console.log(`  - ${w}`);

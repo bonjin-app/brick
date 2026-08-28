@@ -27,7 +27,7 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-1181%20passing-2ea043.svg" alt="스모크 테스트 1181개" />
+  <img src="https://img.shields.io/badge/E2E-1246%20passing-2ea043.svg" alt="스모크 테스트 1246개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
 </p>
 
@@ -135,7 +135,7 @@ DB 마이그레이션은 컨테이너가 부팅할 때 스스로 적용합니다
          (Redis · S3는 선택 — 없으면 PG 기반 기본 구현)
 ```
 
-핵심 설계 결정 48건은 [docs/architecture.md](docs/architecture.md)에 ADR로 기록되어 있습니다.
+핵심 설계 결정 49건은 [docs/architecture.md](docs/architecture.md)에 ADR로 기록되어 있습니다.
 
 ---
 
@@ -191,7 +191,8 @@ DB 마이그레이션은 컨테이너가 부팅할 때 스스로 적용합니다
 - **sitemap.xml · robots.txt** — 플러그인이 자기 URL을 제공. 조각으로 나눠 십만 건 규모 대응.
   **비밀글·비공개 게시판·임시 상품은 제외**
 - **최신글 모아보기** — 여러 게시판을 나란히 (그누보드 메인 화면). 쿼리 한 번으로
-- **그누보드5 데이터 이전** — 덤프 파일로 회원·게시판·게시글·댓글·포인트를 옮긴다.
+- **그누보드5 · 영카트5 데이터 이전** — 덤프 파일로 회원·게시판·게시글·댓글·포인트와
+  **상품·분류·옵션·주문**을 옮긴다. 분류 계층 복원, 주문 상태 매핑, 금액 불일치는 할인으로 흡수.
   **그누보드 비밀번호로 그대로 로그인**되고 첫 로그인에 argon2로 승급된다.
   리허설이 먼저 — 무엇이 옮겨지고 무엇이 안 옮겨지는지 보여준다
 - **감사 로그** — 관리 동작을 행위자·IP와 함께 기록 (180일 보관)
@@ -207,7 +208,7 @@ DB 마이그레이션은 컨테이너가 부팅할 때 스스로 적용합니다
 
 ### 예정
 
-회원 단체메일 · 관련 상품 · 판매 리포트 · 영카트 상품·주문 이전 · 현금영수증 · 정기결제 · 2FA · OpenAPI 문서
+회원 단체메일 · 관련 상품 · 판매 리포트 · 현금영수증 · 정기결제 · 2FA · OpenAPI 문서 · 현금영수증 · 정기결제 · 2FA · OpenAPI 문서
 
 순서와 이유는 [로드맵](docs/roadmap.md)에 있습니다.
 
@@ -272,14 +273,14 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 1,181개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 1,246개 항목):
 
 | 수트 | 항목 | 무엇을 못박는가 |
 |---|---:|---|
 | `smoke-test.sh` | 40 | 설치 · 인증 · 페이지 · 미디어 · 플러그인 로드 |
 | `smoke-member.sh` | 93 | 약관 강제 · 동의 이력 · 개인정보 파기 · 주문 보존 |
 | `smoke-helpdesk.sh` | 109 | 문의 열거 방지 · 비회원 조회 · 사이트맵 유출 |
-| `smoke-migrate.sh` | 86 | 덤프 파싱 · 레벨 매핑 · **비밀번호 보존** · 멱등성 |
+| `smoke-migrate.sh` | 151 | 덤프 파싱 · 레벨 매핑 · **비밀번호 보존** · 영카트 상품·주문 · 멱등성 |
 | `smoke-returns.sh` | 99 | 할인 안분 · 이중 재고 복원 방어 · 청약철회 기간 |
 | `smoke-storefront.sh` | 94 | 사업자번호 체크섬 · 위시리스트 격리 · 지역비 실수령 |
 | `smoke-poll.sh` | 100 | 중복 투표 · IP 해시 · 결과 공개 시점 · 집계 오염 |
@@ -364,14 +365,14 @@ docker/           Dockerfile, entrypoint
 | [회원 생애주기](docs/members.md) | 약관 동의·이메일 인증·탈퇴·휴면, 법적 요건과 설계 |
 | [문의·FAQ·설문·SEO](docs/helpdesk.md) | 1:1 문의 설계, FAQ, 설문조사, 사이트맵 |
 | [사업자정보 표시](docs/business-info.md) | 전자상거래법 제13조, 사업자번호 검증, 테마 렌더 |
-| [그누보드 이전](docs/migrate-gnuboard.md) | 덤프 만들기, 리허설, 레벨 매핑, 비밀번호 보존 |
+| [그누보드·영카트 이전](docs/migrate-gnuboard.md) | 덤프 만들기, 리허설, 레벨 매핑, 비밀번호 보존, 상품·주문 |
 | [쪽지](docs/memo.md) | 프라이버시 설계, 차단, 포인트 차감, 스크랩 |
 | [쇼핑몰](docs/commerce.md) | 상품·주문·재고·쿠폰·후기·문의, 커머스 설계 원칙 |
 | [소셜 로그인](docs/social-login.md) | 구글·카카오·네이버·GitHub·사내 SSO 설정과 보안 |
 | [방문자·팝업](docs/site-ops.md) | 접속자 집계, 팝업·배너, 개인정보 처리 |
 | [결제](docs/payments.md) | PG 설정, 결제 흐름, 위조·중복 방어, 새 PG 붙이기 |
 | [보안](docs/security.md) | 구현된 방어, **신뢰 모델**, 배포 체크리스트 |
-| [아키텍처 (ADR)](docs/architecture.md) | 설계 결정 48건과 그 이유 |
+| [아키텍처 (ADR)](docs/architecture.md) | 설계 결정 49건과 그 이유 |
 | [플러그인 개발](docs/plugin-development.md) | manifest, API, 마이그레이션, 배포 |
 | [테마 개발](docs/theme-development.md) | 템플릿 문법, 스코프, 배포 |
 | [로드맵](docs/roadmap.md) | 그누보드·영카트와의 남은 격차와 순서 |

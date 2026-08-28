@@ -170,3 +170,141 @@ CREATE TABLE `g5_visit` (
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8;
 
 INSERT INTO `g5_visit` VALUES (1,'203.0.113.45');
+
+-- ═════════════════════════════════════════════════════
+-- 영카트5 (쇼핑몰) — 같은 접두어를 쓴다
+--
+-- 파서와 매핑이 실제 데이터에서 깨지는 지점을 넣어두었다:
+--   - 계층 분류 (ca_id 앞자리가 부모)
+--   - 한글만으로 된 상품명 (slug 를 만들 수 없다)
+--   - it_use=0 (판매 중지) · it_soldout=1 (품절)
+--   - 구버전 우편번호 (od_zip1 + od_zip2)
+--   - 알 수 없는 주문 상태
+--   - 주문되지 않은 장바구니 행 (od_id 가 빈 값)
+--   - 금액이 맞지 않는 주문 (할인으로 흡수해야 한다)
+-- ═════════════════════════════════════════════════════
+
+CREATE TABLE `g5_shop_category` (
+  `ca_id` varchar(10) NOT NULL DEFAULT '',
+  `ca_name` varchar(255) NOT NULL DEFAULT '',
+  `ca_order` int(11) NOT NULL DEFAULT '0',
+  `ca_use` tinyint(4) NOT NULL DEFAULT '0',
+  PRIMARY KEY (`ca_id`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+
+INSERT INTO `g5_shop_category` VALUES
+('10','의류',1,1),
+('1010','상의',1,1),
+('1020','하의',2,1),
+('20','신발',2,1),
+('30','숨긴분류',3,0);
+
+CREATE TABLE `g5_shop_item` (
+  `it_id` varchar(20) NOT NULL DEFAULT '',
+  `ca_id` varchar(10) NOT NULL DEFAULT '',
+  `it_name` varchar(255) NOT NULL DEFAULT '',
+  `it_basic` varchar(255) NOT NULL DEFAULT '',
+  `it_explan` text NOT NULL,
+  `it_price` int(11) NOT NULL DEFAULT '0',
+  `it_cust_price` int(11) NOT NULL DEFAULT '0',
+  `it_stock_qty` int(11) NOT NULL DEFAULT '0',
+  `it_use` tinyint(4) NOT NULL DEFAULT '0',
+  `it_soldout` tinyint(4) NOT NULL DEFAULT '0',
+  `it_sc_type` tinyint(4) NOT NULL DEFAULT '0',
+  `it_order` int(11) NOT NULL DEFAULT '0',
+  `it_hit` int(11) NOT NULL DEFAULT '0',
+  `it_img1` varchar(255) NOT NULL DEFAULT '',
+  `it_img2` varchar(255) NOT NULL DEFAULT '',
+  `it_time` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
+  PRIMARY KEY (`it_id`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+
+INSERT INTO `g5_shop_item` VALUES
+('20200101120000','1010','기본 티셔츠','편안한 면 티셔츠','<p>100% 면입니다.</p>',19000,25000,50,1,0,0,1,342,'tshirt1.jpg','tshirt2.jpg','2020-01-01 12:00:00'),
+('20200202130000','1020','청바지','',  '',39000,0,0,1,1,0,2,120,'jeans.jpg','','2020-02-02 13:00:00'),
+('20200303140000','20','운동화','가벼운 러닝화','설명',89000,99000,10,1,0,2,3,88,'','','2020-03-03 14:00:00'),
+('20200404150000','10','단종된 상품','','',10000,0,0,0,0,0,4,5,'','','2020-04-04 15:00:00');
+
+CREATE TABLE `g5_shop_item_option` (
+  `io_no` int(11) NOT NULL AUTO_INCREMENT,
+  `it_id` varchar(20) NOT NULL DEFAULT '',
+  `io_id` varchar(255) NOT NULL DEFAULT '',
+  `io_price` int(11) NOT NULL DEFAULT '0',
+  `io_stock_qty` int(11) NOT NULL DEFAULT '0',
+  `io_use` tinyint(4) NOT NULL DEFAULT '0',
+  PRIMARY KEY (`io_no`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+
+INSERT INTO `g5_shop_item_option` VALUES
+(1,'20200101120000','흰색,S',0,20,1),
+(2,'20200101120000','흰색,M',0,15,1),
+(3,'20200101120000','검정,L',1000,5,1),
+(4,'20200101120000','사용안함',0,0,0);
+
+CREATE TABLE `g5_shop_order` (
+  `od_id` varchar(20) NOT NULL DEFAULT '',
+  `mb_id` varchar(20) NOT NULL DEFAULT '',
+  `od_name` varchar(255) NOT NULL DEFAULT '',
+  `od_email` varchar(255) NOT NULL DEFAULT '',
+  `od_tel` varchar(255) NOT NULL DEFAULT '',
+  `od_hp` varchar(255) NOT NULL DEFAULT '',
+  `od_zip1` varchar(3) NOT NULL DEFAULT '',
+  `od_zip2` varchar(3) NOT NULL DEFAULT '',
+  `od_addr1` varchar(255) NOT NULL DEFAULT '',
+  `od_addr2` varchar(255) NOT NULL DEFAULT '',
+  `od_addr3` varchar(255) NOT NULL DEFAULT '',
+  `od_b_name` varchar(255) NOT NULL DEFAULT '',
+  `od_b_tel` varchar(255) NOT NULL DEFAULT '',
+  `od_memo` text NOT NULL,
+  `od_cart_price` int(11) NOT NULL DEFAULT '0',
+  `od_send_cost` int(11) NOT NULL DEFAULT '0',
+  `od_receipt_price` int(11) NOT NULL DEFAULT '0',
+  `od_settle_case` varchar(255) NOT NULL DEFAULT '',
+  `od_status` varchar(255) NOT NULL DEFAULT '',
+  `od_time` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
+  PRIMARY KEY (`od_id`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+
+INSERT INTO `g5_shop_order` VALUES
+('20210601-0000001','hong','홍길동','hong@old.test','02-111-2222','010-1111-2222','063','000','서울시 강남구','101동 202호','문앞','홍길동','010-1111-2222','부재시 경비실',19000,3000,22000,'카드','완료','2021-06-01 10:00:00'),
+('20210602-0000002','admin','관리자','admin@old.test','','010-9999-8888','','','제주시 어딘가','','','받는사람','010-7777-6666','',39000,5000,44000,'무통장','입금','2021-06-02 11:00:00'),
+('20210603-0000003','','비회원손님','guest@x.test','','010-3333-4444','12345','','부산시','','','비회원손님','010-3333-4444','',89000,0,85000,'가상계좌','배송','2021-06-03 12:00:00'),
+('20210604-0000004','hong','홍길동','hong@old.test','','010-1111-2222','','','서울시','','','홍길동','010-1111-2222','',19000,3000,22000,'카드','취소','2021-06-04 13:00:00'),
+('20210605-0000005','hong','홍길동','hong@old.test','','010-1111-2222','','','서울시','','','홍길동','010-1111-2222','',19000,3000,22000,'카드','이상한상태','2021-06-05 14:00:00');
+
+CREATE TABLE `g5_shop_cart` (
+  `ct_id` int(11) NOT NULL AUTO_INCREMENT,
+  `od_id` varchar(20) NOT NULL DEFAULT '',
+  `mb_id` varchar(20) NOT NULL DEFAULT '',
+  `it_id` varchar(20) NOT NULL DEFAULT '',
+  `it_name` varchar(255) NOT NULL DEFAULT '',
+  `ct_price` int(11) NOT NULL DEFAULT '0',
+  `ct_qty` int(11) NOT NULL DEFAULT '0',
+  `ct_option` varchar(255) NOT NULL DEFAULT '',
+  `io_price` int(11) NOT NULL DEFAULT '0',
+  `ct_status` varchar(255) NOT NULL DEFAULT '',
+  PRIMARY KEY (`ct_id`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+
+INSERT INTO `g5_shop_cart` VALUES
+(1,'20210601-0000001','hong','20200101120000','기본 티셔츠',19000,1,'흰색,M',0,'완료'),
+(2,'20210602-0000002','admin','20200202130000','청바지',39000,1,'',0,'입금'),
+(3,'20210603-0000003','','20200303140000','운동화',89000,1,'',0,'배송'),
+(4,'20210604-0000004','hong','20200101120000','기본 티셔츠',19000,1,'검정,L',1000,'취소'),
+(5,'20210605-0000005','hong','20200101120000','기본 티셔츠',19000,1,'',0,'이상한상태'),
+(6,'','hong','20200101120000','기본 티셔츠',19000,2,'',0,'쇼핑');
+
+-- 옮기지 않는 것들 (analyze 가 알려줘야 한다)
+CREATE TABLE `g5_shop_item_use` (
+  `is_id` int(11) NOT NULL AUTO_INCREMENT,
+  `it_id` varchar(20) NOT NULL DEFAULT '',
+  `is_content` text NOT NULL,
+  PRIMARY KEY (`is_id`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+
+CREATE TABLE `g5_shop_item_qa` (
+  `iq_id` int(11) NOT NULL AUTO_INCREMENT,
+  `it_id` varchar(20) NOT NULL DEFAULT '',
+  `iq_question` text NOT NULL,
+  PRIMARY KEY (`iq_id`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8;

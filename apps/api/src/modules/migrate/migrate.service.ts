@@ -10,6 +10,10 @@ import {
   normalizeSlug, parseGnuDate, wrapLegacyHash,
   type LevelMapping, type MigratePlan,
 } from "./gnuboard-map.js";
+import {
+  YC_TABLES, address, categoryParentId, categorySlug, hasYoungcart, itemImages,
+  itemSlug, itemStatus, orderStatus, parseItemOption, paymentMethod, postcode,
+} from "./youngcart-map.js";
 
 /**
  * 그누보드5 → Brick 데이터 이전.
@@ -45,6 +49,22 @@ export interface AnalyzeResult {
     hasData: boolean;
   }>;
   points: { members: number; total: number };
+  /**
+   * 영카트(쇼핑몰) — 덤프에 있으면 채워진다.
+   * 없으면 null 이고, 화면은 쇼핑몰 절을 감춘다.
+   */
+  shop: {
+    categories: number;
+    products: number;
+    /** 판매중 · 품절 · 숨김 분포 */
+    productStatus: Record<string, number>;
+    options: number;
+    orders: number;
+    orderItems: number;
+    /** 주문 상태 분포 → Brick 상태로 어떻게 접히는지 */
+    orderStatus: Array<{ from: string; to: string; count: number }>;
+    revenue: number;
+  } | null;
   /** 옮겨지지 않는 것 — 미리 알려야 한다 */
   skipped: string[];
   warnings: string[];
@@ -56,6 +76,14 @@ export interface RunResult {
   posts: { created: number };
   comments: { created: number };
   points: { granted: number; total: number };
+  shop: {
+    categories: number;
+    products: number;
+    options: number;
+    orders: number;
+    orderItems: number;
+    skipped: number;
+  };
   warnings: string[];
   durationMs: number;
 }
@@ -213,12 +241,96 @@ export class MigrateService {
       }
     }
 
+    // ── 영카트 (쇼핑몰) ──
+    let shop: AnalyzeResult["shop"] = null;
+    if (hasYoungcart(tables, prefix)) {
+      const productStatus: Record<string, number> = { selling: 0, soldout: 0, hidden: 0 };
+      let products = 0;
+      for (const row of readRows(dump, `${prefix}${YC_TABLES.item}`, tables)) {
+        products += 1;
+        const st = itemStatus(row as never);
+        productStatus[st] = (productStatus[st] ?? 0) + 1;
+      }
+
+      let categories = 0;
+      if (tables.has(`${prefix}${YC_TABLES.category}`)) {
+        for (const _ of readRows(dump, `${prefix}${YC_TABLES.category}`, tables)) categories += 1;
+      }
+
+      let options = 0;
+      if (tables.has(`${prefix}${YC_TABLES.itemOption}`)) {
+        for (const row of readRows(dump, `${prefix}${YC_TABLES.itemOption}`, tables)) {
+          if (parseItemOption(row as never)) options += 1;
+        }
+      }
+
+      const statusCounts = new Map<string, { to: string; count: number }>();
+      let orders = 0;
+      let revenue = 0;
+      for (const row of readRows(dump, `${prefix}${YC_TABLES.order}`, tables)) {
+        orders += 1;
+        const raw = String(row.od_status ?? "").trim() || "(없음)";
+        const mapped = orderStatus(row.od_status);
+        const entry = statusCounts.get(raw) ?? { to: mapped.status, count: 0 };
+        entry.count += 1;
+        statusCounts.set(raw, entry);
+        // 취소·반품은 매출에서 뺀다 — 부풀린 숫자를 보여주면 리허설의 의미가 없다
+        if (mapped.status !== "cancelled" && mapped.status !== "refunded") {
+          revenue += Math.max(0, Math.floor(Number(row.od_receipt_price ?? 0)) || 0);
+        }
+      }
+
+      let orderItems = 0;
+      if (tables.has(`${prefix}${YC_TABLES.cart}`)) {
+        for (const row of readRows(dump, `${prefix}${YC_TABLES.cart}`, tables)) {
+          // 영카트는 장바구니와 주문 항목을 같은 테이블에 둔다.
+          // od_id 가 있으면 주문된 것이고, 없으면 아직 장바구니다(옮기지 않는다).
+          if (String(row.od_id ?? "").trim()) orderItems += 1;
+        }
+      }
+
+      shop = {
+        categories,
+        products,
+        productStatus,
+        options,
+        orders,
+        orderItems,
+        orderStatus: [...statusCounts.entries()]
+          .map(([from, v]) => ({ from, to: v.to, count: v.count }))
+          .sort((a, b) => b.count - a.count),
+        revenue,
+      };
+
+      if (!(await this.tableExists("shop_products"))) {
+        warnings.push(
+          "쇼핑몰 플러그인이 활성화되지 않아 상품·주문을 옮길 수 없습니다. " +
+            "관리자 → 플러그인에서 brick-shop 을 켜고 다시 시도해주세요.",
+        );
+      }
+      const unknown = shop.orderStatus.filter((s) => s.to === "pending" && s.from !== "주문");
+      if (unknown.length) {
+        warnings.push(
+          `알 수 없는 주문 상태 ${unknown.map((u) => `${u.from}(${u.count}건)`).join(", ")}는 ` +
+            `'입금대기'로 옮겨집니다. 임의로 '완료'로 보면 배송하지 않은 주문이 완료되고 ` +
+            `매출 통계가 부풀려집니다.`,
+        );
+      }
+      warnings.push(
+        "상품 이미지 파일은 DB에 없습니다. data/item/ 을 서버로 복사하고 " +
+          "/data/item/ 경로를 연결해야 이미지가 보입니다 (docs/migrate-gnuboard.md).",
+      );
+    }
+
     // ── 옮기지 않는 것 ──
     // 있는데 안 옮기는 것을 명시한다. 없다고 착각하고 나중에 발견하는 것이 최악이다.
     const skipCandidates: Array<[string, string]> = [
       ["memo", "쪽지 — 사적 대화이고 이전 후 맥락이 없다"],
       ["scrap", "스크랩 — 게시글 id 가 달라져 연결할 수 없다"],
-      ["poll", "설문조사 — Brick 에 아직 없다"],
+      // Brick 에도 설문조사가 있지만 옮기지 않는다 — 지난 설문의 표는 그 시점의
+      // 여론 기록이고, 새 사이트에서 이어서 투표받을 대상이 아니다.
+      // 진행 중인 설문이 있으면 관리자에서 새로 만드는 것이 맞다.
+      ["poll", "설문조사 — 지난 표는 그 시점의 기록이라 이어받을 대상이 아닙니다"],
       ["qa_content", "1:1 문의 — 구조가 달라 자동 변환이 위험하다"],
       ["faq", "FAQ — 분류 구조가 달라 수동 이전을 권한다"],
       ["popular", "인기검색어"],
@@ -229,9 +341,19 @@ export class MigrateService {
     for (const [name, why] of skipCandidates) {
       if (tables.has(`${prefix}${name}`)) skipped.push(`${prefix}${name} — ${why}`);
     }
-    // 영카트 테이블이 있으면 알린다 (상품 이전은 아직 없다)
-    if (tables.has(`${prefix}g5_shop_item`) || tables.has(`${prefix}shop_item`)) {
-      skipped.push("영카트 상품·주문 — 아직 지원하지 않습니다 (로드맵에 있습니다)");
+    // 영카트가 있어도 옮기지 않는 것들
+    if (shop) {
+      if (tables.has(`${prefix}${YC_TABLES.itemUse}`)) {
+        skipped.push(
+          `${prefix}${YC_TABLES.itemUse} — 상품 후기 · 구매 검증을 다시 할 수 없어 옮기지 않습니다`,
+        );
+      }
+      if (tables.has(`${prefix}${YC_TABLES.itemQa}`)) {
+        skipped.push(`${prefix}${YC_TABLES.itemQa} — 상품 문의 · 개인정보가 포함되어 있습니다`);
+      }
+      if (tables.has(`${prefix}${YC_TABLES.cart}`)) {
+        skipped.push(`${prefix}${YC_TABLES.cart} 중 주문되지 않은 장바구니 — 옮길 의미가 없습니다`);
+      }
     }
 
     return {
@@ -243,6 +365,7 @@ export class MigrateService {
         .map(([level, count]) => ({ level, count, role: levelToRole(level, mapping) })),
       boards,
       points: { members: pointMembers, total: pointTotal },
+      shop,
       skipped,
       warnings,
     };
@@ -275,6 +398,7 @@ export class MigrateService {
       posts: { created: 0 },
       comments: { created: 0 },
       points: { granted: 0, total: 0 },
+      shop: { categories: 0, products: 0, options: 0, orders: 0, orderItems: 0, skipped: 0 },
       warnings,
       durationMs: 0,
     };
@@ -294,10 +418,15 @@ export class MigrateService {
       await this.importPoints(dump, tables, prefix, memberMap, result, warnings);
     }
 
+    if (plan.shop !== false && hasYoungcart(tables, prefix)) {
+      await this.importShop(dump, tables, prefix, memberMap, result, warnings);
+    }
+
     result.durationMs = Date.now() - started;
     this.log.log(
       `이전 완료: 회원 ${result.members.created} · 게시판 ${result.boards.created} · ` +
-        `글 ${result.posts.created} · 댓글 ${result.comments.created} (${result.durationMs}ms)`,
+        `글 ${result.posts.created} · 댓글 ${result.comments.created} · ` +
+        `상품 ${result.shop.products} · 주문 ${result.shop.orders} (${result.durationMs}ms)`,
     );
     return result;
   }
@@ -597,6 +726,275 @@ export class MigrateService {
         this.log.warn(`포인트 이전 실패 (${gnuId}): ${String(err)}`);
       }
     }
+  }
+
+  /* ── 영카트: 분류 · 상품 · 주문 ────────────────── */
+
+  /**
+   * 영카트 커머스 이전.
+   *
+   * 순서가 중요하다 — 분류 → 상품 → 옵션 → 주문 → 주문항목.
+   * 주문 항목이 상품을 가리키므로 상품이 먼저 있어야 하고,
+   * 상품이 분류를 가리키므로 분류가 먼저 있어야 한다.
+   *
+   * **주문은 재고를 건드리지 않는다.** 과거 주문을 옮기면서 재고를 차감하면
+   * 지금 재고가 음수가 된다 — 이미 팔린 것은 영카트 쪽 재고에 반영되어 있고,
+   * 우리는 그 최종 재고 값을 그대로 가져온다.
+   */
+  private async importShop(
+    dump: string,
+    tables: Map<string, DumpTable>,
+    prefix: string,
+    memberMap: Map<string, string>,
+    result: RunResult,
+    warnings: string[],
+  ): Promise<void> {
+    if (!(await this.tableExists("shop_products"))) {
+      warnings.push(
+        "쇼핑몰 플러그인이 활성화되지 않아 상품·주문을 옮기지 않았습니다. " +
+          "brick-shop 을 켜고 다시 실행해주세요.",
+      );
+      return;
+    }
+
+    /** 영카트 ca_id → Brick 분류 uuid */
+    const catMap = new Map<string, string>();
+    /** 영카트 it_id → Brick 상품 uuid */
+    const itemMap = new Map<string, string>();
+
+    // ── 1. 분류 ──
+    //
+    // 계층을 두 번에 걸쳐 만든다. 영카트의 ca_id 는 앞자리가 부모이므로
+    // 짧은 것부터 처리하면 부모가 항상 먼저 만들어진다.
+    if (tables.has(`${prefix}${YC_TABLES.category}`)) {
+      const cats = [...readRows(dump, `${prefix}${YC_TABLES.category}`, tables)]
+        .filter((r) => String(r.ca_id ?? "").trim())
+        .sort((a, b) => String(a.ca_id).length - String(b.ca_id).length);
+
+      for (const row of cats) {
+        const caId = String(row.ca_id).trim();
+        const slug = categorySlug(caId);
+        const { rows: existing } = await this.db.execute(sql`
+          SELECT id FROM shop_categories WHERE slug = ${slug} LIMIT 1
+        `);
+        if (existing[0]) {
+          catMap.set(caId, String(existing[0].id));
+          continue;
+        }
+
+        const parentCaId = categoryParentId(caId);
+        const parentId = parentCaId ? catMap.get(parentCaId) : null;
+        const id = uuidv7();
+        await this.db.execute(sql`
+          INSERT INTO shop_categories (id, slug, name, parent_id, sort_order, is_visible)
+          VALUES (${id}, ${slug}, ${String(row.ca_name ?? caId).slice(0, 200)},
+                  ${parentId ? sql`${parentId}::uuid` : sql`NULL`},
+                  ${Math.floor(Number(row.ca_order ?? 0)) || 0},
+                  ${String(row.ca_use ?? "1") === "1"})
+        `);
+        catMap.set(caId, id);
+        result.shop.categories += 1;
+      }
+    }
+
+    // ── 2. 상품 ──
+    for (const row of readRows(dump, `${prefix}${YC_TABLES.item}`, tables)) {
+      const itId = String(row.it_id ?? "").trim();
+      if (!itId) continue;
+
+      const name = String(row.it_name ?? "(이름 없음)").slice(0, 300);
+      const slug = itemSlug(itId, name);
+
+      const { rows: existing } = await this.db.execute(sql`
+        SELECT id FROM shop_products WHERE slug = ${slug} LIMIT 1
+      `);
+      if (existing[0]) {
+        // 멱등: 이미 옮긴 상품은 건너뛰고 지도만 채운다 (주문 항목이 참조한다)
+        itemMap.set(itId, String(existing[0].id));
+        result.shop.skipped += 1;
+        continue;
+      }
+
+      const price = Math.max(0, Math.floor(Number(row.it_price ?? 0)) || 0);
+      // it_cust_price 는 "시중가"(정가)다. 판매가보다 낮으면 할인 표시가
+      // 거꾸로 되므로 그때는 버린다.
+      const custPrice = Math.floor(Number(row.it_cust_price ?? 0)) || 0;
+      const listPrice = custPrice > price ? custPrice : null;
+
+      const images = itemImages(row as Record<string, string | null>);
+      const id = uuidv7();
+
+      await this.db.execute(sql`
+        INSERT INTO shop_products
+          (id, slug, name, category_id, summary, description, image_url, images,
+           price, list_price, stock, status, free_shipping, sort_order, sold_count,
+           view_count, created_at)
+        VALUES
+          (${id}, ${slug}, ${name},
+           ${catMap.get(String(row.ca_id ?? "")) ? sql`${catMap.get(String(row.ca_id))}::uuid` : sql`NULL`},
+           ${String(row.it_basic ?? "").slice(0, 500) || null},
+           ${String(row.it_explan ?? "")},
+           ${images[0] ?? null},
+           ${JSON.stringify(images)}::jsonb,
+           ${price}, ${listPrice},
+           ${Math.max(0, Math.floor(Number(row.it_stock_qty ?? 0)) || 0)},
+           ${itemStatus(row as never)},
+           ${String(row.it_sc_type ?? "") === "2"},
+           ${Math.floor(Number(row.it_order ?? 0)) || 0},
+           0,
+           ${Math.max(0, Math.floor(Number(row.it_hit ?? 0)) || 0)},
+           ${parseGnuDate(row.it_time) ?? new Date()})
+      `);
+      itemMap.set(itId, id);
+      result.shop.products += 1;
+    }
+
+    // ── 3. 옵션 ──
+    //
+    // 조합형 옵션(색상+사이즈)은 Brick 의 단층 모델로 표현할 수 없으므로
+    // 조합을 하나의 이름으로 펼친다. 영카트도 화면에서 한 줄로 보여주므로
+    // 사용자가 보는 것은 같다.
+    if (tables.has(`${prefix}${YC_TABLES.itemOption}`)) {
+      const perItem = new Map<string, number>();
+      for (const row of readRows(dump, `${prefix}${YC_TABLES.itemOption}`, tables)) {
+        const productId = itemMap.get(String(row.it_id ?? "").trim());
+        if (!productId) continue;
+        const opt = parseItemOption(row as never);
+        if (!opt) continue;
+
+        const order = perItem.get(productId) ?? 0;
+        perItem.set(productId, order + 1);
+        try {
+          await this.db.execute(sql`
+            INSERT INTO shop_product_options
+              (id, product_id, name, extra_price, stock, sort_order, is_active)
+            VALUES (${uuidv7()}, ${productId}::uuid, ${opt.name}, ${opt.extraPrice},
+                    ${opt.stock}, ${order}, true)
+          `);
+          result.shop.options += 1;
+        } catch (err) {
+          // 같은 이름의 옵션이 두 번 있으면 건너뛴다 (영카트에서 가능하다)
+          this.log.warn(`옵션 이전 실패 (${opt.name}): ${String(err)}`);
+        }
+      }
+    }
+
+    // ── 4. 주문 ──
+    /** 영카트 od_id → Brick 주문 uuid */
+    const orderMap = new Map<string, string>();
+
+    for (const row of readRows(dump, `${prefix}${YC_TABLES.order}`, tables)) {
+      const odId = String(row.od_id ?? "").trim();
+      if (!odId) continue;
+
+      // 주문번호는 영카트의 od_id 를 그대로 쓴다 — 고객이 알고 있는 번호이고,
+      // 문의가 오면 그 번호로 찾아야 한다.
+      const orderNo = odId.slice(0, 30);
+      const { rows: existing } = await this.db.execute(sql`
+        SELECT id FROM shop_orders WHERE order_no = ${orderNo} LIMIT 1
+      `);
+      if (existing[0]) {
+        orderMap.set(odId, String(existing[0].id));
+        result.shop.skipped += 1;
+        continue;
+      }
+
+      const { status, paymentStatus } = orderStatus(row.od_status);
+      const addr = address(row as never);
+      const cartPrice = Math.max(0, Math.floor(Number(row.od_cart_price ?? 0)) || 0);
+      const sendCost = Math.max(0, Math.floor(Number(row.od_send_cost ?? 0)) || 0);
+      const total = Math.max(0, Math.floor(Number(row.od_receipt_price ?? 0)) || 0);
+      // 금액이 맞지 않으면 총액을 신뢰한다 — 실제로 받은 돈이 그것이다.
+      // discount 로 차액을 흡수해 subtotal - discount + shipping = total 을 지킨다.
+      const discount = Math.max(0, cartPrice + sendCost - total);
+      const createdAt = parseGnuDate(row.od_time) ?? new Date();
+      const id = uuidv7();
+
+      await this.db.execute(sql`
+        INSERT INTO shop_orders
+          (id, order_no, user_id, status, subtotal, discount, shipping_fee, total,
+           payment_method, payment_status, paid_at,
+           orderer_name, orderer_phone, orderer_email,
+           receiver_name, receiver_phone, postcode, address1, address2, delivery_memo,
+           created_at, updated_at)
+        VALUES
+          (${id}, ${orderNo},
+           ${memberMap.get(String(row.mb_id ?? "")) ? sql`${memberMap.get(String(row.mb_id))}::uuid` : sql`NULL`},
+           ${status}, ${cartPrice}, ${discount}, ${sendCost}, ${total},
+           ${paymentMethod(row.od_settle_case)}, ${paymentStatus},
+           ${paymentStatus === "paid" ? createdAt : null},
+           ${String(row.od_name ?? "(이름 없음)").slice(0, 100)},
+           ${String(row.od_tel ?? row.od_hp ?? "").slice(0, 30) || "-"},
+           ${String(row.od_email ?? "").slice(0, 255) || null},
+           ${String(row.od_b_name ?? row.od_name ?? "(이름 없음)").slice(0, 100)},
+           ${String(row.od_b_tel ?? row.od_b_hp ?? row.od_tel ?? "").slice(0, 30) || "-"},
+           ${postcode(row as never)}, ${addr.address1}, ${addr.address2},
+           ${String(row.od_memo ?? "").slice(0, 500) || null},
+           ${createdAt}, ${createdAt})
+      `);
+      orderMap.set(odId, id);
+      result.shop.orders += 1;
+    }
+
+    // ── 5. 주문 항목 ──
+    //
+    // 영카트는 장바구니 테이블이 주문 항목을 겸한다. od_id 가 있으면 주문된 것이고,
+    // 없으면 아직 장바구니다(옮기지 않는다 — 옮길 의미가 없다).
+    if (tables.has(`${prefix}${YC_TABLES.cart}`)) {
+      // 멱등: 이미 항목이 들어 있는 주문은 건너뛴다.
+      //
+      // 주문 자체를 건너뛰는 것만으로는 부족하다 — 항목 루프는 장바구니 테이블을
+      // 훑으므로 다시 실행하면 같은 항목이 또 들어간다(실제로 재실행에서 10개가 됐다).
+      // "새로 만든 주문만" 으로 판단하지 않는 이유: 이전이 중간에 실패해
+      // 주문은 있고 항목은 없는 상태가 남을 수 있고, 그때 다시 채워야 한다.
+      const filled = new Set<string>();
+      const { rows: existingItems } = await this.db.execute(sql`
+        SELECT DISTINCT order_id FROM shop_order_items
+      `);
+      for (const r of existingItems) filled.add(String(r.order_id));
+
+      for (const row of readRows(dump, `${prefix}${YC_TABLES.cart}`, tables)) {
+        const odId = String(row.od_id ?? "").trim();
+        if (!odId) continue;
+        const orderId = orderMap.get(odId);
+        if (!orderId) continue;
+        if (filled.has(orderId)) continue;
+
+        const qty = Math.max(1, Math.floor(Number(row.ct_qty ?? 1)) || 1);
+        const unitPrice = Math.max(0, Math.floor(Number(row.ct_price ?? 0)) || 0);
+        // 옵션 추가금은 별도 컬럼(io_price)에 있다. 단가에 더해 두면
+        // 나중에 "이 항목이 얼마였는가"가 맞는다.
+        const optPrice = Math.floor(Number(row.io_price ?? 0)) || 0;
+
+        await this.db.execute(sql`
+          INSERT INTO shop_order_items
+            (id, order_id, product_id, option_id, product_name, option_name,
+             unit_price, quantity, line_total)
+          VALUES
+            (${uuidv7()}, ${orderId}::uuid,
+             ${itemMap.get(String(row.it_id ?? "")) ? sql`${itemMap.get(String(row.it_id))}::uuid` : sql`NULL`},
+             NULL,
+             ${String(row.it_name ?? "(상품 없음)").slice(0, 300)},
+             ${String(row.ct_option ?? "").slice(0, 200) || null},
+             ${unitPrice + optPrice}, ${qty}, ${(unitPrice + optPrice) * qty})
+        `);
+        result.shop.orderItems += 1;
+      }
+    }
+
+    // 판매수량을 주문 항목에서 다시 센다.
+    // 주문을 넣을 때 하나씩 올리면 중간에 실패했을 때 어긋난다.
+    await this.db.execute(sql`
+      UPDATE shop_products p SET sold_count = coalesce(agg.n, 0)
+      FROM (
+        SELECT oi.product_id, sum(oi.quantity) AS n
+        FROM shop_order_items oi
+        JOIN shop_orders o ON o.id = oi.order_id
+        WHERE o.status NOT IN ('cancelled', 'refunded') AND oi.product_id IS NOT NULL
+        GROUP BY oi.product_id
+      ) AS agg
+      WHERE p.id = agg.product_id
+    `);
   }
 
   private async tableExists(table: string): Promise<boolean> {

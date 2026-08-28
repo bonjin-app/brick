@@ -85,7 +85,7 @@ if [[ "$(curl -s "$API/api/install/status")" == *not_installed* ]]; then
 fi
 curl -s -c "$CK" -X POST "$API/api/auth/login" -H 'content-type: application/json' \
   -d '{"email":"new-admin@brick.test","password":"adminpass123"}' >/dev/null
-for pl in brick-board brick-point; do
+for pl in brick-board brick-point brick-shop; do
   contains "$pl 활성화" "$(curl -s -b "$CK" -X POST "$API/api/plugins/$pl/activate")" '"ok":true'
 done
 
@@ -238,6 +238,121 @@ check "이월 사유 표기" "$PT_REASON" "그누보드 이월"
 PT_EXP="$(psql_q "SELECT count(*) FROM point_ledger WHERE ref_type = 'gnuboard.carryover' AND expires_at IS NOT NULL")"
 check "이월 포인트에 임의 만료를 붙이지 않음" "$PT_EXP" "0"
 
+echo "══ 영카트 (쇼핑몰) ══"
+echo "── 리허설이 쇼핑몰을 보고한다"
+contains "분류 5개" "$AN" '"categories":5'
+contains "상품 4개" "$AN" '"products":4'
+contains "판매중 2 · 품절 1 · 숨김 1" "$AN" '"productStatus":{"selling":2,"soldout":1,"hidden":1}'
+contains "사용 중인 옵션 3개 (io_use=0 제외)" "$AN" '"options":3'
+contains "주문 5건" "$AN" '"orders":5'
+contains "주문 항목 5개 (장바구니 1건 제외)" "$AN" '"orderItems":5'
+contains "완료 → delivered" "$AN" '{"from":"완료","to":"delivered","count":1}'
+contains "입금 → paid" "$AN" '{"from":"입금","to":"paid","count":1}'
+contains "취소 → cancelled" "$AN" '{"from":"취소","to":"cancelled","count":1}'
+contains "알 수 없는 상태는 pending" "$AN" '{"from":"이상한상태","to":"pending","count":1}'
+contains "알 수 없는 상태 경고" "$AN" "알 수 없는 주문 상태"
+contains "매출은 취소·반품 제외 (22000+44000+85000+22000)" "$AN" '"revenue":173000'
+contains "이미지 파일 안내" "$AN" "data/item/"
+contains "상품 후기는 옮기지 않음" "$AN" "구매 검증을 다시 할 수 없어"
+contains "상품 문의는 옮기지 않음" "$AN" "개인정보가 포함"
+contains "장바구니는 옮기지 않음" "$AN" "주문되지 않은 장바구니"
+absent "지원하지 않는다는 옛 안내는 사라짐" "$AN" "아직 지원하지 않습니다"
+
+echo "── 분류 계층 (ca_id 앞자리가 부모)"
+CATS="$(psql_q "SELECT slug, name FROM shop_categories ORDER BY slug")"
+contains "대분류 의류" "$CATS" "cat-10|의류"
+contains "중분류 상의" "$CATS" "cat-1010|상의"
+PARENT="$(psql_q "SELECT p.slug FROM shop_categories c JOIN shop_categories p ON p.id = c.parent_id WHERE c.slug = 'cat-1010'")"
+check "상의의 부모는 의류" "$PARENT" "cat-10"
+TOP="$(psql_q "SELECT parent_id IS NULL FROM shop_categories WHERE slug = 'cat-10'")"
+check "대분류는 부모 없음" "$TOP" "true"
+HIDDEN_CAT="$(psql_q "SELECT is_visible FROM shop_categories WHERE slug = 'cat-30'")"
+check "ca_use=0 은 숨김" "$HIDDEN_CAT" "false"
+
+echo "── 상품"
+PRODUCTS="$(psql_q "SELECT name, price, list_price, stock, status FROM shop_products ORDER BY name")"
+contains "판매중 상품 (정가 25000 > 판매가 19000 이므로 유지)" "$PRODUCTS" "기본 티셔츠|19000|25000|50|selling"
+contains "it_soldout=1 → soldout" "$PRODUCTS" "청바지|39000||0|soldout"
+contains "it_use=0 → hidden (draft 가 아니다)" "$PRODUCTS" "단종된 상품|10000||0|hidden"
+FREE="$(psql_q "SELECT free_shipping FROM shop_products WHERE name = '운동화'")"
+check "it_sc_type=2 → 무료배송" "$FREE" "true"
+LIST_PRICE="$(psql_q "SELECT list_price FROM shop_products WHERE name = '청바지'")"
+check "정가가 판매가보다 낮으면 버림 (할인 표시가 거꾸로 된다)" "$LIST_PRICE" ""
+SLUG="$(psql_q "SELECT slug FROM shop_products WHERE name = '기본 티셔츠'")"
+contains "한글 상품명은 id 로 slug 생성" "$SLUG" "item-"
+CAT_LINK="$(psql_q "SELECT c.name FROM shop_products p JOIN shop_categories c ON c.id = p.category_id WHERE p.name = '기본 티셔츠'")"
+check "상품이 분류에 연결" "$CAT_LINK" "상의"
+IMGS="$(psql_q "SELECT image_url, images FROM shop_products WHERE name = '기본 티셔츠'")"
+contains "대표 이미지 경로" "$IMGS" "/data/item/tshirt1.jpg"
+contains "추가 이미지도" "$IMGS" "tshirt2.jpg"
+HIT="$(psql_q "SELECT view_count FROM shop_products WHERE name = '기본 티셔츠'")"
+check "조회수 이어짐" "$HIT" "342"
+
+echo "── 옵션 (조합형을 한 줄로 펼친다)"
+OPTS="$(psql_q "SELECT name, extra_price, stock FROM shop_product_options ORDER BY sort_order")"
+contains "조합 옵션 그대로" "$OPTS" "흰색,M|0|15"
+contains "추가금 있는 옵션" "$OPTS" "검정,L|1000|5"
+OPT_N="$(psql_q "SELECT count(*) FROM shop_product_options")"
+check "io_use=0 은 제외 (3개)" "$OPT_N" "3"
+
+echo "── 주문"
+ORDERS="$(psql_q "SELECT order_no, status, payment_status, subtotal, discount, shipping_fee, total FROM shop_orders ORDER BY order_no")"
+contains "완료 주문" "$ORDERS" "20210601-0000001|delivered|paid|19000|0|3000|22000"
+contains "입금 주문" "$ORDERS" "20210602-0000002|paid|paid|39000|0|5000|44000"
+contains "취소 주문은 미결제" "$ORDERS" "20210604-0000004|cancelled|unpaid"
+contains "알 수 없는 상태는 입금대기" "$ORDERS" "20210605-0000005|pending|unpaid"
+# 금액이 맞지 않는 주문: 89000 + 0 = 89000 인데 실제로 받은 것은 85000 → 차액 4000 을 할인으로
+MISMATCH="$(psql_q "SELECT subtotal, discount, shipping_fee, total FROM shop_orders WHERE order_no = '20210603-0000003'")"
+check "금액 불일치는 할인으로 흡수 (실제로 받은 돈이 총액이다)" "$MISMATCH" "89000|4000|0|85000"
+ORDER_NO_KEPT="$(psql_q "SELECT count(*) FROM shop_orders WHERE order_no = '20210601-0000001'")"
+check "영카트 주문번호를 그대로 쓴다 (고객이 아는 번호)" "$ORDER_NO_KEPT" "1"
+LINKED="$(psql_q "SELECT u.email FROM shop_orders o JOIN users u ON u.id = o.user_id WHERE o.order_no = '20210601-0000001'")"
+check "회원 주문이 이전된 회원에 연결" "$LINKED" "hong@old.test"
+GUEST="$(psql_q "SELECT user_id IS NULL FROM shop_orders WHERE order_no = '20210603-0000003'")"
+check "비회원 주문은 회원 연결 없음" "$GUEST" "true"
+PAID_AT="$(psql_q "SELECT paid_at IS NOT NULL FROM shop_orders WHERE order_no = '20210601-0000001'")"
+check "결제된 주문은 결제 시각 기록" "$PAID_AT" "true"
+UNPAID_AT="$(psql_q "SELECT paid_at IS NULL FROM shop_orders WHERE order_no = '20210604-0000004'")"
+check "미결제 주문은 결제 시각 없음" "$UNPAID_AT" "true"
+METHOD="$(psql_q "SELECT payment_method FROM shop_orders WHERE order_no = '20210601-0000001'")"
+check "결제수단 원문 보존 (통계에 쓴다)" "$METHOD" "카드"
+
+echo "── 우편번호와 주소"
+ZIP_OLD="$(psql_q "SELECT postcode FROM shop_orders WHERE order_no = '20210601-0000001'")"
+check "구버전 우편번호 (od_zip1+od_zip2)" "$ZIP_OLD" "063-000"
+ZIP_NEW="$(psql_q "SELECT postcode FROM shop_orders WHERE order_no = '20210603-0000003'")"
+check "5자리 우편번호" "$ZIP_NEW" "12345"
+ADDR="$(psql_q "SELECT address1, address2 FROM shop_orders WHERE order_no = '20210601-0000001'")"
+check "주소 세 칸을 합침" "$ADDR" "서울시 강남구|101동 202호 문앞"
+RECEIVER="$(psql_q "SELECT receiver_name, receiver_phone FROM shop_orders WHERE order_no = '20210602-0000002'")"
+check "받는 사람 정보" "$RECEIVER" "받는사람|010-7777-6666"
+MEMO="$(psql_q "SELECT delivery_memo FROM shop_orders WHERE order_no = '20210601-0000001'")"
+check "배송 메모" "$MEMO" "부재시 경비실"
+
+echo "── 주문 항목"
+ITEMS="$(psql_q "SELECT count(*) FROM shop_order_items")"
+check "주문 항목 5개 (장바구니 제외)" "$ITEMS" "5"
+ITEM="$(psql_q "SELECT product_name, option_name, unit_price, quantity, line_total FROM shop_order_items oi JOIN shop_orders o ON o.id=oi.order_id WHERE o.order_no='20210601-0000001'")"
+check "항목 내용" "$ITEM" "기본 티셔츠|흰색,M|19000|1|19000"
+OPT_PRICE="$(psql_q "SELECT unit_price FROM shop_order_items oi JOIN shop_orders o ON o.id=oi.order_id WHERE o.order_no='20210604-0000004'")"
+check "옵션 추가금이 단가에 더해짐 (19000+1000)" "$OPT_PRICE" "20000"
+LINKED_ITEM="$(psql_q "SELECT p.name FROM shop_order_items oi JOIN shop_products p ON p.id = oi.product_id JOIN shop_orders o ON o.id=oi.order_id WHERE o.order_no='20210602-0000002'")"
+check "항목이 상품에 연결" "$LINKED_ITEM" "청바지"
+CART_ONLY="$(psql_q "SELECT count(*) FROM shop_order_items WHERE quantity = 2")"
+check "주문되지 않은 장바구니는 옮기지 않음" "$CART_ONLY" "0"
+
+echo "── 판매수량은 취소·반품을 제외하고 다시 센다"
+SOLD="$(psql_q "SELECT sold_count FROM shop_products WHERE name = '기본 티셔츠'")"
+check "티셔츠 판매 2개 (완료1 + 이상한상태1, 취소 제외)" "$SOLD" "2"
+SOLD_JEANS="$(psql_q "SELECT sold_count FROM shop_products WHERE name = '청바지'")"
+check "청바지 판매 1개" "$SOLD_JEANS" "1"
+
+echo "── 과거 주문을 옮겨도 재고가 줄지 않는다"
+# 이미 팔린 것은 영카트 재고에 반영되어 있고 그 최종값을 가져온다.
+# 여기서 또 차감하면 재고가 음수가 된다.
+STOCK="$(psql_q "SELECT stock FROM shop_products WHERE name = '기본 티셔츠'")"
+check "재고는 영카트 값 그대로 (50)" "$STOCK" "50"
+
 echo "── 멱등성 (다시 실행해도 중복이 없다)"
 RUN2="$(curl -s -b "$CK" -X POST "$MG/run" -H 'content-type: application/json' --data-binary "@$TMP/body.json")"
 contains "두 번째 실행은 회원을 건너뜀" "$RUN2" '"created":0'
@@ -248,6 +363,14 @@ DUP_BOARDS="$(psql_q "SELECT count(*) FROM board_boards WHERE slug = 'notice'")"
 check "게시판 중복 없음" "$DUP_BOARDS" "1"
 PT_AFTER="$(psql_q "SELECT sum(remaining) FROM point_ledger pl JOIN users u ON u.id = pl.user_id WHERE u.email = 'admin@old.test'")"
 check "포인트가 두 배로 늘지 않음" "$PT_AFTER" "800"
+contains "상품도 건너뜀" "$RUN2" '"products":0'
+contains "주문도 건너뜀" "$RUN2" '"orders":0'
+DUP_PRODUCTS="$(psql_q "SELECT count(*) FROM shop_products WHERE name = '기본 티셔츠'")"
+check "상품 중복 없음" "$DUP_PRODUCTS" "1"
+DUP_ORDERS="$(psql_q "SELECT count(*) FROM shop_orders WHERE order_no = '20210601-0000001'")"
+check "주문 중복 없음" "$DUP_ORDERS" "1"
+DUP_ITEMS="$(psql_q "SELECT count(*) FROM shop_order_items")"
+check "주문 항목 중복 없음" "$DUP_ITEMS" "5"
 
 echo "── 선택 이전 (게시판 골라 옮기기)"
 node "$ROOT/scripts/reset-test-db.mjs" >/dev/null

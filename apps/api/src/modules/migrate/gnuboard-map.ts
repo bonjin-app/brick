@@ -161,6 +161,8 @@ export interface MigratePlan {
   members: boolean;
   /** 포인트 잔액을 옮기는가 */
   points: boolean;
+  /** 영카트 상품·주문을 옮기는가 (기본 true) */
+  shop?: boolean;
   /** 이미 있는 이메일을 만나면 건너뛴다(false) 또는 실패로 본다(true) */
   strictEmail: boolean;
 }

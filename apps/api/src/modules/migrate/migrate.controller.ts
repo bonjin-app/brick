@@ -42,6 +42,7 @@ export class MigrateController {
       boards?: string[];
       members?: boolean;
       points?: boolean;
+      shop?: boolean;
     },
   ) {
     const dump = readDump(body?.dump);
@@ -51,6 +52,7 @@ export class MigrateController {
       boards: Array.isArray(body?.boards) ? body.boards.map(String) : [],
       members: body?.members !== false,
       points: body?.points !== false,
+      shop: body?.shop !== false,
       strictEmail: false,
     };
 
@@ -60,7 +62,8 @@ export class MigrateController {
       action: "migrate.gnuboard",
       summary:
         `회원 ${result.members.created} · 게시판 ${result.boards.created} · ` +
-        `글 ${result.posts.created} · 댓글 ${result.comments.created}`,
+        `글 ${result.posts.created} · 댓글 ${result.comments.created} · ` +
+        `상품 ${result.shop.products} · 주문 ${result.shop.orders}`,
       ip: req.ip,
     });
     return result;
