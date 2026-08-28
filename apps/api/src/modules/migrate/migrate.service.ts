@@ -828,7 +828,7 @@ export class MigrateService {
         INSERT INTO shop_products
           (id, slug, name, category_id, summary, description, image_url, images,
            price, list_price, stock, status, free_shipping, sort_order, sold_count,
-           view_count, created_at)
+           view_count, created_at, tax_free)
         VALUES
           (${id}, ${slug}, ${name},
            ${catMap.get(String(row.ca_id ?? "")) ? sql`${catMap.get(String(row.ca_id))}::uuid` : sql`NULL`},
@@ -843,7 +843,10 @@ export class MigrateService {
            ${Math.floor(Number(row.it_order ?? 0)) || 0},
            0,
            ${Math.max(0, Math.floor(Number(row.it_hit ?? 0)) || 0)},
-           ${parseGnuDate(row.it_time) ?? new Date()})
+           ${parseGnuDate(row.it_time) ?? new Date()},
+           -- 영카트의 면세 설정을 그대로 옮긴다. 안 옮기면 도서 쇼핑몰이
+           -- 이전 후 부가세를 붙여 증빙을 발급한다 — 잘못된 증빙이다.
+           ${String(row.it_notax ?? "0") === "1"})
       `);
       itemMap.set(itId, id);
       result.shop.products += 1;
@@ -969,14 +972,17 @@ export class MigrateService {
         await this.db.execute(sql`
           INSERT INTO shop_order_items
             (id, order_id, product_id, option_id, product_name, option_name,
-             unit_price, quantity, line_total)
+             unit_price, quantity, line_total, tax_free)
           VALUES
             (${uuidv7()}, ${orderId}::uuid,
              ${itemMap.get(String(row.it_id ?? "")) ? sql`${itemMap.get(String(row.it_id))}::uuid` : sql`NULL`},
              NULL,
              ${String(row.it_name ?? "(상품 없음)").slice(0, 300)},
              ${String(row.ct_option ?? "").slice(0, 200) || null},
-             ${unitPrice + optPrice}, ${qty}, ${(unitPrice + optPrice) * qty})
+             ${unitPrice + optPrice}, ${qty}, ${(unitPrice + optPrice) * qty},
+             -- 과거 주문의 면세 여부도 스냅샷으로 남긴다. 부가세 신고 자료가
+             -- 이전한 주문까지 포함하므로, 없으면 과세로 잡혀 세금이 늘어난다.
+             ${String(row.io_notax ?? row.it_notax ?? "0") === "1"})
         `);
         result.shop.orderItems += 1;
       }

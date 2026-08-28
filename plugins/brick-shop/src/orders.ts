@@ -195,10 +195,12 @@ export async function createOrder(
     for (const line of q.lines) {
       await tx.execute(sql`
         INSERT INTO shop_order_items
-          (id, order_id, product_id, option_id, product_name, option_name, unit_price, quantity, line_total)
+          (id, order_id, product_id, option_id, product_name, option_name, unit_price,
+           quantity, line_total, tax_free)
         VALUES
           (${uuidv7()}, ${orderId}, ${line.productId}::uuid, ${line.optionId}::uuid,
-           ${line.productName}, ${line.optionName}, ${line.unitPrice}, ${line.quantity}, ${line.lineTotal})
+           ${line.productName}, ${line.optionName}, ${line.unitPrice}, ${line.quantity},
+           ${line.lineTotal}, ${line.taxFree})
       `);
       await tx.execute(sql`
         UPDATE shop_products SET sold_count = sold_count + ${line.quantity} WHERE id = ${line.productId}::uuid

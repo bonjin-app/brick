@@ -17,6 +17,13 @@ export interface PricedLine {
   quantity: number;
   lineTotal: number;
   freeShipping: boolean;
+  /**
+   * 면세 상품인가 (도서·농수산물 등).
+   *
+   * 주문 항목에 **스냅샷으로 남긴다** — 상품 설정이 나중에 바뀌어도
+   * 이미 신고한 증빙 금액이 흔들리면 안 된다.
+   */
+  taxFree: boolean;
   /** 현재 남은 재고 (null이면 무한) */
   stock: number | null;
   /** 지금 이 수량으로 주문 가능한가 */
@@ -103,7 +110,7 @@ export async function quote(
     }
 
     const { rows } = await db.execute(sql`
-      SELECT p.id, p.slug, p.name, p.price, p.stock, p.status, p.free_shipping, p.image_url,
+      SELECT p.id, p.slug, p.name, p.price, p.stock, p.status, p.free_shipping, p.tax_free, p.image_url,
              o.id AS option_id, o.name AS option_name, o.extra_price, o.stock AS option_stock, o.is_active
       FROM shop_products p
       LEFT JOIN shop_product_options o
@@ -152,6 +159,7 @@ export async function quote(
       quantity: qty,
       lineTotal: unitPrice * qty,
       freeShipping: Boolean(row.free_shipping),
+      taxFree: Boolean(row.tax_free),
       stock,
       available: !issue,
       ...(issue ? { issue } : {}),

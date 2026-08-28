@@ -1,4 +1,4 @@
-import { definePlugin, isUniqueViolation, rawResponse } from "@brick/plugin-sdk";
+import { definePlugin, isUniqueViolation, isValidBusinessNo, rawResponse } from "@brick/plugin-sdk";
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import { DEFAULT_SETTINGS, ShopError, STATUS_LABEL, escapeHtml, won,
@@ -7,9 +7,9 @@ import { quote } from "./pricing.js";
 import { addToCart, clearCart, getCartItems, updateCartItem, type CartOwner } from "./cart.js";
 import { changeOrderStatus, createOrder, type PointsPort } from "./orders.js";
 import { bankTransferGateway, confirmPayment, gateways, refundPayment, registerGateway } from "./payments.js";
-import { CATEGORY_RESOURCE, COUPON_RESOURCE, INQUIRY_RESOURCE, ORDER_RESOURCE,
-         PRODUCT_RESOURCE, RETURN_RESOURCE, REVIEW_RESOURCE,
-         SHIPPING_ZONE_RESOURCE } from "./admin-resources.js";
+import { CASH_RECEIPT_RESOURCE, CATEGORY_RESOURCE, COUPON_RESOURCE, INQUIRY_RESOURCE,
+         ORDER_RESOURCE, PRODUCT_RESOURCE, RETURN_RESOURCE, REVIEW_RESOURCE,
+         SHIPPING_ZONE_RESOURCE, TAX_INVOICE_RESOURCE } from "./admin-resources.js";
 import { registerStorefrontBlocks } from "./blocks.js";
 import {
   createInquiry, createReview, deleteInquiry, deleteReview, findPurchase,
@@ -22,6 +22,11 @@ import {
   requestReturn, updateReturnStatus,
 } from "./returns.js";
 import { RELATED_LIMIT, listRelated, syncRelated } from "./related.js";
+import {
+  RECEIPT_KINDS, RECEIPT_KIND_LABEL, VAT_PERIODS, cancelCashReceipt, cancelReceiptsForOrder,
+  listCashReceiptGateways, listCashReceipts, listTaxInvoices, markCashReceiptIssued,
+  requestCashReceipt, requestTaxInvoice, updateTaxInvoice, vatReport,
+} from "./tax.js";
 import {
   SITE_TZ, parseGroupBy, parsePeriod, salesByCategory, salesByPeriod,
   salesByProduct, salesSummary, toCsv,
@@ -421,7 +426,7 @@ export default definePlugin(async (ctx) => {
     const { rows } = await db.execute(sql`
       SELECT p.id, p.slug, p.name, p.price, p.list_price, p.stock, p.status, p.image_url,
              p.summary, p.description, p.free_shipping, p.sort_order, p.sold_count,
-             p.category_id, p.images, p.review_count, p.rating_sum,
+             p.category_id, p.tax_free, p.images, p.review_count, p.rating_sum,
              coalesce(
                (SELECT json_agg(json_build_object('name', o.name, 'extra_price', o.extra_price, 'stock', o.stock)
                                 ORDER BY o.sort_order, o.name)
@@ -472,12 +477,12 @@ export default definePlugin(async (ctx) => {
       await db.execute(sql`
         INSERT INTO shop_products
           (id, slug, name, price, list_price, stock, status, image_url, summary, description,
-           free_shipping, sort_order, images, category_id)
+           free_shipping, sort_order, images, category_id, tax_free)
         VALUES
           (${id}, ${p.slug}, ${p.name}, ${p.price}, ${p.listPrice}, ${p.stock}, ${p.status},
            ${p.imageUrl ?? images[0] ?? null}, ${p.summary}, ${p.description},
            ${p.freeShipping}, ${p.sortOrder}, ${JSON.stringify(images)}::jsonb,
-           ${p.categoryId}::uuid)
+           ${p.categoryId}::uuid, ${p.taxFree})
       `);
     } catch (err) {
       throw slugConflict(err, "상품");
@@ -503,7 +508,7 @@ export default definePlugin(async (ctx) => {
           image_url = ${p.imageUrl ?? images[0] ?? null}, summary = ${p.summary},
           description = ${p.description}, free_shipping = ${p.freeShipping}, sort_order = ${p.sortOrder},
           images = ${JSON.stringify(images)}::jsonb, category_id = ${p.categoryId}::uuid,
-          updated_at = now()
+          tax_free = ${p.taxFree}, updated_at = now()
         WHERE id = ${req.params.id}::uuid RETURNING id
       `);
       if (!rows.length) throw new ShopError(404, "상품을 찾을 수 없습니다.");
@@ -829,6 +834,137 @@ export default definePlugin(async (ctx) => {
   ctx.registerRoute("GET", "/admin/reports/summary", async (req) => {
     requireAdmin(req);
     return await salesSummary(db, { period: parsePeriod(req.query) });
+  });
+
+  // ════════════════════════════════════════════════════
+  //  세금 증빙 — 현금영수증 · 세금계산서 · 부가세 신고
+  // ════════════════════════════════════════════════════
+
+  /** 발급 안내 — 화면이 폼을 만들고 손님에게 설명하는 데 쓴다 */
+  ctx.registerRoute("GET", "/tax/info", async () => ({
+    receiptKinds: RECEIPT_KINDS.map((code) => ({ code, label: RECEIPT_KIND_LABEL[code] })),
+    gateways: listCashReceiptGateways().map((g) => ({ code: g.provider, label: g.displayName })),
+    notice:
+      "카드 결제는 카드사가 국세청에 자동 통보하므로 현금영수증을 발급하지 않습니다. " +
+      "무통장 입금 주문에 발급할 수 있습니다.",
+    legalBasis: "부가가치세법 제32조의2 · 제46조",
+  }));
+
+  /** 손님이 자기 주문에 현금영수증을 신청한다 */
+  ctx.registerRoute("POST", "/orders/:orderNo/cash-receipt", async (req) => {
+    const b = req.body as Record<string, unknown>;
+    return await requestCashReceipt(db, {
+      orderNo: req.params.orderNo,
+      kind: String(b.kind ?? ""),
+      identifier: String(b.identifier ?? ""),
+      userId: req.user?.id ?? null,
+      isManager: isManager(req),
+      gateway: b.gateway ? String(b.gateway) : undefined,
+      isValidBusinessNo,
+    });
+  });
+
+  /** 내 주문의 발급 내역 */
+  ctx.registerRoute("GET", "/orders/:orderNo/cash-receipt", async (req) => {
+    const { rows } = await db.execute(sql`
+      SELECT id, user_id FROM shop_orders WHERE order_no = ${req.params.orderNo} LIMIT 1
+    `);
+    const order = rows[0];
+    // 남의 주문이 존재하는지 알려주지 않는다
+    if (!order) throw new ShopError(404, "주문을 찾을 수 없습니다.");
+    if (!isManager(req)) {
+      if (!req.user || String(order.user_id ?? "") !== req.user.id) {
+        throw new ShopError(404, "주문을 찾을 수 없습니다.");
+      }
+    }
+    return await listCashReceipts(db, { orderId: String(order.id) });
+  });
+
+  /** 손님이 세금계산서를 요청한다 */
+  ctx.registerRoute("POST", "/orders/:orderNo/tax-invoice", async (req) => {
+    return await requestTaxInvoice(db, {
+      orderNo: req.params.orderNo,
+      userId: req.user?.id ?? null,
+      isManager: isManager(req),
+      body: (req.body ?? {}) as Record<string, unknown>,
+      isValidBusinessNo,
+    });
+  });
+
+  ctx.registerRoute("GET", "/admin/cash-receipts", async (req) => {
+    requireAdmin(req);
+    return await listCashReceipts(db, {
+      status: req.query.status ? String(req.query.status) : undefined,
+      page: Number(req.query.page ?? 1),
+    });
+  });
+
+  /** 수동 발급 완료 처리 — 운영자가 홈택스에서 발급하고 승인번호를 적는다 */
+  ctx.registerRoute("PUT", "/admin/cash-receipts/:id", async (req) => {
+    requireAdmin(req);
+    const b = req.body as Record<string, unknown>;
+    const status = String(b.status ?? "");
+    if (status === "issued") {
+      return await markCashReceiptIssued(db, {
+        id: req.params.id,
+        approvalNo: String(b.approvalNo ?? ""),
+        receiptUrl: b.receiptUrl ? String(b.receiptUrl) : undefined,
+      });
+    }
+    if (status === "cancelled") {
+      return await cancelCashReceipt(db, {
+        id: req.params.id,
+        reason: String(b.reason ?? "운영자 취소"),
+      });
+    }
+    throw new ShopError(400, "상태는 issued 또는 cancelled 여야 합니다.");
+  });
+
+  ctx.registerRoute("GET", "/admin/tax-invoices", async (req) => {
+    requireAdmin(req);
+    return await listTaxInvoices(db, {
+      status: req.query.status ? String(req.query.status) : undefined,
+      page: Number(req.query.page ?? 1),
+    });
+  });
+
+  ctx.registerRoute("PUT", "/admin/tax-invoices/:id", async (req) => {
+    requireAdmin(req);
+    const b = req.body as Record<string, unknown>;
+    return await updateTaxInvoice(db, {
+      id: req.params.id,
+      status: String(b.status ?? ""),
+      invoiceNo: b.invoiceNo ? String(b.invoiceNo) : undefined,
+      invoiceUrl: b.invoiceUrl ? String(b.invoiceUrl) : undefined,
+      reason: b.reason ? String(b.reason) : undefined,
+    });
+  });
+
+  /** 부가세 신고용 과세기간 목록 — 운영자가 날짜를 계산하지 않게 한다 */
+  ctx.registerRoute("GET", "/admin/reports/vat/periods", async (req) => {
+    requireAdmin(req);
+    const thisYear = new Date().getFullYear();
+    return {
+      years: [thisYear, thisYear - 1, thisYear - 2],
+      periods: VAT_PERIODS.map((p) => ({ code: p.code, label: p.label })),
+    };
+  });
+
+  ctx.registerRoute("GET", "/admin/reports/vat", async (req) => {
+    requireAdmin(req);
+    const year = Math.floor(Number(req.query.year ?? new Date().getFullYear()));
+    const period = String(req.query.period ?? "1-full");
+    const result = await vatReport(db, { year, period, timezone: SITE_TZ });
+    if (String(req.query.format ?? "") === "csv") {
+      return csvReply(
+        `vat-${result.year}-${result.period}`,
+        ["증빙 구분", "주문수", "합계", "과세분", "공급가액", "부가세", "면세금액"],
+        result.groups.map((g) => [
+          g.label, g.orders, g.total, g.taxable, g.supplyAmount, g.vatAmount, g.taxFreeAmount,
+        ]),
+      );
+    }
+    return result;
   });
 
 
@@ -1322,6 +1458,8 @@ export default definePlugin(async (ctx) => {
   ctx.registerAdminResource(INQUIRY_RESOURCE);
   ctx.registerAdminResource(RETURN_RESOURCE);
   ctx.registerAdminResource(SHIPPING_ZONE_RESOURCE);
+  ctx.registerAdminResource(CASH_RECEIPT_RESOURCE);
+  ctx.registerAdminResource(TAX_INVOICE_RESOURCE);
 
   /**
    * 사이트맵: 판매 중인 상품 주소.
@@ -1398,6 +1536,8 @@ function validateProduct(b: Record<string, unknown>) {
 
   return {
     slug, name, price, listPrice, stock, status, categoryId,
+    // 면세 상품 (도서·농수산물 등). 세금 증빙 금액 분해에 쓴다
+    taxFree: b.tax_free === true || b.tax_free === "true",
     imageUrl: String(b.image_url ?? "").trim() || null,
     summary: String(b.summary ?? "").trim() || null,
     description: String(b.description ?? ""),

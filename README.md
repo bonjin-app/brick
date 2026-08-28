@@ -27,7 +27,7 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-1478%20passing-2ea043.svg" alt="스모크 테스트 1478개" />
+  <img src="https://img.shields.io/badge/E2E-1588%20passing-2ea043.svg" alt="스모크 테스트 1588개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
 </p>
 
@@ -273,7 +273,7 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 1,478개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 1,588개 항목):
 
 | 수트 | 항목 | 무엇을 못박는가 |
 |---|---:|---|
@@ -286,6 +286,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `smoke-poll.sh` | 100 | 중복 투표 · IP 해시 · 결과 공개 시점 · 집계 오염 |
 | `smoke-mailing.sh` | 96 | (광고) 강제 표기 · 동의자만 발송 · 발송 직전 동의 재확인 · 실제 발송 내용 |
 | `smoke-reports.sh` | 136 | 부분 환불 차감 · KST 날짜 경계 · 상품별·주문별 합 일치 · 추천에서 반품·미공개 제외 |
+| `smoke-tax.sh` | 110 | 카드 이중 발급 거부 · 금액 분해 합 일치 · 면세 스냅샷 · 반품 시 증빙 취소 |
 | `smoke-board.sh` | 85 | 권한 4단계 · 답변형 · 비밀글 · 첨부 원자성 · XSS |
 | `smoke-point.sh` | 53 | FIFO 소모 · 멱등 적립 · 만료 · 동시성 |
 | `smoke-memo.sh` | 72 | 프라이버시 · 차단 · 포인트 차감 트랜잭션 |
@@ -368,6 +369,7 @@ docker/           Dockerfile, entrypoint
 | [단체메일](docs/mailing.md) | 공지와 광고의 차이, 정보통신망법 제50조 요건, 수신거부 |
 | [판매 리포트](docs/reports.md) | 무엇을 매출로 세는가, 시간대, CSV 내보내기 |
 | [관련 상품](docs/related-products.md) | 수동 지정과 함께 구매, 추천에서 빼는 것 |
+| [세금 증빙](docs/tax.md) | 현금영수증·세금계산서, 면세, 부가세 신고 자료 |
 | [문의·FAQ·설문·SEO](docs/helpdesk.md) | 1:1 문의 설계, FAQ, 설문조사, 사이트맵 |
 | [사업자정보 표시](docs/business-info.md) | 전자상거래법 제13조, 사업자번호 검증, 테마 렌더 |
 | [그누보드·영카트 이전](docs/migrate-gnuboard.md) | 덤프 만들기, 리허설, 레벨 매핑, 비밀번호 보존, 상품·주문 |

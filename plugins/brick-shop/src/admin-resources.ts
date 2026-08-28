@@ -44,6 +44,9 @@ export const PRODUCT_RESOURCE: AdminResource = {
     { name: "summary", label: "짧은 설명", type: "textarea", help: "목록과 검색 결과에 노출됩니다." },
     { name: "description", label: "상세 설명", type: "richtext", help: "HTML을 사용할 수 있습니다." },
     { name: "free_shipping", label: "무료배송", type: "boolean" },
+    // 도서·농수산물 등. 서점이 부가세를 붙여 증빙을 발급하면 잘못된 증빙이다
+    { name: "tax_free", label: "면세 상품", type: "boolean",
+      help: "도서·농수산물 등 부가세가 없는 상품. 현금영수증·세금계산서 금액 계산에 반영됩니다." },
     { name: "sort_order", label: "진열 순서", type: "number", help: "작을수록 먼저 표시됩니다." },
     { name: "sold_count", label: "판매수량", type: "number", readOnly: true, inList: true },
     { name: "rating_avg", label: "평점", type: "number", readOnly: true, inList: true },
@@ -218,5 +221,99 @@ export const SHIPPING_ZONE_RESOURCE: AdminResource = {
     { name: "extra_fee", label: "추가 배송비", type: "money", required: true, inList: true },
     { name: "is_active", label: "적용", type: "boolean", inList: true },
     { name: "sort_order", label: "순서", type: "number", inList: true },
+  ],
+};
+
+/**
+ * 현금영수증.
+ *
+ * 기본은 수동 발급이다 — 운영자가 홈택스에서 발급하고 승인번호를 적는다.
+ * 승인번호 없이 "발급됨"으로 바꿀 수 없게 막았다(tax.ts): 없으면 나중에
+ * 국세청 자료와 대조할 수 없다.
+ */
+export const CASH_RECEIPT_RESOURCE: AdminResource = {
+  name: "cash-receipts",
+  title: "현금영수증",
+  itemLabel: "발급",
+  basePath: "/admin/cash-receipts",
+  order: 7,
+  description:
+    "부가가치세법 제32조의2 — 손님이 요청하면 발급해야 하고, 미발급은 미발급액의 20% 가산세입니다. " +
+    "카드 결제는 카드사가 국세청에 자동 통보하므로 발급 대상이 아닙니다(이중 신고가 됩니다). " +
+    "'발급대기'는 아직 국세청에 신고되지 않았다는 뜻입니다 — 홈택스에서 발급한 뒤 승인번호를 입력하세요.",
+  can: { create: false, delete: false },
+  fields: [
+    { name: "requested_at", label: "신청일", type: "date", readOnly: true, inList: true },
+    { name: "order_no", label: "주문번호", type: "text", readOnly: true, inList: true },
+    { name: "orderer_name", label: "주문자", type: "text", readOnly: true, inList: true },
+    { name: "kind_label", label: "용도", type: "text", readOnly: true, inList: true },
+    // 개인정보라 서버가 가려서 보낸다 (tax.ts maskIdentifier)
+    { name: "identifier", label: "식별번호", type: "text", readOnly: true, inList: true,
+      help: "개인정보이므로 뒤 4자리만 표시됩니다." },
+    { name: "status", label: "상태", type: "text", readOnly: true, inList: true },
+    { name: "total_amount", label: "총액", type: "money", readOnly: true, inList: true },
+    { name: "supply_amount", label: "공급가액", type: "money", readOnly: true },
+    { name: "vat_amount", label: "부가세", type: "money", readOnly: true },
+    { name: "tax_free_amount", label: "면세금액", type: "money", readOnly: true },
+    { name: "gateway", label: "발급 수단", type: "text", readOnly: true },
+    { name: "approval_no", label: "국세청 승인번호", type: "text",
+      help: "홈택스에서 발급한 뒤 승인번호를 입력하고 상태를 '발급완료'로 바꾸세요." },
+    { name: "receipt_url", label: "영수증 링크", type: "text" },
+    { name: "error", label: "오류", type: "textarea", readOnly: true },
+    { name: "cancel_reason", label: "취소 사유", type: "textarea", readOnly: true },
+    { name: "status", label: "상태 변경", type: "select",
+      options: [
+        { value: "issued", label: "발급완료 (승인번호 필수)" },
+        { value: "cancelled", label: "취소" },
+      ] },
+    { name: "reason", label: "취소 사유 입력", type: "textarea",
+      help: "취소할 때 사유를 남기세요." },
+  ],
+};
+
+/**
+ * 세금계산서 요청.
+ *
+ * 국세청 전자세금계산서 연동은 사업자 인증서가 필요해서 아직 하지 않는다.
+ * 이 화면의 목적은 **요청을 잃어버리지 않는 것**이다 — 지금까지는 요청이
+ * 1:1 문의로 들어와 묻히고, 사업자 손님은 매입세액을 공제받지 못했다.
+ */
+export const TAX_INVOICE_RESOURCE: AdminResource = {
+  name: "tax-invoices",
+  title: "세금계산서 요청",
+  itemLabel: "요청",
+  basePath: "/admin/tax-invoices",
+  order: 8,
+  description:
+    "사업자 손님의 세금계산서 요청입니다. 홈택스에서 발급한 뒤 승인번호를 입력하세요. " +
+    "발급하지 않으면 손님이 매입세액을 공제받지 못합니다. 거부할 때는 사유가 필수입니다.",
+  can: { create: false, delete: false },
+  fields: [
+    { name: "requested_at", label: "요청일", type: "date", readOnly: true, inList: true },
+    { name: "order_no", label: "주문번호", type: "text", readOnly: true, inList: true },
+    { name: "company_name", label: "상호", type: "text", readOnly: true, inList: true },
+    { name: "business_no", label: "사업자등록번호", type: "text", readOnly: true, inList: true },
+    { name: "ceo_name", label: "대표자", type: "text", readOnly: true },
+    { name: "address", label: "사업장 주소", type: "textarea", readOnly: true },
+    { name: "business_type", label: "업태", type: "text", readOnly: true },
+    { name: "business_item", label: "종목", type: "text", readOnly: true },
+    { name: "contact_name", label: "담당자", type: "text", readOnly: true },
+    { name: "contact_email", label: "계산서 받을 이메일", type: "text", readOnly: true, inList: true },
+    { name: "contact_phone", label: "연락처", type: "text", readOnly: true },
+    { name: "status", label: "상태", type: "text", readOnly: true, inList: true },
+    { name: "total_amount", label: "총액", type: "money", readOnly: true, inList: true },
+    { name: "supply_amount", label: "공급가액", type: "money", readOnly: true },
+    { name: "vat_amount", label: "부가세", type: "money", readOnly: true },
+    { name: "tax_free_amount", label: "면세금액", type: "money", readOnly: true },
+    { name: "invoice_no", label: "국세청 승인번호", type: "text",
+      help: "발급 처리할 때 반드시 입력하세요 — 없으면 국세청 자료와 대조할 수 없습니다." },
+    { name: "invoice_url", label: "계산서 링크", type: "text" },
+    { name: "reject_reason", label: "거부 사유", type: "textarea", readOnly: true },
+    { name: "status", label: "상태 변경", type: "select",
+      options: [
+        { value: "issued", label: "발급완료 (승인번호 필수)" },
+        { value: "rejected", label: "거부 (사유 필수)" },
+      ] },
+    { name: "reason", label: "거부 사유 입력", type: "textarea" },
   ],
 };

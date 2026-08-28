@@ -98,6 +98,9 @@ jobs:
       - name: E2E 스모크 테스트 (판매 리포트·관련 상품)
         run: bash scripts/smoke-reports.sh
 
+      - name: E2E 스모크 테스트 (세금 증빙)
+        run: bash scripts/smoke-tax.sh
+
       - name: E2E 스모크 테스트 (방문자·팝업)
         run: bash scripts/smoke-site.sh
 

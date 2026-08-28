@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import type { Db } from "./types.js";
+import { cancelReceiptsForOrder } from "./tax.js";
 import { ShopError } from "./types.js";
 import type { PointsPort } from "./orders.js";
 
@@ -421,7 +422,13 @@ export async function updateReturnStatus(
     refund?: (orderNo: string, amount: number, reason: string) => Promise<void>;
     pointsPort?: PointsPort | null;
   },
-): Promise<{ status: string; refunded: number; stockRestored: number }> {
+): Promise<{
+  status: string;
+  refunded: number;
+  stockRestored: number;
+  /** 함께 취소된 현금영수증 수 (환불했는데 증빙이 남으면 세금을 더 낸다) */
+  receiptsCancelled: number;
+}> {
   const next = String(params.status) as ReturnStatus;
   if (!RETURN_STATUS.includes(next)) throw new ShopError(400, "상태가 올바르지 않습니다.");
 
@@ -436,7 +443,7 @@ export async function updateReturnStatus(
   if (!ret) throw new ShopError(404, "요청을 찾을 수 없습니다.");
 
   const current = String(ret.status) as ReturnStatus;
-  if (current === next) return { status: next, refunded: 0, stockRestored: 0 };
+  if (current === next) return { status: next, refunded: 0, stockRestored: 0, receiptsCancelled: 0 };
   if (!RETURN_TRANSITIONS[current].includes(next)) {
     throw new ShopError(
       400,
@@ -450,6 +457,7 @@ export async function updateReturnStatus(
 
   let refunded = 0;
   let stockRestored = 0;
+  let receiptsCancelled = 0;
 
   await db.transaction(async (tx) => {
     await tx.execute(sql`
@@ -610,9 +618,32 @@ export async function updateReturnStatus(
         });
       }
     }
+
+    // 발급된 현금영수증을 취소한다.
+    //
+    // **환불했는데 증빙이 살아 있으면 세금을 더 낸다.** 교환은 금액이
+    // 변하지 않으므로 건드리지 않는다.
+    //
+    // 실패해도 반품 처리를 막지 않는다 — 물건은 이미 돌려받고 환불도 나갔다.
+    // 실패 사유는 cancelReceiptsForOrder 가 행에 남기므로 운영자가 홈택스에서
+    // 직접 취소할 수 있다. 반품이 안 끝나는 것보다 증빙 취소가 밀리는 게 낫다.
+    //
+    // 조건을 `refunded > 0`(PG 환불이 실행된 금액)으로 걸면 안 된다 —
+    // **무통장 주문에는 PG 결제 기록이 없어서 그 값이 항상 0이고**,
+    // 현금영수증이 필요한 주문이 바로 그 무통장 주문이다. 운영자가 계좌로
+    // 직접 환불하더라도 증빙은 취소되어야 한다. 그래서 **돌려줄 금액이
+    // 있는가**(반품 건의 refund_amount)로 판단한다.
+    if (String(ret.kind) !== "exchange" && Number(ret.refund_amount ?? 0) > 0) {
+      receiptsCancelled = (
+        await cancelReceiptsForOrder(db, {
+          orderId: String(ret.order_id),
+          reason: `${KIND_LABEL[String(ret.kind) as ReturnKind]} 환불 (${String(ret.return_no)})`,
+        }).catch(() => ({ cancelled: 0 }))
+      ).cancelled;
+    }
   }
 
-  return { status: next, refunded, stockRestored };
+  return { status: next, refunded, stockRestored, receiptsCancelled };
 }
 
 /** 고객이 요청을 철회 */
