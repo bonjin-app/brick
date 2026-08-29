@@ -1,8 +1,10 @@
 import {
-  All, BadRequestException, Body, Controller, Get, HttpException, NotFoundException,
-  Param, Post, Req, Res, UseGuards,
+  All, BadRequestException, Body, Controller, Get, HttpException, Inject, Logger,
+  NotFoundException, Param, Post, Req, Res, UseGuards,
 } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { sql } from "drizzle-orm";
+import type { BrickDb } from "@brick/database";
 import { isRawResponse, type PluginUploadedFile } from "@brick/core";
 import { PluginLoaderService } from "./plugin-loader.service.js";
 import { AdminGuard } from "../auth/auth.guard.js";
@@ -10,6 +12,7 @@ import { AuthService } from "../auth/auth.service.js";
 import { ExtensionInstallerService } from "../extensions/extension-installer.service.js";
 import { ExtensionUpdaterService } from "../extensions/extension-updater.service.js";
 import { AuditService } from "../audit/audit.service.js";
+import { DB } from "../../runtime.module.js";
 
 @Controller("api")
 export class PluginsController {
@@ -19,6 +22,7 @@ export class PluginsController {
     private readonly installer: ExtensionInstallerService,
     private readonly updater: ExtensionUpdaterService,
     private readonly audit: AuditService,
+    @Inject(DB) private readonly db: BrickDb,
   ) {}
 
   @Get("plugins")
@@ -149,6 +153,57 @@ export class PluginsController {
         })),
     };
   }
+
+  /**
+   * 관리자 대시보드 — "오늘의 사이트" 숫자들.
+   *
+   * 코어 통계(회원·페이지)와 플러그인 카드(registerDashboardCard)를 합친다.
+   * 카드 하나가 실패해도 나머지는 나간다 — 플러그인 하나가 죽었다고
+   * 대시보드 전체가 비면 운영자는 아무것도 볼 수 없다.
+   */
+  @Get("admin/dashboard")
+  @UseGuards(AdminGuard)
+  async adminDashboard() {
+    await this.loader.refreshLocale();
+    // "오늘"의 경계는 판매 리포트와 같은 규칙 — 사이트 시간대 (UTC 자정이 아니다)
+    const tz = process.env.BRICK_TIMEZONE?.trim() || "Asia/Seoul";
+    const [core, cards] = await Promise.all([
+      this.db.execute(sql`
+        SELECT
+          count(*) FILTER (WHERE role <> 'admin')                              AS members,
+          count(*) FILTER (WHERE role <> 'admin'
+            AND (created_at AT TIME ZONE ${tz})::date = (now() AT TIME ZONE ${tz})::date) AS members_today,
+          (SELECT count(*) FROM pages WHERE status = 'published')              AS pages
+        FROM users WHERE is_active
+      `).then(({ rows }) => ({
+        members: Number(rows[0]?.members ?? 0),
+        membersToday: Number(rows[0]?.members_today ?? 0),
+        pages: Number(rows[0]?.pages ?? 0),
+      })),
+      Promise.all(
+        this.loader.dashboardCards
+          .slice()
+          .sort((a, b) => (a.order ?? 100) - (b.order ?? 100))
+          .map(async (card) => {
+            const base = {
+              plugin: card.plugin,
+              title: this.loader.localizeCardTitle(card.plugin, card.title),
+              link: card.link ?? null,
+            };
+            try {
+              const { value, sub } = await card.load();
+              return { ...base, value, sub: sub ?? null, error: false };
+            } catch (err) {
+              // 실패한 카드는 오류로 표시한다 — 0 으로 보이는 것이 최악이다
+              this.dashLogger.error(`card "${card.plugin}/${card.title}" 실패: ${String(err)}`);
+              return { ...base, value: null, sub: null, error: true };
+            }
+          }),
+      ),
+    ]);
+    return { core, cards };
+  }
+  private readonly dashLogger = new Logger("Dashboard");
 
   /** 특정 리소스의 전체 스키마 — 관리자가 목록/폼 화면을 생성하는 데 쓴다 */
   @Get("admin/resources/:plugin/:name")

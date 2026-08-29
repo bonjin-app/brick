@@ -198,5 +198,15 @@ export default definePlugin(async (ctx) => {
   ctx.registerAdminResource(POPUP_RESOURCE);
   registerSiteBlocks(ctx, db);
 
+  // 대시보드 — 그누보드 관리자 첫 화면의 "오늘 방문자"
+  ctx.registerDashboardCard({
+    title: "오늘 방문자",
+    order: 10,
+    load: async () => {
+      const s = await visitStats(db);
+      return { value: s.today, sub: ctx.t("dash.yesterday", { n: s.yesterday }) };
+    },
+  });
+
   return {};
 });

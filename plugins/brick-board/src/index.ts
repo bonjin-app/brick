@@ -854,5 +854,26 @@ ${items}
 
   registerBoardBlocks(ctx, db);
 
+  // 대시보드 — "오늘"의 경계는 쇼핑몰 리포트와 같은 사이트 시간대
+  const TZ = process.env.BRICK_TIMEZONE?.trim() || "Asia/Seoul";
+  ctx.registerDashboardCard({
+    title: "오늘 글",
+    order: 30,
+    link: "/admin/x/brick-board/posts",
+    load: async () => {
+      const { rows } = await db.execute(sql`
+        SELECT
+          (SELECT count(*) FROM board_posts
+            WHERE (created_at AT TIME ZONE ${TZ})::date = (now() AT TIME ZONE ${TZ})::date) AS posts,
+          (SELECT count(*) FROM board_comments
+            WHERE (created_at AT TIME ZONE ${TZ})::date = (now() AT TIME ZONE ${TZ})::date) AS comments
+      `);
+      return {
+        value: Number(rows[0]?.posts ?? 0),
+        sub: ctx.t("dash.comments", { n: Number(rows[0]?.comments ?? 0) }),
+      };
+    },
+  });
+
   return {};
 });

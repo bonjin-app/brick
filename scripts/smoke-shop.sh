@@ -140,6 +140,15 @@ check "동시 주문 6건 중 3건만 성공 (초과판매 없음)" "$SUCCESS" "
 contains "실패는 명확한 재고 메시지" "$(cat "$TMP"/o*.json)" "재고가"
 contains "주문번호 중복 없음(시퀀스)" "$(curl -s -b "$CK" "$SHOP/admin/orders")" '"total":3'
 
+echo "── 관리자 대시보드 — 오늘의 사이트 (registerDashboardCard)"
+DASH="$(curl -s -b "$CK" "$API/api/admin/dashboard")"
+contains "오늘 주문 카드" "$DASH" '"title":"오늘 주문"'
+contains "오늘 주문 3건" "$DASH" '"value":3'
+contains "입금대기 부가문구 (ctx.t)" "$DASH" "입금대기 3건"
+contains "코어 회원 통계" "$DASH" '"members":'
+contains "카드는 관리 화면으로 연결" "$DASH" '"link":"/admin/x/brick-shop/orders"'
+check "비로그인은 대시보드 불가" "$(code "$API/api/admin/dashboard")" "401"
+
 echo "── 재고 소진 후"
 printf '{"items":[{"productId":"%s","quantity":1}],"orderer":{"ordererName":"늦은손님","ordererPhone":"010-0000-0000","postcode":"06236","address1":"서울"}}' "$PID" > "$TMP/late.json"
 check "품절 상품 주문 차단" \

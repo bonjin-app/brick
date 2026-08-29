@@ -165,6 +165,37 @@ export interface PluginContext {
    * 게시글과 상품은 각 플러그인이 등록해야 찾을 수 있다.
    */
   registerSearchSource(source: SearchSource): void;
+
+  /**
+   * 관리자 대시보드 카드를 등록한다.
+   *
+   * 관리자의 첫 화면은 "오늘의 사이트"를 보여줘야 한다 — 오늘 주문, 오늘
+   * 방문자, 답변을 기다리는 문의. 그 숫자들은 전부 플러그인 소유의 테이블에
+   * 있으므로 코어는 알 수 없다. 등록하지 않으면 운영자는 그 숫자를 보러
+   * 매번 각 화면으로 들어가야 한다.
+   *
+   * `title` 은 선언 문자열이라 관리 라벨과 같은 gettext 방식이다 — 원문이
+   * 번역 키이고 locales/en.json 에 `"오늘 주문": "Orders today"` 를 추가한다.
+   * `load` 는 요청 시점에 실행되므로 동적 문구(sub)는 ctx.t 로 만들면 된다.
+   */
+  registerDashboardCard(card: DashboardCard): void;
+}
+
+/**
+ * 관리자 대시보드 카드 하나.
+ *
+ * `load` 실패는 그 카드만 오류로 표시된다 — 플러그인 하나가 죽었다고
+ * 대시보드 전체가 비면 운영자는 아무것도 볼 수 없다.
+ */
+export interface DashboardCard {
+  /** 카드 제목 (예: "오늘 주문"). 원문이 번역 키다 */
+  title: string;
+  /** 표시 순서. 작을수록 먼저 (기본 100) */
+  order?: number;
+  /** 누르면 이동할 관리자 경로 (예: "/admin/x/brick-shop/orders") */
+  link?: string;
+  /** 요청 시점에 값을 계산한다. sub 는 값 아래 작은 글씨 */
+  load(): Promise<{ value: string | number; sub?: string }>;
 }
 
 /** 연결할 수 있는 주소 하나 */

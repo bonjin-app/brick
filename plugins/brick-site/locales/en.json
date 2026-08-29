@@ -33,5 +33,7 @@
   "클릭 시 이동": "Link URL",
   "팝업": "Popup",
   "팝업 · 배너": "Popups · Banners",
-  "현재 창": "Same window"
+  "현재 창": "Same window",
+  "dash.yesterday": "Yesterday: {n}",
+  "오늘 방문자": "Visitors today"
 }

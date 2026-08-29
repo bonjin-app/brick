@@ -2174,6 +2174,28 @@ export default definePlugin(async (ctx) => {
 
   registerStorefrontBlocks(ctx, db, settings);
 
+  // 대시보드 — 운영자가 매일 아침 보는 숫자. "오늘"은 리포트와 같은 사이트 시간대다
+  ctx.registerDashboardCard({
+    title: "오늘 주문",
+    order: 20,
+    link: "/admin/x/brick-shop/orders",
+    load: async () => {
+      const { rows } = await db.execute(sql`
+        SELECT
+          count(*) FILTER (
+            WHERE (created_at AT TIME ZONE ${SITE_TZ})::date = (now() AT TIME ZONE ${SITE_TZ})::date
+              AND status <> 'cancelled'
+          ) AS today,
+          count(*) FILTER (WHERE status = 'pending') AS awaiting
+        FROM shop_orders
+      `);
+      return {
+        value: Number(rows[0]?.today ?? 0),
+        sub: ctx.t("dash.awaitingPayment", { n: Number(rows[0]?.awaiting ?? 0) }),
+      };
+    },
+  });
+
   return {};
 });
 

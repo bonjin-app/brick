@@ -122,5 +122,7 @@
   "파일 첨부 허용": "Allow file attachments",
   "페이지당 글 수": "Posts per page",
   "표시 순서": "Display order",
-  "회원": "Members"
+  "회원": "Members",
+  "dash.comments": "Comments: {n}",
+  "오늘 글": "Posts today"
 }

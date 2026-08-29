@@ -425,5 +425,18 @@ export default definePlugin(async (ctx) => {
 
   registerHelpdeskBlocks(ctx, db, settings);
 
+  // 대시보드 — 답변을 기다리는 문의는 운영자가 가장 먼저 봐야 할 숫자다
+  ctx.registerDashboardCard({
+    title: "답변 대기 문의",
+    order: 40,
+    link: "/admin/x/brick-helpdesk/tickets",
+    load: async () => {
+      const { rows } = await db.execute(sql`
+        SELECT count(*) AS n FROM help_tickets WHERE status = 'open'
+      `);
+      return { value: Number(rows[0]?.n ?? 0) };
+    },
+  });
+
   return {};
 });

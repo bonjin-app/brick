@@ -50,6 +50,27 @@ gettext 방식입니다: **선언에 쓴 원문이 곧 카탈로그 키**이고,
 
 번역이 없는 라벨은 원문이 그대로 나갑니다 (선언 코드는 바꿀 것이 없습니다).
 
+## 대시보드 카드 (registerDashboardCard)
+
+관리자 첫 화면에 "오늘의 숫자"를 올립니다. 등록하지 않으면 운영자는
+그 숫자를 보러 매번 관리 화면으로 들어가야 합니다.
+
+```ts
+ctx.registerDashboardCard({
+  title: "오늘 주문",                       // 원문이 번역 키 (en.json 에 추가)
+  order: 20,                               // 작을수록 먼저
+  link: "/admin/x/my-plugin/orders",       // 누르면 이동 (선택)
+  load: async () => ({                     // 요청 시점에 실행
+    value: 12,
+    sub: ctx.t("dash.awaiting", { n: 3 }), // 동적 문구는 ctx.t
+  }),
+});
+```
+
+`load` 가 던지면 그 카드만 오류로 표시됩니다 — 다른 카드와 대시보드는
+그대로 나갑니다. "오늘"을 세는 쿼리는 사이트 시간대(`BRICK_TIMEZONE`,
+기본 Asia/Seoul)로 날짜를 잘라야 리포트와 숫자가 맞습니다.
+
 ## 구조
 
 ```

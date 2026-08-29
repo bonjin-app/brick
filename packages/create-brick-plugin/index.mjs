@@ -6,7 +6,7 @@
  *   npx create-brick-plugin my-plugin --display "내 플러그인"
  *
  * 만들어지는 것은 **동작하는 예제**다 — 빈 껍데기가 아니다. 방명록 하나가
- * 라우트·블록·관리 화면·마이그레이션·개인정보 파기까지 Brick 플러그인의
+ * 라우트·블록·관리 화면·대시보드 카드·마이그레이션·개인정보 파기까지 Brick 플러그인의
  * 모든 계약을 한 번씩 쓴다. 지우면서 배우는 것이 빈 파일을 채우는 것보다
  * 빠르다.
  *
@@ -267,6 +267,19 @@ export default definePlugin(async (ctx) => {
     },
   });
 
+  // ── 대시보드 카드: 관리자 첫 화면에 "오늘의 숫자"를 올린다 ──
+  // 제목은 관리 라벨과 같은 gettext 방식 — locales/en.json 에 원문을 키로 추가한다.
+  ctx.registerDashboardCard({
+    title: "오늘 방명록",
+    load: async () => {
+      const { rows } = await ctx.db.execute(sql\`
+        SELECT count(*) AS n FROM ${table}_entries
+        WHERE created_at >= date_trunc('day', now())
+      \`);
+      return { value: Number(rows[0]?.n ?? 0) };
+    },
+  });
+
   ctx.logger.log("활성화됨");
   return {};
 });
@@ -275,7 +288,7 @@ export default definePlugin(async (ctx) => {
 const readme = `# ${display}
 
 \`create-brick-plugin\` 으로 시작한 Brick 플러그인입니다.
-방명록 예제가 라우트·블록·관리 화면·마이그레이션·개인정보 파기를 전부
+방명록 예제가 라우트·블록·관리 화면·대시보드 카드·마이그레이션·개인정보 파기를 전부
 한 번씩 씁니다 — 지우면서 바꿔 나가세요.
 
 ## 빌드와 설치
@@ -326,7 +339,8 @@ const localeKo = `{
 }
 `;
 const localeEn = `{
-  "entries.empty": "No entries yet."
+  "entries.empty": "No entries yet.",
+  "오늘 방명록": "Guestbook today"
 }
 `;
 

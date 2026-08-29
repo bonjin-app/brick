@@ -59,6 +59,10 @@ const KO = {
   "adminLogin.forgot": "비밀번호를 잊으셨나요?",
 
   "dash.activeTheme": "활성 테마",
+  "dash.members": "회원",
+  "dash.membersToday": "오늘 가입 {n}명",
+  "dash.pages": "발행 페이지",
+  "dash.cardError": "불러오지 못했습니다",
 
   "settings.title": "사이트 설정",
   "settings.siteName": "사이트 이름",
@@ -285,6 +289,10 @@ const EN: Record<keyof typeof KO, string> = {
   "adminLogin.forgot": "Forgot your password?",
 
   "dash.activeTheme": "Active theme",
+  "dash.members": "Members",
+  "dash.membersToday": "{n} joined today",
+  "dash.pages": "Published pages",
+  "dash.cardError": "Failed to load",
 
   "settings.title": "Site settings",
   "settings.siteName": "Site name",

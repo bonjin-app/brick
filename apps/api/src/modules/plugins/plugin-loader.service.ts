@@ -8,7 +8,7 @@ import type { BrickDb } from "@brick/database";
 import { installedPlugins, siteSettings } from "@brick/database";
 import type { PluginManifest } from "@brick/shared";
 import type { PluginContext, PluginInstance, BlockDefinition, PluginRouteHandler, PluginDb, AdminResource, HookBus, CacheProvider, QueueProvider, StorageProvider, MailProvider, CaptchaProvider, PersonalDataEraser, SitemapSource,
-  SearchSource, LinkTargetSource, Locale, MessageCatalog } from "@brick/core";
+  SearchSource, LinkTargetSource, DashboardCard, Locale, MessageCatalog } from "@brick/core";
 import { AVAILABLE_LOCALES, DEFAULT_LOCALE, makeTranslator, normalizeLocale } from "@brick/core";
 import { DB, HOOKS, CACHE, QUEUE, STORAGE, MAIL, CAPTCHA, ENV } from "../../runtime.module.js";
 import type { BrickEnv } from "../../config/env.js";
@@ -98,6 +98,8 @@ export class PluginLoaderService implements OnModuleInit {
   readonly searchSources: Array<SearchSource & { plugin: string }> = [];
   /** 연결 대상 공급자 — 메뉴·팝업에서 주소를 직접 타이핑하지 않게 한다 */
   readonly linkTargets: Array<LinkTargetSource & { plugin: string }> = [];
+  /** 대시보드 카드 — 관리자 첫 화면의 "오늘의 사이트" 숫자는 플러그인이 안다 */
+  readonly dashboardCards: Array<DashboardCard & { plugin: string }> = [];
   /**
    * 플러그인 간 서비스 레지스트리.
    * 훅으로 표현할 수 없는 협력(호출자 트랜잭션 참여 등)에 쓴다.
@@ -260,6 +262,9 @@ export class PluginLoaderService implements OnModuleInit {
     for (let i = this.linkTargets.length - 1; i >= 0; i--) {
       if (this.linkTargets[i].plugin === name) this.linkTargets.splice(i, 1);
     }
+    for (let i = this.dashboardCards.length - 1; i >= 0; i--) {
+      if (this.dashboardCards[i].plugin === name) this.dashboardCards.splice(i, 1);
+    }
     this.logger.log(`plugin "${name}" deactivated`);
   }
 
@@ -327,6 +332,13 @@ export class PluginLoaderService implements OnModuleInit {
     if (locale === DEFAULT_LOCALE) return menu;
     const catalog = this.pluginCatalogs.get(menu.plugin)?.[locale] ?? {};
     return catalog[menu.label] !== undefined ? { ...menu, label: catalog[menu.label] } : menu;
+  }
+
+  /** 대시보드 카드 제목 — 관리 라벨과 같은 gettext 규칙 (원문=키, 폴백=원문) */
+  localizeCardTitle(plugin: string, title: string): string {
+    const locale = this.localeCache.value;
+    if (locale === DEFAULT_LOCALE) return title;
+    return this.pluginCatalogs.get(plugin)?.[locale]?.[title] ?? title;
   }
 
   private async loadPluginCatalogs(name: string): Promise<void> {
@@ -460,6 +472,10 @@ export class PluginLoaderService implements OnModuleInit {
       registerLinkTarget: (source) => {
         this.linkTargets.push({ ...source, plugin: pluginName });
         this.logger.log(`plugin "${pluginName}" registers link target "${source.label}"`);
+      },
+      registerDashboardCard: (card) => {
+        this.dashboardCards.push({ ...card, plugin: pluginName });
+        this.logger.log(`plugin "${pluginName}" registers dashboard card "${card.title}"`);
       },
     };
   }

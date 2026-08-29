@@ -179,10 +179,16 @@ curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' 
   -d '{"site.locale":"ko"}' >/dev/null
 contains "ko 복귀" "$(curl -s "$API/api/render/page?path=guests")" "아직 글이 없습니다"
 
+echo "── 대시보드 카드 (registerDashboardCard)"
+contains "카드가 대시보드에 나온다" \
+  "$(curl -s -b "$CK" "$API/api/admin/dashboard")" '"title":"오늘 방명록"'
+
 echo "── 비활성화하면 라우트가 닫힌다"
 curl -s -b "$CK" -X POST "$API/api/plugins/guestbook/deactivate" >/dev/null
 NOTFOUND="$(code "$GB/entries")"
 [[ "$NOTFOUND" == "404" || "$NOTFOUND" == "400" ]] && ok "비활성화 후 라우트 없음 ($NOTFOUND)" || bad "비활성화 후에도 라우트가 산다 ($NOTFOUND)"
+absent "비활성화 후 카드도 사라진다" \
+  "$(curl -s -b "$CK" "$API/api/admin/dashboard")" '"title":"오늘 방명록"'
 
 echo
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"

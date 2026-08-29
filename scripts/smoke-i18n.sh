@@ -162,6 +162,9 @@ RES_EN="$(curl -s -b "$CK" "$API/api/admin/resources/brick-shop/orders")"
 contains "필드 라벨이 영어" "$RES_EN" '"label":"Order no."'
 contains "옵션 라벨이 영어" "$RES_EN" '"label":"Paid"'
 contains "설명(help)도 영어" "$RES_EN" "restores stock automatically"
+DASH_EN="$(curl -s -b "$CK" "$API/api/admin/dashboard")"
+contains "대시보드 카드 제목도 영어" "$DASH_EN" '"title":"Orders today"'
+contains "카드 부가문구(ctx.t)도 영어" "$DASH_EN" "Awaiting payment: 0"
 
 echo "── 한국어로 복귀"
 curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' \
