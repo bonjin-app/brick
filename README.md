@@ -27,7 +27,7 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-2455%20passing-2ea043.svg" alt="스모크 테스트 2455개" />
+  <img src="https://img.shields.io/badge/E2E-2458%20passing-2ea043.svg" alt="스모크 테스트 2458개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
 </p>
 
@@ -233,14 +233,15 @@ DB 마이그레이션은 컨테이너가 부팅할 때 스스로 적용합니다
 - **백업 / 복원 CLI** — pg_dump 기반
 - **헬스체크** — `/healthz` · `/readyz`
 
-- **다국어** — `site.locale` 하나로 공개 화면 전부(404 · 테마 라벨 · `lang` · 게시판 ·
-  쇼핑몰 · 로그인/가입/비밀번호 화면)가 함께 바뀝니다. 플러그인은 `ctx.t` + 동봉
-  카탈로그. 빠진 키는 ko 폴백 + 로그
+- **다국어** — `site.locale` 하나로 공개 화면·관리 화면·플러그인이 전부 함께
+  바뀝니다(ko/en). 플러그인 공개 문자열은 `ctx.t` + 동봉 카탈로그, 관리 선언
+  라벨은 gettext 방식(원문이 곧 키 — `locales/en.json` 에 `"주문": "Orders"`).
+  빠진 키는 ko 폴백 + 로그
 
 ### 예정
 
-다국어 4b(플러그인 선언 라벨의 서빙 시점 번역) · SDK npm 공개 · 첫 릴리스.
-1.0 완성형 정의 네 문장의 코드 요건은 충족됐습니다 — 정의와 순서는 [로드맵](docs/roadmap.md)에 있습니다.
+SDK npm 공개 · 첫 릴리스.
+1.0 완성형 정의 네 문장의 코드 요건은 전부 충족됐습니다 — 정의와 순서는 [로드맵](docs/roadmap.md)에 있습니다.
 
 ---
 
@@ -303,7 +304,7 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 2,455개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 2,458개 항목):
 
 | 수트 | 항목 | 무엇을 못박는가 |
 |---|---:|---|
@@ -338,7 +339,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `smoke-create-plugin.sh` | 43 | 템플릿 생성→빌드→ZIP 설치→계약 전부 실사용 · escapeHtml · 실제 탈퇴로 파기 검증 |
 | `smoke-openapi.sh` | 24 | 실제 라우트에서 생성 · 플러그인 켜고 끄면 문서도 변함 · 자체 완결 문서 페이지 |
 | `smoke-registry.sh` | 23 | 서명 통과해야 설치 · 키·주소 고정(TOFU) · 레지스트리 키 바꿔치기 방어 |
-| `smoke-i18n.sh` | 38 | 언어가 실제 렌더를 바꿈 · 즉시 반영 · ko 폴백+로그 · 값은 번역 안 함 |
+| `smoke-i18n.sh` | 41 | 언어가 실제 렌더를 바꿈 · 즉시 반영 · ko 폴백+로그 · 값은 번역 안 함 · 관리 선언 라벨 · 템플릿 잔해 금지 |
 
 
 ```bash
