@@ -290,6 +290,45 @@ export class PluginLoaderService implements OnModuleInit {
     }
   }
 
+  /**
+   * 플러그인이 **선언**한 관리 라벨(AdminResource·관리 메뉴)의 서빙 시점 번역.
+   *
+   * 선언은 문자열이라 ctx.t 를 쓸 수 없다(활성화 한 번에 고정되면 언어 변경을
+   * 못 따라간다). 대신 gettext 방식을 쓴다 — **원문(한국어)이 곧 카탈로그
+   * 키**다. 플러그인은 locales/en.json 에 `"주문": "Orders"` 를 추가하면 되고,
+   * 선언 코드는 한 줄도 바뀌지 않는다. 번역이 없으면 원문이 그대로 나간다 —
+   * 자연 폴백이라 빠짐 로그는 내지 않는다(전 라벨이 원문키라 노이즈가 된다).
+   */
+  localizeAdminResource<T extends AdminResource>(plugin: string, resource: T): T {
+    const locale = this.localeCache.value;
+    if (locale === DEFAULT_LOCALE) return resource;
+    const catalog = this.pluginCatalogs.get(plugin)?.[locale] ?? {};
+    const tr = <S extends string | undefined>(s: S): S =>
+      (s !== undefined && catalog[s] !== undefined ? (catalog[s] as S) : s);
+    return {
+      ...resource,
+      title: tr(resource.title),
+      itemLabel: tr(resource.itemLabel),
+      description: tr(resource.description),
+      fields: resource.fields.map((f) => ({
+        ...f,
+        label: tr(f.label),
+        help: tr((f as { help?: string }).help),
+        placeholder: tr((f as { placeholder?: string }).placeholder),
+        options: (f as { options?: Array<{ value: string; label: string }> }).options?.map(
+          (o) => ({ ...o, label: tr(o.label) }),
+        ),
+      })),
+    };
+  }
+
+  localizeAdminMenu<T extends { plugin: string; label: string }>(menu: T): T {
+    const locale = this.localeCache.value;
+    if (locale === DEFAULT_LOCALE) return menu;
+    const catalog = this.pluginCatalogs.get(menu.plugin)?.[locale] ?? {};
+    return catalog[menu.label] !== undefined ? { ...menu, label: catalog[menu.label] } : menu;
+  }
+
   private async loadPluginCatalogs(name: string): Promise<void> {
     const dir = join(this.pluginsDir, name, "locales");
     const catalogs: Partial<Record<Locale, MessageCatalog>> = {};

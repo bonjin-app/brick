@@ -131,14 +131,17 @@ export class PluginsController {
    */
   @Get("admin/nav")
   @UseGuards(AdminGuard)
-  adminNav() {
+  async adminNav() {
+    // 선언 라벨은 서빙 시점에 번역한다 (원문=키 — 로더 localizeAdminResource)
+    await this.loader.refreshLocale();
     return {
-      menus: this.loader.adminMenus,
+      menus: this.loader.adminMenus.map((m) => this.loader.localizeAdminMenu(m)),
       resources: this.loader.adminResources
         .slice()
         .sort((a, b) => (a.order ?? 100) - (b.order ?? 100))
+        .map((r) => this.loader.localizeAdminResource(r.plugin, r))
         .map((r) => ({
-          plugin: r.plugin,
+          plugin: (r as { plugin: string }).plugin,
           name: r.name,
           title: r.title,
           itemLabel: r.itemLabel,
@@ -150,10 +153,11 @@ export class PluginsController {
   /** 특정 리소스의 전체 스키마 — 관리자가 목록/폼 화면을 생성하는 데 쓴다 */
   @Get("admin/resources/:plugin/:name")
   @UseGuards(AdminGuard)
-  adminResource(@Param("plugin") plugin: string, @Param("name") name: string) {
+  async adminResource(@Param("plugin") plugin: string, @Param("name") name: string) {
     const found = this.loader.adminResources.find((r) => r.plugin === plugin && r.name === name);
     if (!found) throw new NotFoundException(`unknown admin resource: ${plugin}/${name}`);
-    return found;
+    await this.loader.refreshLocale();
+    return this.loader.localizeAdminResource(plugin, found);
   }
 
   /**

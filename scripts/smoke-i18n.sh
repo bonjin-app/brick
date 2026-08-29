@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# 다국어(i18n) E2E 스모크 — 1단계(카탈로그) + 2단계(코어 공개 화면).
+# 다국어(i18n) E2E 스모크 — 카탈로그 규칙 + 코어 공개 화면 + 플러그인 공개
+# 문자열(ctx.t) + 플러그인 관리 선언 라벨(gettext, 서빙 시점 번역).
 #
 # 못박는 것:
 #   - site.locale 이 실제 렌더를 바꾸는가 (404 문구 · 테마 푸터 라벨 · lang)
@@ -144,6 +145,16 @@ contains "품절 배지가 영어" "$DETAIL_EN" "Sold out"
 contains "재입고 폼이 영어" "$DETAIL_EN" "Notify me on restock"
 contains "후기 탭이 영어" "$DETAIL_EN" "Reviews"
 
+echo "── 관리 선언 라벨도 언어를 따라간다 (gettext — 원문이 키, 서빙 시점 번역)"
+NAV_EN="$(curl -s -b "$CK" "$API/api/admin/nav")"
+contains "리소스 제목이 영어 (주문→Orders)" "$NAV_EN" '"title":"Orders"'
+contains "게시판도 영어 (게시판→Boards)" "$NAV_EN" '"title":"Boards"'
+absent  "원문이 남지 않는다" "$NAV_EN" '"title":"주문"'
+RES_EN="$(curl -s -b "$CK" "$API/api/admin/resources/brick-shop/orders")"
+contains "필드 라벨이 영어" "$RES_EN" '"label":"Order no."'
+contains "옵션 라벨이 영어" "$RES_EN" '"label":"Paid"'
+contains "설명(help)도 영어" "$RES_EN" "restores stock automatically"
+
 echo "── 한국어로 복귀"
 curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' \
   -d '{"site.locale":"ko"}' >/dev/null
@@ -152,6 +163,7 @@ contains "다시 한국어" "$BACK" "페이지를 찾을 수 없습니다"
 contains "게시판도 한국어 복귀" "$(curl -s "$API/api/render/page?path=board/news")" "첫 글을 작성해보세요."
 contains "쇼핑몰도 한국어 복귀" "$(curl -s "$API/api/render/page?path=shop/tea")" "재입고 알림 신청"
 contains "lang 복귀" "$BACK" 'lang=\"ko\"'
+contains "관리 라벨도 원문 복귀" "$(curl -s -b "$CK" "$API/api/admin/nav")" '"title":"주문"'
 
 echo
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"

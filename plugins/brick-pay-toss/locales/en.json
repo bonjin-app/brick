@@ -1,0 +1,11 @@
+{
+  "test_ck_ 또는 live_ck_ 로 시작합니다. 공개되어도 되는 값입니다.": "Starts with test_ck_ or live_ck_. Safe to expose publicly.",
+  "test_sk_ 또는 live_sk_ 로 시작합니다. 절대 외부에 노출하지 마세요.": "Starts with test_sk_ or live_sk_. Never expose it.",
+  "결제 사용": "Enable payments",
+  "설정": "Settings",
+  "시크릿 키": "Secret key",
+  "시크릿 키 설정됨": "Secret key is set",
+  "클라이언트 키": "Client key",
+  "토스페이먼츠": "Toss Payments",
+  "토스페이먼츠 개발자센터에서 발급한 키를 입력하세요. 시크릿 키는 저장 후 다시 표시되지 않으며, 비워두고 저장하면 기존 값이 유지됩니다.": "Enter the keys issued by the Toss Payments developer center. The secret key is never shown again after saving; saving with the field empty keeps the existing value."
+}

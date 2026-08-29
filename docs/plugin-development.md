@@ -38,6 +38,18 @@ ctx.locale                        // 현재 사이트 언어 ("ko" | "en")
 번역이 빠지면 빠진 것이 보입니다. 템플릿(`npm create brick-plugin`)이 이
 구조를 그대로 시연합니다.
 
+**관리 화면의 선언 라벨**(registerAdminResource 의 title/label/help/
+placeholder/options, 관리 메뉴 label)은 ctx.t 를 쓰지 않습니다 — 선언은
+활성화 때 한 번 고정되어 언어 변경을 따라갈 수 없기 때문입니다. 대신
+gettext 방식입니다: **선언에 쓴 원문이 곧 카탈로그 키**이고, 서버가 서빙
+시점에 번역합니다. `locales/en.json` 에 원문을 키로 추가하면 됩니다:
+
+```json
+{ "주문": "Orders", "주문번호": "Order no." }
+```
+
+번역이 없는 라벨은 원문이 그대로 나갑니다 (선언 코드는 바꿀 것이 없습니다).
+
 ## 구조
 
 ```
