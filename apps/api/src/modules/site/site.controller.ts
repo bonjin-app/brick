@@ -7,7 +7,7 @@ import { uuidv7 } from "uuidv7";
 import type { BrickDb } from "@brick/database";
 import { menus, pages, siteSettings } from "@brick/database";
 import type { CacheProvider, HookBus } from "@brick/core";
-import { AVAILABLE_LOCALES } from "@brick/core";
+import { AVAILABLE_LOCALES, normalizeLocale } from "@brick/core";
 import { AdminGuard } from "../auth/auth.guard.js";
 import { ipAllowed, parseAllowlist } from "../auth/ip-allowlist.js";
 import { AuditService } from "../audit/audit.service.js";
@@ -54,6 +54,15 @@ export class SiteController {
     @Inject(HOOKS) private readonly hooks: HookBus,
     private readonly audit: AuditService,
   ) {}
+
+  /** 사이트 언어 — **공개**. 로그인·가입 화면이 첫 페인트에 쓴다 */
+  @Get("i18n")
+  async i18n() {
+    const [row] = await this.db
+      .select().from(siteSettings)
+      .where(eq(siteSettings.key, "site.locale")).limit(1);
+    return { locale: normalizeLocale(row?.value) };
+  }
 
   // ── 사이트 설정 ────────────────────────────────────
   @Get("settings")

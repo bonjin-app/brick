@@ -95,6 +95,7 @@ check "비로그인은 설정 불가" \
   "$(code -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"site.locale":"en"}')" "401"
 
 echo "── 기본은 한국어"
+contains "locale 기본값 ko" "$(curl -s "$API/api/i18n")" '"locale":"ko"'
 KO404="$(curl -s "$API/api/render/page?path=no-such-page")"
 contains "404 문구" "$KO404" "페이지를 찾을 수 없습니다"
 contains "lang 속성" "$KO404" 'lang=\"ko\"'
@@ -104,6 +105,7 @@ contains "대표 라벨" "$KO404" "대표 홍길동"
 echo "── 영어로 전환 — 즉시 반영되어야 한다"
 contains "언어 저장" "$(curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' \
   -d '{"site.locale":"en"}')" '"ok":true'
+contains "공개 locale 엔드포인트 (웹 로그인·가입 화면이 쓴다)" "$(curl -s "$API/api/i18n")" '"locale":"en"'
 EN404="$(curl -s "$API/api/render/page?path=no-such-page")"
 contains "404 문구가 영어" "$EN404" "There is no page at /no-such-page."
 contains "제목도 영어" "$EN404" "Page not found"

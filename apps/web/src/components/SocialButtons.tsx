@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useT } from "../lib/i18n";
 
 interface Provider {
   name: string;
@@ -17,6 +18,7 @@ interface Provider {
  * 하나도 설정되지 않았으면 아무것도 그리지 않는다(구분선도 없다).
  */
 export function SocialButtons({ next = "/" }: { next?: string }) {
+  const t = useT();
   const [items, setItems] = useState<Provider[] | null>(null);
 
   useEffect(() => {
@@ -32,7 +34,7 @@ export function SocialButtons({ next = "/" }: { next?: string }) {
     <>
       <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "24px 0 16px" }}>
         <span style={{ flex: 1, height: 1, background: "#e6e6ee" }} />
-        <span style={{ fontSize: 12, color: "#999" }}>또는</span>
+        <span style={{ fontSize: 12, color: "#999" }}>{t("social.or")}</span>
         <span style={{ flex: 1, height: 1, background: "#e6e6ee" }} />
       </div>
       <div style={{ display: "grid", gap: 8 }}>
@@ -53,7 +55,7 @@ export function SocialButtons({ next = "/" }: { next?: string }) {
               color: p.name === "kakao" ? "#191600" : "#fff",
             }}
           >
-            {p.label}로 계속하기
+            {t("social.continue", { label: p.label })}
           </a>
         ))}
       </div>

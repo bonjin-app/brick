@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "../../lib/i18n";
 
 /**
  * 비밀번호 찾기.
@@ -8,6 +9,7 @@ import { useState } from "react";
  * 화면도 항상 "메일을 보냈습니다"로 안내한다.
  */
 export default function ForgotPasswordPage() {
+  const t = useT();
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -27,33 +29,33 @@ export default function ForgotPasswordPage() {
   const input = { width: "100%", padding: 10, marginTop: 4, boxSizing: "border-box" as const };
   return (
     <main style={{ fontFamily: "sans-serif", maxWidth: 400, margin: "100px auto", padding: 24 }}>
-      <h1 style={{ textAlign: "center" }}>비밀번호 찾기</h1>
+      <h1 style={{ textAlign: "center" }}>{t("forgot.title")}</h1>
       {sent ? (
         <div style={{ background: "#f2f8f4", border: "1px solid #cde8d6", borderRadius: 8, padding: 20 }}>
           <p style={{ margin: 0 }}>
-            <strong>{email}</strong> 로 재설정 링크를 보냈습니다.
+            <strong>{email}</strong>{t("forgot.sent")}
           </p>
           <p style={{ color: "#666", fontSize: 14 }}>
-            메일이 오지 않으면 스팸함을 확인해주세요. 링크는 30분간 유효하며 한 번만 사용할 수 있습니다.
+            {t("forgot.hint")}
           </p>
-          <p style={{ fontSize: 14 }}><a href="/login">로그인으로 돌아가기</a></p>
+          <p style={{ fontSize: 14 }}><a href="/login">{t("forgot.back")}</a></p>
         </div>
       ) : (
         <>
           <p style={{ color: "#666", fontSize: 14, textAlign: "center" }}>
-            가입한 이메일 주소를 입력하면 재설정 링크를 보내드립니다.
+            {t("forgot.desc")}
           </p>
           <form onSubmit={submit}>
             <label>
-              이메일
+              {t("login.email")}
               <input style={input} type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
             </label>
             <button disabled={busy} style={{ width: "100%", padding: 12, marginTop: 20, cursor: "pointer" }}>
-              {busy ? "전송 중…" : "재설정 링크 받기"}
+              {busy ? t("forgot.busy") : t("forgot.submit")}
             </button>
           </form>
           <p style={{ textAlign: "center", marginTop: 16, fontSize: 14 }}>
-            <a href="/login">로그인</a>
+            <a href="/login">{t("login.title")}</a>
           </p>
         </>
       )}
