@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useAdminT } from "../../../../lib/i18n-admin";
 
 interface ProviderRow {
   name: string;
@@ -25,6 +26,7 @@ interface ProviderRow {
  * 비밀키를 다시 입력할 필요가 없다.
  */
 export function SocialLoginSettings() {
+  const t = useAdminT();
   const [rows, setRows] = useState<ProviderRow[]>([]);
   const [secrets, setSecrets] = useState<Record<string, string>>({});
   const [message, setMessage] = useState("");
@@ -51,11 +53,11 @@ export function SocialLoginSettings() {
       }),
     });
     if (res.ok) {
-      setMessage(`${row.label} 설정을 저장했습니다.`);
+      setMessage(t("social.savedProvider", { label: row.label }));
       setSecrets({ ...secrets, [row.name]: "" });
       reload();
     } else {
-      setMessage(`실패: ${(await res.json()).message}`);
+      setMessage(`${t("common.failPrefix")}${(await res.json()).message}`);
     }
   }
 
@@ -64,10 +66,9 @@ export function SocialLoginSettings() {
 
   return (
     <div style={{ background: "#fff", borderRadius: 8, padding: 20, maxWidth: 720, marginTop: 24 }}>
-      <h2 style={{ marginTop: 0, fontSize: 18 }}>소셜 로그인</h2>
+      <h2 style={{ marginTop: 0, fontSize: 18 }}>{t("social.title")}</h2>
       <p style={{ fontSize: 13, color: "#777", marginTop: 0 }}>
-        각 공급자의 개발자 콘솔에서 앱을 만들고, 아래 <b>Redirect URI</b>를 그대로 등록하세요.
-        Client Secret은 저장 후 다시 볼 수 없습니다 (비워두면 기존 값을 유지합니다).
+        {t("social.guide1")} {t("social.guide2")}
       </p>
 
       {rows.map((row) => (
@@ -86,7 +87,7 @@ export function SocialLoginSettings() {
             {row.label}
             {row.hasSecret && (
               <span style={{ marginLeft: 8, fontSize: 11, color: "#0a7", fontWeight: 400 }}>
-                비밀키 저장됨
+                {t("social.secretSaved")}
               </span>
             )}
           </label>
@@ -108,7 +109,7 @@ export function SocialLoginSettings() {
                 style={{ ...input, ...mono }}
                 type="password"
                 autoComplete="new-password"
-                placeholder={row.hasSecret ? "변경할 때만 입력" : ""}
+                placeholder={row.hasSecret ? t("social.secretPh") : ""}
                 value={secrets[row.name] ?? ""}
                 onChange={(e) => setSecrets({ ...secrets, [row.name]: e.target.value })}
               />
@@ -118,13 +119,13 @@ export function SocialLoginSettings() {
           {row.needsUrls && (
             <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
               <p style={{ fontSize: 12, color: "#777", margin: 0 }}>
-                표준 OpenID Connect 서버(Keycloak · Authentik · Azure AD · Okta 등)의 주소를 넣으세요.
-                보통 공급자의 <code style={mono}>/.well-known/openid-configuration</code> 에 적혀 있습니다.
+                {t("social.oidcGuide1")}{" "}
+                {t("social.oidcGuide2", { path: "/.well-known/openid-configuration" })}
               </p>
               {([
-                ["authUrl", "인증 주소 (authorization_endpoint)"],
-                ["tokenUrl", "토큰 주소 (token_endpoint)"],
-                ["profileUrl", "사용자 정보 주소 (userinfo_endpoint)"],
+                ["authUrl", t("social.authUrl")],
+                ["tokenUrl", t("social.tokenUrl")],
+                ["profileUrl", t("social.profileUrl")],
               ] as const).map(([field, label]) => (
                 <label key={field} style={{ fontSize: 13 }}>
                   {label}
@@ -150,7 +151,7 @@ export function SocialLoginSettings() {
             onClick={() => save(row)}
             style={{ cursor: "pointer", padding: "7px 16px", marginTop: 10, fontSize: 13 }}
           >
-            {row.label} 저장
+            {t("social.saveLabel", { label: row.label })}
           </button>
         </div>
       ))}

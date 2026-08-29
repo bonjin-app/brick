@@ -15,6 +15,7 @@
  * 앵커는 목록에 있을 수 없다.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useAdminT } from "../../../../lib/i18n-admin";
 
 interface MenuItem { label: string; url: string }
 interface LinkTarget { path: string; label: string; hint?: string | null }
@@ -28,6 +29,7 @@ const btn: React.CSSProperties = {
 };
 
 export default function AdminMenusPage() {
+  const t = useAdminT();
   const [items, setItems] = useState<MenuItem[]>([]);
   const [message, setMessage] = useState("");
   /** 어느 항목의 선택기를 열었나 (null 이면 닫힘) */
@@ -70,34 +72,34 @@ export default function AdminMenusPage() {
     const data = await res.json().catch(() => ({}));
     setMessage(
       res.ok
-        ? "메뉴가 저장되었습니다. 사이트에 즉시 반영됩니다."
-        : `실패: ${data.message ?? res.status}`,
+        ? t("menus.saved")
+        : `${t("common.failPrefix")}${data.message ?? res.status}`,
     );
     if (res.ok) reload();
   }
 
   return (
     <div>
-      <h1>메뉴 (헤더)</h1>
+      <h1>{t("menus.title")}</h1>
       <p style={{ color: "#666", fontSize: 14, marginTop: -8 }}>
-        <strong>연결 대상 선택</strong>을 누르면 만들어 둔 페이지·게시판·쇼핑몰 화면이 목록으로 나옵니다.
+        {t("menus.guide")}
       </p>
 
       <div style={{ background: "#fff", borderRadius: 8, padding: 16, maxWidth: 860 }}>
         {items.map((it, i) => (
           <div key={i} style={{ marginBottom: 10 }}>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <input style={{ ...input, flex: 1 }} placeholder="메뉴에 보일 이름" value={it.label}
+              <input style={{ ...input, flex: 1 }} placeholder={t("menus.labelPh")} value={it.label}
                 onChange={(e) => update(i, { label: e.target.value })} />
               <input style={{ ...input, flex: 2, fontFamily: "ui-monospace, Menlo, monospace", fontSize: 13 }}
                 placeholder="/about 또는 https://…" value={it.url}
                 onChange={(e) => update(i, { url: e.target.value })} />
               <button style={btn} onClick={() => setPickerFor(pickerFor === i ? null : i)}>
-                연결 대상 선택
+                {t("menus.pick")}
               </button>
-              <button style={btn} onClick={() => move(i, -1)} title="위로">↑</button>
-              <button style={btn} onClick={() => move(i, 1)} title="아래로">↓</button>
-              <button style={{ ...btn, color: "crimson" }} title="삭제"
+              <button style={btn} onClick={() => move(i, -1)} title={t("common.up")}>↑</button>
+              <button style={btn} onClick={() => move(i, 1)} title={t("common.down")}>↓</button>
+              <button style={{ ...btn, color: "crimson" }} title={t("common.delete")}
                 onClick={() => { setItems(items.filter((_, j) => j !== i)); setPickerFor(null); }}>✕</button>
             </div>
             {pickerFor === i && <TargetPicker onPick={(t) => pick(i, t)} onClose={() => setPickerFor(null)} />}
@@ -106,20 +108,19 @@ export default function AdminMenusPage() {
 
         <button style={{ ...btn, marginTop: 8, borderStyle: "dashed", padding: "10px 16px" }}
           onClick={() => { setItems([...items, { label: "", url: "" }]); setPickerFor(items.length); }}>
-          + 항목 추가
+          {t("menus.addItem")}
         </button>
 
         <hr style={{ margin: "16px 0", border: "none", borderTop: "1px solid #eee" }} />
         <button onClick={() => void save()}
           style={{ ...btn, padding: "10px 24px", fontWeight: 700, background: "#1a1a2e", color: "#fff", borderColor: "#1a1a2e" }}>
-          저장
+          {t("common.save")}
         </button>
-        {message && <p style={{ color: message.startsWith("실패") ? "crimson" : "#0a7" }}>{message}</p>}
+        {message && <p style={{ color: message.startsWith(t("common.failPrefix").slice(0, 2)) ? "crimson" : "#0a7" }}>{message}</p>}
       </div>
 
       <p style={{ color: "#999", fontSize: 13, marginTop: 12 }}>
-        주소는 <code>/</code> 로 시작하는 내부 경로, <code>https://</code> 외부 링크,
-        <code>#</code> 앵커만 허용됩니다.
+        {t("menus.anchorNote")}
       </p>
     </div>
   );
@@ -132,6 +133,7 @@ export default function AdminMenusPage() {
  * 받아 화면에서 걸러내면 멈춘다. 공급자가 상한을 지켜 보내준다.
  */
 function TargetPicker(props: { onPick: (t: LinkTarget) => void; onClose: () => void }) {
+  const t = useAdminT();
   const [query, setQuery] = useState("");
   const [groups, setGroups] = useState<TargetGroup[]>([]);
   const [loading, setLoading] = useState(true);
@@ -143,7 +145,7 @@ function TargetPicker(props: { onPick: (t: LinkTarget) => void; onClose: () => v
     const timer = setTimeout(() => {
       setLoading(true);
       fetch(`/api/admin/link-targets?q=${encodeURIComponent(query)}`)
-        .then((r) => (r.ok ? r.json() : Promise.reject(new Error("목록을 불러오지 못했습니다."))))
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(t("menus.loadFail")))))
         .then((d) => { setGroups(d.groups ?? []); setError(""); })
         .catch((e: Error) => setError(e.message))
         .finally(() => setLoading(false));
@@ -168,15 +170,15 @@ function TargetPicker(props: { onPick: (t: LinkTarget) => void; onClose: () => v
       boxShadow: "0 6px 20px rgba(0,0,0,.12)", maxHeight: 340, overflowY: "auto",
     }}>
       <div style={{ padding: 10, borderBottom: "1px solid #eee", position: "sticky", top: 0, background: "#fff" }}>
-        <input autoFocus style={{ ...input, width: "100%" }} placeholder="이름으로 찾기"
+        <input autoFocus style={{ ...input, width: "100%" }} placeholder={t("menus.searchPh")}
           value={query} onChange={(e) => setQuery(e.target.value)} />
       </div>
 
       {error && <p style={{ padding: 12, color: "crimson", margin: 0 }}>{error}</p>}
-      {!error && loading && total === 0 && <p style={{ padding: 12, color: "#999", margin: 0 }}>불러오는 중…</p>}
+      {!error && loading && total === 0 && <p style={{ padding: 12, color: "#999", margin: 0 }}>{t("common.loading")}</p>}
       {!error && !loading && total === 0 && (
         <p style={{ padding: 12, color: "#999", margin: 0 }}>
-          찾는 것이 없습니다. 주소를 직접 입력할 수 있습니다.
+          {t("menus.notFound")}
         </p>
       )}
 
@@ -185,16 +187,16 @@ function TargetPicker(props: { onPick: (t: LinkTarget) => void; onClose: () => v
           <div style={{
             padding: "6px 12px", background: "#f7f7fa", fontSize: 12, color: "#666", fontWeight: 600,
           }}>{g.label}</div>
-          {g.items.map((t) => (
-            <div key={t.path} onClick={() => props.onPick(t)}
+          {g.items.map((tg) => (
+            <div key={tg.path} onClick={() => props.onPick(tg)}
               style={{ padding: "9px 12px", cursor: "pointer", borderBottom: "1px solid #f4f4f7" }}
               onMouseEnter={(e) => { e.currentTarget.style.background = "#f2f6ff"; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = "#fff"; }}>
               <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
-                <strong style={{ fontSize: 14 }}>{t.label}</strong>
-                <code style={{ fontSize: 12, color: "#888" }}>{t.path}</code>
+                <strong style={{ fontSize: 14 }}>{tg.label}</strong>
+                <code style={{ fontSize: 12, color: "#888" }}>{tg.path}</code>
               </div>
-              {t.hint && <div style={{ fontSize: 12, color: "#c07000", marginTop: 2 }}>{t.hint}</div>}
+              {tg.hint && <div style={{ fontSize: 12, color: "#c07000", marginTop: 2 }}>{tg.hint}</div>}
             </div>
           ))}
         </div>

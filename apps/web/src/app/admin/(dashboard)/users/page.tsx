@@ -1,15 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useAdminT } from "../../../../lib/i18n-admin";
 
 interface UserRow {
   id: string; email: string; displayName: string;
   role: string; isActive: boolean; createdAt: string;
 }
 
-const ROLE_LABEL: Record<string, string> = { admin: "관리자", manager: "운영자", member: "회원" };
+const ROLES = ["admin", "manager", "member"] as const;
 
 export default function AdminUsersPage() {
+  const t = useAdminT();
   const [data, setData] = useState<{ items: UserRow[]; total: number }>({ items: [], total: 0 });
   const [message, setMessage] = useState("");
   // 회원 목록은 개인정보(이메일) 열람이라 최근 10분 내 비밀번호 재확인이 필요하다.
@@ -39,7 +41,7 @@ export default function AdminUsersPage() {
       body: JSON.stringify({ password }),
     });
     if (!res.ok) {
-      setReauthError((await res.json()).message ?? "확인에 실패했습니다.");
+      setReauthError((await res.json()).message ?? t("users.reauthFail"));
       return;
     }
     setPassword("");
@@ -50,22 +52,21 @@ export default function AdminUsersPage() {
   if (needReauth) {
     return (
       <div style={{ maxWidth: 420 }}>
-        <h1>회원</h1>
+        <h1>{t("users.title")}</h1>
         <div style={{ background: "#fff", borderRadius: 8, padding: 24 }}>
           <p style={{ marginTop: 0 }}>
-            회원 개인정보를 보는 화면입니다. <strong>비밀번호를 다시 확인</strong>해주세요.
-            (10분간 유지됩니다)
+            {t("users.reauthNotice")} {t("users.reauthKeep")}
           </p>
           <form onSubmit={submitReauth} style={{ display: "flex", gap: 8 }}>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="비밀번호"
+              placeholder={t("common.password")}
               autoFocus
               style={{ flex: 1, padding: 8 }}
             />
-            <button type="submit" style={{ padding: "8px 16px", cursor: "pointer" }}>확인</button>
+            <button type="submit" style={{ padding: "8px 16px", cursor: "pointer" }}>{t("common.confirm")}</button>
           </form>
           {reauthError && <p style={{ color: "#c00" }}>{reauthError}</p>}
         </div>
@@ -79,18 +80,18 @@ export default function AdminUsersPage() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     });
-    setMessage(res.ok ? "변경되었습니다." : `실패: ${(await res.json()).message}`);
+    setMessage(res.ok ? t("users.changed") : `${t("common.failPrefix")}${(await res.json()).message}`);
     reload();
   }
 
   return (
     <div>
-      <h1>회원 <span style={{ color: "#999", fontSize: 16 }}>{data.total}명</span></h1>
+      <h1>{t("users.title")} <span style={{ color: "#999", fontSize: 16 }}>{t("users.countN", { n: data.total })}</span></h1>
       {message && <p style={{ color: "#0a7" }}>{message}</p>}
       <table style={{ width: "100%", background: "#fff", borderRadius: 8, borderCollapse: "collapse" }}>
         <thead>
           <tr style={{ textAlign: "left", borderBottom: "1px solid #eee" }}>
-            <th style={{ padding: 12 }}>이름</th><th>이메일</th><th>권한</th><th>상태</th><th>가입일</th>
+            <th style={{ padding: 12 }}>{t("common.name")}</th><th>{t("common.email")}</th><th>{t("users.role")}</th><th>{t("common.status")}</th><th>{t("users.colJoined")}</th>
           </tr>
         </thead>
         <tbody>
@@ -100,21 +101,21 @@ export default function AdminUsersPage() {
               <td>{u.email}</td>
               <td>
                 <select value={u.role} onChange={(e) => patch(u.id, { role: e.target.value })}>
-                  {Object.entries(ROLE_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  {ROLES.map((v) => <option key={v} value={v}>{t(v === "admin" ? "users.roleAdmin" : v === "manager" ? "users.roleManager" : "users.roleMember")}</option>)}
                 </select>
               </td>
               <td>
                 <button onClick={() => patch(u.id, { isActive: !u.isActive })} style={{ cursor: "pointer" }}>
-                  {u.isActive ? "🟢 활성" : "🔴 정지"}
+                  {u.isActive ? t("users.active") : t("users.suspended")}
                 </button>
               </td>
-              <td style={{ color: "#999", fontSize: 13 }}>{new Date(u.createdAt).toLocaleDateString("ko-KR")}</td>
+              <td style={{ color: "#999", fontSize: 13 }}>{new Date(u.createdAt).toLocaleDateString()}</td>
             </tr>
           ))}
         </tbody>
       </table>
       <p style={{ color: "#999", fontSize: 13, marginTop: 12 }}>
-        본인 계정의 권한과 활성 상태는 변경할 수 없습니다 (관리자 전멸 방지).
+        {t("users.selfNote")}
       </p>
     </div>
   );

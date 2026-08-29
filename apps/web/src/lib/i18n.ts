@@ -110,7 +110,8 @@ const CATALOGS: Record<string, Record<string, string>> = { ko: KO, en: EN };
 /** 페이지 이동 간 재요청을 막는 모듈 캐시 */
 let cachedLocale: string | null = null;
 
-export function useT(): (key: WebMessageKey, params?: Record<string, string>) => string {
+/** 사이트 언어 훅 — 공개·관리 화면이 공유한다 */
+export function useLocale(): string {
   const [locale, setLocale] = useState(cachedLocale ?? "ko");
 
   useEffect(() => {
@@ -126,11 +127,25 @@ export function useT(): (key: WebMessageKey, params?: Record<string, string>) =>
       });
   }, []);
 
+  return locale;
+}
+
+/** 카탈로그 → 번역 함수. 규칙: 요청 언어 → ko → 키 자체 */
+export function translatorFor<K extends string>(
+  catalogs: Record<string, Record<string, string>>,
+  koCatalog: Record<K, string>,
+  locale: string,
+): (key: K, params?: Record<string, string | number>) => string {
   return (key, params) => {
-    let message = CATALOGS[locale]?.[key] ?? KO[key] ?? key;
+    let message = catalogs[locale]?.[key] ?? koCatalog[key] ?? key;
     for (const [k, v] of Object.entries(params ?? {})) {
-      message = message.replace(`{${k}}`, v);
+      message = message.replace(`{${k}}`, String(v));
     }
     return message;
   };
+}
+
+export function useT(): (key: WebMessageKey, params?: Record<string, string>) => string {
+  const locale = useLocale();
+  return translatorFor(CATALOGS, KO, locale);
 }

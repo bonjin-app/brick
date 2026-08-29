@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useAdminT } from "../../../../lib/i18n-admin";
 
 /* ── 타입 ─────────────────────────────────────────── */
 interface PageRow { id: string; slug: string; title: string; status: string; updatedAt: string }
@@ -23,6 +24,7 @@ const EMPTY: PageDraft = { slug: "", title: "", status: "draft", blocks: [], seo
 
 /* ── 페이지 목록 + 빌더 ─────────────────────────────── */
 export default function AdminPagesPage() {
+  const t = useAdminT();
   const [rows, setRows] = useState<PageRow[]>([]);
   const [catalog, setCatalog] = useState<BlockDef[]>([]);
   const [draft, setDraft] = useState<PageDraft | null>(null);
@@ -50,14 +52,14 @@ export default function AdminPagesPage() {
       body: JSON.stringify(draft),
     });
     if (res.ok) {
-      setMessage("저장 완료");
+      setMessage(t("pages.saveDone"));
       if (isNew) setDraft(null);
       reload();
-    } else setMessage(`저장 실패: ${(await res.json()).message ?? res.status}`);
+    } else setMessage(`${t("common.saveFailPrefix")}${(await res.json()).message ?? res.status}`);
   }
 
   async function remove(id: string) {
-    if (!confirm("이 페이지를 삭제할까요?")) return;
+    if (!confirm(t("pages.confirmDelete"))) return;
     await fetch(`/api/pages/${id}`, { method: "DELETE" });
     setDraft(null);
     reload();
@@ -79,15 +81,15 @@ export default function AdminPagesPage() {
 
   return (
     <div>
-      <h1>페이지</h1>
+      <h1>{t("pages.title")}</h1>
       <button onClick={() => setDraft({ ...EMPTY })} style={{ cursor: "pointer", padding: "8px 16px", marginBottom: 16 }}>
-        + 새 페이지
+        {t("pages.new")}
       </button>
       {message && <p style={{ color: "#0a7" }}>{message}</p>}
       <table style={{ width: "100%", background: "#fff", borderRadius: 8, borderCollapse: "collapse" }}>
         <thead>
           <tr style={{ textAlign: "left", borderBottom: "1px solid #eee" }}>
-            <th style={{ padding: 12 }}>제목</th><th>주소</th><th>상태</th><th>수정</th>
+            <th style={{ padding: 12 }}>{t("common.title")}</th><th>{t("pages.colSlug")}</th><th>{t("common.status")}</th><th>{t("pages.colUpdated")}</th>
           </tr>
         </thead>
         <tbody>
@@ -95,11 +97,11 @@ export default function AdminPagesPage() {
             <tr key={p.id} style={{ borderBottom: "1px solid #f3f3f3", cursor: "pointer" }} onClick={() => open(p.id)}>
               <td style={{ padding: 12 }}><strong>{p.title}</strong></td>
               <td><code>/{p.slug}</code></td>
-              <td>{p.status === "published" ? "🟢 발행" : p.status === "draft" ? "📝 초안" : "📦 보관"}</td>
+              <td>{p.status === "published" ? t("pages.published") : p.status === "draft" ? t("pages.draft") : t("pages.archived")}</td>
               <td style={{ color: "#999", fontSize: 13 }}>{new Date(p.updatedAt).toLocaleString("ko-KR")}</td>
             </tr>
           ))}
-          {!rows.length && <tr><td colSpan={4} style={{ padding: 24, color: "#999" }}>아직 페이지가 없습니다.</td></tr>}
+          {!rows.length && <tr><td colSpan={4} style={{ padding: 24, color: "#999" }}>{t("pages.empty")}</td></tr>}
         </tbody>
       </table>
     </div>
@@ -116,6 +118,7 @@ function PageEditor(props: {
   onDelete?: () => void;
   onClose: () => void;
 }) {
+  const t = useAdminT();
   const { draft, catalog, onChange } = props;
   const [picker, setPicker] = useState(false);
 
@@ -145,15 +148,15 @@ function PageEditor(props: {
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-        <button onClick={props.onClose} style={{ cursor: "pointer" }}>← 목록</button>
-        <h1 style={{ margin: 0, flex: 1 }}>{draft.id ? "페이지 편집" : "새 페이지"}</h1>
+        <button onClick={props.onClose} style={{ cursor: "pointer" }}>{t("pages.backToList")}</button>
+        <h1 style={{ margin: 0, flex: 1 }}>{draft.id ? t("pages.editTitle") : t("pages.newTitle")}</h1>
         {draft.status === "published" && draft.slug && (
           <a href={`/${draft.slug === "home" ? "" : draft.slug}`} target="_blank" style={{ fontSize: 14 }}>
-            사이트에서 보기 ↗
+            {t("pages.viewOnSite")}
           </a>
         )}
-        {props.onDelete && <button onClick={props.onDelete} style={{ cursor: "pointer", color: "crimson" }}>삭제</button>}
-        <button onClick={props.onSave} style={{ cursor: "pointer", padding: "8px 20px", fontWeight: 700 }}>저장</button>
+        {props.onDelete && <button onClick={props.onDelete} style={{ cursor: "pointer", color: "crimson" }}>{t("common.delete")}</button>}
+        <button onClick={props.onSave} style={{ cursor: "pointer", padding: "8px 20px", fontWeight: 700 }}>{t("common.save")}</button>
       </div>
       {props.message && <p style={{ color: "#0a7" }}>{props.message}</p>}
 
@@ -174,7 +177,7 @@ function PageEditor(props: {
           <div style={{ position: "relative" }}>
             <button onClick={() => setPicker(!picker)}
               style={{ width: "100%", padding: 14, cursor: "pointer", border: "2px dashed #ccc", background: "none", borderRadius: 8 }}>
-              + 블록 추가
+              {t("pages.addBlock")}
             </button>
             {picker && (
               <div style={{ background: "#fff", border: "1px solid #ddd", borderRadius: 8, marginTop: 4, boxShadow: "0 4px 12px rgba(0,0,0,.1)" }}>
@@ -191,22 +194,22 @@ function PageEditor(props: {
 
         {/* 우: 페이지 설정 */}
         <aside style={{ width: 280, background: "#fff", borderRadius: 8, padding: 16, flexShrink: 0 }}>
-          <label>제목<input style={input} value={draft.title}
+          <label>{t("common.title")}<input style={input} value={draft.title}
             onChange={(e) => onChange({ ...draft, title: e.target.value })} /></label>
-          <label style={{ display: "block", marginTop: 12 }}>주소(slug)<input style={input} value={draft.slug}
-            placeholder="home 은 홈페이지" onChange={(e) => onChange({ ...draft, slug: e.target.value })} /></label>
-          <label style={{ display: "block", marginTop: 12 }}>상태
+          <label style={{ display: "block", marginTop: 12 }}>{t("pages.fieldSlug")}<input style={input} value={draft.slug}
+            placeholder={t("pages.slugPh")} onChange={(e) => onChange({ ...draft, slug: e.target.value })} /></label>
+          <label style={{ display: "block", marginTop: 12 }}>{t("common.status")}
             <select style={input} value={draft.status} onChange={(e) => onChange({ ...draft, status: e.target.value })}>
-              <option value="draft">초안</option>
-              <option value="published">발행</option>
-              <option value="archived">보관</option>
+              <option value="draft">{t("pages.statusDraft")}</option>
+              <option value="published">{t("pages.statusPublished")}</option>
+              <option value="archived">{t("pages.statusArchived")}</option>
             </select>
           </label>
           <hr style={{ margin: "16px 0", border: "none", borderTop: "1px solid #eee" }} />
           <strong style={{ fontSize: 13, color: "#888" }}>SEO</strong>
-          <label style={{ display: "block", marginTop: 8 }}>SEO 제목<input style={input} value={draft.seo.title ?? ""}
+          <label style={{ display: "block", marginTop: 8 }}>{t("pages.seoTitle")}<input style={input} value={draft.seo.title ?? ""}
             onChange={(e) => onChange({ ...draft, seo: { ...draft.seo, title: e.target.value } })} /></label>
-          <label style={{ display: "block", marginTop: 12 }}>설명<textarea style={{ ...input, height: 60 }}
+          <label style={{ display: "block", marginTop: 12 }}>{t("common.description")}<textarea style={{ ...input, height: 60 }}
             value={draft.seo.description ?? ""}
             onChange={(e) => onChange({ ...draft, seo: { ...draft.seo, description: e.target.value } })} /></label>
         </aside>
@@ -224,6 +227,7 @@ function BlockCard(props: {
   onMoveDown: () => void;
   onRemove: () => void;
 }) {
+  const t = useAdminT();
   const { node, def } = props;
   const schema = def?.propsSchema?.properties ?? {};
   const input = { width: "100%", padding: 6, boxSizing: "border-box" as const, marginTop: 2 };
@@ -257,7 +261,7 @@ function BlockCard(props: {
           )}
         </label>
       ))}
-      {!Object.keys(schema).length && <p style={{ color: "#999", fontSize: 13 }}>설정할 속성이 없는 블록입니다.</p>}
+      {!Object.keys(schema).length && <p style={{ color: "#999", fontSize: 13 }}>{t("pages.noProps")}</p>}
     </div>
   );
 }

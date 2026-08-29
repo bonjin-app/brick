@@ -148,7 +148,7 @@ DB 마이그레이션은 컨테이너가 부팅할 때 스스로 적용합니다
          (Redis · S3는 선택 — 없으면 PG 기반 기본 구현)
 ```
 
-핵심 설계 결정 76건은 [docs/architecture.md](docs/architecture.md)에 ADR로 기록되어 있습니다.
+핵심 설계 결정 77건은 [docs/architecture.md](docs/architecture.md)에 ADR로 기록되어 있습니다.
 
 ---
 
@@ -239,7 +239,7 @@ DB 마이그레이션은 컨테이너가 부팅할 때 스스로 적용합니다
 
 ### 예정
 
-다국어 관리 화면(운영자 UI) · SDK npm 공개 · 첫 릴리스.
+다국어 4b(플러그인 선언 라벨의 서빙 시점 번역) · SDK npm 공개 · 첫 릴리스.
 1.0 완성형 정의 네 문장의 코드 요건은 충족됐습니다 — 정의와 순서는 [로드맵](docs/roadmap.md)에 있습니다.
 
 ---
@@ -427,7 +427,7 @@ docker/           Dockerfile, entrypoint
 | [방문자·팝업](docs/site-ops.md) | 접속자 집계, 팝업·배너, 개인정보 처리 |
 | [결제](docs/payments.md) | PG 설정, 결제 흐름, 위조·중복 방어, 새 PG 붙이기 |
 | [보안](docs/security.md) | 구현된 방어, **신뢰 모델**, 배포 체크리스트 |
-| [아키텍처 (ADR)](docs/architecture.md) | 설계 결정 76건과 그 이유 |
+| [아키텍처 (ADR)](docs/architecture.md) | 설계 결정 77건과 그 이유 |
 | [플러그인 개발](docs/plugin-development.md) | manifest, API, 마이그레이션, 배포 |
 | [테마 개발](docs/theme-development.md) | 템플릿 문법, 스코프, 배포 |
 | [로드맵](docs/roadmap.md) | 남은 격차와 순서 |

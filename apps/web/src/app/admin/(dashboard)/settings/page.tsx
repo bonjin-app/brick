@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { SocialLoginSettings } from "./SocialLoginSettings";
+import { useAdminT } from "../../../../lib/i18n-admin";
 
 export default function AdminSettingsPage() {
+  const t = useAdminT();
   const [settings, setSettings] = useState<Record<string, unknown>>({});
   const [message, setMessage] = useState("");
 
@@ -20,31 +22,41 @@ export default function AdminSettingsPage() {
         "site.name": String(settings["site.name"] ?? ""),
         "site.description": String(settings["site.description"] ?? ""),
         "site.registration_open": settings["site.registration_open"] !== false,
+        "site.locale": String(settings["site.locale"] ?? "ko"),
       }),
     });
-    setMessage(res.ok ? "저장되었습니다." : `실패: ${(await res.json()).message}`);
+    setMessage(res.ok ? t("common.saved") : `${t("common.failPrefix")}${(await res.json()).message}`);
   }
 
   const input = { width: "100%", padding: 8, marginTop: 4, boxSizing: "border-box" as const };
   return (
     <div>
-      <h1>사이트 설정</h1>
+      <h1>{t("settings.title")}</h1>
       <div style={{ background: "#fff", borderRadius: 8, padding: 20, maxWidth: 520 }}>
-        <label>사이트 이름
+        <label>{t("settings.siteName")}
           <input style={input} value={String(settings["site.name"] ?? "")}
             onChange={(e) => setSettings({ ...settings, "site.name": e.target.value })} />
         </label>
-        <label style={{ display: "block", marginTop: 16 }}>사이트 설명 (SEO 기본값)
+        <label style={{ display: "block", marginTop: 16 }}>{t("settings.siteDesc")}
           <textarea style={{ ...input, height: 70 }} value={String(settings["site.description"] ?? "")}
             onChange={(e) => setSettings({ ...settings, "site.description": e.target.value })} />
         </label>
         <label style={{ display: "block", marginTop: 16 }}>
           <input type="checkbox" checked={settings["site.registration_open"] !== false}
             onChange={(e) => setSettings({ ...settings, "site.registration_open": e.target.checked })} />
-          {" "}회원가입 허용
+          {" "}{t("settings.regOpen")}
+        </label>
+        <label style={{ display: "block", marginTop: 16 }}>{t("settings.locale")}
+          <select style={{ display: "block", padding: 8, marginTop: 4 }}
+            value={String(settings["site.locale"] ?? "ko")}
+            onChange={(e) => setSettings({ ...settings, "site.locale": e.target.value })}>
+            <option value="ko">한국어</option>
+            <option value="en">English</option>
+          </select>
+          <small style={{ color: "#888" }}>{t("settings.localeHint")}</small>
         </label>
         <button onClick={save} style={{ cursor: "pointer", padding: "10px 24px", marginTop: 24, fontWeight: 700 }}>
-          저장
+          {t("common.save")}
         </button>
         {message && <p style={{ color: "#0a7" }}>{message}</p>}
       </div>

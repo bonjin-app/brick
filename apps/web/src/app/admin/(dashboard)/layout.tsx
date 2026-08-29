@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import { useAdminT } from "../../../lib/i18n-admin";
 
 interface NavResource { plugin: string; name: string; title: string }
 interface NavMenu { plugin: string; label: string; path: string; icon?: string }
@@ -11,6 +12,7 @@ interface NavMenu { plugin: string; label: string; path: string; icon?: string }
  * (플러그인이 ZIP으로 설치되어도 관리 화면이 즉시 나타난다).
  */
 export default function AdminLayout({ children }: { children: ReactNode }) {
+  const t = useAdminT();
   const [user, setUser] = useState<{ displayName: string } | null | undefined>(undefined);
   const [nav, setNav] = useState<{ menus: NavMenu[]; resources: NavResource[] }>({ menus: [], resources: [] });
 
@@ -27,7 +29,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       });
   }, []);
 
-  if (user === undefined) return <p style={{ fontFamily: "sans-serif", padding: 40 }}>확인 중…</p>;
+  if (user === undefined) return <p style={{ fontFamily: "sans-serif", padding: 40 }}>{t("nav.checking")}</p>;
   if (!user) return null;
 
   async function logout() {
@@ -40,15 +42,15 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       <aside style={{ width: 210, background: "#1e1e2e", color: "#fff", flexShrink: 0 }}>
         <div style={{ padding: 16, fontWeight: 700, fontSize: 18 }}>BRICK</div>
         <nav>
-          <a style={link} href="/admin">대시보드</a>
-          <a style={link} href="/admin/pages">페이지</a>
-          <a style={link} href="/admin/media">미디어</a>
-          <a style={link} href="/admin/menus">메뉴</a>
-          <a style={link} href="/admin/users">회원</a>
+          <a style={link} href="/admin">{t("nav.dashboard")}</a>
+          <a style={link} href="/admin/pages">{t("nav.pages")}</a>
+          <a style={link} href="/admin/media">{t("nav.media")}</a>
+          <a style={link} href="/admin/menus">{t("nav.menus")}</a>
+          <a style={link} href="/admin/users">{t("nav.users")}</a>
 
           {(nav.resources.length > 0 || nav.menus.length > 0) && (
             <>
-              <div style={sectionLabel}>플러그인</div>
+              <div style={sectionLabel}>{t("nav.plugins")}</div>
               {nav.resources.map((r) => (
                 <a key={`${r.plugin}/${r.name}`} style={link} href={`/admin/x/${r.plugin}/${r.name}`}>
                   {r.title}
@@ -60,16 +62,16 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             </>
           )}
 
-          <div style={sectionLabel}>시스템</div>
-          <a style={link} href="/admin/plugins">플러그인</a>
-          <a style={link} href="/admin/themes">테마</a>
-          <a style={link} href="/admin/settings">설정</a>
-          <a style={link} href="/admin/search">검색 분석</a>
-          <a style={link} href="/admin/audit">감사 로그</a>
+          <div style={sectionLabel}>{t("nav.system")}</div>
+          <a style={link} href="/admin/plugins">{t("nav.plugins")}</a>
+          <a style={link} href="/admin/themes">{t("nav.themes")}</a>
+          <a style={link} href="/admin/settings">{t("nav.settings")}</a>
+          <a style={link} href="/admin/search">{t("nav.search")}</a>
+          <a style={link} href="/admin/audit">{t("nav.audit")}</a>
         </nav>
         <div style={{ padding: 16, marginTop: 20, fontSize: 13, color: "#aaa", borderTop: "1px solid #2c2c40" }}>
           {user.displayName}
-          <button onClick={logout} style={{ display: "block", marginTop: 8, cursor: "pointer" }}>로그아웃</button>
+          <button onClick={logout} style={{ display: "block", marginTop: 8, cursor: "pointer" }}>{t("nav.logout")}</button>
         </div>
       </aside>
       <main style={{ flex: 1, padding: 32, background: "#f6f6f9", minWidth: 0 }}>{children}</main>

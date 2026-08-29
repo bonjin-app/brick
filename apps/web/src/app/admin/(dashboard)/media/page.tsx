@@ -1,12 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useAdminT } from "../../../../lib/i18n-admin";
 
 interface MediaRow {
   id: string; url: string; fileName: string; contentType: string; size: string; createdAt: string;
 }
 
 export default function AdminMediaPage() {
+  const t = useAdminT();
   const [data, setData] = useState<{ items: MediaRow[]; total: number }>({ items: [], total: 0 });
   const [message, setMessage] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
@@ -23,13 +25,13 @@ export default function AdminMediaPage() {
     const fd = new FormData();
     fd.append("file", file);
     const res = await fetch("/api/media/upload", { method: "POST", body: fd });
-    setMessage(res.ok ? "업로드 완료" : `실패: ${(await res.json()).message}`);
+    setMessage(res.ok ? t("media.done") : `${t("common.failPrefix")}${(await res.json()).message}`);
     if (fileRef.current) fileRef.current.value = "";
     reload();
   }
 
   async function remove(id: string) {
-    if (!confirm("이 파일을 삭제할까요? 되돌릴 수 없습니다.")) return;
+    if (!confirm(t("media.confirmDelete"))) return;
     await fetch(`/api/media/${id}`, { method: "DELETE" });
     reload();
   }
@@ -42,13 +44,13 @@ export default function AdminMediaPage() {
   };
   return (
     <div>
-      <h1>미디어 <span style={{ color: "#999", fontSize: 16 }}>{data.total}개</span></h1>
+      <h1>{t("media.title")} <span style={{ color: "#999", fontSize: 16 }}>{t("media.countN", { n: data.total })}</span></h1>
       <form onSubmit={upload} style={{ background: "#fff", padding: 16, borderRadius: 8, marginBottom: 24 }}>
-        <strong>파일 업로드</strong>{" "}
+        <strong>{t("media.upload")}</strong>{" "}
         <input ref={fileRef} type="file" required />{" "}
-        <button style={{ cursor: "pointer" }}>업로드</button>
+        <button style={{ cursor: "pointer" }}>{t("media.uploadBtn")}</button>
         <span style={{ marginLeft: 8, color: "#888", fontSize: 13 }}>
-          이미지 / PDF / 동영상 / ZIP — 실행 가능한 형식은 차단됩니다
+          {t("media.hint")}
         </span>
       </form>
       {message && <p style={{ color: "#0a7" }}>{message}</p>}
@@ -63,12 +65,12 @@ export default function AdminMediaPage() {
             <div style={{ marginTop: 8, wordBreak: "break-all" }}>{f.fileName}</div>
             <div style={{ color: "#999" }}>{humanSize(Number(f.size))}</div>
             <div style={{ marginTop: 6, display: "flex", gap: 8 }}>
-              <button onClick={() => navigator.clipboard.writeText(f.url)} style={{ cursor: "pointer" }}>URL 복사</button>
-              <button onClick={() => remove(f.id)} style={{ cursor: "pointer", color: "crimson" }}>삭제</button>
+              <button onClick={() => navigator.clipboard.writeText(f.url)} style={{ cursor: "pointer" }}>{t("media.copyUrl")}</button>
+              <button onClick={() => remove(f.id)} style={{ cursor: "pointer", color: "crimson" }}>{t("common.delete")}</button>
             </div>
           </div>
         ))}
-        {!data.items.length && <p style={{ color: "#999" }}>아직 업로드된 파일이 없습니다.</p>}
+        {!data.items.length && <p style={{ color: "#999" }}>{t("media.empty")}</p>}
       </div>
     </div>
   );
