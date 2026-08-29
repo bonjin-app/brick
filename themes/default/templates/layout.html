@@ -22,12 +22,12 @@
   </main>
   <footer class="brick-footer">
     {{#if site.business}}
-    <!--
+    {{!--
       사업자정보 — 전자상거래법 제13조상 표시 의무.
       값은 관리자 → 설정 → 사업자정보에서 입력하고, 없는 항목은 내려오지 않으므로
-      각 항목을 {{#if}} 로 감싼다.
-    -->
-    <!-- 라벨은 t 로 온다 (site.locale) — 값이 아니라 라벨만 번역된다 -->
+      각 항목을 조건 블록으로 감싼다. 라벨은 t 로 온다 (site.locale) —
+      값이 아니라 라벨만 번역된다.
+    --}}
     <div class="brick-business">
       {{#if site.business.companyName}}<span>{{ t.footer.company }} <b>{{ site.business.companyName }}</b></span>{{/if}}
       {{#if site.business.representative}}<span>{{ t.footer.representative }} {{ site.business.representative }}</span>{{/if}}

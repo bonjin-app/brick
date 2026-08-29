@@ -84,6 +84,13 @@ fi
 curl -s -c "$CK" -X POST "$API/api/auth/login" -H 'content-type: application/json' \
   -d '{"email":"admin@i18n.test","password":"adminpass123"}' >/dev/null
 
+# 사업자정보 설정 **전** — 바깥 {{#if site.business}} 가 falsy 인 경로.
+# 같은 종류 블록 중첩을 non-greedy 로 자르던 엔진 버그가 정확히 여기서
+# {{/if}} 와 {{!-- --}} 주석을 화면에 노출시켰다.
+PRE="$(curl -s "$API/api/render/page?path=no-such-page")"
+absent "설정 전 푸터에 템플릿 잔해 없음" "$PRE" "{{"
+absent "템플릿 주석은 응답에도 없다" "$PRE" "전자상거래법 제24조"
+
 # 푸터 라벨 검증용 사업자정보 (값은 번역되면 안 된다)
 curl -s -b "$CK" -X PUT "$API/api/business-info" -H 'content-type: application/json' \
   -d '{"companyName":"브릭상사","representative":"홍길동","phone":"02-1234-5678"}' >/dev/null
@@ -102,6 +109,7 @@ contains "404 문구" "$KO404" "페이지를 찾을 수 없습니다"
 contains "lang 속성" "$KO404" 'lang=\"ko\"'
 contains "푸터 라벨" "$KO404" "상호 <b>브릭상사</b>"
 contains "대표 라벨" "$KO404" "대표 홍길동"
+absent  "설정 후에도 템플릿 잔해 없음" "$KO404" "{{"
 
 echo "── 영어로 전환 — 즉시 반영되어야 한다"
 contains "언어 저장" "$(curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' \
