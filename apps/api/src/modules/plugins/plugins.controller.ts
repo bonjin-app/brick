@@ -5,7 +5,7 @@ import {
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { sql } from "drizzle-orm";
 import type { BrickDb } from "@brick/database";
-import { isRawResponse, type PluginUploadedFile } from "@brick/core";
+import { SITE_TZ, isRawResponse, type PluginUploadedFile } from "@brick/core";
 import { PluginLoaderService } from "./plugin-loader.service.js";
 import { AdminGuard } from "../auth/auth.guard.js";
 import { AuthService } from "../auth/auth.service.js";
@@ -16,6 +16,7 @@ import { DB } from "../../runtime.module.js";
 
 @Controller("api")
 export class PluginsController {
+  private readonly logger = new Logger(PluginsController.name);
   constructor(
     private readonly loader: PluginLoaderService,
     private readonly auth: AuthService,
@@ -164,46 +165,43 @@ export class PluginsController {
   @Get("admin/dashboard")
   @UseGuards(AdminGuard)
   async adminDashboard() {
-    await this.loader.refreshLocale();
-    // "오늘"의 경계는 판매 리포트와 같은 규칙 — 사이트 시간대 (UTC 자정이 아니다)
-    const tz = process.env.BRICK_TIMEZONE?.trim() || "Asia/Seoul";
-    const [core, cards] = await Promise.all([
-      this.db.execute(sql`
+    const [core, cards] = await Promise.all([this.coreStats(), this.loader.collectDashboardCards()]);
+    return { core, cards };
+  }
+
+  /**
+   * 코어 통계 — 실패해도 카드처럼 격리한다 (null 반환). 잘못된
+   * BRICK_TIMEZONE 하나로 대시보드 전체가 500 이 되면 정상 로드된
+   * 플러그인 카드까지 전부 사라진다.
+   *
+   * "회원"의 정의는 members 모듈과 같아야 한다 (탈퇴·휴면 제외,
+   * role='member') — 두 화면의 회원 수가 다르면 운영자는 어느 쪽도 믿지
+   * 않는다. "오늘"의 경계는 판매 리포트와 같은 사이트 시간대(SITE_TZ)다.
+   */
+  private async coreStats(): Promise<{ members: number; membersToday: number; pages: number } | null> {
+    try {
+      const { rows } = await this.db.execute(sql`
         SELECT
-          count(*) FILTER (WHERE role <> 'admin')                              AS members,
-          count(*) FILTER (WHERE role <> 'admin'
-            AND (created_at AT TIME ZONE ${tz})::date = (now() AT TIME ZONE ${tz})::date) AS members_today,
-          (SELECT count(*) FROM pages WHERE status = 'published')              AS pages
-        FROM users WHERE is_active
-      `).then(({ rows }) => ({
+          count(*) FILTER (
+            WHERE withdrawn_at IS NULL AND dormant_at IS NULL AND role = 'member'
+          ) AS members,
+          count(*) FILTER (
+            WHERE withdrawn_at IS NULL AND dormant_at IS NULL AND role = 'member'
+              AND created_at >= (date_trunc('day', now() AT TIME ZONE ${SITE_TZ}) AT TIME ZONE ${SITE_TZ})
+          ) AS members_today,
+          (SELECT count(*) FROM pages WHERE status = 'published') AS pages
+        FROM users
+      `);
+      return {
         members: Number(rows[0]?.members ?? 0),
         membersToday: Number(rows[0]?.members_today ?? 0),
         pages: Number(rows[0]?.pages ?? 0),
-      })),
-      Promise.all(
-        this.loader.dashboardCards
-          .slice()
-          .sort((a, b) => (a.order ?? 100) - (b.order ?? 100))
-          .map(async (card) => {
-            const base = {
-              plugin: card.plugin,
-              title: this.loader.localizeCardTitle(card.plugin, card.title),
-              link: card.link ?? null,
-            };
-            try {
-              const { value, sub } = await card.load();
-              return { ...base, value, sub: sub ?? null, error: false };
-            } catch (err) {
-              // 실패한 카드는 오류로 표시한다 — 0 으로 보이는 것이 최악이다
-              this.dashLogger.error(`card "${card.plugin}/${card.title}" 실패: ${String(err)}`);
-              return { ...base, value: null, sub: null, error: true };
-            }
-          }),
-      ),
-    ]);
-    return { core, cards };
+      };
+    } catch (err) {
+      this.logger.error(`대시보드 코어 통계 실패: ${String(err)}`);
+      return null;
+    }
   }
-  private readonly dashLogger = new Logger("Dashboard");
 
   /** 특정 리소스의 전체 스키마 — 관리자가 목록/폼 화면을 생성하는 데 쓴다 */
   @Get("admin/resources/:plugin/:name")

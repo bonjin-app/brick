@@ -1,7 +1,20 @@
 import { createHash, randomBytes } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
+import { SITE_TZ } from "@brick/plugin-sdk";
 import type { Db } from "./types.js";
+
+/**
+ * "오늘"(사이트 시간대)의 SQL 조각.
+ *
+ * 날짜는 반드시 DB 안에서 계산한다 — JS 시간으로 만들어 넣으면 서버와
+ * DB 의 시계가 다를 때 자정 무렵 같은 사람이 두 번 세어진다. 다만 하루의
+ * 경계는 DB 세션 시간대(current_date)가 아니라 **사이트 시간대**다 —
+ * UTC PostgreSQL 배포에서 current_date 를 쓰면 '오늘 방문자'만 오전
+ * 9시에 리셋되어, 대시보드의 다른 카드('오늘 주문'·'오늘 글')와 한 화면
+ * 안에서 "오늘"의 정의가 갈라진다.
+ */
+const TODAY = sql`(now() AT TIME ZONE ${SITE_TZ})::date`;
 
 /**
  * 방문자 집계.
@@ -35,7 +48,7 @@ export async function visitorSalt(settings: {
  * 같은 방문자를 식별하는 키.
  *
  * 날짜를 섞지 않는다 — 날짜 구분은 유니크 인덱스의 `visit_day` 가 하고,
- * 그 값은 DB의 `current_date` 다. 여기서 JS 시간으로 날짜를 만들어 넣으면
+ * 그 값은 DB 안에서 계산한 사이트 시간대의 오늘(TODAY)이다. JS 시간으로 만들면
  * 서버와 DB의 시간대가 다를 때 자정 무렵에 같은 사람이 두 번 세어진다.
  *
  * UA를 섞는 이유: 사무실·학교처럼 한 IP 뒤에 여러 사람이 있는 환경에서
@@ -95,7 +108,7 @@ export async function recordVisit(
     INSERT INTO site_visits
       (id, visit_day, visitor_key, ip_prefix, referer_host, user_agent, is_mobile, user_id)
     VALUES
-      (${uuidv7()}, current_date, ${key}, ${ipPrefix(params.ip)},
+      (${uuidv7()}, ${TODAY}, ${key}, ${ipPrefix(params.ip)},
        ${refererHost(params.referer)}, ${params.userAgent.slice(0, 300)}, ${mobile},
        ${params.userId})
     ON CONFLICT (visit_day, visitor_key) DO NOTHING
@@ -105,7 +118,7 @@ export async function recordVisit(
 
   await db.execute(sql`
     INSERT INTO site_visit_daily (visit_day, total, members, mobile)
-    VALUES (current_date, 1, ${params.userId ? 1 : 0}, ${mobile ? 1 : 0})
+    VALUES (${TODAY}, 1, ${params.userId ? 1 : 0}, ${mobile ? 1 : 0})
     ON CONFLICT (visit_day) DO UPDATE SET
       total = site_visit_daily.total + 1,
       members = site_visit_daily.members + ${params.userId ? 1 : 0},
@@ -123,11 +136,11 @@ export async function recordVisit(
  * 첫 방문에서만 한 번 돈다.
  */
 export async function pruneVisits(db: Db, keepDailyDays: number): Promise<void> {
-  await db.execute(sql`DELETE FROM site_visits WHERE visit_day < current_date`);
+  await db.execute(sql`DELETE FROM site_visits WHERE visit_day < ${TODAY}`);
   if (keepDailyDays > 0) {
     await db.execute(sql`
       DELETE FROM site_visit_daily
-      WHERE visit_day < current_date - ${keepDailyDays}::integer
+      WHERE visit_day < ${TODAY} - ${keepDailyDays}::integer
     `);
   }
 }
@@ -137,12 +150,12 @@ export async function visitStats(db: Db) {
   const [summary, best, recent] = await Promise.all([
     db.execute(sql`
       SELECT
-        coalesce(sum(total) FILTER (WHERE visit_day = current_date), 0)            AS today,
-        coalesce(sum(total) FILTER (WHERE visit_day = current_date - 1), 0)        AS yesterday,
-        coalesce(sum(total) FILTER (WHERE visit_day >= date_trunc('month', current_date)), 0) AS this_month,
+        coalesce(sum(total) FILTER (WHERE visit_day = ${TODAY}), 0)            AS today,
+        coalesce(sum(total) FILTER (WHERE visit_day = ${TODAY} - 1), 0)        AS yesterday,
+        coalesce(sum(total) FILTER (WHERE visit_day >= date_trunc('month', ${TODAY})), 0) AS this_month,
         coalesce(sum(total), 0)                                                    AS total,
-        coalesce(sum(members) FILTER (WHERE visit_day = current_date), 0)          AS today_members,
-        coalesce(sum(mobile)  FILTER (WHERE visit_day = current_date), 0)          AS today_mobile
+        coalesce(sum(members) FILTER (WHERE visit_day = ${TODAY}), 0)          AS today_members,
+        coalesce(sum(mobile)  FILTER (WHERE visit_day = ${TODAY}), 0)          AS today_mobile
       FROM site_visit_daily
     `).then((r) => r.rows[0] ?? {}),
     db.execute(sql`
@@ -150,7 +163,7 @@ export async function visitStats(db: Db) {
     `).then((r) => r.rows[0] ?? null),
     db.execute(sql`
       SELECT visit_day, total, members, mobile FROM site_visit_daily
-      WHERE visit_day >= current_date - 29 ORDER BY visit_day
+      WHERE visit_day >= ${TODAY} - 29 ORDER BY visit_day
     `).then((r) => r.rows),
   ]);
 
@@ -171,7 +184,7 @@ export async function visitStats(db: Db) {
 export async function todayReferers(db: Db) {
   const { rows } = await db.execute(sql`
     SELECT referer_host, count(*) AS n FROM site_visits
-    WHERE visit_day = current_date AND referer_host IS NOT NULL
+    WHERE visit_day = ${TODAY} AND referer_host IS NOT NULL
     GROUP BY referer_host ORDER BY n DESC LIMIT 20
   `);
   return rows;

@@ -67,9 +67,14 @@ ctx.registerDashboardCard({
 });
 ```
 
-`load` 가 던지면 그 카드만 오류로 표시됩니다 — 다른 카드와 대시보드는
-그대로 나갑니다. "오늘"을 세는 쿼리는 사이트 시간대(`BRICK_TIMEZONE`,
-기본 Asia/Seoul)로 날짜를 잘라야 리포트와 숫자가 맞습니다.
+`load` 가 던지거나 3초를 넘기면 그 카드만 오류로 표시됩니다 — 다른
+카드와 대시보드는 그대로 나갑니다. "오늘"을 세는 쿼리는 사이트
+시간대(SDK 가 재수출하는 `SITE_TZ` 상수)로 날짜를 잘라야 리포트와
+숫자가 맞고, **컬럼이 아니라 상수 쪽을 변환**해야 인덱스를 탑니다:
+
+```sql
+created_at >= (date_trunc('day', now() AT TIME ZONE ${SITE_TZ}) AT TIME ZONE ${SITE_TZ})
+```
 
 ## 구조
 

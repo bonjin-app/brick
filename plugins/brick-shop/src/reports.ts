@@ -39,11 +39,12 @@
  * 화면에서 클릭으로 바꿀 성질의 값이 아니다.
  */
 import { sql } from "drizzle-orm";
+import { SITE_TZ } from "@brick/plugin-sdk";
 import type { PluginDb } from "@brick/plugin-sdk";
 import { ShopError } from "./types.js";
 
-/** 사이트 시간대. 리포트의 날짜 경계를 정한다. */
-export const SITE_TZ = process.env.BRICK_TIMEZONE?.trim() || "Asia/Seoul";
+/** 사이트 시간대 — 정의는 @brick/core 하나다 (복사본 다섯이 우연히 같길 비는 대신) */
+export { SITE_TZ };
 
 export type GroupBy = "day" | "week" | "month";
 const GROUP_UNITS: Record<GroupBy, string> = { day: "day", week: "week", month: "month" };

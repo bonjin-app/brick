@@ -5,6 +5,7 @@ import type { FastifyRequest } from "fastify";
 import type { BrickDb } from "@brick/database";
 import { auditLogs } from "@brick/database";
 import type { SessionUser } from "@brick/shared";
+import { SITE_TZ } from "@brick/core";
 import { DB } from "../../runtime.module.js";
 
 export interface AuditEntry {
@@ -26,7 +27,7 @@ const RETENTION_DAYS = 180;
  * 이전 기록이 전날로 밀려서, 관리자가 "어제 무슨 일이 있었나"를 볼 때
  * 엉뚱한 범위를 본다.
  */
-const AUDIT_TZ = process.env.BRICK_TIMEZONE?.trim() || "Asia/Seoul";
+
 
 /**
  * 감사 로그.
@@ -100,10 +101,10 @@ export class AuditService {
         ? [sql`${auditLogs.actorEmail} ILIKE ${`%${opts.actor.replace(/[%_\\]/g, "\\$&")}%`}`]
         : []),
       ...(opts.from && dateShape.test(opts.from)
-        ? [sql`${auditLogs.createdAt} >= (${opts.from}::date::timestamp AT TIME ZONE ${AUDIT_TZ})`]
+        ? [sql`${auditLogs.createdAt} >= (${opts.from}::date::timestamp AT TIME ZONE ${SITE_TZ})`]
         : []),
       ...(opts.to && dateShape.test(opts.to)
-        ? [sql`${auditLogs.createdAt} < ((${opts.to}::date + 1)::timestamp AT TIME ZONE ${AUDIT_TZ})`]
+        ? [sql`${auditLogs.createdAt} < ((${opts.to}::date + 1)::timestamp AT TIME ZONE ${SITE_TZ})`]
         : []),
     ];
     const where = filters.length ? and(...filters) : undefined;
@@ -123,7 +124,7 @@ export class AuditService {
       total: Number(total?.value ?? 0),
       page,
       pageSize: size,
-      timezone: AUDIT_TZ,
+      timezone: SITE_TZ,
     };
   }
 

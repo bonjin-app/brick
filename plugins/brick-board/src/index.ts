@@ -1,4 +1,4 @@
-import { definePlugin, searchExcerpt, isUniqueViolation, rawResponse } from "@brick/plugin-sdk";
+import { definePlugin, searchExcerpt, isUniqueViolation, rawResponse, SITE_TZ } from "@brick/plugin-sdk";
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import { BoardError, escapeHtml, hasRole, rankOf, type Db, type SessionUser } from "./types.js";
@@ -854,8 +854,8 @@ ${items}
 
   registerBoardBlocks(ctx, db);
 
-  // 대시보드 — "오늘"의 경계는 쇼핑몰 리포트와 같은 사이트 시간대
-  const TZ = process.env.BRICK_TIMEZONE?.trim() || "Asia/Seoul";
+  // 대시보드 — "오늘"의 경계는 쇼핑몰 리포트와 같은 사이트 시간대(SITE_TZ).
+  // 상수 쪽을 변환하는 반개구간 — 컬럼을 캐스팅하면 인덱스를 못 탄다.
   ctx.registerDashboardCard({
     title: "오늘 글",
     order: 30,
@@ -864,9 +864,9 @@ ${items}
       const { rows } = await db.execute(sql`
         SELECT
           (SELECT count(*) FROM board_posts
-            WHERE (created_at AT TIME ZONE ${TZ})::date = (now() AT TIME ZONE ${TZ})::date) AS posts,
+            WHERE created_at >= (date_trunc('day', now() AT TIME ZONE ${SITE_TZ}) AT TIME ZONE ${SITE_TZ})) AS posts,
           (SELECT count(*) FROM board_comments
-            WHERE (created_at AT TIME ZONE ${TZ})::date = (now() AT TIME ZONE ${TZ})::date) AS comments
+            WHERE created_at >= (date_trunc('day', now() AT TIME ZONE ${SITE_TZ}) AT TIME ZONE ${SITE_TZ})) AS comments
       `);
       return {
         value: Number(rows[0]?.posts ?? 0),

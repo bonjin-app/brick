@@ -270,7 +270,10 @@ function starterPages(code: string, siteName: string): Array<{
           title: "홈",
           blocks: [
             h(siteName),
-            p("상품을 준비 중입니다. 관리자 → 쇼핑몰 → 상품 에서 첫 상품을 등록해보세요."),
+            // "준비 중입니다"는 첫 상품을 등록하는 순간 거짓말이 된다 — 상품
+            // 목록 블록이 빈 상태 안내를 스스로 그리므로, 여기는 상품 유무와
+            // 무관하게 참인 소개 문구를 둔다 (바꾸라는 힌트 포함).
+            p(`${siteName}에 오신 것을 환영합니다. 이 문단을 가게 소개로 바꿔주세요 — 첫 상품은 관리자 → 상품 에서 등록합니다.`),
             spacer(),
             { block: "brick-shop/product-list",
               props: { limit: 8, columns: 4, sort: "recent", title: "새로 나온 상품" } },

@@ -2180,11 +2180,14 @@ export default definePlugin(async (ctx) => {
     order: 20,
     link: "/admin/x/brick-shop/orders",
     load: async () => {
+      // 유효 주문의 정의는 /admin/stats 와 같다 (cancelled·refunded 제외) —
+      // 두 화면의 숫자가 다르면 운영자는 어느 쪽도 믿지 않는다.
+      // "오늘"은 상수 쪽을 변환하는 반개구간 — 컬럼을 캐스팅하면 인덱스를 못 탄다.
       const { rows } = await db.execute(sql`
         SELECT
           count(*) FILTER (
-            WHERE (created_at AT TIME ZONE ${SITE_TZ})::date = (now() AT TIME ZONE ${SITE_TZ})::date
-              AND status <> 'cancelled'
+            WHERE created_at >= (date_trunc('day', now() AT TIME ZONE ${SITE_TZ}) AT TIME ZONE ${SITE_TZ})
+              AND status NOT IN ('cancelled', 'refunded')
           ) AS today,
           count(*) FILTER (WHERE status = 'pending') AS awaiting
         FROM shop_orders

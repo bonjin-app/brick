@@ -146,7 +146,7 @@ CREATE INDEX IF NOT EXISTS ${table}_entries_created_idx
   ON ${table}_entries (created_at DESC);
 `;
 
-const src = `import { definePlugin, escapeHtml, type AdminResource } from "@brick/plugin-sdk";
+const src = `import { definePlugin, escapeHtml, SITE_TZ, type AdminResource } from "@brick/plugin-sdk";
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 
@@ -269,12 +269,15 @@ export default definePlugin(async (ctx) => {
 
   // ── 대시보드 카드: 관리자 첫 화면에 "오늘의 숫자"를 올린다 ──
   // 제목은 관리 라벨과 같은 gettext 방식 — locales/en.json 에 원문을 키로 추가한다.
+  // "오늘"의 경계는 사이트 시간대(SITE_TZ)다 — DB 시간대(date_trunc('day', now()))로
+  // 자르면 UTC 배포에서 이 카드만 다른 카드·리포트와 하루 경계가 어긋난다.
+  // 컬럼이 아니라 상수 쪽을 변환하는 반개구간이라 created_at 인덱스를 탄다.
   ctx.registerDashboardCard({
     title: "오늘 방명록",
     load: async () => {
       const { rows } = await ctx.db.execute(sql\`
         SELECT count(*) AS n FROM ${table}_entries
-        WHERE created_at >= date_trunc('day', now())
+        WHERE created_at >= (date_trunc('day', now() AT TIME ZONE \${SITE_TZ}) AT TIME ZONE \${SITE_TZ})
       \`);
       return { value: Number(rows[0]?.n ?? 0) };
     },

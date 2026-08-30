@@ -28,6 +28,7 @@ import type { BrickDb } from "@brick/database";
 import { DB } from "../../runtime.module.js";
 import { PluginLoaderService } from "../plugins/plugin-loader.service.js";
 import type { SearchHit, SearchParams } from "@brick/core";
+import { SITE_TZ } from "@brick/core";
 
 /**
  * 최소 검색어 길이.
@@ -40,7 +41,7 @@ export const MIN_QUERY_LENGTH = 2;
 export const SEARCH_PAGE_SIZE = 20;
 
 /** 날짜 경계를 자르는 시간대 — 리포트와 같은 값을 쓴다 (ADR-51) */
-const SEARCH_TZ = process.env.BRICK_TIMEZONE?.trim() || "Asia/Seoul";
+
 
 export interface SearchGroup {
   code: string;
@@ -292,7 +293,7 @@ export class SearchService {
         SELECT DISTINCT
           l.query,
           coalesce(l.user_id::text, l.ip_hash, l.id::text) AS who,
-          (l.created_at AT TIME ZONE ${SEARCH_TZ})::date AS day,
+          (l.created_at AT TIME ZONE ${SITE_TZ})::date AS day,
           l.result_count
         FROM search_logs l
         WHERE l.created_at >= now() - (${days} || ' days')::interval

@@ -307,9 +307,8 @@ export class PluginLoaderService implements OnModuleInit {
   localizeAdminResource<T extends AdminResource>(plugin: string, resource: T): T {
     const locale = this.localeCache.value;
     if (locale === DEFAULT_LOCALE) return resource;
-    const catalog = this.pluginCatalogs.get(plugin)?.[locale] ?? {};
     const tr = <S extends string | undefined>(s: S): S =>
-      (s !== undefined && catalog[s] !== undefined ? (catalog[s] as S) : s);
+      (s !== undefined ? (this.trCatalog(plugin, s) as S) : s);
     return {
       ...resource,
       title: tr(resource.title),
@@ -328,17 +327,53 @@ export class PluginLoaderService implements OnModuleInit {
   }
 
   localizeAdminMenu<T extends { plugin: string; label: string }>(menu: T): T {
-    const locale = this.localeCache.value;
-    if (locale === DEFAULT_LOCALE) return menu;
-    const catalog = this.pluginCatalogs.get(menu.plugin)?.[locale] ?? {};
-    return catalog[menu.label] !== undefined ? { ...menu, label: catalog[menu.label] } : menu;
+    if (this.localeCache.value === DEFAULT_LOCALE) return menu;
+    return { ...menu, label: this.trCatalog(menu.plugin, menu.label) };
   }
 
-  /** 대시보드 카드 제목 — 관리 라벨과 같은 gettext 규칙 (원문=키, 폴백=원문) */
-  localizeCardTitle(plugin: string, title: string): string {
+  /** 선언 라벨(관리 리소스·메뉴·대시보드 카드)이 공유하는 gettext 치환 — 원문=키, 폴백=원문 */
+  private trCatalog(plugin: string, text: string): string {
     const locale = this.localeCache.value;
-    if (locale === DEFAULT_LOCALE) return title;
-    return this.pluginCatalogs.get(plugin)?.[locale]?.[title] ?? title;
+    if (locale === DEFAULT_LOCALE) return text;
+    return this.pluginCatalogs.get(plugin)?.[locale]?.[text] ?? text;
+  }
+
+  /**
+   * 대시보드 카드 수집 — 정렬·제목 번역·실행·격리까지 여기서 끝낸다.
+   * 레지스트리를 "쓸 수 있는 형태"로 만드는 지식이 HTTP 계층에 흩어지면
+   * 두 번째 소비자가 생기는 순간 규칙(기본 order·번역)이 복제된다.
+   *
+   * 실패 격리는 시간 축에도 적용한다 — 느린 카드 하나가 관리자 첫 화면
+   * 전체를 붙잡으면 안 되므로, 시간 초과는 그 카드만 오류로 표시한다.
+   */
+  async collectDashboardCards(timeoutMs = 3000): Promise<
+    Array<{ plugin: string; title: string; link: string | null; value: string | number | null; sub: string | null; error: boolean }>
+  > {
+    await this.refreshLocale();
+    const sorted = this.dashboardCards.slice().sort((a, b) => (a.order ?? 100) - (b.order ?? 100));
+    return Promise.all(
+      sorted.map(async (card) => {
+        const base = {
+          plugin: card.plugin,
+          title: this.trCatalog(card.plugin, card.title),
+          link: card.link ?? null,
+        };
+        try {
+          const result = await Promise.race([
+            card.load(),
+            new Promise<never>((_, reject) => {
+              const t = setTimeout(() => reject(new Error(`카드 시간 초과 (${timeoutMs}ms)`)), timeoutMs);
+              t.unref?.();
+            }),
+          ]);
+          return { ...base, value: result.value, sub: result.sub ?? null, error: false };
+        } catch (err) {
+          // 실패한 카드는 오류로 표시한다 — 0 으로 보이는 것이 최악이다
+          this.logger.error(`dashboard card "${card.plugin}/${card.title}" 실패: ${String(err)}`);
+          return { ...base, value: null, sub: null, error: true };
+        }
+      }),
+    );
   }
 
   private async loadPluginCatalogs(name: string): Promise<void> {

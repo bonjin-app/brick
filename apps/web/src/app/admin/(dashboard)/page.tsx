@@ -13,26 +13,34 @@ interface DashCard {
 }
 
 interface Dashboard {
-  core: { members: number; membersToday: number; pages: number };
+  // 코어 통계는 서버에서 격리되어 실패하면 null 로 온다
+  core: { members: number; membersToday: number; pages: number } | null;
   cards: DashCard[];
 }
 
 export default function AdminDashboard() {
   const t = useAdminT();
   const [dash, setDash] = useState<Dashboard | null>(null);
+  const [dashFailed, setDashFailed] = useState(false);
   const [stats, setStats] = useState({ plugins: 0, activePlugins: 0, themes: 0, activeTheme: "-" });
 
   useEffect(() => {
-    fetch("/api/admin/dashboard").then((r) => r.json()).then(setDash);
-    Promise.all([fetch("/api/plugins").then((r) => r.json()), fetch("/api/themes").then((r) => r.json())]).then(
-      ([plugins, themes]) =>
+    // 서버는 카드 실패를 격리한다 — 클라이언트도 같은 원칙: fetch 실패(401·500·
+    // 네트워크)를 빈 화면으로 숨기지 않고, 오류 JSON 을 dash 로 오인하지 않는다.
+    fetch("/api/admin/dashboard")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then(setDash)
+      .catch(() => setDashFailed(true));
+    Promise.all([fetch("/api/plugins").then((r) => r.json()), fetch("/api/themes").then((r) => r.json())])
+      .then(([plugins, themes]) =>
         setStats({
           plugins: plugins.length,
           activePlugins: plugins.filter((p: { isActive: boolean }) => p.isActive).length,
           themes: themes.themes.length,
           activeTheme: themes.active,
         }),
-    );
+      )
+      .catch(() => {});
   }, []);
 
   const card: React.CSSProperties = {
@@ -63,11 +71,16 @@ export default function AdminDashboard() {
       <h1>{t("nav.dashboard")}</h1>
       {/* 오늘의 사이트 — 코어(회원·페이지) + 플러그인 카드(오늘 방문자·주문·글·문의) */}
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+        {dashFailed ? <div style={card}>⚠ {t("dash.cardError")}</div> : null}
         {dash
           ? [
-              stat("members", t("dash.members"), dash.core.members,
-                t("dash.membersToday", { n: dash.core.membersToday }), "/admin/users"),
-              stat("pages", t("dash.pages"), dash.core.pages, null, "/admin/pages"),
+              ...(dash.core
+                ? [
+                    stat("members", t("dash.members"), dash.core.members,
+                      t("dash.membersToday", { n: dash.core.membersToday }), "/admin/users"),
+                    stat("pages", t("dash.pages"), dash.core.pages, null, "/admin/pages"),
+                  ]
+                : [stat("core-error", t("dash.members"), "⚠", t("dash.cardError"))]),
               ...dash.cards.map((c, i) =>
                 stat(`${c.plugin}-${i}`, c.title,
                   c.error ? "⚠" : c.value, c.error ? t("dash.cardError") : c.sub, c.link),

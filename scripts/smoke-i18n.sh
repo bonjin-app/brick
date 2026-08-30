@@ -58,6 +58,29 @@ console.log("OK");
 JS
 [[ $? -eq 0 ]] && ok "폴백·파라미터·로그 규칙" || bad "번역기 규칙"
 
+echo "── 테마 템플릿 엔진 규칙 (같은 종류 중첩 · 주석 · 주입 금지 · fail-closed)"
+node - "$ROOT" <<'JS'
+const { renderTemplate } = await import(`file://${process.argv[2]}/packages/theme-sdk/dist/index.js`);
+const fail = (m, got) => { console.error("FAIL:", m, JSON.stringify(got)); process.exit(1); };
+let r = renderTemplate("A{{#if biz}}X{{#if biz.a}}B{{/if}}Y{{/if}}Z", {});
+if (r !== "AZ") fail("같은 종류 중첩 — 바깥 falsy 면 통째로 사라진다", r);
+r = renderTemplate("{{#if biz}}[{{#if biz.a}}{{ biz.a }}{{/if}}{{#if biz.b}}·{{ biz.b }}{{/if}}]{{/if}}", { biz: { a: "가" } });
+if (r !== "[가]") fail("같은 종류 중첩 — 바깥 truthy + 안쪽 선택", r);
+r = renderTemplate("A{{!-- 비밀 메모 --}}B", {});
+if (r !== "AB") fail("주석은 응답에도 없다", r);
+r = renderTemplate("{{#each items}}{{#if on}}{{ name }} {{/if}}{{/each}}", { items: [{ name: "x", on: true }, { name: "y", on: false }] });
+if (r !== "x ") fail("each 안 if 중첩", r);
+// 삽입된 값은 다시 파싱하지 않는다 — 게시글 본문의 "{{ site.name }}" 이 값으로 바뀌면 주입이다
+r = renderTemplate("{{{ content }}}|{{ title }}", { content: "본문 {{ secret }}", title: "제목 {{ secret }}", secret: "유출" });
+if (r !== "본문 {{ secret }}|제목 {{ secret }}") fail("값 안의 {{ }} 는 재치환되지 않는다", r);
+// 짝 없는 여는 태그는 fail-closed — 감싸려던 내용이 조건 없이 노출되면 안 된다
+r = renderTemplate("공개{{#if admin}}비밀{{#if x}}y{{/if}}", { x: true });
+if (r.includes("비밀") || r.includes("y")) fail("짝 없는 블록의 내용은 렌더되지 않는다", r);
+if (!r.includes("{{#if admin}}")) fail("짝 없는 태그는 화면에 남아 오류가 보인다", r);
+console.log("OK");
+JS
+[[ $? -eq 0 ]] && ok "중첩·주석·주입 금지·fail-closed" || bad "테마 엔진 규칙"
+
 if [[ "${BRICK_SMOKE_KEEP_DB:-}" != "1" ]]; then
   node "$ROOT/scripts/reset-test-db.mjs" || exit 1
 fi
