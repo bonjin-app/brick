@@ -61,9 +61,16 @@ my-theme/
 | `{{{ content }}}` | 슬롯(home/page)이 렌더된 결과 |
 | `{{{ themeTokens }}}` | tokens가 CSS 변수로 변환된 `<style>` 내용물 |
 | `themeAssets` | `/themes/<name>/assets` 경로 |
+| `themeVersion` | 테마 버전 — 자산 URL 의 캐시버스터로 쓰세요: `style.css?v={{ themeVersion }}`. 버전을 올리면 손님 브라우저의 옛 CSS 캐시가 깨집니다 |
 | `locale` | 사이트 언어 (`site.locale` — `<html lang="{{ locale }}">` 에 쓰세요) |
-| `t.*` | 번역된 라벨 — 예: `{{ t.footer.company }}`(상호/Company). 값이 아니라 **라벨**만 번역됩니다 |
+| `t.*` | 번역된 라벨 — 예: `{{ t.footer.company }}`(상호/Company), `{{ t.header.login }}`. 값이 아니라 **라벨**만 번역됩니다 |
 | `site.business.*` | 사업자정보 (값 — 번역되지 않습니다) |
+| `user` | 로그인한 사용자 (`user.displayName`, `user.isAdmin`) — 비로그인이면 없음. 로그인 렌더는 캐시되지 않으므로 사용자별 내용이 새지 않습니다 |
+| `guest` | 비로그인 여부 — 엔진에 else 가 없어 `{{#if guest}}로그인 링크{{/if}}` 형태로 씁니다 |
+
+로그아웃은 상태를 바꾸므로 링크(GET)가 아니라 **폼(POST)** 으로 만드세요 —
+`<form method="post" action="/api/auth/logout">` 는 JS 없이 제출돼도 홈으로
+돌아옵니다 (서버가 `accept: text/html` 제출에 303 을 응답합니다).
 
 page.html 슬롯은 추가로 `title`(페이지 제목), `{{{ blocksHtml }}}`(블록 트리 렌더 결과)를 받습니다.
 

@@ -2,7 +2,7 @@ import {
   BadRequestException, Body, Controller, Get, Inject, Param, Put, Query, Req, UseGuards,
 } from "@nestjs/common";
 import type { FastifyRequest } from "fastify";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import type { BrickDb } from "@brick/database";
 import { menus, pages, siteSettings } from "@brick/database";
@@ -58,10 +58,16 @@ export class SiteController {
   /** 사이트 언어 — **공개**. 로그인·가입 화면이 첫 페인트에 쓴다 */
   @Get("i18n")
   async i18n() {
-    const [row] = await this.db
+    // 사이트명도 함께 준다 — 로그인·가입 화면이 사이트 이름을 보여주는 데
+    // 쓴다 (요청 하나로: 언어와 이름은 같은 화면이 같은 시점에 필요로 한다)
+    const rows = await this.db
       .select().from(siteSettings)
-      .where(eq(siteSettings.key, "site.locale")).limit(1);
-    return { locale: normalizeLocale(row?.value) };
+      .where(inArray(siteSettings.key, ["site.locale", "site.name"]));
+    const get = (k: string) => rows.find((r) => r.key === k)?.value;
+    return {
+      locale: normalizeLocale(get("site.locale")),
+      siteName: String(get("site.name") ?? "Brick"),
+    };
   }
 
   // ── 사이트 설정 ────────────────────────────────────

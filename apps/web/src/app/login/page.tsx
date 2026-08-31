@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { SocialButtons } from "../../components/SocialButtons";
+import { AuthShell, authButton, authInput, authLabel } from "../../components/AuthShell";
 import { useT } from "../../lib/i18n";
 
 /** 공개 로그인 — 로그인 후 홈으로 이동한다 (관리자 로그인은 /admin/login) */
@@ -33,30 +34,28 @@ export default function LoginPage() {
     }
   }
 
-  const input = { width: "100%", padding: 10, marginTop: 4, boxSizing: "border-box" as const };
   return (
-    <main style={{ fontFamily: "sans-serif", maxWidth: 380, margin: "100px auto", padding: 24 }}>
-      <h1 style={{ textAlign: "center" }}>{t("login.title")}</h1>
+    <AuthShell title={t("login.title")}>
       <form onSubmit={submit}>
-        <label>{t("login.email")}
-          <input style={input} type="email" required value={form.email}
+        <label style={{ ...authLabel, marginTop: 0 }}>{t("login.email")}
+          <input style={authInput} type="email" required value={form.email}
             onChange={(e) => setForm({ ...form, email: e.target.value })} />
         </label>
-        <label style={{ display: "block", marginTop: 16 }}>{t("login.password")}
-          <input style={input} type="password" required value={form.password}
+        <label style={authLabel}>{t("login.password")}
+          <input style={authInput} type="password" required value={form.password}
             onChange={(e) => setForm({ ...form, password: e.target.value })} />
         </label>
-        <button disabled={busy} style={{ width: "100%", padding: 12, marginTop: 24, cursor: "pointer" }}>
+        <button disabled={busy} style={authButton}>
           {busy ? t("login.busy") : t("login.title")}
         </button>
       </form>
-      {error && <p style={{ color: "crimson" }}>{error}</p>}
+      {error && <p style={{ color: "#c0392b", fontSize: 14 }}>{error}</p>}
       <SocialButtons next="/" />
-      <p style={{ textAlign: "center", marginTop: 16, fontSize: 14 }}>
+      <p style={{ textAlign: "center", marginTop: 18, fontSize: 14, color: "#4b4b55" }}>
         {t("login.noAccount")} <a href="/register">{t("login.register")}</a>
         {" · "}
         <a href="/forgot-password">{t("login.forgot")}</a>
       </p>
-    </main>
+    </AuthShell>
   );
 }

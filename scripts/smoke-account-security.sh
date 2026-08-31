@@ -483,6 +483,11 @@ check "일반 화면은 영향 없다" "$(code "$API/api/render/page?path=")" "2
 psql_q "DELETE FROM site_settings WHERE key = 'security.admin_ip_allowlist'" >/dev/null
 check "목록을 비우면 제한 없음" "$(code -b "$TMP/plain.txt" "$API/api/admin/nav")" "200"
 
+echo "── 로그아웃 — API 는 JSON, 테마 폼(JS 없는 제출)은 303 리다이렉트"
+check "폼 제출(accept: text/html)은 홈으로 303" \
+  "$(code -b "$TMP/plain.txt" -X POST "$API/api/auth/logout" -H 'accept: text/html')" "303"
+check "로그아웃 뒤 세션 무효" "$(code -b "$TMP/plain.txt" "$API/api/admin/nav")" "401"
+
 echo
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 [[ "$FAIL" -eq 0 ]]

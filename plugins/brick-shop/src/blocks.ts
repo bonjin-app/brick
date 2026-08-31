@@ -100,7 +100,7 @@ export function registerStorefrontBlocks(
         },
       },
     },
-    render: async (props) => {
+    render: async (props, blockCtx) => {
       const slug = String(props.slug ?? props.__pathTail ?? "");
       if (!slug) return `<div class="brick-shop-empty">${escapeHtml(t("detail.pickProduct"))}</div>`;
 
@@ -230,7 +230,7 @@ ${relatedHtml}
 <a id="brick-reviews"></a>
 ${reviewSection({ id: String(p.id), reviewCount, ratingAvg, inquiryCount: Number(p.inquiry_count ?? 0) })}
 <script type="application/ld+json">${jsonLd}</script>
-${buyScript()}${GALLERY_SCRIPT}${restockScript()}${STOREFRONT_CSS}`;
+${buyScript(`${shopBaseOf(blockCtx)}/cart`)}${GALLERY_SCRIPT}${restockScript()}${STOREFRONT_CSS}`;
     },
   };
   ctx.registerBlock(productDetailBlock);
@@ -600,7 +600,21 @@ const GALLERY_SCRIPT = `
 
 /* ── 장바구니 담기 / 바로 구매 스크립트 ──────────────
    비회원 장바구니 토큰은 localStorage에 보관한다. */
-const buyScript = () => `
+/**
+ * 이 블록이 놓인 페이지의 기준 경로. "바로 구매"가 이동할 장바구니 주소를
+ * 만들 때 쓴다 — '/cart' 로 하드코딩하면 상점 페이지 slug 가 'shop' 일 때
+ * 존재하지 않는 경로로 떨어진다 (장바구니는 <상점 페이지>/cart 로 라우팅된다).
+ */
+function shopBaseOf(blockCtx?: { path?: string; pathTail?: string }): string {
+  const path = String(blockCtx?.path ?? "").replace(/^\/+|\/+$/g, "");
+  const tail = String(blockCtx?.pathTail ?? "").replace(/^\/+|\/+$/g, "");
+  const base = tail && path.endsWith(tail)
+    ? path.slice(0, path.length - tail.length).replace(/\/+$/g, "")
+    : path;
+  return `/${base || "shop"}`;
+}
+
+const buyScript = (cartPath: string) => `
 <script>
 (function(){
   var form = document.currentScript.parentNode.querySelector('.brick-buy-form');
@@ -624,7 +638,7 @@ const buyScript = () => `
         .then(function(res){
           if (!res.ok) { msg.textContent = res.d.message || ${JSON.stringify(t("buy.addFail"))}; return; }
           if (res.d.guestToken) localStorage.setItem('brick_shop_guest', res.d.guestToken);
-          if (btn.dataset.act === 'buy') { location.href = '/cart'; return; }
+          if (btn.dataset.act === 'buy') { location.href = ${JSON.stringify(cartPath)}; return; }
           msg.textContent = ${JSON.stringify(t("buy.added"))};
         })
         .catch(function(){ msg.textContent = ${JSON.stringify(t("buy.error"))}; });

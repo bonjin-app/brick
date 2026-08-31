@@ -134,12 +134,22 @@ contains "푸터 라벨" "$KO404" "상호 <b>브릭상사</b>"
 contains "대표 라벨" "$KO404" "대표 홍길동"
 absent  "설정 후에도 템플릿 잔해 없음" "$KO404" "{{"
 
+echo "── 헤더 유틸 — 로그인 상태를 테마가 안다"
+contains "비로그인 헤더에 로그인 링크" "$KO404" ">로그인</a>"
+contains "비로그인 헤더에 회원가입" "$KO404" ">회원가입</a>"
+contains "테마 CSS 캐시버스터 (버전 쿼리)" "$KO404" "style.css?v="
+AUTHED="$(curl -s -b "$CK" "$API/api/render/page?path=no-such-page")"
+contains "로그인 헤더에 이름" "$AUTHED" "Administrator"
+contains "로그인 헤더에 로그아웃 (POST 폼)" "$AUTHED" "/api/auth/logout"
+absent  "로그인 상태에 로그인 링크 없음" "$AUTHED" ">로그인</a>"
+
 echo "── 영어로 전환 — 즉시 반영되어야 한다"
 contains "언어 저장" "$(curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' \
   -d '{"site.locale":"en"}')" '"ok":true'
 contains "공개 locale 엔드포인트 (웹 로그인·가입 화면이 쓴다)" "$(curl -s "$API/api/i18n")" '"locale":"en"'
 EN404="$(curl -s "$API/api/render/page?path=no-such-page")"
 contains "404 문구가 영어" "$EN404" "There is no page at /no-such-page."
+contains "헤더 유틸도 영어" "$EN404" ">Log in</a>"
 contains "제목도 영어" "$EN404" "Page not found"
 contains "lang 속성" "$EN404" 'lang=\"en\"'
 contains "푸터 라벨이 영어" "$EN404" "Company <b>브릭상사</b>"
@@ -173,6 +183,12 @@ curl -s -b "$CK" -X POST "$API/api/plugins/brick-shop/admin/products" -H 'conten
   -d '{"slug":"tea","name":"Green Tea","price":9000,"stock":0,"status":"selling","free_shipping":true}' >/dev/null
 DETAIL_EN="$(curl -s "$API/api/render/page?path=shop/tea")"
 contains "품절 배지가 영어" "$DETAIL_EN" "Sold out"
+# 재고 있는 상품 — 바로 구매의 장바구니 이동이 상점 페이지 slug 를 따른다
+# ('/cart' 하드코딩이었다: slug 가 'shop' 이면 존재하지 않는 경로였다)
+curl -s -b "$CK" -X POST "$API/api/plugins/brick-shop/admin/products" -H 'content-type: application/json' \
+  -d '{"slug":"mug","name":"Mug","price":12000,"stock":5,"status":"selling"}' >/dev/null
+contains "장바구니 경로가 상점 slug 기준" \
+  "$(curl -s "$API/api/render/page?path=shop/mug")" "/shop/cart"
 contains "재입고 폼이 영어" "$DETAIL_EN" "Notify me on restock"
 contains "후기 탭이 영어" "$DETAIL_EN" "Reviews"
 

@@ -137,7 +137,9 @@ echo "══ 커뮤니티 스타터 ══"
 R="$(fresh_install community "달빛마을")"
 contains "설치 성공" "$R" '"ok":true'
 contains "적용 내역을 알려준다" "$R" "게시판 자유게시판"
-contains "홈 페이지" "$R" "페이지 홈"
+# 홈 페이지 제목은 사이트명이다 — 테마가 페이지 제목을 h1 으로 그리므로
+# "홈"이라는 제목은 화면에 "홈"이라는 h1 을 만든다 (이중 제목의 원인이었다)
+contains "홈 페이지 (제목=사이트명)" "$R" "페이지 달빛마을"
 contains "메뉴" "$R" "헤더 메뉴"
 
 check "게시판 3개" "$(psql_q "SELECT count(*) FROM board_boards")" "3"

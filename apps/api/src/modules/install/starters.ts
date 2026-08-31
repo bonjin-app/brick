@@ -237,8 +237,8 @@ function starterPages(code: string, siteName: string): Array<{
   const about = {
     slug: "about",
     title: "소개",
+    // 첫 heading 블록을 넣지 않는다 — 테마가 페이지 제목을 h1 으로 그린다 (이중 제목 방지)
     blocks: [
-      h(`${siteName} 소개`),
       p(`${siteName}에 오신 것을 환영합니다. 이 문단을 사이트 소개로 바꿔주세요 — 관리자 → 페이지 → 소개 에서 수정할 수 있습니다.`),
     ],
     plainText: `${siteName} 소개`,
@@ -249,9 +249,10 @@ function starterPages(code: string, siteName: string): Array<{
       return [
         {
           slug: "home",
-          title: "홈",
+          // 테마가 페이지 제목을 h1 으로 그린다 — heading 블록을 또 넣으면
+          // "홈"과 사이트명이 이중 제목이 되므로, 제목 자체를 사이트명으로 둔다.
+          title: siteName,
           blocks: [
-            h(siteName),
             p("커뮤니티에 오신 것을 환영합니다. 아래는 게시판의 최신 글입니다."),
             spacer(),
             // 스타터가 만든 게시판 세 개를 나란히 — 메인 화면의 완성형을 보여준다
@@ -267,9 +268,8 @@ function starterPages(code: string, siteName: string): Array<{
       return [
         {
           slug: "home",
-          title: "홈",
+          title: siteName,
           blocks: [
-            h(siteName),
             // "준비 중입니다"는 첫 상품을 등록하는 순간 거짓말이 된다 — 상품
             // 목록 블록이 빈 상태 안내를 스스로 그리므로, 여기는 상품 유무와
             // 무관하게 참인 소개 문구를 둔다 (바꾸라는 힌트 포함).
@@ -288,7 +288,6 @@ function starterPages(code: string, siteName: string): Array<{
           slug: "guide",
           title: "이용 안내",
           blocks: [
-            h("이용 안내"),
             h("주문과 배송", 2),
             p("주문 후 2~3일 안에 배송됩니다. 이 내용을 실제 배송 정책으로 바꿔주세요."),
             h("교환과 반품", 2),
@@ -303,9 +302,8 @@ function starterPages(code: string, siteName: string): Array<{
       return [
         {
           slug: "home",
-          title: "홈",
+          title: siteName,
           blocks: [
-            h(siteName),
             p(`${siteName}의 공식 홈페이지입니다. 이 문단을 회사의 한 줄 소개로 바꿔주세요.`),
             spacer(),
             { block: "brick-board/latest-posts",
@@ -318,7 +316,6 @@ function starterPages(code: string, siteName: string): Array<{
           slug: "services",
           title: "서비스",
           blocks: [
-            h("서비스"),
             p("제공하는 서비스를 소개해주세요. 항목이 여럿이면 단 나누기 블록이 어울립니다."),
           ],
           plainText: "서비스 소개",
@@ -327,7 +324,6 @@ function starterPages(code: string, siteName: string): Array<{
           slug: "support",
           title: "문의하기",
           blocks: [
-            h("문의하기"),
             p("궁금한 점을 남겨주시면 답변드립니다."),
             // 1:1 문의 화면 — brick-helpdesk 가 활성화되어 있으면 여기서 접수된다
             { block: "brick-helpdesk/tickets", props: {} },

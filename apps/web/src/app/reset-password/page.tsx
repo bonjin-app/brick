@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AuthShell, authButton, authInput, authLabel } from "../../components/AuthShell";
 import { useT } from "../../lib/i18n";
 
 type State = "checking" | "invalid" | "ready" | "done";
@@ -51,12 +52,10 @@ export default function ResetPasswordPage() {
     }
   }
 
-  const input = { width: "100%", padding: 10, marginTop: 4, boxSizing: "border-box" as const };
   return (
-    <main style={{ fontFamily: "sans-serif", maxWidth: 400, margin: "100px auto", padding: 24 }}>
-      <h1 style={{ textAlign: "center" }}>{t("reset.title")}</h1>
+    <AuthShell title={t("reset.title")}>
 
-      {state === "checking" && <p style={{ textAlign: "center", color: "#666" }}>{t("reset.checking")}</p>}
+      {state === "checking" && <p style={{ textAlign: "center", color: "#6b6b75" }}>{t("reset.checking")}</p>}
 
       {state === "invalid" && (
         <div style={{ background: "#fdf2f0", border: "1px solid #f3d0ca", borderRadius: 8, padding: 20 }}>
@@ -75,22 +74,22 @@ export default function ResetPasswordPage() {
 
       {state === "ready" && (
         <form onSubmit={submit}>
-          <label>
+          <label style={{ ...authLabel, marginTop: 0 }}>
             {t("reset.newPassword")}
-            <input style={input} type="password" required minLength={8} value={form.password}
+            <input style={authInput} type="password" required minLength={8} value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })} />
           </label>
-          <label style={{ display: "block", marginTop: 16 }}>
+          <label style={authLabel}>
             {t("reset.confirm")}
-            <input style={input} type="password" required value={form.confirm}
+            <input style={authInput} type="password" required value={form.confirm}
               onChange={(e) => setForm({ ...form, confirm: e.target.value })} />
           </label>
-          <button disabled={busy} style={{ width: "100%", padding: 12, marginTop: 20, cursor: "pointer" }}>
+          <button disabled={busy} style={authButton}>
             {busy ? t("reset.busy") : t("reset.submit")}
           </button>
-          {error && <p style={{ color: "crimson" }}>{error}</p>}
+          {error && <p style={{ color: "#c0392b", fontSize: 14 }}>{error}</p>}
         </form>
       )}
-    </main>
+    </AuthShell>
   );
 }

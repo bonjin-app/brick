@@ -161,6 +161,12 @@ export class AuthController {
     const token = (req.cookies as Record<string, string> | undefined)?.[SESSION_COOKIE];
     if (token) await this.auth.logout(token);
     reply.clearCookie(SESSION_COOKIE, { path: "/" });
+    // 테마 헤더의 로그아웃은 JS 없는 <form> 제출이다 — JSON 을 화면에
+    // 보여주는 대신 홈으로 돌려보낸다 (303: POST 후 GET 리다이렉트)
+    if (String(req.headers.accept ?? "").includes("text/html")) {
+      reply.status(303).header("location", "/");
+      return;
+    }
     return { ok: true };
   }
 

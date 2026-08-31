@@ -116,6 +116,13 @@ export class PageRenderService {
     const themeCommon = {
       locale: site.locale,
       t: catalogToTree(t, CORE_MESSAGE_KEYS),
+      /**
+       * 헤더 유틸(로그인/로그아웃)용. 로그인 렌더는 캐시되지 않으므로
+       * (위 cacheable 정책) 사용자별 내용이 다른 사람에게 새지 않는다.
+       * 템플릿 엔진에 else 가 없어 비로그인 분기는 guest 로 준다.
+       */
+      user: user ? { displayName: user.displayName, isAdmin: user.role === "admin" } : null,
+      guest: !user,
     };
 
     /**

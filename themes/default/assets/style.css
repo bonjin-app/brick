@@ -1,15 +1,162 @@
-body { margin: 0; font-family: var(--font-body); color: var(--color-text); background: var(--color-bg); }
-.brick-header { padding: 16px 24px; border-bottom: 1px solid #eee; }
-.brick-logo { font-weight: 700; text-decoration: none; color: var(--color-primary); font-size: 20px; }
-.brick-main { max-width: 960px; margin: 0 auto; padding: 32px 24px; min-height: 60vh; }
+/*
+ * Brick Default — 기본 테마 스타일.
+ *
+ * 기본 스킨을 그대로 써도 사이트로 보이게 하는 것이 목표다.
+ * 색·글꼴은 brick.theme.json 의 tokens(:root CSS 변수)에서 오고,
+ * 블록 고유의 화면(상품 그리드·게시판 표 내부)은 블록이 자기 CSS 를
+ * 가진다 — 테마는 뼈대(헤더·본문 폭·타이포·폼 기본기)만 책임진다.
+ */
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  color: var(--color-text);
+  background: var(--color-bg);
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--color-primary); }
+img { max-width: 100%; height: auto; }
+
+/* ── 헤더 ─────────────────────────────────────────── */
+.brick-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: 0 28px;
+  height: 60px;
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-line);
+}
+.brick-logo {
+  font-weight: 800;
+  text-decoration: none;
+  color: var(--color-primary);
+  font-size: 20px;
+  letter-spacing: -0.5px;
+  white-space: nowrap;
+}
+.brick-nav { display: flex; gap: 4px; flex: 1; min-width: 0; overflow-x: auto; }
+.brick-nav a {
+  color: var(--color-text);
+  text-decoration: none;
+  font-size: 14.5px;
+  font-weight: 500;
+  padding: 8px 10px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+.brick-nav a:hover { color: var(--color-primary); background: var(--color-primary-soft); }
+
+/* 로그인/회원가입/로그아웃 — 헤더 우측 유틸 */
+.brick-util { display: flex; align-items: center; gap: 14px; margin-left: auto; white-space: nowrap; }
+.brick-util a { color: var(--color-muted); text-decoration: none; font-size: 13.5px; }
+.brick-util a:hover { color: var(--color-text); }
+.brick-util .brick-util-cta {
+  color: #fff;
+  background: var(--color-primary);
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+.brick-util .brick-util-cta:hover { color: #fff; filter: brightness(0.94); }
+.brick-util-name { font-size: 13.5px; font-weight: 600; }
+.brick-logout { display: inline; margin: 0; }
+.brick-logout button {
+  border: 0;
+  background: none;
+  color: var(--color-muted);
+  font: inherit;
+  font-size: 13.5px;
+  cursor: pointer;
+  padding: 0;
+}
+.brick-logout button:hover { color: var(--color-text); }
+
+/* ── 본문 ─────────────────────────────────────────── */
+.brick-main { max-width: 1024px; margin: 0 auto; padding: 40px 28px 72px; min-height: 60vh; }
+.brick-page > h1 { font-size: 30px; letter-spacing: -0.8px; margin: 0 0 20px; }
+.brick-main h2 { font-size: 21px; letter-spacing: -0.4px; margin: 36px 0 10px; }
+.brick-main h3 { font-size: 17px; margin: 26px 0 8px; }
+.brick-main p { margin: 0 0 14px; }
 .brick-hero { text-align: center; padding: 80px 0; }
-.brick-footer { padding: 24px; text-align: center; color: #999; font-size: 13px; border-top: 1px solid #eee; }
+
+/* 폼 기본기 — 게시판 검색·글쓰기 등 블록이 그리는 폼이 상속한다 */
+.brick-main input[type="text"],
+.brick-main input[type="number"],
+.brick-main input[type="email"],
+.brick-main input[type="password"],
+.brick-main select,
+.brick-main textarea {
+  font: inherit;
+  color: inherit;
+  background: var(--color-bg);
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  padding: 9px 12px;
+}
+.brick-main input:focus-visible,
+.brick-main select:focus-visible,
+.brick-main textarea:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 0;
+  border-color: transparent;
+}
+.brick-main button {
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--color-line);
+  background: var(--color-bg);
+  color: var(--color-text);
+  border-radius: 8px;
+  padding: 9px 16px;
+}
+.brick-main button:hover { border-color: var(--color-muted); }
+.brick-main button.brick-primary,
+.brick-main .brick-primary {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+  font-weight: 600;
+}
+.brick-main button.brick-primary:hover { filter: brightness(0.94); }
+
+/* 표 기본기 — 게시판 목록 등 */
+.brick-main table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+.brick-main th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--color-muted);
+  border-bottom: 1px solid var(--color-line);
+  padding: 10px 12px;
+  font-size: 13px;
+}
+.brick-main td { border-bottom: 1px solid var(--color-line); padding: 12px; }
+
+/* ── 푸터 ─────────────────────────────────────────── */
+.brick-footer {
+  padding: 28px 28px 36px;
+  text-align: center;
+  color: var(--color-muted);
+  font-size: 13px;
+  border-top: 1px solid var(--color-line);
+  background: var(--color-bg-soft);
+}
 .brick-footer a { color: inherit; }
 /* 사업자정보 — 전자상거래법상 표시 의무. 항목을 쉼표 없이 간격으로 구분한다 */
 .brick-business { display: flex; flex-wrap: wrap; gap: 4px 14px; justify-content: center; margin-bottom: 10px; line-height: 1.8; }
-.brick-business b { font-weight: 600; color: #666; }
-.brick-footer-credit { opacity: .7; }
-.brick-header { display: flex; align-items: center; gap: 24px; }
-.brick-nav { display: flex; gap: 16px; }
-.brick-nav a { color: var(--color-text); text-decoration: none; font-size: 14px; }
-.brick-nav a:hover { color: var(--color-primary); }
+.brick-business b { font-weight: 600; }
+.brick-footer-credit { opacity: 0.75; }
+
+/* ── 모바일 ───────────────────────────────────────── */
+@media (max-width: 720px) {
+  .brick-header { flex-wrap: wrap; height: auto; padding: 10px 16px; gap: 8px 16px; }
+  .brick-nav { order: 3; flex-basis: 100%; }
+  .brick-util { gap: 10px; }
+  .brick-main { padding: 24px 16px 56px; }
+  .brick-page > h1 { font-size: 24px; }
+}

@@ -93,6 +93,10 @@ const CORE_KO: MessageCatalog = {
   "footer.email": "이메일",
   "footer.privacyOfficer": "개인정보 보호책임자",
   "footer.hosting": "호스팅",
+  "header.login": "로그인",
+  "header.register": "회원가입",
+  "header.logout": "로그아웃",
+  "header.admin": "관리자",
 };
 
 const CORE_EN: MessageCatalog = {
@@ -106,6 +110,10 @@ const CORE_EN: MessageCatalog = {
   "footer.email": "Email",
   "footer.privacyOfficer": "Privacy officer",
   "footer.hosting": "Hosting",
+  "header.login": "Log in",
+  "header.register": "Sign up",
+  "header.logout": "Log out",
+  "header.admin": "Admin",
 };
 
 export const CORE_CATALOGS: Record<Locale, MessageCatalog> = { ko: CORE_KO, en: CORE_EN };

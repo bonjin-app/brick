@@ -30,6 +30,11 @@ const KO = {
   "register.fail": "가입에 실패했습니다.",
   "register.done": "가입 완료! 로그인 페이지로 이동합니다…",
   "register.haveAccount": "이미 계정이 있나요?",
+  "register.required": "(필수)",
+  "register.optional": "(선택)",
+  "register.viewBody": "내용 보기",
+  "register.age": "만 14세 이상입니다.",
+  "register.needAge": "만 14세 이상만 가입할 수 있습니다.",
 
   "social.or": "또는",
   "social.continue": "{label}로 계속하기",
@@ -74,6 +79,11 @@ const EN: Record<keyof typeof KO, string> = {
   "register.busy": "Working…",
   "register.submit": "Create account",
   "register.fail": "Sign-up failed.",
+  "register.required": "(required)",
+  "register.optional": "(optional)",
+  "register.viewBody": "View details",
+  "register.age": "I am 14 years of age or older.",
+  "register.needAge": "You must be at least 14 years old to sign up.",
   "register.done": "Welcome! Taking you to the login page…",
   "register.haveAccount": "Already have an account?",
 
@@ -109,6 +119,7 @@ const CATALOGS: Record<string, Record<string, string>> = { ko: KO, en: EN };
 
 /** 페이지 이동 간 재요청을 막는 모듈 캐시 */
 let cachedLocale: string | null = null;
+let cachedSiteName: string | null = null;
 
 /** 사이트 언어 훅 — 공개·관리 화면이 공유한다 */
 export function useLocale(): string {
@@ -120,6 +131,7 @@ export function useLocale(): string {
       .then((r) => r.json())
       .then((d) => {
         cachedLocale = d.locale === "en" ? "en" : "ko";
+        cachedSiteName = String(d.siteName ?? "") || null;
         setLocale(cachedLocale);
       })
       .catch(() => {
@@ -128,6 +140,25 @@ export function useLocale(): string {
   }, []);
 
   return locale;
+}
+
+/** 사이트 이름 훅 — 로그인·가입 화면의 머리글. useLocale 과 같은 응답을 쓴다 */
+export function useSiteName(): string {
+  const [name, setName] = useState(cachedSiteName ?? "");
+
+  useEffect(() => {
+    if (cachedSiteName) { setName(cachedSiteName); return; }
+    fetch("/api/i18n")
+      .then((r) => r.json())
+      .then((d) => {
+        cachedLocale = d.locale === "en" ? "en" : "ko";
+        cachedSiteName = String(d.siteName ?? "") || null;
+        if (cachedSiteName) setName(cachedSiteName);
+      })
+      .catch(() => {}); // 이름을 못 받아도 화면은 떠야 한다
+  }, []);
+
+  return name;
 }
 
 /** 카탈로그 → 번역 함수. 규칙: 요청 언어 → ko → 키 자체 */

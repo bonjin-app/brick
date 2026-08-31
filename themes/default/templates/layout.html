@@ -8,7 +8,7 @@
   <meta property="og:title" content="{{ pageTitle }}" />
   {{#if seo.description}}<meta property="og:description" content="{{ seo.description }}" />{{/if}}
   <style>{{{ themeTokens }}}</style>
-  <link rel="stylesheet" href="{{ themeAssets }}/style.css" />
+  <link rel="stylesheet" href="{{ themeAssets }}/style.css?v={{ themeVersion }}" />
 </head>
 <body>
   <header class="brick-header">
@@ -16,6 +16,20 @@
     <nav class="brick-nav">
       {{#each menu}}<a href="{{ url }}">{{ label }}</a>{{/each}}
     </nav>
+    <div class="brick-util">
+      {{#if guest}}
+      <a href="/login">{{ t.header.login }}</a>
+      <a class="brick-util-cta" href="/register">{{ t.header.register }}</a>
+      {{/if}}
+      {{#if user}}
+      <span class="brick-util-name">{{ user.displayName }}</span>
+      {{#if user.isAdmin}}<a href="/admin">{{ t.header.admin }}</a>{{/if}}
+      {{!-- 로그아웃은 상태를 바꾸므로 링크(GET)가 아니라 폼(POST)이다 --}}
+      <form class="brick-logout" method="post" action="/api/auth/logout">
+        <button type="submit">{{ t.header.logout }}</button>
+      </form>
+      {{/if}}
+    </div>
   </header>
   <main class="brick-main">
     {{{ content }}}

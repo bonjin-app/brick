@@ -46,7 +46,10 @@ export class ThemesService {
       ...scope,
       content: body,
       themeTokens: this.tokensToCss(manifest.tokens ?? {}),
+      // 버전 쿼리 = 캐시버스터. 없으면 테마를 고쳐도(ZIP 업데이트 포함)
+      // 손님 브라우저가 옛 style.css 를 계속 쓴다 — 버전을 올리면 깨진다.
       themeAssets: `/themes/${name}/${manifest.assets ?? "assets"}`,
+      themeVersion: encodeURIComponent(manifest.version ?? "0"),
     });
     return layout;
   }
