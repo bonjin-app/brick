@@ -232,42 +232,44 @@ STATS="$(curl -s -b "$CK" "$SHOP/admin/stats")"
 contains "/admin/stats 도 환불을 뺀다" "$STATS" '"revenue":"26000"'
 
 echo "── 회귀: 시간대 — KST 오전 8시 결제는 그날이다 (UTC면 전날)"
-# 2026-08-10 08:00 KST = 2026-08-09 23:00 UTC
+# 2026-02-10 08:00 KST = 2026-02-09 23:00 UTC
 EARLY="$(mkorder "$P2" 1)"
-psql_q "UPDATE shop_orders SET payment_status='paid', status='paid', paid_at='2026-08-09 23:00:00+00' WHERE order_no='$EARLY'" >/dev/null
-R="$(curl -s -b "$CK" "$SHOP/admin/reports/sales?from=2026-08-10&to=2026-08-10")"
-contains "8월 10일로 잡힌다" "$R" '"bucket":"2026-08-10"'
+psql_q "UPDATE shop_orders SET payment_status='paid', status='paid', paid_at='2026-02-09 23:00:00+00' WHERE order_no='$EARLY'" >/dev/null
+R="$(curl -s -b "$CK" "$SHOP/admin/reports/sales?from=2026-02-10&to=2026-02-10")"
+contains "2월 10일로 잡힌다" "$R" '"bucket":"2026-02-10"'
 contains "10일 주문수 1" "$R" '"orders":1'
-R9="$(curl -s -b "$CK" "$SHOP/admin/reports/sales?from=2026-08-09&to=2026-08-09")"
+R9="$(curl -s -b "$CK" "$SHOP/admin/reports/sales?from=2026-02-09&to=2026-02-09")"
 check "9일에는 없다 (UTC로 잘랐으면 여기 있다)" "$(echo "$R9" | jq_get "['buckets']")" "[]"
 
-# 자정 직전: 2026-08-10 23:30 KST = 14:30 UTC → 여전히 10일
+# 자정 직전: 2026-02-10 23:30 KST = 14:30 UTC → 여전히 10일
 LATE="$(mkorder "$P2" 1)"
-psql_q "UPDATE shop_orders SET payment_status='paid', status='paid', paid_at='2026-08-10 14:30:00+00' WHERE order_no='$LATE'" >/dev/null
-R="$(curl -s -b "$CK" "$SHOP/admin/reports/sales?from=2026-08-10&to=2026-08-10")"
+psql_q "UPDATE shop_orders SET payment_status='paid', status='paid', paid_at='2026-02-10 14:30:00+00' WHERE order_no='$LATE'" >/dev/null
+R="$(curl -s -b "$CK" "$SHOP/admin/reports/sales?from=2026-02-10&to=2026-02-10")"
 contains "자정 직전도 같은 날 (주문 2건)" "$R" '"orders":2'
-# 자정 직후: 2026-08-11 00:30 KST = 2026-08-10 15:30 UTC → 11일
+# 자정 직후: 2026-02-11 00:30 KST = 2026-02-10 15:30 UTC → 11일
 NEXT="$(mkorder "$P2" 1)"
-psql_q "UPDATE shop_orders SET payment_status='paid', status='paid', paid_at='2026-08-10 15:30:00+00' WHERE order_no='$NEXT'" >/dev/null
-R="$(curl -s -b "$CK" "$SHOP/admin/reports/sales?from=2026-08-10&to=2026-08-10")"
+psql_q "UPDATE shop_orders SET payment_status='paid', status='paid', paid_at='2026-02-10 15:30:00+00' WHERE order_no='$NEXT'" >/dev/null
+R="$(curl -s -b "$CK" "$SHOP/admin/reports/sales?from=2026-02-10&to=2026-02-10")"
 contains "자정을 넘기면 빠진다 (여전히 2건)" "$R" '"orders":2'
-R11="$(curl -s -b "$CK" "$SHOP/admin/reports/sales?from=2026-08-11&to=2026-08-11")"
+R11="$(curl -s -b "$CK" "$SHOP/admin/reports/sales?from=2026-02-11&to=2026-02-11")"
 contains "11일에 1건" "$R11" '"orders":1'
 
 echo "── to 는 그날 끝까지 포함한다"
-R="$(curl -s -b "$CK" "$SHOP/admin/reports/sales?from=2026-08-09&to=2026-08-11")"
+R="$(curl -s -b "$CK" "$SHOP/admin/reports/sales?from=2026-02-09&to=2026-02-11")"
 check "3일 구간에 버킷 2개 (10일·11일)" "$(python3 -c "
 import json,sys
 print(len(json.load(sys.stdin)['buckets']))" <<< "$R")" "2"
-contains "마지막 날이 빠지지 않았다" "$R" '"bucket":"2026-08-11"'
+contains "마지막 날이 빠지지 않았다" "$R" '"bucket":"2026-02-11"'
 
 echo "── 주·월 묶음"
-RW="$(curl -s -b "$CK" "$SHOP/admin/reports/sales?from=2026-08-01&to=2026-08-31&groupBy=week")"
+RW="$(curl -s -b "$CK" "$SHOP/admin/reports/sales?from=2026-02-01&to=2026-02-28&groupBy=week")"
 contains "주 단위" "$RW" '"groupBy":"week"'
-RM="$(curl -s -b "$CK" "$SHOP/admin/reports/sales?from=2026-08-01&to=2026-08-31&groupBy=month")"
-contains "월 단위 버킷 하나" "$RM" '"bucket":"2026-08-01"'
-# 8월엔 시간대 검증용 주문 3건 + 오늘(8월) 주문 2건 = 5건
-check "8월 주문 5건이 한 버킷에" "$(echo "$RM" | jq_get "['buckets'][0]['orders']")" "5"
+RM="$(curl -s -b "$CK" "$SHOP/admin/reports/sales?from=2026-02-01&to=2026-02-28&groupBy=month")"
+contains "월 단위 버킷 하나" "$RM" '"bucket":"2026-02-01"'
+# 시간대 검증용 주문 3건만 있는 달이다. 과거 고정 월(2월)을 쓰는 이유:
+# 예전엔 8월이라 "오늘 주문"이 같은 달에 섞였고, 그 기대치(5건)는 9월 1일이
+# 되자 깨졌다 — 오늘과 절대 겹치지 않는 달이어야 시간 의존이 없다.
+check "2월 주문 3건이 한 버킷에" "$(echo "$RM" | jq_get "['buckets'][0]['orders']")" "3"
 
 echo "── 상품별"
 PR="$(curl -s -b "$CK" "$SHOP/admin/reports/products?from=$TODAY&to=$TODAY")"
@@ -283,7 +285,7 @@ PR_Q="$(curl -s -b "$CK" "$SHOP/admin/reports/products?from=$TODAY&to=$TODAY&sor
 contains "수량 정렬" "$PR_Q" '"sort":"qty"'
 check "limit 적용" "$(python3 -c "
 import json,sys
-print(len(json.load(sys.stdin)['products']))" <<< "$(curl -s -b "$CK" "$SHOP/admin/reports/products?from=2026-08-01&to=2026-08-31&limit=1")")" "1"
+print(len(json.load(sys.stdin)['products']))" <<< "$(curl -s -b "$CK" "$SHOP/admin/reports/products?from=2026-02-01&to=2026-02-28&limit=1")")" "1"
 
 echo "── 정합성: 상품별 합 + 배송비 == 주문별 순매출"
 # 이것이 안 맞으면 운영자는 두 리포트를 다 못 믿는다
@@ -337,18 +339,22 @@ import json,sys; print(sum(c['net'] for c in json.load(sys.stdin)['categories'])
 check "롤업해도 합계는 같다" "$SUM_FLAT" "$SUM_ROLL"
 
 echo "── 요약 (직전 동일 기간 대비)"
-SM="$(curl -s -b "$CK" "$SHOP/admin/reports/summary?from=2026-09-01&to=2026-09-30")"
+# 전부 오늘과 절대 겹치지 않는 고정 과거 기간이다 — "오늘 주문"이 섞이는
+# 기간을 쓰면 검증이 달력에 의존한다 (실제로 9월 1일에 8월 기대치가 깨졌다).
+PREVM="$(mkorder "$P2" 1)"
+psql_q "UPDATE shop_orders SET payment_status='paid', status='paid', paid_at='2026-01-20 03:00:00+00' WHERE order_no='$PREVM'" >/dev/null
+SM="$(curl -s -b "$CK" "$SHOP/admin/reports/summary?from=2026-02-01&to=2026-02-28")"
 contains "당월" "$SM" '"current"'
 contains "직전 기간을 함께 준다" "$SM" '"previous"'
 PREV_FROM="$(echo "$SM" | jq_get "['previous']['period']['from']")"
 PREV_TO="$(echo "$SM" | jq_get "['previous']['period']['to']")"
-check "직전 기간이 같은 길이 (8/2~8/31)" "$PREV_FROM|$PREV_TO" "2026-08-02|2026-08-31"
+check "직전 기간이 같은 길이 (1/4~1/31)" "$PREV_FROM|$PREV_TO" "2026-01-04|2026-01-31"
 contains "구매자 수" "$SM" '"buyers"'
-# 8월엔 매출이 있고 9월에도 있으므로 증감률이 나온다
+# 2월(3건)과 직전 1월(1건) 모두 매출이 있으므로 증감률이 나온다
 CHG="$(echo "$SM" | jq_get "['change']['net']")"
 [[ "$CHG" != "None" && -n "$CHG" ]] && ok "증감률 계산 ($CHG%)" || bad "증감률 계산"
-# 직전 기간이 0이면 비율을 만들지 않는다
-SM0="$(curl -s -b "$CK" "$SHOP/admin/reports/summary?from=2026-11-01&to=2026-11-30")"
+# 직전 기간이 0이면 비율을 만들지 않는다 (설치 전 과거라 당월·직전 모두 0)
+SM0="$(curl -s -b "$CK" "$SHOP/admin/reports/summary?from=2025-11-01&to=2025-11-30")"
 check "직전이 0이면 증감률은 null (100%도 무한도 거짓)" "$(echo "$SM0" | jq_get "['change']['net']")" "None"
 check "그때 당월 순매출은 0" "$(echo "$SM0" | jq_get "['current']['net']")" "0"
 
@@ -382,7 +388,7 @@ check "CSV 도 관리자만" "$(code "$SHOP/admin/reports/products?format=csv")"
 
 echo "── 삭제된 상품의 판매도 남는다"
 psql_q "DELETE FROM shop_products WHERE id='$P2'" >/dev/null
-PRD="$(curl -s -b "$CK" "$SHOP/admin/reports/products?from=2026-08-01&to=2026-08-31")"
+PRD="$(curl -s -b "$CK" "$SHOP/admin/reports/products?from=2026-02-01&to=2026-02-28")"
 contains "주문 시점 상품명이 남는다" "$PRD" '"productName":"모자"'
 CAP_ID="$(python3 -c "
 import json, sys
