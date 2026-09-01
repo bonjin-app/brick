@@ -246,7 +246,8 @@ DB 마이그레이션은 컨테이너가 부팅할 때 스스로 적용합니다
 
 ### 예정
 
-SDK npm 공개 · 첫 릴리스.
+SDK npm 공개.
+첫 릴리스는 [v0.1.0 (알파)](https://github.com/bonjin-app/brick/releases/tag/v0.1.0)으로 나갔습니다.
 1.0 완성형 정의 네 문장의 코드 요건은 전부 충족됐습니다 — 정의와 순서는 [로드맵](docs/roadmap.md)에 있습니다.
 
 ---
