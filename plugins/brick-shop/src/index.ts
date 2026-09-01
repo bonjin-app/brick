@@ -1717,7 +1717,11 @@ export default definePlugin(async (ctx) => {
 
   /** 이 주문에서 무엇을 얼마나 신청할 수 있는가 */
   ctx.registerRoute("GET", "/orders/:orderNo/returnable", async (req) => {
-    const view = await getReturnable(db, { orderNo: req.params.orderNo, viewer: req.user });
+    const view = await getReturnable(db, {
+      orderNo: req.params.orderNo,
+      viewer: req.user,
+      guestToken: req.query.token ?? null,
+    });
     const s = await settings();
     return {
       items: view.items,
@@ -1735,6 +1739,7 @@ export default definePlugin(async (ctx) => {
       orderNo: req.params.orderNo,
       input: req.body as never,
       viewer: req.user,
+      guestToken: req.query.token ?? null,
       settings: { returnShippingFee: s.returnShippingFee },
     });
     await ctx.hooks.doAction("shop.return.requested", {

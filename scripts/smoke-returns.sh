@@ -122,6 +122,30 @@ contains "반품 배송비 안내" "$RA" '"returnShippingFee":3000'
 check "남의 주문은 404 (403이면 존재가 새어 나간다)" "$(code -b "$B2" "$SHOP/orders/$NO1/returnable")" "404"
 check "비로그인도 404" "$(code "$SHOP/orders/$NO1/returnable")" "404"
 
+echo "── 비회원도 청약철회할 수 있다 (회원 여부와 무관한 법적 권리)"
+# 전자상거래법 제17조의 청약철회권은 비회원 구매자에게도 있다. 주문했던
+# 기기의 guestToken 으로만 열린다 — 주문번호는 순차적이라 번호만으로
+# 열리면 남의 주문을 철회할 수 있다.
+# 재고 검증이 추적하는 상품과 섞이지 않게 **전용 상품**을 쓴다 —
+# 같은 상품을 쓰면 이 주문이 뒤따르는 재고 기대치를 어긋나게 한다
+PID_G="$(curl -s -b "$CK" -X POST "$SHOP/admin/products" -H 'content-type: application/json' \
+  -d '{"slug":"ret-guest","name":"비회원 청약철회 상품","price":10000,"stock":50,"status":"selling"}' | jq_get "['id']")"
+printf '{"items":[{"productId":"%s","quantity":1}],"orderer":{"ordererName":"비회원","ordererPhone":"010-0000-1111","postcode":"06236","address1":"서울"}}' "$PID_G" > "$TMP/gorder.json"
+GORDER="$(curl -s -X POST "$SHOP/orders" -H 'content-type: application/json' --data-binary "@$TMP/gorder.json")"
+GNO="$(echo "$GORDER" | jq_get "['orderNo']")"
+GTOKEN="$(echo "$GORDER" | jq_get "['guestToken']")"
+[[ -n "$GNO" && -n "$GTOKEN" ]] && ok "비회원 주문 생성" || bad "비회원 주문 생성"
+contains "토큰으로 신청 자격 조회" \
+  "$(curl -s "$SHOP/orders/$GNO/returnable?token=$GTOKEN")" '"allowedKinds"'
+check "토큰 없으면 404" "$(code "$SHOP/orders/$GNO/returnable")" "404"
+check "틀린 토큰도 404" "$(code "$SHOP/orders/$GNO/returnable?token=nope")" "404"
+GITEM="$(psql_q "SELECT oi.id FROM shop_order_items oi JOIN shop_orders o ON o.id=oi.order_id WHERE o.order_no='$GNO'")"
+printf '{"kind":"cancel","reasonCode":"change_of_mind","items":[{"orderItemId":"%s","quantity":1}]}' "$GITEM" > "$TMP/greq.json"
+contains "비회원이 실제로 신청한다" \
+  "$(curl -s -X POST "$SHOP/orders/$GNO/returns?token=$GTOKEN" -H 'content-type: application/json' --data-binary "@$TMP/greq.json")" '"returnNo"'
+check "토큰 없는 신청은 404" \
+  "$(code -X POST "$SHOP/orders/$GNO/returns" -H 'content-type: application/json' --data-binary "@$TMP/greq.json")" "404"
+
 echo "── 부분 취소: 할인 안분 (돈이 걸린 계산)"
 ITEM1="$(psql_q "SELECT oi.id FROM shop_order_items oi JOIN shop_orders o ON o.id=oi.order_id WHERE o.order_no='$NO1'")"
 # 2개 중 1개만 취소 → 실제로 받은 돈 18,000 중 절반 = 9,000 (10,000이 아니다)

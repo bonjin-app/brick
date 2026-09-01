@@ -232,6 +232,9 @@ contains "주문서에 무통장 안내" "$CO_R" "무통장 입금"
 # 주문 조회 — 주문한 손님이 주문을 다시 볼 화면 (회원 목록 / 비회원 번호 조회)
 contains "/shop/orders 가 주문 조회를 그린다" "$(curl -s "$API/api/render/page?path=shop/orders")" "brick-order-list"
 contains "/shop/orders/<번호> 가 상세를 그린다" "$(curl -s "$API/api/render/page?path=shop/orders/20990101-000001")" "brick-order-detail"
+# 주문 상세에 취소·반품 신청 UI 가 함께 온다 — 청약철회는 손님의 권리이므로
+# 화면이 있어야 한다 (관리자만 처리할 수 있으면 권리가 아니다)
+contains "상세에 취소·반품 신청 자리" "$(curl -s "$API/api/render/page?path=shop/orders/20990101-000001")" "brick-ret-slot"
 contains "/shop/event 가 기획전 목록을 그린다" "$(curl -s "$API/api/render/page?path=shop/event")" "기획전"
 GUIDE="$(curl -s "$API/api/render/page?path=guide")"
 contains "교환·반품 안내가 있다 (표시 의무의 출발점)" "$GUIDE" "교환과 반품"

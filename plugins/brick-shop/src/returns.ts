@@ -108,7 +108,19 @@ export interface ReturnableItem {
  */
 export async function getReturnable(
   db: Db,
-  params: { orderNo: string; viewer: { id: string; role: string } | null },
+  params: {
+    orderNo: string;
+    viewer: { id: string; role: string } | null;
+    /**
+     * 비회원 주문의 소유 증명 (주문 시 발급된 토큰).
+     *
+     * 청약철회권(전자상거래법 제17조)은 **회원 여부와 무관한 법적 권리**다 —
+     * 비회원 구매자도 신청할 수 있어야 한다. 주문 조회와 같은 규칙을 쓴다:
+     * 주문번호는 순차적이라 번호만으로는 열리지 않고, 주문했던 기기의
+     * 토큰이 있어야 한다.
+     */
+    guestToken?: string | null;
+  },
 ): Promise<{
   order: Record<string, unknown>;
   items: ReturnableItem[];
@@ -119,8 +131,8 @@ export async function getReturnable(
   withdrawalExpired: boolean;
 }> {
   const { rows } = await db.execute(sql`
-    SELECT id, order_no, user_id, status, subtotal, discount, shipping_fee, point_used, total,
-           delivered_at, coupon_code, payment_status
+    SELECT id, order_no, user_id, guest_token, status, subtotal, discount, shipping_fee,
+           point_used, total, delivered_at, coupon_code, payment_status
     FROM shop_orders WHERE order_no = ${params.orderNo} LIMIT 1
   `);
   const order = rows[0];
@@ -128,7 +140,12 @@ export async function getReturnable(
 
   const isManager = params.viewer?.role === "admin" || params.viewer?.role === "manager";
   const isOwner = Boolean(params.viewer && String(order.user_id) === params.viewer.id);
-  if (!isManager && !isOwner) {
+  // 비회원 주문 — 토큰이 일치하고 그 주문에 회원이 없을 때만
+  const token = String(params.guestToken ?? "");
+  const isGuestOwner = Boolean(
+    token && !order.user_id && String(order.guest_token ?? "") === token,
+  );
+  if (!isManager && !isOwner && !isGuestOwner) {
     // 주문번호는 순차적이므로 존재를 알려주지 않는다
     throw new ShopError(404, "주문을 찾을 수 없습니다.");
   }
@@ -238,6 +255,8 @@ export async function requestReturn(
     orderNo: string;
     input: RequestInput;
     viewer: { id: string; role: string } | null;
+    /** 비회원 주문의 소유 증명 — getReturnable 과 같은 규칙 */
+    guestToken?: string | null;
     settings: { returnShippingFee: number };
   },
 ): Promise<{ id: string; returnNo: string; refundAmount: number; shippingPayer: string }> {
@@ -247,7 +266,11 @@ export async function requestReturn(
   const reasonCode = String(params.input?.reasonCode ?? "") as ReasonCode;
   if (!(reasonCode in REASON_CODES)) throw new ShopError(400, "사유를 선택해주세요.");
 
-  const view = await getReturnable(db, { orderNo: params.orderNo, viewer: params.viewer });
+  const view = await getReturnable(db, {
+    orderNo: params.orderNo,
+    viewer: params.viewer,
+    guestToken: params.guestToken,
+  });
   if (!view.allowedKinds.includes(kind)) {
     throw new ShopError(
       400,

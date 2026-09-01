@@ -67,6 +67,15 @@ const ORDERS_CSS = `
 .brick-o-meta dt { color: var(--color-muted, #71717d); }
 .brick-o-meta dd { margin: 0; }
 .brick-o-history { font-size: 13.5px; color: var(--color-muted, #71717d); }
+.brick-ret { margin-top: 22px; border: 1px solid var(--color-line, #e7e7ec); border-radius: 10px; padding: 12px 16px; }
+.brick-ret summary { cursor: pointer; font-weight: 600; }
+.brick-ret h4 { margin: 14px 0 6px; font-size: 14px; }
+.brick-ret-kinds { display: flex; gap: 14px; flex-wrap: wrap; font-size: 14px; }
+.brick-ret-kind { display: flex; gap: 6px; align-items: center; }
+.brick-ret-form select, .brick-ret-form input[name=detail] { width: 100%; max-width: 420px; }
+.brick-ret-note { font-size: 13px; color: var(--color-muted, #71717d); margin: 8px 0; }
+.brick-ret-msg { margin-left: 10px; font-size: 13.5px; color: #c0392b; }
+.brick-ret-done { padding: 14px; background: var(--color-bg-soft, #f7f7f9); border-radius: 10px; margin-top: 18px; }
 </style>`;
 
 /** 목록 화면 — 회원이면 /my/orders, 401 이면 비회원 조회 폼 */
@@ -125,7 +134,7 @@ const listScript = (t: (k: string) => string, labels: string) => `
 </script>`;
 
 /** 상세 화면 — 회원 쿠키로 시도, 실패하면 이 기기의 guestToken 으로 재시도 */
-const detailScript = (t: (k: string) => string, labels: string) => `
+const detailScript = (t: (k: string, p?: Record<string, string | number>) => string, labels: string) => `
 <script>
 (function(){
   var root = document.getElementById('brick-order-detail');
@@ -142,6 +151,113 @@ const detailScript = (t: (k: string) => string, labels: string) => `
     var url = '/api/plugins/brick-shop/orders/' + encodeURIComponent(no) +
       (withToken && guest ? '?token=' + encodeURIComponent(guest) : '');
     return fetch(url).then(function(r){ return r.ok ? r.json() : null; });
+  }
+
+  function renderReturnSection(orderNo){
+    var slot = document.getElementById('brick-ret-slot');
+    if (!slot) return;
+    var guest = localStorage.getItem('brick_shop_guest');
+    var q = guest ? ('?token=' + encodeURIComponent(guest)) : '';
+    fetch('/api/plugins/brick-shop/orders/' + encodeURIComponent(orderNo) + '/returnable' + q)
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(v){
+        if (!v || !v.allowedKinds || !v.allowedKinds.length) return;
+        var openable = (v.items || []).some(function(it){ return it.availableQty > 0; });
+        if (!openable) return;
+
+        var deadline = v.withdrawalDeadline
+          ? '<p class="brick-ret-note">' + ${JSON.stringify(t("ret.withdrawalDeadline", { date: "__D__" }))}
+              .replace('__D__', new Date(v.withdrawalDeadline).toLocaleDateString()) + '</p>'
+          : '';
+        var expired = v.withdrawalExpired
+          ? '<p class="brick-ret-note">' + ${JSON.stringify(t("ret.withdrawalExpired"))} + '</p>' : '';
+
+        var kinds = v.allowedKinds.map(function(k){
+          return '<label class="brick-ret-kind"><input type="radio" name="ret-kind" value="' + esc(k.code) + '" />' +
+            esc(k.label) + '</label>';
+        }).join('');
+
+        var rows = (v.items || []).filter(function(it){ return it.availableQty > 0; }).map(function(it){
+          return '<tr><td><label><input type="checkbox" data-ret-item="' + esc(it.orderItemId) + '" /> ' +
+            esc(it.productName) + (it.optionName ? ' — ' + esc(it.optionName) : '') + '</label></td>' +
+            '<td><input type="number" min="1" max="' + it.availableQty + '" value="' + it.availableQty +
+            '" data-ret-qty="' + esc(it.orderItemId) + '" style="width:70px" /> / ' + it.availableQty + '</td></tr>';
+        }).join('');
+
+        slot.innerHTML =
+          '<details class="brick-ret"><summary>' + ${JSON.stringify(t("ret.request"))} + '</summary>' +
+          deadline + expired +
+          '<form class="brick-ret-form">' +
+          '<h4>' + ${JSON.stringify(t("ret.kind"))} + '</h4><div class="brick-ret-kinds">' + kinds + '</div>' +
+          '<h4>' + ${JSON.stringify(t("ret.reason"))} + '</h4><select name="reason" required><option value="">—</option></select>' +
+          '<h4>' + ${JSON.stringify(t("ret.reasonDetail"))} + '</h4><input name="detail" maxlength="500" />' +
+          '<h4>' + ${JSON.stringify(t("ret.items"))} + '</h4>' +
+          '<table><tbody>' + rows + '</tbody></table>' +
+          '<p class="brick-ret-note" data-ret-payer></p>' +
+          '<button type="submit" class="brick-primary">' + ${JSON.stringify(t("ret.submit"))} + '</button>' +
+          '<span class="brick-ret-msg" role="status"></span>' +
+          '</form></details>';
+
+        var form = slot.querySelector('.brick-ret-form');
+        var sel = form.querySelector('select[name=reason]');
+        var payerNote = form.querySelector('[data-ret-payer]');
+        var msg = form.querySelector('.brick-ret-msg');
+
+        // 사유 목록 — 각 사유의 반송비 부담을 **미리** 보여준다.
+        // 나중에 환불액이 깎여 있으면 분쟁이 된다.
+        fetch('/api/plugins/brick-shop/returns/reasons').then(function(r){ return r.json(); })
+          .then(function(d){
+            sel.innerHTML = '<option value="">—</option>' + (d.items || []).map(function(it){
+              return '<option value="' + esc(it.code) + '" data-payer="' + esc(it.shippingPayer) + '">' +
+                esc(it.label) + '</option>';
+            }).join('');
+          });
+
+        sel.addEventListener('change', function(){
+          var opt = sel.options[sel.selectedIndex];
+          var payer = opt && opt.dataset.payer;
+          if (!payer) { payerNote.textContent = ''; return; }
+          var who = payer === 'seller'
+            ? ${JSON.stringify(t("ret.payerSeller"))}
+            : ${JSON.stringify(t("ret.payerCustomer"))};
+          payerNote.textContent = ${JSON.stringify(t("ret.shippingPayer"))} + ': ' + who +
+            (payer === 'customer' && v.returnShippingFee
+              ? ' · ' + ${JSON.stringify(t("ret.returnShippingNote", { amount: "__A__" }))}
+                  .replace('__A__', Number(v.returnShippingFee).toLocaleString('ko-KR'))
+              : '');
+        });
+
+        form.addEventListener('submit', function(e){
+          e.preventDefault();
+          var kindEl = form.querySelector('input[name=ret-kind]:checked');
+          if (!kindEl) { msg.textContent = ${JSON.stringify(t("ret.pickReason"))}; return; }
+          if (!sel.value) { msg.textContent = ${JSON.stringify(t("ret.pickReason"))}; return; }
+          var items = [];
+          form.querySelectorAll('[data-ret-item]:checked').forEach(function(cb){
+            var id = cb.dataset.retItem;
+            var qtyEl = form.querySelector('[data-ret-qty="' + id + '"]');
+            items.push({ orderItemId: id, quantity: Number(qtyEl.value) });
+          });
+          if (!items.length) { msg.textContent = ${JSON.stringify(t("ret.pickItem"))}; return; }
+
+          var btn = form.querySelector('button[type=submit]');
+          btn.disabled = true;
+          msg.textContent = ${JSON.stringify(t("ret.submitting"))};
+          fetch('/api/plugins/brick-shop/orders/' + encodeURIComponent(orderNo) + '/returns' + q, {
+            method: 'POST', headers: {'content-type':'application/json'},
+            body: JSON.stringify({ kind: kindEl.value, reasonCode: sel.value,
+              reason: form.querySelector('input[name=detail]').value || undefined, items: items })
+          }).then(function(r){ return r.json().then(function(d){ return {ok:r.ok, d:d}; }); })
+            .then(function(res){
+              btn.disabled = false;
+              if (!res.ok) { msg.textContent = res.d.message || ${JSON.stringify(t("ret.fail"))}; return; }
+              slot.innerHTML = '<p class="brick-ret-done">' +
+                ${JSON.stringify(t("ret.done", { no: "__N__" }))}.replace('__N__', esc(res.d.returnNo)) + '</p>';
+            })
+            .catch(function(){ btn.disabled = false; msg.textContent = ${JSON.stringify(t("ret.fail"))}; });
+        });
+      })
+      .catch(function(){});
   }
 
   load(false).then(function(d){ return d || load(true); }).then(function(d){
@@ -168,7 +284,11 @@ const detailScript = (t: (k: string) => string, labels: string) => `
       '<dt>' + ${JSON.stringify(t("orders.address"))} + '</dt><dd>(' + esc(o.postcode || '') + ') ' + esc(o.address1 || '') + ' ' + esc(o.address2 || '') + '</dd>' +
       (o.delivery_memo ? '<dt>' + ${JSON.stringify(t("orders.memo"))} + '</dt><dd>' + esc(o.delivery_memo) + '</dd>' : '') +
       '</dl>' +
-      (history ? '<h3>' + ${JSON.stringify(t("orders.history"))} + '</h3><ul class="brick-o-history">' + history + '</ul>' : '');
+      (history ? '<h3>' + ${JSON.stringify(t("orders.history"))} + '</h3><ul class="brick-o-history">' + history + '</ul>' : '') +
+      '<div id="brick-ret-slot"></div>';
+    // 취소·반품 신청 — 신청 가능한 주문일 때만 버튼을 낸다.
+    // 청약철회(전자상거래법 제17조)는 손님의 권리이므로 화면이 있어야 한다.
+    renderReturnSection(o.order_no);
   });
 })();
 </script>`;
