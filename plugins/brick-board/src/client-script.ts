@@ -366,7 +366,7 @@ export const BOARD_CSS = `
 .brick-post-head h1,.brick-post-head h2{margin:6px 0 10px;font-size:24px;line-height:1.4;letter-spacing:-0.6px;font-weight:800}
 .brick-post-meta{display:flex;gap:12px;color:var(--color-muted, #6c6c7a);font-size:13px;flex-wrap:wrap}
 .brick-edited{color:var(--color-muted, #6c6c7a)}
-.brick-post-content{line-height:1.8;min-height:80px;word-break:break-word}
+.brick-post-content{line-height:1.8;padding-bottom:28px;word-break:break-word}
 .brick-post-content img{max-width:100%;height:auto}
 .brick-post-content blockquote{margin:14px 0;padding:10px 16px;border-left:3px solid var(--color-line, #e4e4ea);color:var(--color-text-soft, #45454f)}
 .brick-post-content pre{background:var(--color-bg-soft, #f6f6f9);padding:12px;border-radius:6px;overflow-x:auto}

@@ -118,6 +118,12 @@ contains "tokens.css 에 다크" "$TOKENS" 'data-theme="dark"'
 CT="$(curl -s -o /dev/null -w "%{content_type}" "$API/api/themes/tokens.css")"
 contains "CSS 로 내려준다" "$CT" "text/css"
 
+echo "── 404 에서 손님을 세워 두지 않는다"
+NF="$(render "no-such-page")"
+contains "404 안내" "$NF" "페이지를 찾을 수 없습니다"
+contains "홈으로 가는 길" "$NF" '<a class="brick-btn brick-btn-primary" href="/">홈으로</a>'
+contains "검색으로 가는 길" "$NF" 'href="/search"'
+
 echo "── 팔레트에는 화면들이 실제로 쓸 값이 다 있어야 한다"
 for tok in color-bg color-bg-soft color-text color-text-soft color-muted \
            color-line color-line-strong color-primary color-primary-hover \

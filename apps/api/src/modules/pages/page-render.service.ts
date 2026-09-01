@@ -192,7 +192,16 @@ export class PageRenderService {
         menu: nav,
         pageTitle: `${t("page.notFoundTitle")} — ${site.name}`,
         title: t("page.notFoundTitle"),
-        blocksHtml: `<p>${escapeHtml(t("page.notFoundBody", { path }))}</p>`,
+        /**
+         * 404 에서 손님을 세워 두지 않는다 — 갈 곳을 준다.
+         * "없습니다" 한 줄만 있으면 뒤로가기 말고 할 수 있는 게 없다.
+         */
+        blocksHtml:
+          `<p>${escapeHtml(t("page.notFoundBody", { path }))}</p>` +
+          `<div class="brick-hero-actions" style="justify-content:flex-start">` +
+          `<a class="brick-btn brick-btn-primary" href="/">${escapeHtml(t("page.notFoundHome"))}</a>` +
+          `<a class="brick-btn" href="/search">${escapeHtml(t("page.notFoundSearch"))}</a>` +
+          `</div>`,
         seo: {},
       });
       return { html, status: 404 };

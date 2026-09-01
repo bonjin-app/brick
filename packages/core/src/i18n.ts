@@ -85,6 +85,8 @@ export function catalogToTree(t: Translator, keys: string[]): Record<string, unk
 const CORE_KO: MessageCatalog = {
   "page.notFoundTitle": "페이지를 찾을 수 없습니다",
   "page.notFoundBody": "요청하신 주소(/{path})에 해당하는 페이지가 없습니다.",
+  "page.notFoundHome": "홈으로",
+  "page.notFoundSearch": "검색해 보기",
   "footer.company": "상호",
   "footer.representative": "대표",
   "footer.businessNo": "사업자등록번호",
@@ -129,6 +131,8 @@ const CORE_KO: MessageCatalog = {
 const CORE_EN: MessageCatalog = {
   "page.notFoundTitle": "Page not found",
   "page.notFoundBody": "There is no page at /{path}.",
+  "page.notFoundHome": "Go home",
+  "page.notFoundSearch": "Search instead",
   "footer.company": "Company",
   "footer.representative": "Representative",
   "footer.businessNo": "Business reg. no.",
