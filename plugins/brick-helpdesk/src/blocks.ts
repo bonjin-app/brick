@@ -149,7 +149,7 @@ const HELP_CSS = `
 .brick-badge{font-size:11px;padding:2px 8px;border-radius:10px;font-weight:700}
 .brick-badge.open{background:color-mix(in srgb, var(--color-danger, #c9342f) 13%, transparent);color:var(--color-danger, #c9342f)}
 .brick-badge.answered{background:color-mix(in srgb, var(--color-success, #11795a) 14%, transparent);color:var(--color-success, #11795a)}
-.brick-badge.closed{background:var(--color-line, #e4e4ea);color:var(--color-muted, #6c6c7a)}
+.brick-badge.closed{background:var(--color-bg-sunken, #eeeef3);color:var(--color-text-soft, #45454f)}
 .brick-help-form{padding:20px;border:1px solid var(--color-line, #e4e4ea);border-radius:12px;margin-bottom:20px}
 .brick-help-form label{display:block;font-size:14px;margin-bottom:10px}
 .brick-help-form input,.brick-help-form select,.brick-help-form textarea{width:100%;padding:11px;margin-top:4px;border:1px solid var(--color-line, #e4e4ea);border-radius:8px;box-sizing:border-box;font:inherit}
