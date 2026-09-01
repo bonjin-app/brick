@@ -41,8 +41,8 @@ export default function AdminAuditPage() {
 
   return (
     <div>
-      <h1>{t("audit.title")} <span style={{ color: "#999", fontSize: 15 }}>{t("audit.countN", { n: data.total })}</span></h1>
-      <p style={{ color: "#666", fontSize: 14 }}>
+      <h1>{t("audit.title")} <span style={{ color: "var(--color-muted)", fontSize: 15 }}>{t("audit.countN", { n: data.total })}</span></h1>
+      <p style={{ color: "var(--color-text-soft)", fontSize: 14 }}>
         {t("audit.desc")}
       </p>
       <select value={filter} onChange={(e) => { setFilter(e.target.value); setPage(1); }}
@@ -51,29 +51,29 @@ export default function AdminAuditPage() {
         {KNOWN_ACTIONS.map((v) => <option key={v} value={v}>{t(`audit.a.${v}` as never)}</option>)}
       </select>
 
-      <div style={{ overflowX: "auto", background: "#fff", borderRadius: 8 }}>
+      <div style={{ overflowX: "auto", background: "var(--color-bg)", borderRadius: 8 }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
           <thead>
-            <tr style={{ textAlign: "left", borderBottom: "1px solid #eee" }}>
+            <tr style={{ textAlign: "left", borderBottom: "1px solid var(--color-line)" }}>
               <th style={{ padding: 12 }}>{t("audit.colTime")}</th><th>{t("audit.colActor")}</th><th>{t("audit.colAction")}</th><th>{t("audit.colTarget")}</th><th>IP</th>
             </tr>
           </thead>
           <tbody>
             {data.items.map((r) => (
-              <tr key={r.id} style={{ borderBottom: "1px solid #f4f4f7" }}>
-                <td style={{ padding: 12, whiteSpace: "nowrap", color: "#666" }}>
+              <tr key={r.id} style={{ borderBottom: "1px solid var(--color-line)" }}>
+                <td style={{ padding: 12, whiteSpace: "nowrap", color: "var(--color-text-soft)" }}>
                   {new Date(r.createdAt).toLocaleString()}
                 </td>
-                <td>{r.actorEmail ?? <span style={{ color: "#aaa" }}>{t("audit.system")}</span>}</td>
-                <td style={SENSITIVE.has(r.action) ? { color: "#c0392b", fontWeight: 600 } : undefined}>
+                <td>{r.actorEmail ?? <span style={{ color: "var(--color-muted)" }}>{t("audit.system")}</span>}</td>
+                <td style={SENSITIVE.has(r.action) ? { color: "var(--color-danger)", fontWeight: 600 } : undefined}>
                   {(KNOWN_ACTIONS as readonly string[]).includes(r.action) ? t(`audit.a.${r.action}` as never) : r.action}
                 </td>
-                <td style={{ color: "#555" }}>{r.summary ?? r.targetId ?? "-"}</td>
-                <td style={{ color: "#999", fontSize: 13 }}>{r.ip ?? "-"}</td>
+                <td style={{ color: "var(--color-text-soft)" }}>{r.summary ?? r.targetId ?? "-"}</td>
+                <td style={{ color: "var(--color-muted)", fontSize: 13 }}>{r.ip ?? "-"}</td>
               </tr>
             ))}
             {!data.items.length && (
-              <tr><td colSpan={5} style={{ padding: 24, color: "#999" }}>{t("audit.empty")}</td></tr>
+              <tr><td colSpan={5} style={{ padding: 24, color: "var(--color-muted)" }}>{t("audit.empty")}</td></tr>
             )}
           </tbody>
         </table>
@@ -82,7 +82,7 @@ export default function AdminAuditPage() {
       {data.total > data.items.length && (
         <div style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "center" }}>
           <button disabled={page <= 1} onClick={() => setPage(page - 1)} style={{ cursor: "pointer" }}>{t("common.prev")}</button>
-          <span style={{ fontSize: 13, color: "#666" }}>{t("common.pageN", { n: page })}</span>
+          <span style={{ fontSize: 13, color: "var(--color-text-soft)" }}>{t("common.pageN", { n: page })}</span>
           <button disabled={!data.items.length} onClick={() => setPage(page + 1)} style={{ cursor: "pointer" }}>{t("common.next")}</button>
         </div>
       )}

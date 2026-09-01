@@ -85,23 +85,23 @@ export default function AdminPagesPage() {
       <button onClick={() => setDraft({ ...EMPTY })} style={{ cursor: "pointer", padding: "8px 16px", marginBottom: 16 }}>
         {t("pages.new")}
       </button>
-      {message && <p style={{ color: "#0a7" }}>{message}</p>}
-      <table style={{ width: "100%", background: "#fff", borderRadius: 8, borderCollapse: "collapse" }}>
+      {message && <p style={{ color: "var(--color-success)" }}>{message}</p>}
+      <table style={{ width: "100%", background: "var(--color-bg)", borderRadius: 8, borderCollapse: "collapse" }}>
         <thead>
-          <tr style={{ textAlign: "left", borderBottom: "1px solid #eee" }}>
+          <tr style={{ textAlign: "left", borderBottom: "1px solid var(--color-line)" }}>
             <th style={{ padding: 12 }}>{t("common.title")}</th><th>{t("pages.colSlug")}</th><th>{t("common.status")}</th><th>{t("pages.colUpdated")}</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((p) => (
-            <tr key={p.id} style={{ borderBottom: "1px solid #f3f3f3", cursor: "pointer" }} onClick={() => open(p.id)}>
+            <tr key={p.id} style={{ borderBottom: "1px solid var(--color-line)", cursor: "pointer" }} onClick={() => open(p.id)}>
               <td style={{ padding: 12 }}><strong>{p.title}</strong></td>
               <td><code>/{p.slug}</code></td>
               <td>{p.status === "published" ? t("pages.published") : p.status === "draft" ? t("pages.draft") : t("pages.archived")}</td>
-              <td style={{ color: "#999", fontSize: 13 }}>{new Date(p.updatedAt).toLocaleString("ko-KR")}</td>
+              <td style={{ color: "var(--color-muted)", fontSize: 13 }}>{new Date(p.updatedAt).toLocaleString("ko-KR")}</td>
             </tr>
           ))}
-          {!rows.length && <tr><td colSpan={4} style={{ padding: 24, color: "#999" }}>{t("pages.empty")}</td></tr>}
+          {!rows.length && <tr><td colSpan={4} style={{ padding: 24, color: "var(--color-muted)" }}>{t("pages.empty")}</td></tr>}
         </tbody>
       </table>
     </div>
@@ -155,10 +155,10 @@ function PageEditor(props: {
             {t("pages.viewOnSite")}
           </a>
         )}
-        {props.onDelete && <button onClick={props.onDelete} style={{ cursor: "pointer", color: "crimson" }}>{t("common.delete")}</button>}
+        {props.onDelete && <button onClick={props.onDelete} style={{ cursor: "pointer", color: "var(--color-danger)" }}>{t("common.delete")}</button>}
         <button onClick={props.onSave} style={{ cursor: "pointer", padding: "8px 20px", fontWeight: 700 }}>{t("common.save")}</button>
       </div>
-      {props.message && <p style={{ color: "#0a7" }}>{props.message}</p>}
+      {props.message && <p style={{ color: "var(--color-success)" }}>{props.message}</p>}
 
       <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
         {/* 좌: 블록 캔버스 */}
@@ -176,15 +176,15 @@ function PageEditor(props: {
           ))}
           <div style={{ position: "relative" }}>
             <button onClick={() => setPicker(!picker)}
-              style={{ width: "100%", padding: 14, cursor: "pointer", border: "2px dashed #ccc", background: "none", borderRadius: 8 }}>
+              style={{ width: "100%", padding: 14, cursor: "pointer", border: "2px dashed var(--color-line-strong)", background: "none", borderRadius: 8 }}>
               {t("pages.addBlock")}
             </button>
             {picker && (
-              <div style={{ background: "#fff", border: "1px solid #ddd", borderRadius: 8, marginTop: 4, boxShadow: "0 4px 12px rgba(0,0,0,.1)" }}>
+              <div style={{ background: "var(--color-bg)", border: "1px solid var(--color-line-strong)", borderRadius: 8, marginTop: 4, boxShadow: "0 4px 12px rgba(0,0,0,.1)" }}>
                 {catalog.map((b) => (
                   <div key={b.name} onClick={() => addBlock(b.name)}
-                    style={{ padding: "10px 16px", cursor: "pointer", borderBottom: "1px solid #f3f3f3" }}>
-                    <strong>{b.displayName}</strong> <span style={{ color: "#999", fontSize: 12 }}>{b.name}</span>
+                    style={{ padding: "10px 16px", cursor: "pointer", borderBottom: "1px solid var(--color-line)" }}>
+                    <strong>{b.displayName}</strong> <span style={{ color: "var(--color-muted)", fontSize: 12 }}>{b.name}</span>
                   </div>
                 ))}
               </div>
@@ -193,7 +193,7 @@ function PageEditor(props: {
         </div>
 
         {/* 우: 페이지 설정 */}
-        <aside style={{ width: 280, background: "#fff", borderRadius: 8, padding: 16, flexShrink: 0 }}>
+        <aside style={{ width: 280, background: "var(--color-bg)", borderRadius: 8, padding: 16, flexShrink: 0 }}>
           <label>{t("common.title")}<input style={input} value={draft.title}
             onChange={(e) => onChange({ ...draft, title: e.target.value })} /></label>
           <label style={{ display: "block", marginTop: 12 }}>{t("pages.fieldSlug")}<input style={input} value={draft.slug}
@@ -205,8 +205,8 @@ function PageEditor(props: {
               <option value="archived">{t("pages.statusArchived")}</option>
             </select>
           </label>
-          <hr style={{ margin: "16px 0", border: "none", borderTop: "1px solid #eee" }} />
-          <strong style={{ fontSize: 13, color: "#888" }}>SEO</strong>
+          <hr style={{ margin: "16px 0", border: "none", borderTop: "1px solid var(--color-line)" }} />
+          <strong style={{ fontSize: 13, color: "var(--color-muted)" }}>SEO</strong>
           <label style={{ display: "block", marginTop: 8 }}>{t("pages.seoTitle")}<input style={input} value={draft.seo.title ?? ""}
             onChange={(e) => onChange({ ...draft, seo: { ...draft.seo, title: e.target.value } })} /></label>
           <label style={{ display: "block", marginTop: 12 }}>{t("common.description")}<textarea style={{ ...input, height: 60 }}
@@ -237,12 +237,12 @@ function BlockCard(props: {
   }
 
   return (
-    <div style={{ background: "#fff", borderRadius: 8, padding: 16, marginBottom: 12, boxShadow: "0 1px 3px rgba(0,0,0,.06)" }}>
+    <div style={{ background: "var(--color-bg)", borderRadius: 8, padding: 16, marginBottom: 12, boxShadow: "0 1px 3px rgba(0,0,0,.06)" }}>
       <div style={{ display: "flex", alignItems: "center", marginBottom: 8 }}>
         <strong style={{ flex: 1 }}>{def?.displayName ?? node.block}</strong>
         <button onClick={props.onMoveUp} style={{ cursor: "pointer" }}>↑</button>
         <button onClick={props.onMoveDown} style={{ cursor: "pointer", marginLeft: 4 }}>↓</button>
-        <button onClick={props.onRemove} style={{ cursor: "pointer", marginLeft: 8, color: "crimson" }}>✕</button>
+        <button onClick={props.onRemove} style={{ cursor: "pointer", marginLeft: 8, color: "var(--color-danger)" }}>✕</button>
       </div>
       {Object.entries(schema).map(([key, meta]) => (
         <label key={key} style={{ display: "block", marginTop: 8, fontSize: 13 }}>
@@ -261,7 +261,7 @@ function BlockCard(props: {
           )}
         </label>
       ))}
-      {!Object.keys(schema).length && <p style={{ color: "#999", fontSize: 13 }}>{t("pages.noProps")}</p>}
+      {!Object.keys(schema).length && <p style={{ color: "var(--color-muted)", fontSize: 13 }}>{t("pages.noProps")}</p>}
     </div>
   );
 }

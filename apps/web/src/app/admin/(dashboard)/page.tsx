@@ -44,12 +44,12 @@ export default function AdminDashboard() {
   }, []);
 
   const card: React.CSSProperties = {
-    background: "#fff", borderRadius: 8, padding: 20, minWidth: 170,
+    background: "var(--color-bg)", borderRadius: 8, padding: 20, minWidth: 170,
     boxShadow: "0 1px 3px rgba(0,0,0,.08)", color: "inherit", textDecoration: "none",
   };
-  const label: React.CSSProperties = { color: "#888", fontSize: 14 };
+  const label: React.CSSProperties = { color: "var(--color-muted)", fontSize: 14 };
   const value: React.CSSProperties = { fontSize: 28, lineHeight: 1.4 };
-  const sub: React.CSSProperties = { color: "#999", fontSize: 12.5 };
+  const sub: React.CSSProperties = { color: "var(--color-muted)", fontSize: 12.5 };
 
   const stat = (k: string, l: string, v: React.ReactNode, s?: string | null, link?: string | null) => {
     const body = (

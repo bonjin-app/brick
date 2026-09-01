@@ -22,10 +22,10 @@ interface LinkTarget { path: string; label: string; hint?: string | null }
 interface TargetGroup { code: string; label: string; items: LinkTarget[] }
 
 const input: React.CSSProperties = {
-  padding: 8, boxSizing: "border-box", border: "1px solid #ddd", borderRadius: 6,
+  padding: 8, boxSizing: "border-box", border: "1px solid var(--color-line-strong)", borderRadius: 6,
 };
 const btn: React.CSSProperties = {
-  cursor: "pointer", padding: "8px 12px", borderRadius: 6, border: "1px solid #ddd", background: "#fff",
+  cursor: "pointer", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--color-line-strong)", background: "var(--color-bg)",
 };
 
 export default function AdminMenusPage() {
@@ -81,11 +81,11 @@ export default function AdminMenusPage() {
   return (
     <div>
       <h1>{t("menus.title")}</h1>
-      <p style={{ color: "#666", fontSize: 14, marginTop: -8 }}>
+      <p style={{ color: "var(--color-text-soft)", fontSize: 14, marginTop: -8 }}>
         {t("menus.guide")}
       </p>
 
-      <div style={{ background: "#fff", borderRadius: 8, padding: 16, maxWidth: 860 }}>
+      <div style={{ background: "var(--color-bg)", borderRadius: 8, padding: 16, maxWidth: 860 }}>
         {items.map((it, i) => (
           <div key={i} style={{ marginBottom: 10 }}>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -99,7 +99,7 @@ export default function AdminMenusPage() {
               </button>
               <button style={btn} onClick={() => move(i, -1)} title={t("common.up")}>↑</button>
               <button style={btn} onClick={() => move(i, 1)} title={t("common.down")}>↓</button>
-              <button style={{ ...btn, color: "crimson" }} title={t("common.delete")}
+              <button style={{ ...btn, color: "var(--color-danger)" }} title={t("common.delete")}
                 onClick={() => { setItems(items.filter((_, j) => j !== i)); setPickerFor(null); }}>✕</button>
             </div>
             {pickerFor === i && <TargetPicker onPick={(t) => pick(i, t)} onClose={() => setPickerFor(null)} />}
@@ -111,15 +111,15 @@ export default function AdminMenusPage() {
           {t("menus.addItem")}
         </button>
 
-        <hr style={{ margin: "16px 0", border: "none", borderTop: "1px solid #eee" }} />
+        <hr style={{ margin: "16px 0", border: "none", borderTop: "1px solid var(--color-line)" }} />
         <button onClick={() => void save()}
-          style={{ ...btn, padding: "10px 24px", fontWeight: 700, background: "#1a1a2e", color: "#fff", borderColor: "#1a1a2e" }}>
+          style={{ ...btn, padding: "10px 24px", fontWeight: 700, background: "var(--color-primary)", color: "var(--color-on-primary)", borderColor: "var(--color-primary)" }}>
           {t("common.save")}
         </button>
-        {message && <p style={{ color: message.startsWith(t("common.failPrefix").slice(0, 2)) ? "crimson" : "#0a7" }}>{message}</p>}
+        {message && <p style={{ color: message.startsWith(t("common.failPrefix").slice(0, 2)) ? "var(--color-danger)" : "var(--color-success)" }}>{message}</p>}
       </div>
 
-      <p style={{ color: "#999", fontSize: 13, marginTop: 12 }}>
+      <p style={{ color: "var(--color-muted)", fontSize: 13, marginTop: 12 }}>
         {t("menus.anchorNote")}
       </p>
     </div>
@@ -166,18 +166,18 @@ function TargetPicker(props: { onPick: (t: LinkTarget) => void; onClose: () => v
 
   return (
     <div ref={boxRef} style={{
-      marginTop: 6, border: "1px solid #ddd", borderRadius: 8, background: "#fff",
+      marginTop: 6, border: "1px solid var(--color-line-strong)", borderRadius: 8, background: "var(--color-bg)",
       boxShadow: "0 6px 20px rgba(0,0,0,.12)", maxHeight: 340, overflowY: "auto",
     }}>
-      <div style={{ padding: 10, borderBottom: "1px solid #eee", position: "sticky", top: 0, background: "#fff" }}>
+      <div style={{ padding: 10, borderBottom: "1px solid var(--color-line)", position: "sticky", top: 0, background: "var(--color-bg)" }}>
         <input autoFocus style={{ ...input, width: "100%" }} placeholder={t("menus.searchPh")}
           value={query} onChange={(e) => setQuery(e.target.value)} />
       </div>
 
-      {error && <p style={{ padding: 12, color: "crimson", margin: 0 }}>{error}</p>}
-      {!error && loading && total === 0 && <p style={{ padding: 12, color: "#999", margin: 0 }}>{t("common.loading")}</p>}
+      {error && <p style={{ padding: 12, color: "var(--color-danger)", margin: 0 }}>{error}</p>}
+      {!error && loading && total === 0 && <p style={{ padding: 12, color: "var(--color-muted)", margin: 0 }}>{t("common.loading")}</p>}
       {!error && !loading && total === 0 && (
-        <p style={{ padding: 12, color: "#999", margin: 0 }}>
+        <p style={{ padding: 12, color: "var(--color-muted)", margin: 0 }}>
           {t("menus.notFound")}
         </p>
       )}
@@ -185,18 +185,18 @@ function TargetPicker(props: { onPick: (t: LinkTarget) => void; onClose: () => v
       {groups.map((g) => (
         <div key={g.code}>
           <div style={{
-            padding: "6px 12px", background: "#f7f7fa", fontSize: 12, color: "#666", fontWeight: 600,
+            padding: "6px 12px", background: "var(--color-bg-soft)", fontSize: 12, color: "var(--color-text-soft)", fontWeight: 600,
           }}>{g.label}</div>
           {g.items.map((tg) => (
             <div key={tg.path} onClick={() => props.onPick(tg)}
-              style={{ padding: "9px 12px", cursor: "pointer", borderBottom: "1px solid #f4f4f7" }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "#f2f6ff"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "#fff"; }}>
+              style={{ padding: "9px 12px", cursor: "pointer", borderBottom: "1px solid var(--color-line)" }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "var(--color-bg-soft)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "var(--color-bg)"; }}>
               <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
                 <strong style={{ fontSize: 14 }}>{tg.label}</strong>
-                <code style={{ fontSize: 12, color: "#888" }}>{tg.path}</code>
+                <code style={{ fontSize: 12, color: "var(--color-muted)" }}>{tg.path}</code>
               </div>
-              {tg.hint && <div style={{ fontSize: 12, color: "#c07000", marginTop: 2 }}>{tg.hint}</div>}
+              {tg.hint && <div style={{ fontSize: 12, color: "var(--color-warning)", marginTop: 2 }}>{tg.hint}</div>}
             </div>
           ))}
         </div>

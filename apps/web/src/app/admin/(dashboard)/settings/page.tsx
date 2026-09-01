@@ -32,7 +32,7 @@ export default function AdminSettingsPage() {
   return (
     <div>
       <h1>{t("settings.title")}</h1>
-      <div style={{ background: "#fff", borderRadius: 8, padding: 20, maxWidth: 520 }}>
+      <div style={{ background: "var(--color-bg)", borderRadius: 8, padding: 20, maxWidth: 520 }}>
         <label>{t("settings.siteName")}
           <input style={input} value={String(settings["site.name"] ?? "")}
             onChange={(e) => setSettings({ ...settings, "site.name": e.target.value })} />
@@ -53,12 +53,12 @@ export default function AdminSettingsPage() {
             <option value="ko">한국어</option>
             <option value="en">English</option>
           </select>
-          <small style={{ color: "#888" }}>{t("settings.localeHint")}</small>
+          <small style={{ color: "var(--color-muted)" }}>{t("settings.localeHint")}</small>
         </label>
         <button onClick={save} style={{ cursor: "pointer", padding: "10px 24px", marginTop: 24, fontWeight: 700 }}>
           {t("common.save")}
         </button>
-        {message && <p style={{ color: "#0a7" }}>{message}</p>}
+        {message && <p style={{ color: "var(--color-success)" }}>{message}</p>}
       </div>
       <SocialLoginSettings />
     </div>

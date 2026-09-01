@@ -63,12 +63,23 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     );
   };
 
+  /**
+   * 관리 화면도 사이트 팔레트를 따른다 — 색은 토큰에서 온다.
+   *
+   * **사이드바만 예외로 항상 어둡다.** 관리 도구의 사이드바는 라이트 모드에서도
+   * 어두운 것이 관례이고(내용 영역과 확실히 구분된다), 그 위의 글자 대비를
+   * 팔레트가 바뀔 때마다 다시 맞추는 것보다 고정하는 편이 안전하다.
+   * colorScheme 을 dark 로 알려 그 안의 UA 위젯도 어둡게 그려지게 한다.
+   */
   return (
-    <div style={{
-      fontFamily: "sans-serif", display: "flex", minHeight: "100dvh",
-      color: "#17171c", background: "#f6f6f9", colorScheme: "light",
+    <div className="brick-admin" style={{
+      fontFamily: "var(--font-body)", display: "flex", minHeight: "100dvh",
+      color: "var(--color-text)", background: "var(--color-bg-soft)",
     }}>
-      <aside style={{ width: 210, background: "#1e1e2e", color: "#fff", flexShrink: 0 }}>
+      <style dangerouslySetInnerHTML={{ __html: ADMIN_CSS }} />
+      <aside className="brick-admin-side" style={{
+        width: 210, background: "#1e1e2e", color: "#fff", flexShrink: 0, colorScheme: "dark",
+      }}>
         <div style={{ padding: 16, fontWeight: 700, fontSize: 18 }}>BRICK</div>
         <nav>
           <NavLink href="/admin">{t("nav.dashboard")}</NavLink>
@@ -103,10 +114,45 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           <button onClick={logout} style={{ display: "block", marginTop: 8, cursor: "pointer" }}>{t("nav.logout")}</button>
         </div>
       </aside>
-      <main style={{ flex: 1, padding: 32, background: "#f6f6f9", minWidth: 0 }}>{children}</main>
+      <main style={{ flex: 1, padding: 32, background: "var(--color-bg-soft)", minWidth: 0 }}>{children}</main>
     </div>
   );
 }
+
+/**
+ * 관리 화면 공통 스타일.
+ *
+ * 화면마다 인라인 스타일로 버튼과 입력칸을 그리다 보니 **스타일을 안 준
+ * 것들이 UA 기본**으로 남았다 — 다크에서 회색 버튼, 라이트에서 제각각인
+ * 테두리. 공통 규칙을 한 곳에서 주면 새 화면(플러그인이 만든 관리 화면
+ * 포함)도 자동으로 어울린다. 인라인 스타일이 더 구체적이므로 기존 화면의
+ * 의도적인 색(주 행동 버튼 등)은 그대로 이긴다.
+ */
+const ADMIN_CSS = `
+.brick-admin button, .brick-admin input[type="submit"] {
+  font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+  padding: 8px 14px; border-radius: 8px;
+  border: 1px solid var(--color-line-strong); background: var(--color-bg); color: var(--color-text);
+}
+.brick-admin button:hover { border-color: var(--color-muted); background: var(--color-bg-soft); }
+.brick-admin button[disabled] { opacity: .5; cursor: not-allowed; }
+.brick-admin input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]),
+.brick-admin select, .brick-admin textarea {
+  font: inherit; font-size: 14px; padding: 8px 11px; border-radius: 8px;
+  border: 1px solid var(--color-line-strong); background: var(--color-bg); color: var(--color-text);
+}
+.brick-admin input::placeholder, .brick-admin textarea::placeholder { color: var(--color-muted); }
+.brick-admin input[type="checkbox"], .brick-admin input[type="radio"] { accent-color: var(--color-primary); }
+.brick-admin :focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
+.brick-admin table { border-collapse: collapse; }
+.brick-admin a { color: var(--color-primary-text); }
+/* 사이드바는 어두운 채로 고정이므로 위 규칙을 적용하지 않는다 */
+.brick-admin-side a { color: inherit; }
+.brick-admin-side button {
+  border: 0; background: none; color: #c9c9d6; padding: 0; font-size: 13px; font-weight: 400;
+}
+.brick-admin-side button:hover { background: none; color: #fff; }
+`;
 
 const link = {
   display: "block", padding: "9px 16px", color: "#c9c9d6", textDecoration: "none",
@@ -121,6 +167,6 @@ const linkActive = {
   borderLeft: "3px solid #ff6f5f",
 };
 const sectionLabel = {
-  padding: "16px 16px 6px", fontSize: 11.5, color: "#6b6b85",
+  padding: "16px 16px 6px", fontSize: 11.5, color: "#9a9ab8",
   textTransform: "uppercase" as const, letterSpacing: ".5px", fontWeight: 700,
 };

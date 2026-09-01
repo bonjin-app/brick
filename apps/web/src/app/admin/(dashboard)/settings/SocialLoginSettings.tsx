@@ -65,16 +65,16 @@ export function SocialLoginSettings() {
   const mono = { fontFamily: "ui-monospace, monospace", fontSize: 12 };
 
   return (
-    <div style={{ background: "#fff", borderRadius: 8, padding: 20, maxWidth: 720, marginTop: 24 }}>
+    <div style={{ background: "var(--color-bg)", borderRadius: 8, padding: 20, maxWidth: 720, marginTop: 24 }}>
       <h2 style={{ marginTop: 0, fontSize: 18 }}>{t("social.title")}</h2>
-      <p style={{ fontSize: 13, color: "#777", marginTop: 0 }}>
+      <p style={{ fontSize: 13, color: "var(--color-muted)", marginTop: 0 }}>
         {t("social.guide1")} {t("social.guide2")}
       </p>
 
       {rows.map((row) => (
         <div
           key={row.name}
-          style={{ borderTop: "1px solid #eee", paddingTop: 16, marginTop: 16 }}
+          style={{ borderTop: "1px solid var(--color-line)", paddingTop: 16, marginTop: 16 }}
         >
           <label style={{ fontWeight: 700 }}>
             <input
@@ -86,7 +86,7 @@ export function SocialLoginSettings() {
             />{" "}
             {row.label}
             {row.hasSecret && (
-              <span style={{ marginLeft: 8, fontSize: 11, color: "#0a7", fontWeight: 400 }}>
+              <span style={{ marginLeft: 8, fontSize: 11, color: "var(--color-success)", fontWeight: 400 }}>
                 {t("social.secretSaved")}
               </span>
             )}
@@ -118,7 +118,7 @@ export function SocialLoginSettings() {
 
           {row.needsUrls && (
             <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
-              <p style={{ fontSize: 12, color: "#777", margin: 0 }}>
+              <p style={{ fontSize: 12, color: "var(--color-muted)", margin: 0 }}>
                 {t("social.oidcGuide1")}{" "}
                 {t("social.oidcGuide2", { path: "/.well-known/openid-configuration" })}
               </p>
@@ -143,7 +143,7 @@ export function SocialLoginSettings() {
             </div>
           )}
 
-          <p style={{ fontSize: 12, color: "#666", margin: "10px 0 0" }}>
+          <p style={{ fontSize: 12, color: "var(--color-text-soft)", margin: "10px 0 0" }}>
             Redirect URI <code style={mono}>{row.redirectUri}</code>
           </p>
 
@@ -155,7 +155,7 @@ export function SocialLoginSettings() {
           </button>
         </div>
       ))}
-      {message && <p style={{ color: "#0a7", marginBottom: 0 }}>{message}</p>}
+      {message && <p style={{ color: "var(--color-success)", marginBottom: 0 }}>{message}</p>}
     </div>
   );
 }

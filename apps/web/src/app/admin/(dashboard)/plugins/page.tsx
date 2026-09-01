@@ -82,16 +82,16 @@ export default function AdminPluginsPage() {
       </div>
 
       {updates !== null && (
-        <div style={{ background: "#fff", padding: 16, borderRadius: 8, marginBottom: 16 }}>
+        <div style={{ background: "var(--color-bg)", padding: 16, borderRadius: 8, marginBottom: 16 }}>
           {updates.length === 0 ? (
-            <p style={{ margin: 0, color: "#666" }}>{t("plugins.upToDate")}</p>
+            <p style={{ margin: 0, color: "var(--color-text-soft)" }}>{t("plugins.upToDate")}</p>
           ) : updates.map((u) => (
             <div key={`${u.kind}/${u.name}`}
-              style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0", borderBottom: "1px solid #f3f3f3" }}>
+              style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0", borderBottom: "1px solid var(--color-line)" }}>
               <div style={{ flex: 1 }}>
                 <strong>{u.displayName}</strong>{" "}
-                <span style={{ color: "#888", fontSize: 13 }}>{u.currentVersion} → {u.nextVersion}</span>
-                {u.notes && <div style={{ fontSize: 13, color: "#666" }}>{u.notes}</div>}
+                <span style={{ color: "var(--color-muted)", fontSize: 13 }}>{u.currentVersion} → {u.nextVersion}</span>
+                {u.notes && <div style={{ fontSize: 13, color: "var(--color-text-soft)" }}>{u.notes}</div>}
               </div>
               {/* 서명 검증을 통과해야만 설치된다 — 실패하면 이유가 메시지로 나온다 */}
               <button onClick={() => void applyUpdate(u)}
@@ -100,25 +100,25 @@ export default function AdminPluginsPage() {
           ))}
         </div>
       )}
-      <form onSubmit={upload} style={{ background: "#fff", padding: 16, borderRadius: 8, marginBottom: 24 }}>
+      <form onSubmit={upload} style={{ background: "var(--color-bg)", padding: 16, borderRadius: 8, marginBottom: 24 }}>
         <strong>{t("plugins.upload")}</strong>{" "}
         <input ref={fileRef} type="file" accept=".zip" required />{" "}
         <button style={{ cursor: "pointer" }}>{t("common.install")}</button>
-        <span style={{ marginLeft: 8, color: "#888", fontSize: 13 }}>{t("plugins.uploadHint")}</span>
+        <span style={{ marginLeft: 8, color: "var(--color-muted)", fontSize: 13 }}>{t("plugins.uploadHint")}</span>
       </form>
-      {message && <p style={{ color: "#0a7" }}>{message}</p>}
-      <table style={{ width: "100%", background: "#fff", borderRadius: 8, borderCollapse: "collapse" }}>
+      {message && <p style={{ color: "var(--color-success)" }}>{message}</p>}
+      <table style={{ width: "100%", background: "var(--color-bg)", borderRadius: 8, borderCollapse: "collapse" }}>
         <thead>
-          <tr style={{ textAlign: "left", borderBottom: "1px solid #eee" }}>
+          <tr style={{ textAlign: "left", borderBottom: "1px solid var(--color-line)" }}>
             <th style={{ padding: 12 }}>{t("common.name")}</th><th>{t("common.version")}</th><th>{t("common.description")}</th><th>{t("common.status")}</th><th></th>
           </tr>
         </thead>
         <tbody>
           {plugins.map((p) => (
-            <tr key={p.name} style={{ borderBottom: "1px solid #f3f3f3" }}>
-              <td style={{ padding: 12 }}><strong>{p.displayName}</strong><br /><span style={{ color: "#999", fontSize: 12 }}>{p.name}</span></td>
+            <tr key={p.name} style={{ borderBottom: "1px solid var(--color-line)" }}>
+              <td style={{ padding: 12 }}><strong>{p.displayName}</strong><br /><span style={{ color: "var(--color-muted)", fontSize: 12 }}>{p.name}</span></td>
               <td>{p.version}</td>
-              <td style={{ color: "#666" }}>{p.description}</td>
+              <td style={{ color: "var(--color-text-soft)" }}>{p.description}</td>
               <td>{p.isActive ? t("plugins.active") : t("plugins.inactive")}</td>
               <td><button onClick={() => toggle(p)} style={{ cursor: "pointer" }}>{p.isActive ? t("plugins.deactivate") : t("plugins.activate")}</button></td>
             </tr>

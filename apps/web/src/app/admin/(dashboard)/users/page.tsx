@@ -53,7 +53,7 @@ export default function AdminUsersPage() {
     return (
       <div style={{ maxWidth: 420 }}>
         <h1>{t("users.title")}</h1>
-        <div style={{ background: "#fff", borderRadius: 8, padding: 24 }}>
+        <div style={{ background: "var(--color-bg)", borderRadius: 8, padding: 24 }}>
           <p style={{ marginTop: 0 }}>
             {t("users.reauthNotice")} {t("users.reauthKeep")}
           </p>
@@ -68,7 +68,7 @@ export default function AdminUsersPage() {
             />
             <button type="submit" style={{ padding: "8px 16px", cursor: "pointer" }}>{t("common.confirm")}</button>
           </form>
-          {reauthError && <p style={{ color: "#c00" }}>{reauthError}</p>}
+          {reauthError && <p style={{ color: "var(--color-danger)" }}>{reauthError}</p>}
         </div>
       </div>
     );
@@ -86,17 +86,17 @@ export default function AdminUsersPage() {
 
   return (
     <div>
-      <h1>{t("users.title")} <span style={{ color: "#999", fontSize: 16 }}>{t("users.countN", { n: data.total })}</span></h1>
-      {message && <p style={{ color: "#0a7" }}>{message}</p>}
-      <table style={{ width: "100%", background: "#fff", borderRadius: 8, borderCollapse: "collapse" }}>
+      <h1>{t("users.title")} <span style={{ color: "var(--color-muted)", fontSize: 16 }}>{t("users.countN", { n: data.total })}</span></h1>
+      {message && <p style={{ color: "var(--color-success)" }}>{message}</p>}
+      <table style={{ width: "100%", background: "var(--color-bg)", borderRadius: 8, borderCollapse: "collapse" }}>
         <thead>
-          <tr style={{ textAlign: "left", borderBottom: "1px solid #eee" }}>
+          <tr style={{ textAlign: "left", borderBottom: "1px solid var(--color-line)" }}>
             <th style={{ padding: 12 }}>{t("common.name")}</th><th>{t("common.email")}</th><th>{t("users.role")}</th><th>{t("common.status")}</th><th>{t("users.colJoined")}</th>
           </tr>
         </thead>
         <tbody>
           {data.items.map((u) => (
-            <tr key={u.id} style={{ borderBottom: "1px solid #f3f3f3" }}>
+            <tr key={u.id} style={{ borderBottom: "1px solid var(--color-line)" }}>
               <td style={{ padding: 12 }}><strong>{u.displayName}</strong></td>
               <td>{u.email}</td>
               <td>
@@ -109,12 +109,12 @@ export default function AdminUsersPage() {
                   {u.isActive ? t("users.active") : t("users.suspended")}
                 </button>
               </td>
-              <td style={{ color: "#999", fontSize: 13 }}>{new Date(u.createdAt).toLocaleDateString()}</td>
+              <td style={{ color: "var(--color-muted)", fontSize: 13 }}>{new Date(u.createdAt).toLocaleDateString()}</td>
             </tr>
           ))}
         </tbody>
       </table>
-      <p style={{ color: "#999", fontSize: 13, marginTop: 12 }}>
+      <p style={{ color: "var(--color-muted)", fontSize: 13, marginTop: 12 }}>
         {t("users.selfNote")}
       </p>
     </div>

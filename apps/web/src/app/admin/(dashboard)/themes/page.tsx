@@ -42,20 +42,20 @@ export default function AdminThemesPage() {
   return (
     <div>
       <h1>{t("themes.title")}</h1>
-      <form onSubmit={upload} style={{ background: "#fff", padding: 16, borderRadius: 8, marginBottom: 24 }}>
+      <form onSubmit={upload} style={{ background: "var(--color-bg)", padding: 16, borderRadius: 8, marginBottom: 24 }}>
         <strong>{t("themes.upload")}</strong>{" "}
         <input ref={fileRef} type="file" accept=".zip" required />{" "}
         <button style={{ cursor: "pointer" }}>{t("common.install")}</button>
-        <span style={{ marginLeft: 8, color: "#888", fontSize: 13 }}>{t("themes.hint")}</span>
+        <span style={{ marginLeft: 8, color: "var(--color-muted)", fontSize: 13 }}>{t("themes.hint")}</span>
       </form>
-      {message && <p style={{ color: "#0a7" }}>{message}</p>}
+      {message && <p style={{ color: "var(--color-success)" }}>{message}</p>}
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
         {data.themes.map((th) => (
-          <div key={th.name} style={{ background: "#fff", borderRadius: 8, padding: 20, width: 240 }}>
-            <strong>{th.displayName}</strong> <span style={{ color: "#999", fontSize: 12 }}>v{th.version}</span>
-            <p style={{ color: "#666", fontSize: 13, minHeight: 40 }}>{th.description}</p>
+          <div key={th.name} style={{ background: "var(--color-bg)", borderRadius: 8, padding: 20, width: 240 }}>
+            <strong>{th.displayName}</strong> <span style={{ color: "var(--color-muted)", fontSize: 12 }}>v{th.version}</span>
+            <p style={{ color: "var(--color-text-soft)", fontSize: 13, minHeight: 40 }}>{th.description}</p>
             {data.active === th.name ? (
-              <span style={{ color: "#0a7" }}>{t("themes.inUse")}</span>
+              <span style={{ color: "var(--color-success)" }}>{t("themes.inUse")}</span>
             ) : (
               <button onClick={() => activate(th.name)} style={{ cursor: "pointer" }}>{t("common.apply")}</button>
             )}

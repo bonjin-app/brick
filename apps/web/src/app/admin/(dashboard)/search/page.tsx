@@ -15,13 +15,13 @@ interface NoResult { query: string; count: number; lastAt: string }
 interface Rule { id: string; term: string; kind: string; replacement: string | null; note: string | null }
 
 const card: React.CSSProperties = {
-  background: "#fff", borderRadius: 8, padding: 20, marginBottom: 20,
+  background: "var(--color-bg)", borderRadius: 8, padding: 20, marginBottom: 20,
   boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
 };
-const th: React.CSSProperties = { textAlign: "left", padding: "8px 10px", borderBottom: "1px solid #eee", fontSize: 13, color: "#666" };
-const td: React.CSSProperties = { padding: "8px 10px", borderBottom: "1px solid #f4f4f7", fontSize: 14 };
-const btn: React.CSSProperties = { padding: "6px 12px", cursor: "pointer", borderRadius: 6, border: "1px solid #ddd", background: "#fff" };
-const input: React.CSSProperties = { padding: 8, border: "1px solid #ddd", borderRadius: 6, fontSize: 14 };
+const th: React.CSSProperties = { textAlign: "left", padding: "8px 10px", borderBottom: "1px solid var(--color-line)", fontSize: 13, color: "var(--color-text-soft)" };
+const td: React.CSSProperties = { padding: "8px 10px", borderBottom: "1px solid var(--color-line)", fontSize: 14 };
+const btn: React.CSSProperties = { padding: "6px 12px", cursor: "pointer", borderRadius: 6, border: "1px solid var(--color-line-strong)", background: "var(--color-bg)" };
+const input: React.CSSProperties = { padding: 8, border: "1px solid var(--color-line-strong)", borderRadius: 6, fontSize: 14 };
 
 export default function SearchAnalyticsPage() {
   const t = useAdminT();
@@ -78,17 +78,17 @@ export default function SearchAnalyticsPage() {
           <option value={90}>{t("search.days90")}</option>
         </select>
       </div>
-      {message && <p style={{ color: "#0a7" }}>{message}</p>}
+      {message && <p style={{ color: "var(--color-success)" }}>{message}</p>}
 
       <section style={card}>
         <h2 style={{ marginTop: 0, fontSize: 17 }}>
-          {t("search.emptyTitle")} <span style={{ color: "#999", fontSize: 14 }}>{t("search.emptyCountN", { n: empty.length })}</span>
+          {t("search.emptyTitle")} <span style={{ color: "var(--color-muted)", fontSize: 14 }}>{t("search.emptyCountN", { n: empty.length })}</span>
         </h2>
-        <p style={{ color: "#666", fontSize: 13, marginTop: 0 }}>
+        <p style={{ color: "var(--color-text-soft)", fontSize: 13, marginTop: 0 }}>
           {t("search.emptyDesc")}
         </p>
         {empty.length === 0 ? (
-          <p style={{ color: "#999" }}>{t("search.emptyNone")}</p>
+          <p style={{ color: "var(--color-muted)" }}>{t("search.emptyNone")}</p>
         ) : (
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead><tr><th style={th}>{t("search.colQuery")}</th><th style={th}>{t("search.colCount")}</th><th style={th}>{t("search.colLast")}</th><th style={th}></th></tr></thead>
@@ -97,7 +97,7 @@ export default function SearchAnalyticsPage() {
                 <tr key={r.query}>
                   <td style={{ ...td, fontWeight: 500 }}>{r.query}</td>
                   <td style={td}>{r.count}</td>
-                  <td style={{ ...td, color: "#888" }}>{new Date(r.lastAt).toLocaleDateString("ko-KR")}</td>
+                  <td style={{ ...td, color: "var(--color-muted)" }}>{new Date(r.lastAt).toLocaleDateString("ko-KR")}</td>
                   <td style={td}>
                     <button style={btn} onClick={() => fillFrom(r.query)}>{t("search.link")}</button>
                   </td>
@@ -110,21 +110,21 @@ export default function SearchAnalyticsPage() {
 
       <section style={card}>
         <h2 style={{ marginTop: 0, fontSize: 17 }}>{t("search.popularTitle")}</h2>
-        <p style={{ color: "#666", fontSize: 13, marginTop: 0 }}>
+        <p style={{ color: "var(--color-text-soft)", fontSize: 13, marginTop: 0 }}>
           {t("search.popularDesc1")} {t("search.popularDesc2")}
         </p>
         {popular.length === 0 ? (
-          <p style={{ color: "#999" }}>{t("search.none")}</p>
+          <p style={{ color: "var(--color-muted)" }}>{t("search.none")}</p>
         ) : (
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead><tr><th style={th}>{t("search.colRank")}</th><th style={th}>{t("search.colQuery")}</th><th style={th}>{t("search.colCount")}</th><th style={th}>{t("search.colEmptyRate")}</th></tr></thead>
             <tbody>
               {popular.map((r, i) => (
                 <tr key={r.query}>
-                  <td style={{ ...td, color: "#999" }}>{i + 1}</td>
+                  <td style={{ ...td, color: "var(--color-muted)" }}>{i + 1}</td>
                   <td style={{ ...td, fontWeight: 500 }}>{r.query}</td>
                   <td style={td}>{r.count}</td>
-                  <td style={{ ...td, color: r.emptyRatio > 50 ? "crimson" : "#666" }}>
+                  <td style={{ ...td, color: r.emptyRatio > 50 ? "var(--color-danger)" : "var(--color-text-soft)" }}>
                     {r.emptyRatio}%
                   </td>
                 </tr>
@@ -136,7 +136,7 @@ export default function SearchAnalyticsPage() {
 
       <section style={card}>
         <h2 style={{ marginTop: 0, fontSize: 17 }}>{t("search.rulesTitle")}</h2>
-        <p style={{ color: "#666", fontSize: 13, marginTop: 0 }}>
+        <p style={{ color: "var(--color-text-soft)", fontSize: 13, marginTop: 0 }}>
           {t("search.ruleReplaceDesc")}<br />
           {t("search.ruleBlockDesc")}
         </p>
@@ -148,12 +148,12 @@ export default function SearchAnalyticsPage() {
                 <td style={{ ...td, fontWeight: 500 }}>{r.term}</td>
                 <td style={td}>{r.kind === "replace" ? t("search.replace") : t("search.block")}</td>
                 <td style={td}>{r.replacement ?? "-"}</td>
-                <td style={{ ...td, color: "#888" }}>{r.note ?? ""}</td>
+                <td style={{ ...td, color: "var(--color-muted)" }}>{r.note ?? ""}</td>
                 <td style={td}><button style={btn} onClick={() => void removeRule(r.id)}>{t("common.delete")}</button></td>
               </tr>
             ))}
             {rules.length === 0 && (
-              <tr><td style={{ ...td, color: "#999" }} colSpan={5}>{t("search.noRules")}</td></tr>
+              <tr><td style={{ ...td, color: "var(--color-muted)" }} colSpan={5}>{t("search.noRules")}</td></tr>
             )}
           </tbody>
         </table>
@@ -171,7 +171,7 @@ export default function SearchAnalyticsPage() {
           )}
           <input style={{ ...input, flex: 1, minWidth: 140 }} placeholder={t("search.notePh")} value={form.note}
             onChange={(e) => setForm({ ...form, note: e.target.value })} />
-          <button style={{ ...btn, background: "#1a1a2e", color: "#fff", borderColor: "#1a1a2e" }}
+          <button style={{ ...btn, background: "var(--color-primary)", color: "var(--color-on-primary)", borderColor: "var(--color-primary)" }}
             onClick={() => void saveRule()}>{t("common.save")}</button>
         </div>
       </section>

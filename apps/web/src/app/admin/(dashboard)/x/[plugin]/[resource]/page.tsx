@@ -142,7 +142,7 @@ export default function PluginResourcePage() {
     return row;
   }
 
-  if (error) return <div><h1>{t("common.error")}</h1><p style={{ color: "crimson" }}>{error}</p></div>;
+  if (error) return <div><h1>{t("common.error")}</h1><p style={{ color: "var(--color-danger)" }}>{error}</p></div>;
   if (!res) return <p>{t("common.loading")}</p>;
 
   const listFields = res.fields.filter((f) => f.inList);
@@ -152,14 +152,14 @@ export default function PluginResourcePage() {
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <h1 style={{ margin: 0, flex: 1 }}>
-          {res.title} <span style={{ color: "#999", fontSize: 15 }}>{t("x.countN", { n: total })}</span>
+          {res.title} <span style={{ color: "var(--color-muted)", fontSize: 15 }}>{t("x.countN", { n: total })}</span>
         </h1>
         {can.create && !editing && (
           <button onClick={() => setEditing(blank())} style={btn}>{t("x.addItem", { label: res.itemLabel })}</button>
         )}
       </div>
-      {res.description && <p style={{ color: "#666", fontSize: 14 }}>{res.description}</p>}
-      {message && <p style={{ color: "#0a7" }}>{message}</p>}
+      {res.description && <p style={{ color: "var(--color-text-soft)", fontSize: 14 }}>{res.description}</p>}
+      {message && <p style={{ color: "var(--color-success)" }}>{message}</p>}
 
       {editing ? (
         <ResourceForm
@@ -171,28 +171,28 @@ export default function PluginResourcePage() {
         />
       ) : (
         <>
-          <div style={{ overflowX: "auto", background: "#fff", borderRadius: 8 }}>
+          <div style={{ overflowX: "auto", background: "var(--color-bg)", borderRadius: 8 }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
               <thead>
-                <tr style={{ textAlign: "left", borderBottom: "1px solid #eee" }}>
+                <tr style={{ textAlign: "left", borderBottom: "1px solid var(--color-line)" }}>
                   {listFields.map((f) => <th key={f.name} style={{ padding: 12 }}>{f.label}</th>)}
                   <th style={{ padding: 12, width: 130 }}></th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row, i) => (
-                  <tr key={String(row[idField] ?? i)} style={{ borderBottom: "1px solid #f4f4f7" }}>
+                  <tr key={String(row[idField] ?? i)} style={{ borderBottom: "1px solid var(--color-line)" }}>
                     {listFields.map((f) => (
                       <td key={f.name} style={{ padding: 12 }}>{formatCell(row[f.name], f)}</td>
                     ))}
                     <td style={{ padding: 12, whiteSpace: "nowrap" }}>
                       {can.update && <button onClick={() => setEditing({ ...row })} style={btnSm}>{t("common.edit")}</button>}
-                      {can.delete && <button onClick={() => remove(row)} style={{ ...btnSm, color: "crimson", marginLeft: 6 }}>{t("common.delete")}</button>}
+                      {can.delete && <button onClick={() => remove(row)} style={{ ...btnSm, color: "var(--color-danger)", marginLeft: 6 }}>{t("common.delete")}</button>}
                     </td>
                   </tr>
                 ))}
                 {!rows.length && (
-                  <tr><td colSpan={listFields.length + 1} style={{ padding: 24, color: "#999" }}>
+                  <tr><td colSpan={listFields.length + 1} style={{ padding: 24, color: "var(--color-muted)" }}>
                     {t("x.emptyItems", { label: res.itemLabel })}
                   </td></tr>
                 )}
@@ -202,7 +202,7 @@ export default function PluginResourcePage() {
           {total > rows.length && (
             <div style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "center" }}>
               <button style={btnSm} disabled={page <= 1} onClick={() => setPage(page - 1)}>{t("common.prev")}</button>
-              <span style={{ fontSize: 13, color: "#666" }}>{t("common.pageN", { n: page })}</span>
+              <span style={{ fontSize: 13, color: "var(--color-text-soft)" }}>{t("common.pageN", { n: page })}</span>
               <button style={btnSm} disabled={rows.length === 0} onClick={() => setPage(page + 1)}>{t("common.next")}</button>
             </div>
           )}
@@ -225,15 +225,15 @@ function ResourceForm(props: {
   const set = (name: string, v: unknown) => onChange({ ...value, [name]: v });
 
   return (
-    <div style={{ background: "#fff", borderRadius: 8, padding: 24, maxWidth: 680 }}>
+    <div style={{ background: "var(--color-bg)", borderRadius: 8, padding: 24, maxWidth: 680 }}>
       <h2 style={{ marginTop: 0 }}>{value[resource.idField ?? "id"] ? t("x.editItem", { label: resource.itemLabel }) : t("x.newItem", { label: resource.itemLabel })}</h2>
       {resource.fields.filter((f) => !f.readOnly).map((f) => (
         <div key={f.name} style={{ marginBottom: 16 }}>
           <label style={{ display: "block", fontSize: 14, fontWeight: 600 }}>
-            {f.label}{f.required && <span style={{ color: "crimson" }}> *</span>}
+            {f.label}{f.required && <span style={{ color: "var(--color-danger)" }}> *</span>}
           </label>
           <FieldInput field={f} value={value[f.name]} onChange={(v) => set(f.name, v)} />
-          {f.help && <div style={{ fontSize: 12.5, color: "#888", marginTop: 4 }}>{f.help}</div>}
+          {f.help && <div style={{ fontSize: 12.5, color: "var(--color-muted)", marginTop: 4 }}>{f.help}</div>}
         </div>
       ))}
       <div style={{ display: "flex", gap: 8, marginTop: 24 }}>
@@ -246,7 +246,7 @@ function ResourceForm(props: {
 
 function FieldInput({ field, value, onChange }: { field: AdminField; value: unknown; onChange: (v: unknown) => void }) {
   const t = useAdminT();
-  const base = { width: "100%", padding: 9, marginTop: 4, boxSizing: "border-box" as const, border: "1px solid #ddd", borderRadius: 6 };
+  const base = { width: "100%", padding: 9, marginTop: 4, boxSizing: "border-box" as const, border: "1px solid var(--color-line-strong)", borderRadius: 6 };
 
   switch (field.type) {
     case "boolean":
@@ -257,7 +257,7 @@ function FieldInput({ field, value, onChange }: { field: AdminField; value: unkn
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <input type="number" style={base} value={String(value ?? "")} placeholder={field.placeholder}
             onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))} />
-          {field.type === "money" && <span style={{ color: "#666", whiteSpace: "nowrap" }}>원</span>}
+          {field.type === "money" && <span style={{ color: "var(--color-text-soft)", whiteSpace: "nowrap" }}>원</span>}
         </div>
       );
     case "select":
@@ -284,7 +284,7 @@ function FieldInput({ field, value, onChange }: { field: AdminField; value: unkn
           {typeof value === "string" && value && (
             <img src={value} alt="" style={{ maxHeight: 90, marginTop: 8, borderRadius: 6 }} />
           )}
-          <div style={{ fontSize: 12.5, color: "#888", marginTop: 4 }}>
+          <div style={{ fontSize: 12.5, color: "var(--color-muted)", marginTop: 4 }}>
             <a href="/admin/media" target="_blank">{t("x.mediaLink")}</a> — {t("x.imageHint")}
           </div>
         </div>
@@ -312,5 +312,5 @@ function formatCell(v: unknown, f: AdminField): string {
   return s.length > 60 ? `${s.slice(0, 60)}…` : s;
 }
 
-const btn = { cursor: "pointer", padding: "9px 18px", border: "1px solid #ddd", borderRadius: 6, background: "#fff" };
-const btnSm = { cursor: "pointer", padding: "5px 10px", border: "1px solid #ddd", borderRadius: 5, background: "#fff", fontSize: 13 };
+const btn = { cursor: "pointer", padding: "9px 18px", border: "1px solid var(--color-line-strong)", borderRadius: 6, background: "var(--color-bg)" };
+const btnSm = { cursor: "pointer", padding: "5px 10px", border: "1px solid var(--color-line-strong)", borderRadius: 5, background: "var(--color-bg)", fontSize: 13 };
