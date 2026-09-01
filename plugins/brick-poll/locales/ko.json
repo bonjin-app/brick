@@ -1,0 +1,21 @@
+{
+  "poll.empty": "진행 중인 설문이 없습니다.",
+  "poll.loading": "불러오는 중…",
+  "poll.total": "참여 {n}명",
+  "poll.votes": "{n}명",
+  "poll.vote": "투표하기",
+  "poll.maxNote": "최대 {n}개 선택",
+  "poll.pickOne": "선택지를 골라주세요.",
+  "poll.tooMany": "최대 {n}개까지 선택할 수 있습니다.",
+  "poll.voteFail": "투표에 실패했습니다.",
+  "poll.loadFail": "설문을 불러올 수 없습니다.",
+  "poll.resultsAfterVote": "결과는 투표 후 공개됩니다.",
+  "poll.resultsAfterClose": "결과는 설문이 끝난 뒤 공개됩니다.",
+  "poll.commentPlaceholder": "기타 의견 (선택)",
+  "poll.alreadyVoted": "이미 참여하셨습니다.",
+  "poll.inactive": "종료된 설문입니다.",
+  "poll.notStarted": "아직 시작되지 않은 설문입니다.",
+  "poll.closed": "설문이 종료되었습니다.",
+  "poll.loginRequired": "로그인 후 참여할 수 있습니다.",
+  "poll.notFound": "설문을 찾을 수 없습니다."
+}

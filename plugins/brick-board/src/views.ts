@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { BlockRenderContext } from "@brick/plugin-sdk";
-import { escapeHtml, hasRole, humanSize, shortDate, type BoardRow, type Db } from "./types.js";
-import { localeTag, t } from "./i18n.js";
+import { escapeHtml, fullDate, hasRole, humanSize, shortDate, type BoardRow, type Db } from "./types.js";
+import { t } from "./i18n.js";
 
 /**
  * 게시판 화면 렌더 — 목록 / 상세 / 글쓰기.
@@ -305,7 +305,7 @@ ${files
     <h2>${escapeHtml(post.title)}</h2>
     <div class="brick-post-meta">
       <span>${escapeHtml(post.author_name ?? "-")}</span>
-      <time>${new Date(String(post.created_at)).toLocaleString(localeTag())}</time>
+      <time>${fullDate(post.created_at)}</time>
       <span>${escapeHtml(t("detail.views", { n: Number(post.view_count) }))}</span>
       ${String(post.updated_at) !== String(post.created_at) ? `<span class="brick-edited">${escapeHtml(t("detail.edited"))}</span>` : ""}
     </div>

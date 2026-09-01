@@ -339,6 +339,14 @@ NONE="$(curl -s -X POST "$API/api/blocks/render" -H 'content-type: application/j
   -d '{"name":"brick-poll/poll","props":{"slug":"nonexistent"}}' | render_html)"
 contains "없는 설문은 안내" "$NONE" "진행 중인 설문이 없습니다"
 
+echo "── 목록의 하위 경로는 개별 설문으로 전환된다 (ADR-70)"
+# 이게 없으면 목록의 링크가 목록 자신을 다시 그린다 — 투표 화면에 도달 불가였다
+curl -s -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' \
+  -d '{"slug":"vote","title":"설문","status":"published","blocks":[{"block":"brick-poll/poll-list","props":{}}]}' >/dev/null
+VPAGE="$(curl -s "$API/api/render/page?path=vote/favorite")"
+contains "하위 경로가 개별 설문" "$VPAGE" 'data-slug=\"favorite\"'
+contains "링크는 페이지 기준 경로" "$(curl -s "$API/api/render/page?path=vote")" "/vote/favorite"
+
 echo "── XSS"
 curl -s -b "$CK" -X POST "$PL/admin/polls" -H 'content-type: application/json' \
   -d '{"slug":"xss","question":"<script>alert(1)</script> 질문","options_text":"<img src=x onerror=alert(1)>\n정상","result_visibility":"always"}' >/dev/null

@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { PluginContext } from "@brick/plugin-sdk";
 import { type Db } from "./poll.js";
+import { t } from "./i18n.js";
 
 /**
  * 설문 블록.
@@ -13,6 +14,36 @@ import { type Db } from "./poll.js";
  * 설문인지는 보여야 한다.
  */
 export function registerPollBlocks(ctx: PluginContext, db: Db): void {
+  /** 개별 설문 렌더 — poll 블록과 poll-list 의 하위 경로가 함께 쓴다 */
+  async function renderSinglePoll(slug: string, showTotal = true): Promise<string> {
+    const { rows } = await db.execute(
+      slug
+        ? sql`
+            SELECT id, slug, question, description, vote_count
+            FROM poll_polls WHERE slug = ${slug} AND is_active = true LIMIT 1
+          `
+        : sql`
+            SELECT id, slug, question, description, vote_count
+            FROM poll_polls
+            WHERE is_active = true
+              AND (starts_at IS NULL OR starts_at <= now())
+              AND (ends_at IS NULL OR ends_at >= now())
+            ORDER BY created_at DESC LIMIT 1
+          `,
+    );
+    const poll = rows[0];
+    if (!poll) {
+      return `<div class="brick-poll-empty">${escapeHtml(t("poll.empty"))}</div>${POLL_CSS}`;
+    }
+    return `
+<section class="brick-poll" data-slug="${escapeHtml(poll.slug)}">
+  <h3 class="brick-poll-q">${escapeHtml(poll.question)}</h3>
+  ${poll.description ? `<p class="brick-poll-desc">${escapeHtml(poll.description)}</p>` : ""}
+  ${showTotal ? `<p class="brick-poll-total" data-total>${escapeHtml(t("poll.total", { n: Number(poll.vote_count) }))}</p>` : ""}
+  <div class="brick-poll-body"><p class="brick-poll-loading">${escapeHtml(t("poll.loading"))}</p></div>
+</section>${POLL_CSS}${pollScript()}`;
+  }
+
   ctx.registerBlock({
     name: "poll",
     displayName: "설문조사",
@@ -30,34 +61,7 @@ export function registerPollBlocks(ctx: PluginContext, db: Db): void {
     render: async (props, blockCtx) => {
       // 주소의 마지막 경로도 받는다 — /poll/<slug> 형태로 페이지를 만들 수 있다
       const slug = String(props.slug ?? blockCtx.pathTail?.replace(/^\/+/, "") ?? "");
-
-      const { rows } = await db.execute(
-        slug
-          ? sql`
-              SELECT id, slug, question, description, vote_count
-              FROM poll_polls WHERE slug = ${slug} AND is_active = true LIMIT 1
-            `
-          : sql`
-              SELECT id, slug, question, description, vote_count
-              FROM poll_polls
-              WHERE is_active = true
-                AND (starts_at IS NULL OR starts_at <= now())
-                AND (ends_at IS NULL OR ends_at >= now())
-              ORDER BY created_at DESC LIMIT 1
-            `,
-      );
-      const poll = rows[0];
-      if (!poll) {
-        return `<div class="brick-poll-empty">진행 중인 설문이 없습니다.</div>${POLL_CSS}`;
-      }
-
-      return `
-<section class="brick-poll" data-slug="${escapeHtml(poll.slug)}">
-  <h3 class="brick-poll-q">${escapeHtml(poll.question)}</h3>
-  ${poll.description ? `<p class="brick-poll-desc">${escapeHtml(poll.description)}</p>` : ""}
-  ${props.showTotal !== false ? `<p class="brick-poll-total" data-total>참여 ${Number(poll.vote_count)}명</p>` : ""}
-  <div class="brick-poll-body"><p class="brick-poll-loading">불러오는 중…</p></div>
-</section>${POLL_CSS}${POLL_SCRIPT}`;
+      return renderSinglePoll(slug, props.showTotal !== false);
     },
   });
 
@@ -72,7 +76,17 @@ export function registerPollBlocks(ctx: PluginContext, db: Db): void {
         title: { type: "string", title: "제목 (비우면 표시 안 함)" },
       },
     },
-    render: async (props) => {
+    render: async (props, blockCtx) => {
+      // /설문페이지/<slug> 는 개별 설문으로 전환한다 (ADR-70 라우터 패턴).
+      // 이게 없으면 목록의 링크가 목록 자신을 다시 그린다 — 투표 화면에
+      // 도달할 방법이 없었다.
+      const tail = String(blockCtx?.pathTail ?? "").replace(/^\/+|\/+$/g, "");
+      const path = String(blockCtx?.path ?? "").replace(/^\/+|\/+$/g, "");
+      const base = tail && path.endsWith(tail)
+        ? `/${path.slice(0, path.length - tail.length).replace(/\/+$/g, "")}`
+        : `/${path || "poll"}`;
+      if (tail) return renderSinglePoll(tail);
+
       const limit = Math.min(20, Math.max(1, Number(props.limit ?? 5)));
       const { rows } = await db.execute(sql`
         SELECT slug, question, vote_count, ends_at FROM poll_polls
@@ -82,13 +96,13 @@ export function registerPollBlocks(ctx: PluginContext, db: Db): void {
         ORDER BY created_at DESC LIMIT ${limit}
       `);
       if (!rows.length) {
-        return `<div class="brick-poll-empty">진행 중인 설문이 없습니다.</div>${POLL_CSS}`;
+        return `<div class="brick-poll-empty">${escapeHtml(t("poll.empty"))}</div>${POLL_CSS}`;
       }
       const items = rows
         .map(
           (p) => `    <li>
-      <a href="/poll/${encodeURIComponent(String(p.slug))}">${escapeHtml(p.question)}</a>
-      <span>${Number(p.vote_count)}명</span>
+      <a href="${base}/${encodeURIComponent(String(p.slug))}">${escapeHtml(p.question)}</a>
+      <span>${escapeHtml(t("poll.votes", { n: Number(p.vote_count) }))}</span>
     </li>`,
         )
         .join("\n");
@@ -146,7 +160,7 @@ const POLL_CSS = `
  * 프레임워크 없이 쓴다 — 테마는 빌드를 타지 않으므로 어떤 테마에서도 동작해야 한다.
  * 서버가 준 데이터만 그리고 HTML 은 전부 이스케이프한다.
  */
-const POLL_SCRIPT = `
+const pollScript = () => `
 <script>
 (function(){
   var root = document.currentScript.parentNode.querySelector('.brick-poll');
@@ -169,7 +183,7 @@ const POLL_SCRIPT = `
 
   function setTotal(n){
     var el = root.querySelector('[data-total]');
-    if (el) el.textContent = '참여 ' + Number(n) + '명';
+    if (el) el.textContent = ${JSON.stringify(t("poll.total", { n: "__N__" }))}.replace('__N__', Number(n));
   }
 
   function renderResults(view){
@@ -194,10 +208,10 @@ const POLL_SCRIPT = `
 
     return '<div class="brick-poll-opts">' + opts + '</div>' +
       (view.poll.allowComment
-        ? '<textarea class="brick-poll-comment" data-comment placeholder="기타 의견 (선택)"></textarea>'
+        ? '<textarea class="brick-poll-comment" data-comment placeholder="' + ${JSON.stringify(t("poll.commentPlaceholder"))} + '"></textarea>'
         : '') +
-      '<div class="brick-poll-actions"><button data-submit>투표하기</button>' +
-      (multiple ? '<span class="brick-poll-note">최대 ' + view.poll.maxChoices + '개 선택</span>' : '') +
+      '<div class="brick-poll-actions"><button data-submit>' + ${JSON.stringify(t("poll.vote"))} + '</button>' +
+      (multiple ? '<span class="brick-poll-note">' + ${JSON.stringify(t("poll.maxNote", { n: "__N__" }))}.replace('__N__', view.poll.maxChoices) + '</span>' : '') +
       '<span class="brick-poll-msg" data-msg></span></div>';
   }
 
@@ -210,9 +224,10 @@ const POLL_SCRIPT = `
         ? '<p class="brick-poll-note">' + esc(view.poll.blockedReason) + '</p>'
         : '';
       body.innerHTML = note + (view.showResults ? renderResults(view)
-        : '<p class="brick-poll-note">결과는 ' +
-          (view.poll.resultVisibility === 'after_close' ? '설문이 끝난 뒤' : '투표 후') +
-          ' 공개됩니다.</p>');
+        : '<p class="brick-poll-note">' +
+          (view.poll.resultVisibility === 'after_close'
+            ? ${JSON.stringify(t("poll.resultsAfterClose"))}
+            : ${JSON.stringify(t("poll.resultsAfterVote"))}) + '</p>');
       return;
     }
 
@@ -225,9 +240,9 @@ const POLL_SCRIPT = `
 
       var picked = [].slice.call(body.querySelectorAll('input[name="poll-opt"]:checked'))
         .map(function(i){ return i.value; });
-      if (!picked.length) { msg.textContent = '선택지를 골라주세요.'; return; }
+      if (!picked.length) { msg.textContent = ${JSON.stringify(t("poll.pickOne"))}; return; }
       if (picked.length > view.poll.maxChoices) {
-        msg.textContent = '최대 ' + view.poll.maxChoices + '개까지 선택할 수 있습니다.';
+        msg.textContent = ${JSON.stringify(t("poll.tooMany", { n: "__N__" }))}.replace('__N__', view.poll.maxChoices);
         return;
       }
 
@@ -241,7 +256,7 @@ const POLL_SCRIPT = `
         })
       }).then(function(res){
         btn.disabled = false;
-        if (!res.ok) { msg.textContent = res.d.message || '투표에 실패했습니다.'; return; }
+        if (!res.ok) { msg.textContent = res.d.message || ${JSON.stringify(t("poll.voteFail"))}; return; }
         // 응답이 투표 후 상태를 함께 주므로 다시 요청하지 않는다
         paint(res.d);
       });
@@ -249,7 +264,7 @@ const POLL_SCRIPT = `
   }
 
   json(API + '/polls/' + encodeURIComponent(slug)).then(function(res){
-    if (!res.ok) { body.innerHTML = '<p class="brick-poll-note">설문을 불러올 수 없습니다.</p>'; return; }
+    if (!res.ok) { body.innerHTML = '<p class="brick-poll-note">' + ${JSON.stringify(t("poll.loadFail"))} + '</p>'; return; }
     paint(res.d);
   });
 })();

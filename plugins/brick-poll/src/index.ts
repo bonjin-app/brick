@@ -8,6 +8,7 @@ import {
   type Db,
 } from "./poll.js";
 import { registerPollBlocks } from "./blocks.js";
+import { bindI18n } from "./i18n.js";
 
 /**
  * brick-poll — 설문조사 (그누보드의 설문조사에 대응).
@@ -17,6 +18,7 @@ import { registerPollBlocks } from "./blocks.js";
  *  - **결과 공개 시점**: 투표 전에 보여주면 표가 쏠린다(밴드왜건).
  */
 export default definePlugin(async (ctx) => {
+  bindI18n(ctx);
   const db = ctx.db as Db;
 
   const requireManager = (req: { user: { role: string } | null }) => {

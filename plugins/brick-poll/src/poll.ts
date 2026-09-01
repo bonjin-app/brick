@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import { createHash } from "node:crypto";
 import type { PluginDb } from "@brick/plugin-sdk";
+import { t } from "./i18n.js";
 
 export type Db = PluginDb;
 
@@ -198,11 +199,11 @@ function voteBlockedReason(
     viewer: { id: string; role: string } | null;
   },
 ): string | null {
-  if (ctx.hasVoted) return "이미 참여하셨습니다.";
-  if (ctx.phase === "inactive") return "종료된 설문입니다.";
-  if (ctx.phase === "before") return "아직 시작되지 않은 설문입니다.";
-  if (ctx.phase === "closed") return "설문이 종료되었습니다.";
-  if (poll.vote_role === "member" && !ctx.viewer) return "로그인 후 참여할 수 있습니다.";
+  if (ctx.hasVoted) return t("poll.alreadyVoted");
+  if (ctx.phase === "inactive") return t("poll.inactive");
+  if (ctx.phase === "before") return t("poll.notStarted");
+  if (ctx.phase === "closed") return t("poll.closed");
+  if (poll.vote_role === "member" && !ctx.viewer) return t("poll.loginRequired");
   return null;
 }
 
@@ -257,7 +258,7 @@ export async function vote(
   if (phase !== "open") {
     throw new PollError(
       409,
-      phase === "before" ? "아직 시작되지 않은 설문입니다." : "종료된 설문입니다.",
+      phase === "before" ? t("poll.notStarted") : t("poll.inactive"),
     );
   }
   if (poll.vote_role === "member" && !params.viewer) {

@@ -101,6 +101,20 @@ export function humanSize(bytes: number): string {
 }
 
 /** 상대 시간 (오늘은 시각, 그 외는 날짜) */
+/**
+ * 전체 일시 — "2026.09.01 14:06".
+ *
+ * toLocaleString(locale) 을 쓰지 않는다 — Node 의 ICU 데이터 구성에 따라
+ * ko-KR 이 "PM 2:06:35" 같은 반쪽 영문으로 나온다(실제로 그랬다).
+ * 날짜 표기는 런타임이 아니라 우리가 정한다.
+ */
+export function fullDate(value: unknown): string {
+  const d = new Date(String(value));
+  if (Number.isNaN(d.getTime())) return "";
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
 export function shortDate(value: unknown): string {
   const d = new Date(String(value));
   if (Number.isNaN(d.getTime())) return "";
