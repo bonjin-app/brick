@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { useAdminT } from "../../../lib/i18n-admin";
 
 interface NavResource { plugin: string; name: string; title: string }
@@ -13,6 +14,7 @@ interface NavMenu { plugin: string; label: string; path: string; icon?: string }
  */
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const t = useAdminT();
+  const pathname = usePathname() ?? "";
   const [user, setUser] = useState<{ displayName: string } | null | undefined>(undefined);
   const [nav, setNav] = useState<{ menus: NavMenu[]; resources: NavResource[] }>({ menus: [], resources: [] });
 
@@ -46,6 +48,21 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
    * **흰 카드 위에 흰 글자**가 되어 읽을 수 없다 — 실제로 그랬다.
    * 관리 화면의 다크 대응은 별도 작업이고, 그때까지 여기서 잠근다.
    */
+  /**
+   * 사이드바 항목. **지금 어느 화면인지 표시한다** — 메뉴가 스무 개를 넘는데
+   * 강조가 없으면 운영자는 자기 위치를 화면 제목으로만 알 수 있다.
+   * 하위 경로(상품 → 상품 수정)도 그 항목에 속하므로 접두어로 판정하되,
+   * "/admin" 은 모든 경로의 접두어라 정확히 일치할 때만 켠다.
+   */
+  const NavLink = ({ href, children: label }: { href: string; children: ReactNode }) => {
+    const active = href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
+    return (
+      <a href={href} style={active ? linkActive : link}>
+        {label}
+      </a>
+    );
+  };
+
   return (
     <div style={{
       fontFamily: "sans-serif", display: "flex", minHeight: "100dvh",
@@ -54,32 +71,32 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       <aside style={{ width: 210, background: "#1e1e2e", color: "#fff", flexShrink: 0 }}>
         <div style={{ padding: 16, fontWeight: 700, fontSize: 18 }}>BRICK</div>
         <nav>
-          <a style={link} href="/admin">{t("nav.dashboard")}</a>
-          <a style={link} href="/admin/pages">{t("nav.pages")}</a>
-          <a style={link} href="/admin/media">{t("nav.media")}</a>
-          <a style={link} href="/admin/menus">{t("nav.menus")}</a>
-          <a style={link} href="/admin/users">{t("nav.users")}</a>
+          <NavLink href="/admin">{t("nav.dashboard")}</NavLink>
+          <NavLink href="/admin/pages">{t("nav.pages")}</NavLink>
+          <NavLink href="/admin/media">{t("nav.media")}</NavLink>
+          <NavLink href="/admin/menus">{t("nav.menus")}</NavLink>
+          <NavLink href="/admin/users">{t("nav.users")}</NavLink>
 
           {(nav.resources.length > 0 || nav.menus.length > 0) && (
             <>
               <div style={sectionLabel}>{t("nav.plugins")}</div>
               {nav.resources.map((r) => (
-                <a key={`${r.plugin}/${r.name}`} style={link} href={`/admin/x/${r.plugin}/${r.name}`}>
+                <NavLink key={`${r.plugin}/${r.name}`} href={`/admin/x/${r.plugin}/${r.name}`}>
                   {r.title}
-                </a>
+                </NavLink>
               ))}
               {nav.menus.map((m) => (
-                <a key={m.path} style={link} href={m.path}>{m.icon ? `${m.icon} ` : ""}{m.label}</a>
+                <NavLink key={m.path} href={m.path}>{m.icon ? `${m.icon} ` : ""}{m.label}</NavLink>
               ))}
             </>
           )}
 
           <div style={sectionLabel}>{t("nav.system")}</div>
-          <a style={link} href="/admin/plugins">{t("nav.plugins")}</a>
-          <a style={link} href="/admin/themes">{t("nav.themes")}</a>
-          <a style={link} href="/admin/settings">{t("nav.settings")}</a>
-          <a style={link} href="/admin/search">{t("nav.search")}</a>
-          <a style={link} href="/admin/audit">{t("nav.audit")}</a>
+          <NavLink href="/admin/plugins">{t("nav.plugins")}</NavLink>
+          <NavLink href="/admin/themes">{t("nav.themes")}</NavLink>
+          <NavLink href="/admin/settings">{t("nav.settings")}</NavLink>
+          <NavLink href="/admin/search">{t("nav.search")}</NavLink>
+          <NavLink href="/admin/audit">{t("nav.audit")}</NavLink>
         </nav>
         <div style={{ padding: 16, marginTop: 20, fontSize: 13, color: "#aaa", borderTop: "1px solid #2c2c40" }}>
           {user.displayName}
@@ -91,7 +108,18 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   );
 }
 
-const link = { display: "block", padding: "9px 16px", color: "#ddd", textDecoration: "none", fontSize: 14.5 };
+const link = {
+  display: "block", padding: "9px 16px", color: "#c9c9d6", textDecoration: "none",
+  fontSize: 14.5, borderLeft: "3px solid transparent",
+};
+/** 현재 화면 — 왼쪽 띠와 밝은 글자로 표시한다 */
+const linkActive = {
+  ...link,
+  color: "#fff",
+  fontWeight: 600,
+  background: "rgba(255,255,255,.07)",
+  borderLeft: "3px solid #ff6f5f",
+};
 const sectionLabel = {
   padding: "16px 16px 6px", fontSize: 11.5, color: "#6b6b85",
   textTransform: "uppercase" as const, letterSpacing: ".5px", fontWeight: 700,
