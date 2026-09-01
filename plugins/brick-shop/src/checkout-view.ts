@@ -69,7 +69,10 @@ export function registerCheckoutView(ctx: PluginContext, t: (k: string, p?: Reco
       <dt id="brick-co-bank-label" hidden>${escapeHtml(t("checkout.bankAccount"))}</dt><dd id="brick-co-bank" hidden></dd>
     </dl>
     <p class="brick-co-guest" id="brick-co-guest" hidden>${escapeHtml(t("checkout.guestHint"))}</p>
-    <p><a class="brick-primary brick-co-back" href="${escapeHtml(base)}">${escapeHtml(t("checkout.goShop"))}</a></p>
+    <p>
+      <a class="brick-primary brick-co-back" id="brick-co-view" href="${escapeHtml(base)}/orders">${escapeHtml(t("orders.viewOrder"))}</a>
+      <a class="brick-co-back" href="${escapeHtml(base)}">${escapeHtml(t("checkout.goShop"))}</a>
+    </p>
   </section>
 </div>
 ${checkoutScript(t)}
@@ -177,6 +180,8 @@ const checkoutScript = (t: (k: string) => string) => `
           bank.textContent = d.bankAccount;
         }
         if (guest) document.getElementById('brick-co-guest').hidden = false;
+        var view = document.getElementById('brick-co-view');
+        if (view) view.href = root.dataset.shopBase + '/orders/' + encodeURIComponent(d.orderNo);
         document.getElementById('brick-co-done').hidden = false;
         window.scrollTo(0, 0);
       })

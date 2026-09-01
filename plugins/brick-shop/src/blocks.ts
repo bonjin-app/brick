@@ -6,6 +6,7 @@ import { reviewSection } from "./reviews-view.js";
 import { RELATED_LIMIT, listRelated, type RelatedProduct } from "./related.js";
 import { activeCollections, viewCollection } from "./collections.js";
 import { registerCheckoutView } from "./checkout-view.js";
+import { registerOrdersView } from "./orders-view.js";
 
 /**
  * 스토어프론트 블록.
@@ -273,6 +274,7 @@ ${buyScript(`${shopBaseOf(blockCtx)}/cart`)}${GALLERY_SCRIPT}${restockScript()}$
       }
       if (seg[0] === "cart") return cartBlock.render({}, blockCtx);
       if (seg[0] === "checkout") return checkoutBlock.render({}, blockCtx);
+      if (seg[0] === "orders") return ordersBlock.render({ orderNo: seg[1] ?? "" }, blockCtx);
       if (seg[0] === "event") {
         return seg[1] ? renderCollectionPage(seg[1]) : renderCollectionIndex();
       }
@@ -389,6 +391,7 @@ ${cartScript(shopBaseOf(blockCtx))}${STOREFRONT_CSS}`,
   ctx.registerBlock(cartBlock);
 
   const checkoutBlock = registerCheckoutView(ctx, t);
+  const ordersBlock = registerOrdersView(ctx, t);
 }
 
 /**
@@ -681,6 +684,7 @@ const cartScript = (shopBase: string) => `
     }).join('');
 
     root.innerHTML =
+      '<p class="brick-cart-orders-link"><a href="' + ${JSON.stringify(shopBase)} + '/orders">' + ${JSON.stringify(t("orders.linkFromCart"))} + ' →</a></p>' +
       '<table><thead><tr><th>' + ${JSON.stringify(t("cart.colProduct"))} + '</th><th>' + ${JSON.stringify(t("cart.colUnit"))} + '</th><th>' + ${JSON.stringify(t("cart.colQty"))} + '</th><th>' + ${JSON.stringify(t("cart.colSum"))} + '</th><th></th></tr></thead>' +
       '<tbody>' + rows + '</tbody></table>' +
       '<div class="brick-cart-total"><dl>' +

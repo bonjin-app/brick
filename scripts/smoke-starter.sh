@@ -229,6 +229,9 @@ CO_R="$(curl -s "$API/api/render/page?path=shop/checkout")"
 contains "/shop/checkout 이 주문서를 그린다" "$CO_R" "brick-co-form"
 contains "주문서의 상점 기준 경로" "$CO_R" 'data-shop-base=\"/shop\"' 
 contains "주문서에 무통장 안내" "$CO_R" "무통장 입금"
+# 주문 조회 — 주문한 손님이 주문을 다시 볼 화면 (회원 목록 / 비회원 번호 조회)
+contains "/shop/orders 가 주문 조회를 그린다" "$(curl -s "$API/api/render/page?path=shop/orders")" "brick-order-list"
+contains "/shop/orders/<번호> 가 상세를 그린다" "$(curl -s "$API/api/render/page?path=shop/orders/20990101-000001")" "brick-order-detail"
 contains "/shop/event 가 기획전 목록을 그린다" "$(curl -s "$API/api/render/page?path=shop/event")" "기획전"
 GUIDE="$(curl -s "$API/api/render/page?path=guide")"
 contains "교환·반품 안내가 있다 (표시 의무의 출발점)" "$GUIDE" "교환과 반품"
