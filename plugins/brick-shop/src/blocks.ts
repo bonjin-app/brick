@@ -585,7 +585,13 @@ const STOREFRONT_CSS = `
 .brick-product-thumb{position:relative;aspect-ratio:1;background:var(--color-bg-soft, #f6f6f9);border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius-lg, 14px);overflow:hidden;display:flex;align-items:center;justify-content:center;transition:border-color .16s ease}
 .brick-product-card:hover .brick-product-thumb{border-color:var(--color-line-strong, #d0d0d9)}
 .brick-product-thumb img{width:100%;height:100%;object-fit:cover}
-.brick-noimg{color:var(--color-muted, #6c6c7a);font-size:13px}
+.brick-noimg{display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--color-muted, #6c6c7a);font-size:12.5px;opacity:.75}
+.brick-noimg::before{
+  content:"";width:34px;height:28px;border:2px solid currentColor;border-radius:4px;
+  background:
+    radial-gradient(circle at 9px 9px, currentColor 2.5px, transparent 3px),
+    linear-gradient(135deg, transparent 55%, currentColor 55%, currentColor 72%, transparent 72%);
+}
 .brick-badge-soldout{position:absolute;top:8px;left:8px;padding:4px 10px;border-radius:999px;background:rgba(20,20,28,.82);color:#fff;font-size:12px;font-weight:700;line-height:1.4}
 .brick-product-card.is-soldout .brick-product-thumb img{opacity:.55}
 .brick-product-card.is-soldout .brick-product-name{color:var(--color-muted, #6c6c7a)}
