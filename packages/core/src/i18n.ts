@@ -97,6 +97,18 @@ const CORE_KO: MessageCatalog = {
   "header.register": "회원가입",
   "header.logout": "로그아웃",
   "header.admin": "관리자",
+  "search.placeholder": "검색어를 입력하세요",
+  "search.button": "검색",
+  "search.title": "통합검색",
+  "search.tooShort": "검색어는 2자 이상 입력해주세요.",
+  "search.empty": "\"{query}\" 에 대한 결과가 없습니다.",
+  "search.total": "\"{query}\" 검색 결과 {total}건",
+  "search.groupTotal": "{total}건",
+  "search.more": "더보기",
+  "search.all": "전체",
+  "search.replaced": "\"{from}\" 대신 \"{to}\" 로 검색했습니다.",
+  "search.prev": "이전",
+  "search.next": "다음",
 };
 
 const CORE_EN: MessageCatalog = {
@@ -114,6 +126,18 @@ const CORE_EN: MessageCatalog = {
   "header.register": "Sign up",
   "header.logout": "Log out",
   "header.admin": "Admin",
+  "search.placeholder": "Search…",
+  "search.button": "Search",
+  "search.title": "Search",
+  "search.tooShort": "Please enter at least 2 characters.",
+  "search.empty": "No results for \"{query}\".",
+  "search.total": "{total} results for \"{query}\"",
+  "search.groupTotal": "{total} results",
+  "search.more": "More",
+  "search.all": "All",
+  "search.replaced": "Searched for \"{to}\" instead of \"{from}\".",
+  "search.prev": "Prev",
+  "search.next": "Next",
 };
 
 export const CORE_CATALOGS: Record<Locale, MessageCatalog> = { ko: CORE_KO, en: CORE_EN };

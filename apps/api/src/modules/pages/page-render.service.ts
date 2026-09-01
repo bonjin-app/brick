@@ -157,6 +157,21 @@ export class PageRenderService {
         const html = await this.themes.render("home", { ...themeCommon, site, menu: nav, pageTitle: site.name, seo: {} });
         return { html, status: 200, slug: "home" };
       }
+      // /search 는 페이지가 없어도 통합검색으로 폴백한다 — 테마 헤더의
+      // 검색폼이 어느 사이트에서든 404 로 떨어지지 않게. search slug 로
+      // 페이지를 만들면 그 페이지가 우선한다 (운영자가 화면을 가질 수 있다).
+      if (path === "search") {
+        const title = t("search.title");
+        const blocksHtml = await this.renderNodes(
+          [{ block: "core/search", props: {} }],
+          blockCtx,
+        );
+        const html = await this.themes.render("page", {
+          ...themeCommon, site, menu: nav,
+          title, pageTitle: `${title} — ${site.name}`, blocksHtml, seo: {},
+        });
+        return { html, status: 200, slug: "search" };
+      }
       const html = await this.themes.render("page", {
         ...themeCommon,
         site,

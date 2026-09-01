@@ -283,6 +283,11 @@ export class PluginLoaderService implements OnModuleInit {
    */
   private localeCache: { value: Locale; at: number } = { value: DEFAULT_LOCALE, at: 0 };
 
+  /** 현재 사이트 언어 (캐시) — 코어 블록이 렌더 시점 번역에 쓴다 */
+  get siteLocale(): Locale {
+    return this.localeCache.value;
+  }
+
   async refreshLocale(): Promise<void> {
     if (Date.now() - this.localeCache.at < 10_000) return;
     try {

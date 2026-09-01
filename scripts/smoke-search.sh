@@ -482,6 +482,14 @@ print(','.join(g['code'] for g in d['groups']))" <<< "$BROKEN_LT")" "boards"
 psql_q "ALTER TABLE board_boards RENAME COLUMN title_tmp TO title" >/dev/null
 contains "고치면 다시 나온다" "$(curl -s -b "$CK" "$API/api/admin/link-targets")" '"code":"boards"'
 
+echo "── 공개 검색 화면 — /search 는 페이지가 없어도 렌더된다 (core/search 폴백)"
+SPAGE="$(curl -s "$API/api/render/page?path=search&q=%EC%9A%B0%EC%82%B0")"  # "우산" — 수트가 만든 페이지가 걸린다
+contains "검색 화면이 뜬다 (페이지 없이)" "$SPAGE" "통합검색"
+contains "검색 폼" "$SPAGE" "brick-search-form"
+contains "결과 문구" "$SPAGE" "검색 결과"
+absent  "0건 그룹은 그리지 않는다" "$SPAGE" "0건</small>"
+contains "빈 검색은 폼만" "$(curl -s "$API/api/render/page?path=search")" "brick-search-form"
+
 echo
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 [[ $FAIL -eq 0 ]] || { echo; echo "── 서버 로그 ──"; tail -40 "$TMP/api.log"; exit 1; }

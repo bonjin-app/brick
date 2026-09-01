@@ -52,8 +52,28 @@ img { max-width: 100%; height: auto; }
 }
 .brick-nav a:hover { color: var(--color-primary); background: var(--color-primary-soft); }
 
+/* 헤더 검색 — /search 는 페이지가 없어도 코어가 폴백으로 그린다 */
+.brick-header-search { margin-left: auto; }
+.brick-header-search input {
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--color-text);
+  background: var(--color-bg-soft);
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  padding: 7px 12px;
+  width: 170px;
+  transition: width .15s ease;
+}
+.brick-header-search input:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 0;
+  border-color: transparent;
+  width: 220px;
+}
+
 /* 로그인/회원가입/로그아웃 — 헤더 우측 유틸 */
-.brick-util { display: flex; align-items: center; gap: 14px; margin-left: auto; white-space: nowrap; }
+.brick-util { display: flex; align-items: center; gap: 14px; white-space: nowrap; }
 .brick-util a { color: var(--color-muted); text-decoration: none; font-size: 13.5px; }
 .brick-util a:hover { color: var(--color-text); }
 .brick-util .brick-util-cta {
@@ -64,7 +84,8 @@ img { max-width: 100%; height: auto; }
   font-weight: 600;
 }
 .brick-util .brick-util-cta:hover { color: #fff; filter: brightness(0.94); }
-.brick-util-name { font-size: 13.5px; font-weight: 600; }
+.brick-util-name { font-size: 13.5px; font-weight: 600; color: var(--color-text) !important; text-decoration: none; }
+.brick-util-name:hover { color: var(--color-primary) !important; }
 .brick-logout { display: inline; margin: 0; }
 .brick-logout button {
   border: 0;
@@ -156,6 +177,8 @@ img { max-width: 100%; height: auto; }
 @media (max-width: 720px) {
   .brick-header { flex-wrap: wrap; height: auto; padding: 10px 16px; gap: 8px 16px; }
   .brick-nav { order: 3; flex-basis: 100%; }
+  .brick-header-search { order: 4; flex-basis: 100%; margin-left: 0; }
+  .brick-header-search input, .brick-header-search input:focus-visible { width: 100%; }
   .brick-util { gap: 10px; }
   .brick-main { padding: 24px 16px 56px; }
   .brick-page > h1 { font-size: 24px; }
