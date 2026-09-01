@@ -221,7 +221,14 @@ contains "이용 안내 링크" "$MENU" '"url":"/guide"'
 check "쇼핑몰 메뉴도 전부 렌더된다" "$(verify_menu_links "$MENU")" "끊어진 링크: 없음"
 SHOP_PAGE="$(curl -s "$API/api/render/page?path=shop")"
 contains "/shop 이 뜬다 (상품이 없으면 빈 안내)" "$SHOP_PAGE" "등록된 상품이 없습니다"
-contains "/shop/cart 가 장바구니를 그린다" "$(curl -s "$API/api/render/page?path=shop/cart")" "brick-cart"
+CART_R="$(curl -s "$API/api/render/page?path=shop/cart")"
+contains "/shop/cart 가 장바구니를 그린다" "$CART_R" "brick-cart"
+# 주문하기는 상점 페이지 기준 경로다 — '/checkout' 하드코딩은 404 였다
+contains "주문하기가 checkout 으로" "$CART_R" "/checkout"
+CO_R="$(curl -s "$API/api/render/page?path=shop/checkout")"
+contains "/shop/checkout 이 주문서를 그린다" "$CO_R" "brick-co-form"
+contains "주문서의 상점 기준 경로" "$CO_R" 'data-shop-base=\"/shop\"' 
+contains "주문서에 무통장 안내" "$CO_R" "무통장 입금"
 contains "/shop/event 가 기획전 목록을 그린다" "$(curl -s "$API/api/render/page?path=shop/event")" "기획전"
 GUIDE="$(curl -s "$API/api/render/page?path=guide")"
 contains "교환·반품 안내가 있다 (표시 의무의 출발점)" "$GUIDE" "교환과 반품"

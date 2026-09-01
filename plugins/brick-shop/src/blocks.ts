@@ -5,6 +5,7 @@ import { bindI18n, t } from "./i18n.js";
 import { reviewSection } from "./reviews-view.js";
 import { RELATED_LIMIT, listRelated, type RelatedProduct } from "./related.js";
 import { activeCollections, viewCollection } from "./collections.js";
+import { registerCheckoutView } from "./checkout-view.js";
 
 /**
  * 스토어프론트 블록.
@@ -271,6 +272,7 @@ ${buyScript(`${shopBaseOf(blockCtx)}/cart`)}${GALLERY_SCRIPT}${restockScript()}$
         return `${nav}\n${list}`;
       }
       if (seg[0] === "cart") return cartBlock.render({}, blockCtx);
+      if (seg[0] === "checkout") return checkoutBlock.render({}, blockCtx);
       if (seg[0] === "event") {
         return seg[1] ? renderCollectionPage(seg[1]) : renderCollectionIndex();
       }
@@ -378,13 +380,15 @@ ${buyScript(`${shopBaseOf(blockCtx)}/cart`)}${GALLERY_SCRIPT}${restockScript()}$
   const cartBlock: Parameters<PluginContext["registerBlock"]>[0] = {
     name: "cart",
     displayName: "장바구니",
-    render: async () => `
+    render: async (_props, blockCtx) => `
 <div class="brick-cart" id="brick-cart">
   <p class="brick-cart-loading">${escapeHtml(t("cart.loading"))}</p>
 </div>
-${cartScript()}${STOREFRONT_CSS}`,
+${cartScript(shopBaseOf(blockCtx))}${STOREFRONT_CSS}`,
   };
   ctx.registerBlock(cartBlock);
+
+  const checkoutBlock = registerCheckoutView(ctx, t);
 }
 
 /**
@@ -648,7 +652,7 @@ const buyScript = (cartPath: string) => `
 </script>`;
 
 /* ── 장바구니 화면 스크립트 ─────────────────────────── */
-const cartScript = () => `
+const cartScript = (shopBase: string) => `
 <script>
 (function(){
   var root = document.getElementById('brick-cart');
@@ -662,7 +666,9 @@ const cartScript = () => `
 
   function render(d){
     if (!d.items || !d.items.length) {
-      root.innerHTML = '<p class="brick-shop-empty">' + ${JSON.stringify(t("cart.empty"))} + '</p>';
+      // 빈 장바구니가 막다른 골목이 되지 않게 — 상점으로 가는 길을 함께 준다
+      root.innerHTML = '<p class="brick-shop-empty">' + ${JSON.stringify(t("cart.empty"))} +
+        ' <a href="' + ${JSON.stringify(shopBase)} + '">' + ${JSON.stringify(t("cart.goShop"))} + '</a></p>';
       return;
     }
     var rows = d.items.map(function(it){
@@ -682,7 +688,7 @@ const cartScript = () => `
       (d.discount ? '<dt>' + ${JSON.stringify(t("cart.discount"))} + '</dt><dd>-' + fmt(d.discount) + '</dd>' : '') +
       '<dt>' + ${JSON.stringify(t("cart.shipping"))} + '</dt><dd>' + (d.shippingFee ? fmt(d.shippingFee) : ${JSON.stringify(t("cart.free"))}) + '</dd>' +
       '<dt class="brick-grand">' + ${JSON.stringify(t("cart.grand"))} + '</dt><dd class="brick-grand">' + fmt(d.total) + '</dd>' +
-      '</dl><div class="brick-buy-actions"><a class="brick-primary" href="/checkout" ' +
+      '</dl><div class="brick-buy-actions"><a class="brick-primary" href="' + ${JSON.stringify(shopBase)} + '/checkout" ' +
       'style="flex:1;padding:14px;border-radius:8px;text-align:center;text-decoration:none">' + ${JSON.stringify(t("cart.order"))} + '</a></div></div>';
 
     root.querySelectorAll('tr[data-item]').forEach(function(tr){
