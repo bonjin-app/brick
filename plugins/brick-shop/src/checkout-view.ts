@@ -38,18 +38,18 @@ export function registerCheckoutView(ctx: PluginContext, t: (k: string, p?: Reco
 
   <form class="brick-co-form" id="brick-co-form" hidden>
     <h2>${escapeHtml(t("checkout.orderer"))}</h2>
-    ${field(t("checkout.name"), '<input name="ordererName" required maxlength="50" autocomplete="name" />')}
-    ${field(t("checkout.phone"), '<input name="ordererPhone" required maxlength="20" autocomplete="tel" placeholder="010-0000-0000" />')}
+    ${field(t("checkout.name"), '<input type="text" name="ordererName" autocomplete="name" required maxlength="50" autocomplete="name" />')}
+    ${field(t("checkout.phone"), '<input type="tel" name="ordererPhone" autocomplete="tel" inputmode="tel" required maxlength="20" autocomplete="tel" placeholder="010-0000-0000" />')}
     ${field(t("checkout.email"), '<input name="ordererEmail" type="email" maxlength="255" autocomplete="email" />')}
 
     <h2>${escapeHtml(t("checkout.shippingTo"))}</h2>
     <div class="brick-co-addr">
-      ${field(t("checkout.postcode"), '<input name="postcode" required maxlength="10" autocomplete="postal-code" />')}
-      ${field(t("checkout.address1"), '<input name="address1" required maxlength="200" autocomplete="street-address" />')}
+      ${field(t("checkout.postcode"), '<input type="text" name="postcode" autocomplete="postal-code" inputmode="numeric" required maxlength="10" autocomplete="postal-code" />')}
+      ${field(t("checkout.address1"), '<input type="text" name="address1" autocomplete="street-address" required maxlength="200" autocomplete="street-address" />')}
     </div>
-    ${field(t("checkout.address2"), '<input name="address2" maxlength="200" />')}
+    ${field(t("checkout.address2"), '<input type="text" name="address2" autocomplete="address-line2" maxlength="200" />')}
     ${field(t("checkout.memo"), '<input name="deliveryMemo" maxlength="200" />')}
-    ${field(t("checkout.coupon"), '<input name="couponCode" maxlength="40" autocomplete="off" />')}
+    ${field(t("checkout.coupon"), '<input type="text" name="couponCode" maxlength="40" autocomplete="off" />')}
 
     <h2>${escapeHtml(t("checkout.payment"))}</h2>
     <p class="brick-co-pay">

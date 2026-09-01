@@ -121,7 +121,9 @@ export default function AccountPage() {
   }
 
   const page: React.CSSProperties = {
-    minHeight: "100vh", margin: 0, background: "var(--color-bg-soft)", color: "var(--color-text)", colorScheme: "light",
+    // colorScheme 을 라이트로 못 박으면 다크 화면에 흰 체크박스가 남는다 —
+    // 밝기는 루트가 손님의 선택에 따라 정한다
+    minHeight: "100dvh", margin: 0, background: "var(--color-bg-soft)", color: "var(--color-text)",
     fontFamily: "'Pretendard', 'Apple SD Gothic Neo', sans-serif",
     padding: "40px 16px 72px", boxSizing: "border-box",
   };

@@ -49,6 +49,10 @@ const FALLBACK_TOKENS = `
   --color-line: #292a33; --color-line-strong: #3b3c48;
   --color-danger: #ff7a72; --color-success: #3ec79d; --color-warning: #e5a844;
 }
+/* 손님이 고른 밝기를 UA 위젯(스크롤바·체크박스·파일 선택)에도 알린다 —
+   meta 만으로는 OS 설정을 따라서, 토글로 다크를 골라도 흰 체크박스가 남는다 */
+:root[data-theme="dark"] { color-scheme: dark; }
+:root[data-theme="light"] { color-scheme: light; }
 html, body { background: var(--color-bg-soft); color: var(--color-text); }
 body { margin: 0; font-family: var(--font-body); -webkit-font-smoothing: antialiased; }
 * { box-sizing: border-box; }

@@ -159,6 +159,8 @@ const reviewScript = () => `
   /* ── 후기 ── */
   function renderDist(data){
     var box = get(root, '[data-dist]');
+    // 후기가 없으면 요약(별점 분포)을 서버가 그리지 않는다 — 그때는 채울 곳도 없다
+    if (!box) return;
     var max = 0;
     for (var i = 1; i <= 5; i++) max = Math.max(max, Number((data.distribution||{})[i] || 0));
     var html = '';

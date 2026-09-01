@@ -353,13 +353,22 @@ ${eyebrow ? `  <span class="brick-eyebrow">${esc(eyebrow)}</span>\n` : ""}${titl
 <style>
 .brick-search-form { display: flex; gap: 8px; max-width: 560px; }
 .brick-search-form input { flex: 1; }
-.brick-search-note { color: var(--color-muted, #71717d); }
-.brick-search-group h2 small { font-weight: 400; font-size: 13px; color: var(--color-muted, #71717d); }
-.brick-search-group ul { list-style: none; padding: 0; margin: 0 0 8px; }
-.brick-search-group li { padding: 10px 0; border-bottom: 1px solid var(--color-line, #e7e7ec); }
-.brick-search-meta { margin-left: 8px; font-size: 12.5px; color: var(--color-muted, #71717d); }
-.brick-search-excerpt { margin: 4px 0 0; font-size: 13.5px; color: var(--color-muted, #71717d); }
-.brick-search-pager { display: flex; gap: 16px; margin-top: 18px; }
+.brick-search-note { color: var(--color-muted, #6c6c7a); font-size: 14px; margin: 10px 0 0; }
+/*
+ * 그룹 제목이 결과 제목보다 크면 무엇이 결과인지 흐려진다 — 제목은 분류
+ * 라벨이므로 작게, 결과는 누를 것이므로 크고 굵게.
+ */
+.brick-search-group { margin-top: 30px; }
+.brick-search-group h2 { font-size: 15px; margin: 0 0 6px; letter-spacing: 0; color: var(--color-muted, #6c6c7a); font-weight: 600; }
+.brick-search-group h2 small { font-weight: 400; font-size: 13px; color: var(--color-muted, #6c6c7a); }
+.brick-search-group ul { list-style: none; padding: 0; margin: 0; }
+.brick-search-group li { padding: 14px 0; border-bottom: 1px solid var(--color-line, #e4e4ea); }
+.brick-search-group li:last-child { border-bottom: 0; }
+.brick-search-group li > a { font-size: 16px; font-weight: 600; color: var(--color-text, #17171c); text-decoration: none; }
+.brick-search-group li > a:hover { color: var(--color-primary-text, #b63a2e); text-decoration: underline; }
+.brick-search-meta { margin-left: 8px; font-size: 12.5px; color: var(--color-muted, #6c6c7a); }
+.brick-search-excerpt { margin: 5px 0 0; font-size: 14px; line-height: 1.6; color: var(--color-text-soft, #45454f); }
+.brick-search-pager { display: flex; gap: 16px; margin-top: 22px; }
 </style></div>`;
       },
     });
