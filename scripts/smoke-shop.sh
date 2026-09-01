@@ -387,6 +387,9 @@ echo "── 스토어프론트 블록"
 BLOCKS="$(curl -s "$API/api/blocks")"
 contains "상품목록 블록" "$BLOCKS" "brick-shop/product-list"
 contains "장바구니 블록" "$BLOCKS" "brick-shop/cart"
+# 화면이 없으면 손님이 못 쓰는 기능이다 — 담아둔 상품을 다시 볼 화면
+contains "위시리스트 블록" "$BLOCKS" "brick-shop/wishlist"
+contains "최근 본 상품 블록" "$BLOCKS" "brick-shop/recent-views"
 DETAIL="$(curl -s -X POST "$API/api/blocks/render" -H 'content-type: application/json' \
   -d '{"name":"brick-shop/product-detail","props":{"slug":"smoke-item"}}')"
 contains "상품 상세 서버 렌더" "$DETAIL" "스모크 상품"

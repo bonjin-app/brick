@@ -27,5 +27,21 @@
   "회원 포인트": "Member Points",
   "회원가입 적립": "Points on signup",
   "회원별 포인트 잔액입니다. 수정에서 '조정' 값을 입력하면 지급(양수)·차감(음수)됩니다. 모든 변동은 원장에 기록되어 되돌릴 수 없습니다.": "Point balances per member. Enter an 'Adjustment' when editing to grant (positive) or deduct (negative). Every change is written to the ledger and cannot be undone.",
-  "회원의 포인트 내역에 표시됩니다.": "Shown in the member's point history."
+  "회원의 포인트 내역에 표시됩니다.": "Shown in the member's point history.",
+  "point.title": "My points",
+  "point.balance": "Available points",
+  "point.expiring": "Expiring soon",
+  "point.history": "Earn & spend history",
+  "point.empty": "No point history.",
+  "point.colDate": "Date",
+  "point.colReason": "Description",
+  "point.colAmount": "Change",
+  "point.colExpires": "Expires",
+  "point.loginRequired": "Log in to see your points.",
+  "point.login": "Log in",
+  "point.loading": "Loading…",
+  "point.loadFail": "Could not load.",
+  "point.unit": "pts",
+  "point.noExpiry": "No expiry",
+  "point.more": "Load more"
 }

@@ -80,6 +80,12 @@ curl -s -b "$ADMIN" -X POST "$API/api/plugins/brick-shop/activate" >/dev/null
 contains "포인트 없이 쇼핑몰 동작" "$(curl -s "$SH/payment-methods")" '"pointsAvailable":false'
 # 그다음 포인트를 켠다 — 쇼핑몰이 사용 시점에 조회하므로 즉시 반영되어야 한다
 contains "포인트 플러그인 활성화" "$(curl -s -b "$ADMIN" -X POST "$API/api/plugins/brick-point/activate")" '"ok":true'
+
+echo "── 내 포인트 화면 (잔액 위젯 + 내역)"
+# 잔액만 보여주고 내역 화면이 없으면 포인트를 신뢰할 수 없다 (그누보드의 포인트 내역 자리)
+BLK="$(curl -s "$API/api/blocks")"
+contains "포인트 위젯 블록" "$BLK" "brick-point/my-points"
+contains "포인트 내역 블록" "$BLK" "brick-point/my-point-history"
 contains "서비스 공개 로그" "$(cat "$TMP/api.log")" 'provides service "points"'
 contains "쇼핑몰이 포인트를 인식" "$(curl -s "$SH/payment-methods")" '"pointsAvailable":true'
 curl -s -b "$ADMIN" -X POST "$API/api/plugins/brick-board/activate" >/dev/null

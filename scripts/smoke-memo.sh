@@ -206,6 +206,8 @@ contains "읽음 처리 실행" "$(curl -s -b "$U2" -X POST "$MM/read-all")" '"o
 contains "안읽음 0" "$(curl -s -b "$U2" "$MM/unread-count")" '"count":0'
 
 echo "── 스크랩"
+# 스크랩 API 는 있었지만 담아둔 글을 다시 볼 화면이 없었다
+contains "내 스크랩 화면 블록" "$(curl -s "$API/api/blocks")" "brick-board/my-scraps"
 printf '{"slug":"free","title":"자유","write_role":"member","write_interval":0}' > "$TMP/b.json"
 curl -s -b "$ADMIN" -X POST "$BD/admin/boards" -H 'content-type: application/json' --data-binary "@$TMP/b.json" >/dev/null
 printf '{"title":"스크랩 대상","content":"<p>본문</p>"}' > "$TMP/p.json"

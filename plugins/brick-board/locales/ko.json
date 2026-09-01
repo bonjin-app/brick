@@ -84,5 +84,15 @@
   "cards.empty": "공개된 게시판이 없습니다.",
   "cards.count": "{n}개의 글",
   "latest.empty": "게시물이 없습니다.",
-  "dash.comments": "댓글 {n}개"
+  "dash.comments": "댓글 {n}개",
+  "scrap.title": "내 스크랩",
+  "scrap.empty": "스크랩한 글이 없습니다.",
+  "scrap.loginRequired": "스크랩은 로그인 후 이용할 수 있습니다.",
+  "scrap.colBoard": "게시판",
+  "scrap.colTitle": "제목",
+  "scrap.colDate": "스크랩한 날",
+  "scrap.remove": "삭제",
+  "scrap.loading": "불러오는 중…",
+  "scrap.loadFail": "불러올 수 없습니다.",
+  "scrap.login": "로그인"
 }

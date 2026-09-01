@@ -1,0 +1,18 @@
+{
+  "point.title": "내 포인트",
+  "point.balance": "사용 가능 포인트",
+  "point.expiring": "곧 소멸 예정",
+  "point.history": "적립·사용 내역",
+  "point.empty": "포인트 내역이 없습니다.",
+  "point.colDate": "날짜",
+  "point.colReason": "내용",
+  "point.colAmount": "변동",
+  "point.colExpires": "유효기간",
+  "point.loginRequired": "포인트는 로그인 후 확인할 수 있습니다.",
+  "point.login": "로그인",
+  "point.loading": "불러오는 중…",
+  "point.loadFail": "불러올 수 없습니다.",
+  "point.unit": "점",
+  "point.noExpiry": "무기한",
+  "point.more": "더 보기"
+}

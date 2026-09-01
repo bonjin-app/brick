@@ -7,6 +7,7 @@ import { RELATED_LIMIT, listRelated, type RelatedProduct } from "./related.js";
 import { activeCollections, viewCollection } from "./collections.js";
 import { registerCheckoutView } from "./checkout-view.js";
 import { registerOrdersView } from "./orders-view.js";
+import { registerWishlistView } from "./wishlist-view.js";
 
 /**
  * 스토어프론트 블록.
@@ -275,6 +276,7 @@ ${buyScript(`${shopBaseOf(blockCtx)}/cart`)}${GALLERY_SCRIPT}${restockScript()}$
       if (seg[0] === "cart") return cartBlock.render({}, blockCtx);
       if (seg[0] === "checkout") return checkoutBlock.render({}, blockCtx);
       if (seg[0] === "orders") return ordersBlock.render({ orderNo: seg[1] ?? "" }, blockCtx);
+      if (seg[0] === "wishlist") return wishlistBlock.render({}, blockCtx);
       if (seg[0] === "event") {
         return seg[1] ? renderCollectionPage(seg[1]) : renderCollectionIndex();
       }
@@ -392,6 +394,7 @@ ${cartScript(shopBaseOf(blockCtx))}${STOREFRONT_CSS}`,
 
   const checkoutBlock = registerCheckoutView(ctx, t);
   const ordersBlock = registerOrdersView(ctx, t);
+  const { wishlistBlock } = registerWishlistView(ctx, t);
 }
 
 /**

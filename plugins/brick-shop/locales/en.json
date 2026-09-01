@@ -412,5 +412,13 @@
   "ret.colRefund": "Refund",
   "ret.emptyRequests": "No cancel/return requests.",
   "ret.close": "Close",
-  "ret.returnShippingNote": "A return shipping fee of {amount} KRW will be deducted."
+  "ret.returnShippingNote": "A return shipping fee of {amount} KRW will be deducted.",
+  "wish.title": "Wishlist",
+  "wish.empty": "Nothing saved yet.",
+  "wish.remove": "Remove",
+  "wish.soldout": "Sold out",
+  "wish.unavailable": "Unavailable",
+  "recent.title": "Recently viewed",
+  "recent.empty": "No recently viewed products.",
+  "wish.loginHint": "Log in to see these on your other devices."
 }

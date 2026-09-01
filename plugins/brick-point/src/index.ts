@@ -1,4 +1,5 @@
 import { definePlugin } from "@brick/plugin-sdk";
+import { bindI18n, t } from "./i18n.js";
 import type { PluginDb } from "@brick/plugin-sdk";
 import { sql } from "drizzle-orm";
 import {
@@ -37,6 +38,7 @@ const KIND_LABEL: Record<string, string> = {
  * 반대로 이 플러그인은 게시판이 없어도 동작한다.
  */
 export default definePlugin(async (ctx) => {
+  bindI18n(ctx);
   const db = ctx.db as PluginDb;
 
   const settings = async (): Promise<PointSettings> => ({
@@ -466,13 +468,36 @@ export default definePlugin(async (ctx) => {
     displayName: "내 포인트",
     render: async (_props, blockCtx) => {
       if (!blockCtx.user) {
-        return `<div class="brick-point-widget"><a href="/login">로그인</a> 후 포인트를 확인할 수 있습니다.</div>${WIDGET_CSS}`;
+        return `<div class="brick-point-widget"><a href="/login">${t("point.login")}</a> ${t("point.loginRequired")}</div>${WIDGET_CSS}`;
       }
       const balance = await points.balance(blockCtx.user.id);
       return `<div class="brick-point-widget">
-  <span class="brick-point-label">내 포인트</span>
+  <span class="brick-point-label">${t("point.title")}</span>
   <strong class="brick-point-value">${balance.toLocaleString("ko-KR")}</strong>
 </div>${WIDGET_CSS}`;
+    },
+  });
+
+  /**
+   * 블록: 내 포인트 내역.
+   *
+   * 잔액 위젯만 있고 **내역 화면이 없었다** — 어떻게 쌓이고 어디에 썼는지
+   * 볼 수 없으면 포인트를 신뢰할 수 없다(그누보드의 포인트 내역과 같은
+   * 자리다). 원장은 사용자별 내용이라 골격만 서버 렌더하고 목록은
+   * 클라이언트가 인증 API 로 가져온다.
+   */
+  ctx.registerBlock({
+    name: "my-point-history",
+    displayName: "내 포인트 내역",
+    render: async (_props, blockCtx) => {
+      if (!blockCtx.user) {
+        return `<div class="brick-point-history"><p class="brick-ph-empty">${t("point.loginRequired")} <a href="/login">${t("point.login")}</a></p></div>${HISTORY_CSS}`;
+      }
+      return `
+<div class="brick-point-history" id="brick-ph">
+  <div id="brick-ph-body"><p class="brick-ph-empty">${t("point.loading")}</p></div>
+</div>
+${historyScript()}${HISTORY_CSS}`;
     },
   });
 
@@ -482,6 +507,91 @@ export default definePlugin(async (ctx) => {
     },
   };
 });
+
+const HISTORY_CSS = `
+<style>
+.brick-point-history { max-width: 680px; }
+.brick-ph-summary { display: flex; gap: 22px; align-items: baseline; padding: 16px 18px; background: var(--color-bg-soft, #f8f8fb); border-radius: 10px; margin-bottom: 18px; flex-wrap: wrap; }
+.brick-ph-summary strong { font-size: 24px; color: var(--color-primary, #d0402c); }
+.brick-ph-summary span { color: var(--color-muted, #888); font-size: 13.5px; }
+.brick-point-history table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+.brick-point-history th, .brick-point-history td { padding: 10px 8px; border-bottom: 1px solid var(--color-line, #e7e7ec); text-align: left; }
+.brick-point-history th { font-size: 13px; color: var(--color-muted, #71717d); }
+.brick-point-history .brick-ph-amt { text-align: right; white-space: nowrap; font-weight: 600; }
+.brick-point-history .brick-ph-plus { color: #0a7; }
+.brick-point-history .brick-ph-minus { color: #c0392b; }
+.brick-point-history .brick-ph-date, .brick-point-history .brick-ph-exp { width: 110px; color: var(--color-muted, #71717d); font-size: 13px; }
+.brick-ph-empty { padding: 36px; text-align: center; color: var(--color-muted, #999); }
+.brick-ph-more { display: block; margin: 16px auto 0; padding: 9px 20px; border: 1px solid var(--color-line, #e7e7ec); border-radius: 8px; background: #fff; cursor: pointer; font: inherit; }
+</style>`;
+
+/** 내 포인트 내역 클라이언트 — 페이지 누적 로드 */
+const historyScript = () => `
+<script>
+(function(){
+  var root = document.getElementById('brick-ph');
+  if (!root) return;
+  var body = document.getElementById('brick-ph-body');
+  var page = 1;
+  var rows = [];
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function num(n){ return Number(n).toLocaleString('ko-KR'); }
+  function d2(v){
+    if (!v) return '';
+    var d = new Date(v);
+    if (isNaN(d.getTime())) return '';
+    var p = function(n){ return String(n).padStart(2,'0'); };
+    return d.getFullYear() + '.' + p(d.getMonth()+1) + '.' + p(d.getDate());
+  }
+
+  function paint(d){
+    var head =
+      '<div class="brick-ph-summary">' +
+      '<span>' + ${JSON.stringify(t("point.balance"))} + '</span><strong>' + num(d.balance) + '</strong>' +
+      (d.expiringSoon > 0
+        ? '<span>' + ${JSON.stringify(t("point.expiring"))} + ' ' + num(d.expiringSoon) + ${JSON.stringify(t("point.unit"))} + '</span>'
+        : '') +
+      '</div>';
+    if (!rows.length) {
+      body.innerHTML = head + '<p class="brick-ph-empty">' + ${JSON.stringify(t("point.empty"))} + '</p>';
+      return;
+    }
+    var trs = rows.map(function(r){
+      var plus = Number(r.amount) > 0;
+      return '<tr><td class="brick-ph-date">' + d2(r.created_at) + '</td>' +
+        '<td>' + esc(r.reason || r.kindLabel || '') + '</td>' +
+        '<td class="brick-ph-amt ' + (plus ? 'brick-ph-plus' : 'brick-ph-minus') + '">' +
+        (plus ? '+' : '') + num(r.amount) + '</td>' +
+        '<td class="brick-ph-exp">' + (r.expires_at ? d2(r.expires_at) : ${JSON.stringify(t("point.noExpiry"))}) + '</td></tr>';
+    }).join('');
+    body.innerHTML = head +
+      '<table><thead><tr>' +
+      '<th class="brick-ph-date">' + ${JSON.stringify(t("point.colDate"))} + '</th>' +
+      '<th>' + ${JSON.stringify(t("point.colReason"))} + '</th>' +
+      '<th class="brick-ph-amt">' + ${JSON.stringify(t("point.colAmount"))} + '</th>' +
+      '<th class="brick-ph-exp">' + ${JSON.stringify(t("point.colExpires"))} + '</th>' +
+      '</tr></thead><tbody>' + trs + '</tbody></table>' +
+      (rows.length < d.total
+        ? '<button type="button" class="brick-ph-more">' + ${JSON.stringify(t("point.more"))} + '</button>'
+        : '');
+    var more = body.querySelector('.brick-ph-more');
+    if (more) more.addEventListener('click', function(){ page += 1; load(); });
+  }
+
+  function load(){
+    fetch('/api/plugins/brick-point/my?page=' + page)
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(d){
+        if (!d) { body.innerHTML = '<p class="brick-ph-empty">' + ${JSON.stringify(t("point.loadFail"))} + '</p>'; return; }
+        rows = rows.concat(d.items || []);
+        paint(d);
+      })
+      .catch(function(){ body.innerHTML = '<p class="brick-ph-empty">' + ${JSON.stringify(t("point.loadFail"))} + '</p>'; });
+  }
+  load();
+})();
+</script>`;
 
 const WIDGET_CSS = `
 <style>

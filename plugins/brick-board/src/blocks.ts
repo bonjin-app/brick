@@ -292,6 +292,27 @@ ${cards}
 </div>${BOARD_CSS}${LATEST_MULTI_CSS}`;
     },
   });
+  /**
+   * 내 스크랩 — 스크랩 API(/my/scraps)는 있었지만 화면이 없었다.
+   * 담아둔 글을 다시 볼 방법이 없으면 스크랩 기능도 반쪽이다.
+   *
+   * 골격만 서버 렌더 — 내 스크랩은 사용자별 내용이므로 캐시에 실으면 안 된다.
+   */
+  ctx.registerBlock({
+    name: "my-scraps",
+    displayName: "내 스크랩",
+    render: async (_props, blockCtx) => {
+      if (!blockCtx.user) {
+        return `<div class="brick-scraps"><p class="brick-b-empty">${escapeHtml(t("scrap.loginRequired"))} <a href="/login">${escapeHtml(t("scrap.login"))}</a></p></div>${SCRAPS_CSS}`;
+      }
+      return `
+<div class="brick-scraps" id="brick-scraps">
+  <div id="brick-scraps-body"><p class="brick-b-empty">${escapeHtml(t("scrap.loading"))}</p></div>
+</div>
+${scrapsScript()}${SCRAPS_CSS}`;
+    },
+  });
+
 }
 
 /* ── 최신글 모아보기 스타일 ────────────────────────── */
@@ -305,3 +326,70 @@ const LATEST_MULTI_CSS = `
 .brick-latest-card .brick-more{font-size:12px;color:#999;font-weight:400}
 .brick-latest-card .brick-latest-posts{margin:0}
 </style>`;
+
+const SCRAPS_CSS = `
+<style>
+.brick-scraps table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+.brick-scraps th, .brick-scraps td { padding: 10px 8px; border-bottom: 1px solid var(--color-line, #e7e7ec); text-align: left; }
+.brick-scraps th { font-size: 13px; color: var(--color-muted, #71717d); }
+.brick-scraps a { color: inherit; text-decoration: none; }
+.brick-scraps a:hover { text-decoration: underline; }
+.brick-scraps .brick-s-board { width: 120px; color: var(--color-muted, #71717d); font-size: 13.5px; }
+.brick-scraps .brick-s-date { width: 110px; color: var(--color-muted, #71717d); font-size: 13px; }
+.brick-scraps .brick-s-act { width: 60px; text-align: right; }
+.brick-scraps .brick-s-act button { border: 0; background: none; color: var(--color-muted, #71717d); cursor: pointer; font-size: 12.5px; }
+.brick-b-empty { padding: 36px; text-align: center; color: var(--color-muted, #999); }
+</style>`;
+
+/** 스크랩 목록 클라이언트 — 목록 조회와 해제 */
+const scrapsScript = () => `
+<script>
+(function(){
+  var root = document.getElementById('brick-scraps');
+  if (!root) return;
+  var body = document.getElementById('brick-scraps-body');
+  var API = '/api/plugins/brick-board';
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function d2(v){
+    var d = new Date(v);
+    if (isNaN(d.getTime())) return '';
+    var p = function(n){ return String(n).padStart(2,'0'); };
+    return d.getFullYear() + '.' + p(d.getMonth()+1) + '.' + p(d.getDate());
+  }
+
+  function load(){
+    fetch(API + '/my/scraps').then(function(r){ return r.ok ? r.json() : null; }).then(function(d){
+      if (!d) { body.innerHTML = '<p class="brick-b-empty">' + ${JSON.stringify(t("scrap.loadFail"))} + '</p>'; return; }
+      if (!d.items || !d.items.length) {
+        body.innerHTML = '<p class="brick-b-empty">' + ${JSON.stringify(t("scrap.empty"))} + '</p>';
+        return;
+      }
+      body.innerHTML = '<table><thead><tr>' +
+        '<th class="brick-s-board">' + ${JSON.stringify(t("scrap.colBoard"))} + '</th>' +
+        '<th>' + ${JSON.stringify(t("scrap.colTitle"))} + '</th>' +
+        '<th class="brick-s-date">' + ${JSON.stringify(t("scrap.colDate"))} + '</th><th></th>' +
+        '</tr></thead><tbody>' +
+        d.items.map(function(it){
+          return '<tr><td class="brick-s-board">' + esc(it.board_title) + '</td>' +
+            '<td><a href="/board/' + esc(it.board_slug) + '/' + esc(it.id) + '">' + esc(it.title) + '</a>' +
+            (it.comment_count ? ' <small>[' + it.comment_count + ']</small>' : '') + '</td>' +
+            '<td class="brick-s-date">' + d2(it.scrapped_at) + '</td>' +
+            '<td class="brick-s-act"><button type="button" data-unscrap="' + esc(it.id) + '">' +
+            ${JSON.stringify(t("scrap.remove"))} + '</button></td></tr>';
+        }).join('') + '</tbody></table>';
+
+      body.querySelectorAll('[data-unscrap]').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          // 스크랩은 토글이다 — 같은 엔드포인트를 다시 부르면 해제된다
+          fetch(API + '/posts/' + encodeURIComponent(btn.dataset.unscrap) + '/scrap', { method: 'POST' })
+            .then(load);
+        });
+      });
+    }).catch(function(){
+      body.innerHTML = '<p class="brick-b-empty">' + ${JSON.stringify(t("scrap.loadFail"))} + '</p>';
+    });
+  }
+  load();
+})();
+</script>`;

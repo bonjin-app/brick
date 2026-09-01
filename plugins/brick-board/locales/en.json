@@ -124,5 +124,15 @@
   "표시 순서": "Display order",
   "회원": "Members",
   "dash.comments": "Comments: {n}",
-  "오늘 글": "Posts today"
+  "오늘 글": "Posts today",
+  "scrap.title": "My bookmarks",
+  "scrap.empty": "No bookmarked posts.",
+  "scrap.loginRequired": "Log in to use bookmarks.",
+  "scrap.colBoard": "Board",
+  "scrap.colTitle": "Title",
+  "scrap.colDate": "Bookmarked",
+  "scrap.remove": "Remove",
+  "scrap.loading": "Loading…",
+  "scrap.loadFail": "Could not load.",
+  "scrap.login": "Log in"
 }
