@@ -28,14 +28,18 @@ export function reviewSection(product: {
   </nav>
 
   <div class="brick-pd-panel" data-panel="reviews">
-    <div class="brick-review-summary">
+    ${/*
+       후기가 없으면 요약을 그리지 않는다 — 평점 "-" 와 0 이 다섯 줄 늘어선
+       막대는 정보가 아니라 "이 상품은 아무도 안 샀다"는 인상만 준다.
+     */ ""}
+    ${product.reviewCount > 0 ? `<div class="brick-review-summary">
       <div class="brick-review-score">
-        <strong>${product.ratingAvg ? product.ratingAvg.toFixed(1) : "-"}</strong>
+        <strong>${product.ratingAvg.toFixed(1)}</strong>
         <div class="brick-stars" aria-label="${escapeHtml(t("reviews.avgAria", { n: product.ratingAvg }))}">${stars}</div>
         <small>${escapeHtml(t("reviews.count", { n: product.reviewCount }))}</small>
       </div>
       <div class="brick-review-dist" data-dist></div>
-    </div>
+    </div>` : ""}
     <div data-review-form></div>
     <div data-review-list><p class="brick-shop-empty">${escapeHtml(t("common.loading"))}</p></div>
   </div>

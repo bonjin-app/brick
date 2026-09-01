@@ -37,8 +37,20 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     window.location.href = "/admin/login";
   }
 
+  /**
+   * 관리자는 **라이트 고정**이다 — 색을 여기서 명시한다.
+   *
+   * 공개 화면과 인증 화면은 사이트 테마 토큰을 따라 다크로 바뀌지만
+   * (루트 레이아웃이 /api/themes/tokens.css 를 불러온다), 관리 화면의 색은
+   * 아직 라이트 디자인으로 하드코딩되어 있다. 글자색만 body 에서 상속받으면
+   * **흰 카드 위에 흰 글자**가 되어 읽을 수 없다 — 실제로 그랬다.
+   * 관리 화면의 다크 대응은 별도 작업이고, 그때까지 여기서 잠근다.
+   */
   return (
-    <div style={{ fontFamily: "sans-serif", display: "flex", minHeight: "100vh" }}>
+    <div style={{
+      fontFamily: "sans-serif", display: "flex", minHeight: "100dvh",
+      color: "#17171c", background: "#f6f6f9", colorScheme: "light",
+    }}>
       <aside style={{ width: 210, background: "#1e1e2e", color: "#fff", flexShrink: 0 }}>
         <div style={{ padding: 16, fontWeight: 700, fontSize: 18 }}>BRICK</div>
         <nav>

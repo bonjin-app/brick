@@ -118,6 +118,19 @@ contains "tokens.css 에 다크" "$TOKENS" 'data-theme="dark"'
 CT="$(curl -s -o /dev/null -w "%{content_type}" "$API/api/themes/tokens.css")"
 contains "CSS 로 내려준다" "$CT" "text/css"
 
+echo "── 팔레트에는 화면들이 실제로 쓸 값이 다 있어야 한다"
+for tok in color-bg color-bg-soft color-text color-text-soft color-muted \
+           color-line color-line-strong color-primary color-primary-hover \
+           color-primary-soft color-primary-text color-on-primary \
+           color-danger color-success color-warning radius radius-lg; do
+  contains "토큰 $tok" "$TOKENS" "--$tok:"
+done
+# 로그인·마이페이지가 쓰는 색은 다크에서도 정의돼야 한다 — 아니면 흰 글자에 흰 배경이 된다
+DARK_BLOCK="${TOKENS##*data-theme}"
+for tok in color-bg color-text color-muted color-line color-on-primary; do
+  contains "다크에도 $tok" "$DARK_BLOCK" "--$tok:"
+done
+
 echo "── 기본기: 스킵 링크 · 파비콘 · 현재 위치"
 contains "스킵 링크(키보드)" "$HOME_HTML" 'class="brick-skip"'
 contains "파비콘" "$HOME_HTML" 'rel="icon"'

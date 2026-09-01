@@ -177,7 +177,14 @@ export function registerBoardBlocks(ctx: PluginContext, db: Db): void {
           AND (${slug} = '' OR b.slug = ${slug})
         ORDER BY p.created_at DESC LIMIT ${limit}
       `);
-      if (!rows.length) return `<p class="brick-board-empty">${escapeHtml(t("latest.empty"))}</p>${BOARD_CSS}`;
+      /**
+       * 비었을 때도 제목은 그린다. 제목 없이 "게시물이 없습니다" 박스만 남으면
+       * 손님은 **무엇이** 비었는지 알 수 없다 (홈에 공지 위젯이 그랬다).
+       */
+      const heading = props.title ? `<h3 class="brick-widget-title">${escapeHtml(String(props.title))}</h3>` : "";
+      if (!rows.length) {
+        return `${heading}<p class="brick-board-empty">${escapeHtml(t("latest.empty"))}</p>${BOARD_CSS}`;
+      }
 
       const items = rows
         .map(
@@ -188,7 +195,6 @@ export function registerBoardBlocks(ctx: PluginContext, db: Db): void {
     </li>`,
         )
         .join("\n");
-      const heading = props.title ? `<h3 class="brick-widget-title">${escapeHtml(props.title)}</h3>` : "";
       return `${heading}<ul class="brick-latest-posts">\n${items}\n</ul>${BOARD_CSS}`;
     },
   });
