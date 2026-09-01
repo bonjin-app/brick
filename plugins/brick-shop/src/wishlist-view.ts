@@ -70,7 +70,7 @@ const WISH_CSS = `
 .brick-wish-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .brick-wish-name { margin: 8px 0 2px; font-size: 14px; line-height: 1.4; }
 .brick-wish-price { font-weight: 700; font-size: 14.5px; }
-.brick-wish-badge { position: absolute; top: 8px; left: 8px; background: rgba(0,0,0,.66); color: #fff; font-size: 12px; padding: 3px 8px; border-radius: 6px; }
+.brick-wish-badge { position: absolute; top: 8px; left: 8px; background: rgba(0,0,0,.66); color: var(--color-on-primary, #ffffff); font-size: 12px; padding: 3px 8px; border-radius: 6px; }
 .brick-wish-del { position: absolute; top: 6px; right: 6px; border: 0; background: rgba(255,255,255,.9); border-radius: 6px; font-size: 12px; padding: 4px 8px; cursor: pointer; }
 .brick-wish-hint { font-size: 13px; color: var(--color-muted, #71717d); margin: 10px 0 0; }
 .brick-recent h3 { font-size: 17px; margin: 30px 0 12px; }

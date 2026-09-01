@@ -78,7 +78,7 @@ export function registerBoardBlocks(ctx: PluginContext, db: Db): void {
       // (비로그인 요청은 캐시되므로 담으면 유출된다)
       if (!hasRole(ctx.user, board.read_role)) {
         return `<div class="brick-board">
-  <div class="brick-board-head"><h2>${escapeHtml(board.title)}</h2></div>
+  <div class="brick-board-head"><h1>${escapeHtml(board.title)}</h1></div>
   <p class="brick-board-empty">${escapeHtml(board.read_role === "member" ? t("board.readMember") : t("board.readManager"))}
     ${!ctx.user ? `<a href="/login">${escapeHtml(t("common.login"))}</a>` : ""}</p>
 </div>${BOARD_CSS}`;
@@ -89,8 +89,15 @@ export function registerBoardBlocks(ctx: PluginContext, db: Db): void {
       if (view === "detail" && postId) {
         html = await renderDetail(db, board, postId, ctx);
       } else if (view === "write") {
+        // 글쓰기 화면의 제목은 게시판 이름 + 무엇을 하는 화면인지
+        ctx.setSeo?.({ title: `${board.title} — ${t("write.title")}` });
         html = await renderWrite(db, board, ctx, postId);
       } else {
+        /**
+         * 목록 화면의 제목은 게시판 이름이다. 라우터 페이지 제목("게시판")이
+         * 그대로 쓰이면 게시판이 몇 개든 문서 제목이 하나가 된다.
+         */
+        ctx.setSeo?.({ title: board.title, description: board.description ?? undefined });
         html = await renderList(db, board, ctx);
       }
       return `${html}${BOARD_SCRIPT}${BOARD_CSS}`;
@@ -114,7 +121,7 @@ export function registerBoardBlocks(ctx: PluginContext, db: Db): void {
     return `<div class="brick-board"><div class="brick-board-index">${items}</div></div>
 <style>.brick-board-index{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
 .brick-board-index-item{display:block;padding:16px;border:1px solid var(--brick-border,#e5e5ea);border-radius:10px;text-decoration:none;color:inherit}
-.brick-board-index-item span{display:block;color:#888;font-size:13px;margin-top:4px}</style>${BOARD_CSS}`;
+.brick-board-index-item span{display:block;color:var(--color-muted, #6c6c7a);font-size:13px;margin-top:4px}</style>${BOARD_CSS}`;
   }
 
   // ── 게시판 목록 (카드) ─────────────────────────────
@@ -318,12 +325,12 @@ ${scrapsScript()}${SCRAPS_CSS}`;
 /* ── 최신글 모아보기 스타일 ────────────────────────── */
 const LATEST_MULTI_CSS = `
 <style>
-.brick-latest-grid{display:grid;grid-template-columns:repeat(var(--brick-latest-cols,3),1fr);gap:24px;margin:20px 0}
+.brick-latest-grid{display:grid;grid-template-columns:repeat(var(--brick-latest-cols,3),1fr);gap:20px;margin:20px 0;align-items:start}
 @media(max-width:900px){.brick-latest-grid{grid-template-columns:1fr}}
-.brick-latest-card{border:1px solid #e6e6ee;border-radius:12px;padding:18px 20px}
+.brick-latest-card{border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius-lg, 16px);padding:18px 20px;background:var(--color-bg, #fff)}
 .brick-latest-card h3{margin:0 0 12px;font-size:16px;display:flex;align-items:baseline;justify-content:space-between;gap:8px}
 .brick-latest-card h3 a{text-decoration:none;color:inherit}
-.brick-latest-card .brick-more{font-size:12px;color:#999;font-weight:400}
+.brick-latest-card .brick-more{font-size:12px;color:var(--color-muted, #6c6c7a);font-weight:400}
 .brick-latest-card .brick-latest-posts{margin:0}
 </style>`;
 

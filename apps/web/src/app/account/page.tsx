@@ -121,17 +121,17 @@ export default function AccountPage() {
   }
 
   const page: React.CSSProperties = {
-    minHeight: "100vh", margin: 0, background: "#f5f6f8", color: "#1a1a1a", colorScheme: "light",
+    minHeight: "100vh", margin: 0, background: "var(--color-bg-soft)", color: "var(--color-text)", colorScheme: "light",
     fontFamily: "'Pretendard', 'Apple SD Gothic Neo', sans-serif",
     padding: "40px 16px 72px", boxSizing: "border-box",
   };
   const card: React.CSSProperties = {
-    width: "100%", maxWidth: 560, margin: "0 auto 18px", background: "#fff",
-    border: "1px solid #e7e7ec", borderRadius: 14, padding: "24px 26px",
+    width: "100%", maxWidth: 560, margin: "0 auto 18px", background: "var(--color-bg)",
+    border: "1px solid var(--color-line)", borderRadius: 14, padding: "24px 26px",
     boxShadow: "0 4px 16px rgba(20,20,31,.05)", boxSizing: "border-box",
   };
   const h2: React.CSSProperties = { margin: "0 0 14px", fontSize: 17, letterSpacing: "-0.3px" };
-  const small: React.CSSProperties = { fontSize: 12.5, color: "#8b8b95" };
+  const small: React.CSSProperties = { fontSize: 12.5, color: "var(--color-muted)" };
   const saveBtn: React.CSSProperties = { ...authButton, width: "auto", padding: "9px 18px", marginTop: 14 };
 
   if (gone) {
@@ -160,13 +160,13 @@ export default function AccountPage() {
     <main style={page}>
       <header style={{ width: "100%", maxWidth: 560, margin: "0 auto 20px", display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
         <h1 style={{ margin: 0, fontSize: 24, letterSpacing: "-0.5px" }}>{t("account.title")}</h1>
-        <a href="/" style={{ fontSize: 13.5, color: "#e2574c", textDecoration: "none" }}>
+        <a href="/" style={{ fontSize: 13.5, color: "var(--color-primary)", textDecoration: "none" }}>
           ← {siteName || t("account.backToSite")}
         </a>
       </header>
 
       {(notice || error) && (
-        <div style={{ ...card, padding: "12px 18px", color: error ? "#c0392b" : "#0a7", fontSize: 14 }}>
+        <div style={{ ...card, padding: "12px 18px", color: error ? "var(--color-danger)" : "var(--color-success)", fontSize: 14 }}>
           {error || notice}
         </div>
       )}
@@ -179,11 +179,11 @@ export default function AccountPage() {
             <p style={{ margin: "0 0 4px", fontSize: 14 }}>
               {t("account.email")} — <strong>{me.email}</strong>{" "}
               {me.email_verified ? (
-                <span style={{ color: "#0a7", fontSize: 12.5 }}>✓ {t("account.emailVerified")}</span>
+                <span style={{ color: "var(--color-success)", fontSize: 12.5 }}>✓ {t("account.emailVerified")}</span>
               ) : (
                 <>
-                  <span style={{ color: "#c0392b", fontSize: 12.5 }}>{t("account.emailUnverified")}</span>{" "}
-                  <button style={{ ...small, border: 0, background: "none", color: "#e2574c", cursor: "pointer", padding: 0 }}
+                  <span style={{ color: "var(--color-danger)", fontSize: 12.5 }}>{t("account.emailUnverified")}</span>{" "}
+                  <button style={{ ...small, border: 0, background: "none", color: "var(--color-primary)", cursor: "pointer", padding: 0 }}
                     onClick={() => call("/api/me/email/verify/send", { method: "POST", body: "{}" }, t("account.verifySent"))}>
                     {t("account.sendVerify")}
                   </button>
@@ -238,15 +238,15 @@ export default function AccountPage() {
           <section style={card}>
             <h2 style={h2}>{t("account.sessions")}</h2>
             {sessions.map((s) => (
-              <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #f0f0f4", fontSize: 14 }}>
+              <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--color-line)", fontSize: 14 }}>
                 <span style={{ flex: 1 }}>
                   {s.device}{" "}
-                  {s.isCurrent && <em style={{ fontStyle: "normal", color: "#0a7", fontSize: 12.5 }}>· {t("account.sessionCurrent")}</em>}
+                  {s.isCurrent && <em style={{ fontStyle: "normal", color: "var(--color-success)", fontSize: 12.5 }}>· {t("account.sessionCurrent")}</em>}
                   <br />
                   <span style={small}>{t("account.lastSeen")}: {new Date(s.lastSeenAt ?? s.createdAt).toLocaleString()}</span>
                 </span>
                 {!s.isCurrent && (
-                  <button style={{ ...small, border: "1px solid #e7e7ec", background: "#fff", borderRadius: 7, padding: "5px 10px", cursor: "pointer" }}
+                  <button style={{ ...small, border: "1px solid var(--color-line)", background: "var(--color-bg)", borderRadius: 7, padding: "5px 10px", cursor: "pointer" }}
                     onClick={() => revokeSession(s.id)}>
                     {t("account.sessionRevoke")}
                   </button>
@@ -254,20 +254,20 @@ export default function AccountPage() {
               </div>
             ))}
             {sessions.length > 1 && (
-              <button style={{ ...saveBtn, background: "#fff", color: "#c0392b", border: "1px solid #f0c9c4" }} onClick={revokeOthers}>
+              <button style={{ ...saveBtn, background: "var(--color-bg)", color: "var(--color-danger)", border: "1px solid color-mix(in srgb, var(--color-danger) 34%, transparent)" }} onClick={revokeOthers}>
                 {t("account.sessionRevokeOthers")}
               </button>
             )}
           </section>
 
           {/* ── 탈퇴 ── */}
-          <section style={{ ...card, borderColor: "#f0c9c4" }}>
-            <h2 style={{ ...h2, color: "#c0392b" }}>{t("account.withdraw")}</h2>
-            <p style={{ margin: "0 0 10px", fontSize: 13.5, color: "#6b6b75" }}>{t("account.withdrawDesc")}</p>
+          <section style={{ ...card, borderColor: "color-mix(in srgb, var(--color-danger) 34%, transparent)" }}>
+            <h2 style={{ ...h2, color: "var(--color-danger)" }}>{t("account.withdraw")}</h2>
+            <p style={{ margin: "0 0 10px", fontSize: 13.5, color: "var(--color-muted)" }}>{t("account.withdrawDesc")}</p>
             {losses.length > 0 && (
               <details style={{ fontSize: 13.5, marginBottom: 10 }}>
                 <summary style={{ cursor: "pointer" }}>{t("account.withdrawLosses")}</summary>
-                <ul style={{ margin: "8px 0 0", paddingLeft: 18, color: "#6b6b75" }}>
+                <ul style={{ margin: "8px 0 0", paddingLeft: 18, color: "var(--color-muted)" }}>
                   {losses.map((l, i) => <li key={i}><strong>{l.label}</strong> — {l.detail}</li>)}
                 </ul>
               </details>
@@ -289,7 +289,7 @@ export default function AccountPage() {
                     onChange={(e) => setWithdraw({ ...withdraw, confirm: e.target.value })} />
                 </label>
               )}
-              <button style={{ ...saveBtn, background: "#c0392b" }}>{t("account.withdrawButton")}</button>
+              <button style={{ ...saveBtn, background: "var(--color-danger)" }}>{t("account.withdrawButton")}</button>
             </form>
           </section>
         </>

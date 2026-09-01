@@ -518,11 +518,11 @@ const HISTORY_CSS = `
 .brick-point-history th, .brick-point-history td { padding: 10px 8px; border-bottom: 1px solid var(--color-line, #e7e7ec); text-align: left; }
 .brick-point-history th { font-size: 13px; color: var(--color-muted, #71717d); }
 .brick-point-history .brick-ph-amt { text-align: right; white-space: nowrap; font-weight: 600; }
-.brick-point-history .brick-ph-plus { color: #0a7; }
-.brick-point-history .brick-ph-minus { color: #c0392b; }
+.brick-point-history .brick-ph-plus { color: var(--color-success, #11795a); }
+.brick-point-history .brick-ph-minus { color: var(--color-danger, #c9342f); }
 .brick-point-history .brick-ph-date, .brick-point-history .brick-ph-exp { width: 110px; color: var(--color-muted, #71717d); font-size: 13px; }
 .brick-ph-empty { padding: 36px; text-align: center; color: var(--color-muted, #999); }
-.brick-ph-more { display: block; margin: 16px auto 0; padding: 9px 20px; border: 1px solid var(--color-line, #e7e7ec); border-radius: 8px; background: #fff; cursor: pointer; font: inherit; }
+.brick-ph-more { display: block; margin: 16px auto 0; padding: 9px 20px; border: 1px solid var(--color-line, #e7e7ec); border-radius: 8px; background: var(--color-bg, #ffffff); cursor: pointer; font: inherit; }
 </style>`;
 
 /** 내 포인트 내역 클라이언트 — 페이지 누적 로드 */
@@ -595,7 +595,7 @@ const historyScript = () => `
 
 const WIDGET_CSS = `
 <style>
-.brick-point-widget{display:flex;align-items:baseline;gap:8px;padding:14px 18px;background:#f8f8fb;border-radius:10px;font-size:14px}
-.brick-point-label{color:#888}
+.brick-point-widget{display:flex;align-items:baseline;gap:8px;padding:14px 18px;background:var(--color-bg-soft, #f6f6f9);border-radius:10px;font-size:14px}
+.brick-point-label{color:var(--color-muted, #6c6c7a)}
 .brick-point-value{font-size:20px;color:var(--color-primary,#d0402c)}
 </style>`;

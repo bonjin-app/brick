@@ -85,7 +85,7 @@ ${checkoutScript(t)}
 .brick-co-totals { margin: 10px 0 0; font-size: 14.5px; }
 .brick-co-totals div { display: flex; justify-content: space-between; padding: 3px 0; }
 .brick-co-totals .brick-grand { font-weight: 700; font-size: 16px; border-top: 1px solid var(--color-line, #e7e7ec); padding-top: 8px; margin-top: 6px; }
-.brick-co-form .brick-field { display: block; margin-top: 12px; font-size: 13.5px; color: #4b4b55; }
+.brick-co-form .brick-field { display: block; margin-top: 12px; font-size: 13.5px; color: var(--color-text-soft, #45454f); }
 .brick-co-form .brick-field input { display: block; width: 100%; margin-top: 5px; }
 .brick-co-addr { display: grid; grid-template-columns: 130px 1fr; gap: 10px; }
 .brick-co-pay { background: var(--color-bg-soft, #f7f7f9); border: 1px solid var(--color-line, #e7e7ec); border-radius: 10px; padding: 12px 14px; }

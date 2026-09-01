@@ -120,19 +120,19 @@ const FAQ_CSS = `
 <style>
 .brick-faq{margin:20px 0}
 .brick-faq-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
-.brick-faq-tabs a{padding:7px 14px;border:1px solid #e3e3ea;border-radius:20px;text-decoration:none;color:inherit;font-size:14px}
-.brick-faq-tabs a.is-on{background:var(--color-primary,#d0402c);color:#fff;border-color:transparent}
+.brick-faq-tabs a{padding:7px 14px;border:1px solid var(--color-line, #e4e4ea);border-radius:20px;text-decoration:none;color:inherit;font-size:14px}
+.brick-faq-tabs a.is-on{background:var(--color-primary,#d0402c);color:var(--color-on-primary, #ffffff);border-color:transparent}
 .brick-faq-tabs a span{opacity:.6;font-size:12px}
 .brick-faq-search{display:flex;gap:8px;margin-bottom:20px}
-.brick-faq-search input{flex:1;padding:11px;border:1px solid #ddd;border-radius:8px;font:inherit}
-.brick-faq-search button{padding:11px 20px;border:0;border-radius:8px;background:var(--color-primary,#d0402c);color:#fff;font-weight:700;cursor:pointer}
-.brick-faq-empty{padding:40px;text-align:center;color:#999}
-.brick-faq-item{border-bottom:1px solid #eee}
+.brick-faq-search input{flex:1;padding:11px;border:1px solid var(--color-line, #e4e4ea);border-radius:8px;font:inherit}
+.brick-faq-search button{padding:11px 20px;border:0;border-radius:8px;background:var(--color-primary,#d0402c);color:var(--color-on-primary, #ffffff);font-weight:700;cursor:pointer}
+.brick-faq-empty{padding:40px;text-align:center;color:var(--color-muted, #6c6c7a)}
+.brick-faq-item{border-bottom:1px solid var(--color-line, #e4e4ea)}
 .brick-faq-item summary{padding:16px 4px;cursor:pointer;font-weight:600;line-height:1.5}
 .brick-faq-item summary::marker{color:var(--color-primary,#d0402c)}
-.brick-faq-answer{padding:0 4px 16px;line-height:1.8;color:#444}
-.brick-faq-rate{display:flex;align-items:center;gap:8px;padding:0 4px 16px;font-size:13px;color:#888}
-.brick-faq-rate button{padding:4px 12px;border:1px solid #ddd;border-radius:14px;background:#fff;font-size:13px;cursor:pointer}
+.brick-faq-answer{padding:0 4px 16px;line-height:1.8;color:var(--color-text-soft, #45454f)}
+.brick-faq-rate{display:flex;align-items:center;gap:8px;padding:0 4px 16px;font-size:13px;color:var(--color-muted, #6c6c7a)}
+.brick-faq-rate button{padding:4px 12px;border:1px solid var(--color-line, #e4e4ea);border-radius:14px;background:var(--color-bg, #ffffff);font-size:13px;cursor:pointer}
 .brick-faq-thanks{color:var(--color-primary,#d0402c);font-style:normal}
 </style>`;
 
@@ -141,24 +141,24 @@ const HELP_CSS = `
 .brick-help{margin:24px 0}
 .brick-help-title{font-size:22px;margin:0 0 16px}
 .brick-help-toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px}
-.brick-help-toolbar button{padding:10px 18px;border:0;border-radius:8px;background:var(--color-primary,#d0402c);color:#fff;font-weight:700;cursor:pointer}
+.brick-help-toolbar button{padding:10px 18px;border:0;border-radius:8px;background:var(--color-primary,#d0402c);color:var(--color-on-primary, #ffffff);font-weight:700;cursor:pointer}
 .brick-help table{width:100%;border-collapse:collapse;font-size:14px}
-.brick-help th,.brick-help td{padding:12px 8px;border-bottom:1px solid #eee;text-align:left}
-.brick-help th{color:#888;font-weight:600;font-size:13px}
+.brick-help th,.brick-help td{padding:12px 8px;border-bottom:1px solid var(--color-line, #e4e4ea);text-align:left}
+.brick-help th{color:var(--color-muted, #6c6c7a);font-weight:600;font-size:13px}
 .brick-help td a{color:inherit;text-decoration:none;font-weight:600}
 .brick-badge{font-size:11px;padding:2px 8px;border-radius:10px;font-weight:700}
-.brick-badge.open{background:#fdecea;color:#b3261e}
-.brick-badge.answered{background:#e8f4ea;color:#2b7a3d}
-.brick-badge.closed{background:#eee;color:#777}
-.brick-help-form{padding:20px;border:1px solid #e6e6ee;border-radius:12px;margin-bottom:20px}
+.brick-badge.open{background:color-mix(in srgb, var(--color-danger, #c9342f) 13%, transparent);color:var(--color-danger, #c9342f)}
+.brick-badge.answered{background:color-mix(in srgb, var(--color-success, #11795a) 14%, transparent);color:var(--color-success, #11795a)}
+.brick-badge.closed{background:var(--color-line, #e4e4ea);color:var(--color-muted, #6c6c7a)}
+.brick-help-form{padding:20px;border:1px solid var(--color-line, #e4e4ea);border-radius:12px;margin-bottom:20px}
 .brick-help-form label{display:block;font-size:14px;margin-bottom:10px}
-.brick-help-form input,.brick-help-form select,.brick-help-form textarea{width:100%;padding:11px;margin-top:4px;border:1px solid #ddd;border-radius:8px;box-sizing:border-box;font:inherit}
+.brick-help-form input,.brick-help-form select,.brick-help-form textarea{width:100%;padding:11px;margin-top:4px;border:1px solid var(--color-line, #e4e4ea);border-radius:8px;box-sizing:border-box;font:inherit}
 .brick-help-form textarea{min-height:140px}
-.brick-help-msg{font-size:13px;color:#b3261e;min-height:18px}
+.brick-help-msg{font-size:13px;color:var(--color-danger, #c9342f);min-height:18px}
 .brick-thread{margin-top:20px;display:grid;gap:14px}
-.brick-thread-item{padding:16px;border-radius:10px;background:#f8f8fb;white-space:pre-wrap;line-height:1.7}
-.brick-thread-item.is-staff{background:#eef4fb;border-left:3px solid var(--color-primary,#d0402c)}
-.brick-thread-item b{display:block;font-size:13px;margin-bottom:6px;color:#666}
+.brick-thread-item{padding:16px;border-radius:10px;background:var(--color-bg-soft, #f6f6f9);white-space:pre-wrap;line-height:1.7}
+.brick-thread-item.is-staff{background:color-mix(in srgb, var(--color-primary, #cf4437) 9%, transparent);border-left:3px solid var(--color-primary,#d0402c)}
+.brick-thread-item b{display:block;font-size:13px;margin-bottom:6px;color:var(--color-text-soft, #45454f)}
 </style>`;
 
 /* ── FAQ 클라이언트 (조회수 · 평가) ────────────────── */
@@ -271,7 +271,7 @@ const HELP_SCRIPT = `
           '<label>조회용 비밀번호<input type="password" data-guest-pw placeholder="4자 이상" /></label>'
         : '') +
       '<div class="brick-help-toolbar"><span class="brick-help-msg" data-msg></span>' +
-      '<span><button data-cancel style="background:#eee;color:#333;margin-right:8px">취소</button>' +
+      '<span><button data-cancel style="background:var(--color-line, #e4e4ea);color:var(--color-text, #17171c);margin-right:8px">취소</button>' +
       '<button data-submit>등록</button></span></div></div>';
 
     body.querySelector('[data-cancel]').addEventListener('click', showList);
@@ -312,7 +312,7 @@ const HELP_SCRIPT = `
       body.innerHTML =
         '<div class="brick-help-toolbar"><span>' + esc(t.ticket_no) +
         ' <span class="brick-badge ' + esc(t.status) + '">' + label(t.status) + '</span></span>' +
-        '<button data-back style="background:#eee;color:#333">목록</button></div>' +
+        '<button data-back style="background:var(--color-line, #e4e4ea);color:var(--color-text, #17171c)">목록</button></div>' +
         '<h3 style="margin:0 0 10px">' + esc(t.title) + '</h3>' +
         '<div class="brick-thread"><div class="brick-thread-item"><b>' + esc(t.author_name) +
         ' · ' + day(t.created_at) + '</b>' + esc(t.content) + '</div>' + thread + '</div>' +

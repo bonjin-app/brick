@@ -104,11 +104,17 @@ export async function renderList(
   const total = Number(counted[0]?.n ?? 0);
   const totalPages = Math.max(1, Math.ceil(total / size));
 
+  /**
+   * 첫 열은 "공지" 표시 전용이다. 공지가 없는 게시판에서는 늘 비어 있으므로
+   * 그 열을 아예 그리지 않는다 — 언제나 빈 열은 표를 넓히기만 한다.
+   */
+  const showNoticeCol = notices.length > 0;
+
   const row = (p: Record<string, unknown>, notice: boolean) => {
     const depth = Number(p.depth ?? 0);
     const indent = depth > 0 ? `<span class="brick-reply-mark" style="--d:${depth}">&#8627;</span>` : "";
     return `      <tr${notice ? ' class="brick-notice"' : ""}>
-        <td class="brick-c-num">${notice ? escapeHtml(t("list.notice")) : ""}</td>
+        ${showNoticeCol ? `<td class="brick-c-num">${notice ? escapeHtml(t("list.notice")) : ""}</td>` : ""}
         <td class="brick-c-title">
           ${p.category ? `<span class="brick-cat">${escapeHtml(p.category)}</span>` : ""}${indent}
           <a href="${base}/${escapeHtml(p.id)}">${escapeHtml(p.title)}</a>
@@ -150,20 +156,20 @@ export async function renderList(
 
   return `<div class="brick-board">
   <div class="brick-board-head">
-    <h2>${escapeHtml(board.title)}</h2>
+    <h1>${escapeHtml(board.title)}</h1>
     <span class="brick-board-total">${t("list.total", { n: total })}${q ? escapeHtml(t("list.searchLabel", { q })) : ""}</span>
   </div>
   ${board.description && !q ? `<p class="brick-board-desc">${escapeHtml(board.description)}</p>` : ""}
 ${catNav}
   <table class="brick-board-table">
     <thead>
-      <tr><th class="brick-c-num"></th><th>${escapeHtml(t("list.colTitle"))}</th><th class="brick-c-author">${escapeHtml(t("list.colAuthor"))}</th>
+      <tr>${showNoticeCol ? '<th class="brick-c-num"></th>' : ""}<th>${escapeHtml(t("list.colTitle"))}</th><th class="brick-c-author">${escapeHtml(t("list.colAuthor"))}</th>
           <th class="brick-c-date">${escapeHtml(t("list.colDate"))}</th><th class="brick-c-view">${escapeHtml(t("list.colView"))}</th></tr>
     </thead>
     <tbody>
 ${notices.map((p) => row(p, true)).join("\n")}
 ${items.map((p) => row(p, false)).join("\n")}
-${!notices.length && !items.length ? `      <tr><td colspan="5" class="brick-board-empty">${escapeHtml(q ? t("list.emptySearch") : t("list.emptyFirst"))}</td></tr>` : ""}
+${!notices.length && !items.length ? `      <tr><td colspan="${showNoticeCol ? 5 : 4}" class="brick-board-empty">${escapeHtml(q ? t("list.emptySearch") : t("list.emptyFirst"))}</td></tr>` : ""}
     </tbody>
   </table>
 ${pager}
@@ -227,7 +233,7 @@ export async function renderDetail(
   // (비로그인 요청만 캐시되므로 로그인 사용자는 안전하지만, 방어를 이중으로 둔다)
   if (post.is_secret && !isOwner && !isManager) {
     return `<div class="brick-board">
-  <div class="brick-post-head"><h2>${escapeHtml(post.title)}</h2></div>
+  <div class="brick-post-head"><h1>${escapeHtml(post.title)}</h1></div>
   <div class="brick-secret-notice">
     <p>&#128274; ${escapeHtml(t("detail.secretNotice"))}</p>
     ${!ctx.user ? `<p>${escapeHtml(t("detail.loginRetry", { link: "\u0000" })).replace("\u0000", `<a href="/login">${escapeHtml(t("common.login"))}</a>`)}</p>` : ""}
@@ -235,6 +241,19 @@ export async function renderDetail(
   </div>
 </div>`;
   }
+
+  /**
+   * 이 화면의 제목·설명은 글이다 — 브라우저 탭·공유 링크·검색 결과가 여기서
+   * 나온다. 비밀글은 위에서 이미 돌려보냈으므로 여기서 본문을 요약해도 안전하다.
+   */
+  ctx.setSeo?.({
+    title: String(post.title ?? ""),
+    description: String(post.content ?? "")
+      .replace(/<[^>]*>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 155),
+  });
 
   // 스크랩 여부 — 로그인 사용자에게만 의미가 있다
   let scrapped = false;
@@ -302,7 +321,7 @@ ${files
   return `<div class="brick-board brick-post" data-board="${escapeHtml(board.slug)}" data-post="${escapeHtml(post.id)}">
   <div class="brick-post-head">
     ${post.category ? `<span class="brick-cat">${escapeHtml(post.category)}</span>` : ""}
-    <h2>${escapeHtml(post.title)}</h2>
+    <h1>${escapeHtml(post.title)}</h1>
     <div class="brick-post-meta">
       <span>${escapeHtml(post.author_name ?? "-")}</span>
       <time>${fullDate(post.created_at)}</time>
@@ -386,7 +405,7 @@ export async function renderWrite(
 
   if (!hasRole(ctx.user, board.write_role)) {
     return `<div class="brick-board">
-  <div class="brick-board-head"><h2>${escapeHtml(board.title)}</h2></div>
+  <div class="brick-board-head"><h1>${escapeHtml(board.title)}</h1></div>
   <p class="brick-board-empty">${escapeHtml(t("write.noPermission"))}
     ${!ctx.user ? `<a href="/login">${escapeHtml(t("common.login"))}</a>` : ""} <a href="${base}">${escapeHtml(t("common.toList"))}</a></p>
 </div>`;
@@ -427,7 +446,7 @@ export async function renderWrite(
      ${editing ? `data-edit="${escapeHtml(editing.id)}"` : ""}
      ${replyTo && replyTitle ? `data-reply-to="${escapeHtml(replyTo)}"` : ""}>
   <div class="brick-board-head">
-    <h2>${escapeHtml(editing ? t("write.editTitle") : replyTitle ? t("write.replyTitle") : t("write.title"))}</h2>
+    <h1>${escapeHtml(editing ? t("write.editTitle") : replyTitle ? t("write.replyTitle") : t("write.title"))}</h1>
   </div>
   ${replyTitle ? `<p class="brick-board-desc">${escapeHtml(t("write.original", { title: replyTitle }))}</p>` : ""}
 

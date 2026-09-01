@@ -74,7 +74,7 @@ const ORDERS_CSS = `
 .brick-ret-kind { display: flex; gap: 6px; align-items: center; }
 .brick-ret-form select, .brick-ret-form input[name=detail] { width: 100%; max-width: 420px; }
 .brick-ret-note { font-size: 13px; color: var(--color-muted, #71717d); margin: 8px 0; }
-.brick-ret-msg { margin-left: 10px; font-size: 13.5px; color: #c0392b; }
+.brick-ret-msg { margin-left: 10px; font-size: 13.5px; color: var(--color-danger, #c9342f); }
 .brick-ret-done { padding: 14px; background: var(--color-bg-soft, #f7f7f9); border-radius: 10px; margin-top: 18px; }
 </style>`;
 

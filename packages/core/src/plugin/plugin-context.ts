@@ -491,6 +491,19 @@ export interface BlockRenderContext {
   query: Record<string, string>;
   /** 요청한 사용자 (비로그인이면 null). 수정 버튼 표시 등에 쓴다 */
   user: { id: string; role: string; displayName: string } | null;
+  /**
+   * 이 화면의 제목·설명을 블록이 정한다.
+   *
+   * 한 페이지가 URL 로 여러 화면을 전환하면(게시판 목록/글 상세, 상품
+   * 목록/상세) 페이지 제목 하나로는 맞을 수가 없다 — 글 상세의 문서 제목이
+   * "게시판"이면 **브라우저 탭·공유 링크·검색 결과에 글 제목이 안 나온다.**
+   * 실제로 그랬고, 검색엔진에는 같은 제목의 페이지가 수천 개로 보인다.
+   *
+   * 화면을 아는 블록이 제목을 말한다. 페이지의 SEO 설정이 있으면 그것이
+   * 우선한다(운영자가 명시한 값이 자동 추론보다 세다). 여러 블록이 부르면
+   * 마지막 호출이 이긴다 — 상세 화면을 그리는 블록이 보통 나중이다.
+   */
+  setSeo?: (seo: { title?: string; description?: string }) => void;
 }
 
 /**

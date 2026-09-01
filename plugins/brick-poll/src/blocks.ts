@@ -122,35 +122,35 @@ function escapeHtml(s: unknown): string {
 
 const POLL_CSS = `
 <style>
-.brick-poll{border:1px solid #e6e6ee;border-radius:12px;padding:20px 22px;margin:20px 0}
+.brick-poll{border:1px solid var(--color-line, #e4e4ea);border-radius:12px;padding:20px 22px;margin:20px 0}
 .brick-poll-q{margin:0 0 8px;font-size:17px;line-height:1.5}
-.brick-poll-desc{margin:0 0 12px;color:#777;font-size:14px;line-height:1.6}
-.brick-poll-total{margin:0 0 14px;color:#999;font-size:13px}
-.brick-poll-loading,.brick-poll-empty{color:#999;font-size:14px;padding:12px 0;margin:0}
-.brick-poll-empty{padding:30px;text-align:center;border:1px dashed #e6e6ee;border-radius:12px}
+.brick-poll-desc{margin:0 0 12px;color:var(--color-muted, #6c6c7a);font-size:14px;line-height:1.6}
+.brick-poll-total{margin:0 0 14px;color:var(--color-muted, #6c6c7a);font-size:13px}
+.brick-poll-loading,.brick-poll-empty{color:var(--color-muted, #6c6c7a);font-size:14px;padding:12px 0;margin:0}
+.brick-poll-empty{padding:30px;text-align:center;border:1px dashed var(--color-line, #e4e4ea);border-radius:12px}
 .brick-poll-opts{display:grid;gap:8px;margin:0 0 14px}
-.brick-poll-opt{display:flex;align-items:center;gap:9px;padding:11px 13px;border:1px solid #e6e6ee;border-radius:8px;cursor:pointer;font-size:14px}
+.brick-poll-opt{display:flex;align-items:center;gap:9px;padding:11px 13px;border:1px solid var(--color-line, #e4e4ea);border-radius:8px;cursor:pointer;font-size:14px}
 .brick-poll-opt:hover{border-color:var(--color-primary,#d0402c)}
 .brick-poll-opt input{margin:0;flex:none}
 .brick-poll-actions{display:flex;align-items:center;gap:10px}
-.brick-poll-actions button{padding:11px 22px;border:0;border-radius:8px;background:var(--color-primary,#d0402c);color:#fff;font-weight:700;font-size:14px;cursor:pointer}
+.brick-poll-actions button{padding:11px 22px;border:0;border-radius:8px;background:var(--color-primary,#d0402c);color:var(--color-on-primary, #ffffff);font-weight:700;font-size:14px;cursor:pointer}
 .brick-poll-actions button:disabled{opacity:.5;cursor:default}
-.brick-poll-msg{font-size:13px;color:#b3261e}
-.brick-poll-note{font-size:13px;color:#888;padding:10px 0;margin:0}
-.brick-poll-comment{width:100%;min-height:70px;padding:11px;margin-bottom:12px;border:1px solid #ddd;border-radius:8px;box-sizing:border-box;font:inherit}
+.brick-poll-msg{font-size:13px;color:var(--color-danger, #c9342f)}
+.brick-poll-note{font-size:13px;color:var(--color-muted, #6c6c7a);padding:10px 0;margin:0}
+.brick-poll-comment{width:100%;min-height:70px;padding:11px;margin-bottom:12px;border:1px solid var(--color-line, #e4e4ea);border-radius:8px;box-sizing:border-box;font:inherit}
 /* 결과 */
 .brick-poll-result{display:grid;gap:11px}
 .brick-poll-row{font-size:14px}
 .brick-poll-row-head{display:flex;justify-content:space-between;gap:10px;margin-bottom:5px}
 .brick-poll-row-head b{font-weight:600}
 .brick-poll-row.is-mine b{color:var(--color-primary,#d0402c)}
-.brick-poll-bar{height:9px;background:#eef0f5;border-radius:5px;overflow:hidden}
-.brick-poll-bar i{display:block;height:100%;background:#c9cede;transition:width .3s}
+.brick-poll-bar{height:9px;background:var(--color-bg-sunken, #eeeef3);border-radius:5px;overflow:hidden}
+.brick-poll-bar i{display:block;height:100%;background:var(--color-line-strong, #d0d0d9);transition:width .3s}
 .brick-poll-row.is-mine .brick-poll-bar i{background:var(--color-primary,#d0402c)}
 .brick-poll-list{margin:12px 0;padding:0;list-style:none;display:grid;gap:8px}
-.brick-poll-list li{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid #f0f0f4;font-size:14px}
+.brick-poll-list li{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--color-line, #e4e4ea);font-size:14px}
 .brick-poll-list a{text-decoration:none;color:inherit}
-.brick-poll-list span{color:#999;font-size:13px}
+.brick-poll-list span{color:var(--color-muted, #6c6c7a);font-size:13px}
 .brick-poll-heading{margin:8px 0;font-size:17px}
 </style>`;
 

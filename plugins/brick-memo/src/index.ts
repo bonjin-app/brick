@@ -553,7 +553,7 @@ function maskEmail(email: string): string {
 const BADGE_CSS = `
 <style>
 .brick-memo-badge{display:inline-flex;align-items:center;gap:6px;text-decoration:none;color:inherit;font-size:14px}
-.brick-memo-count{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;background:var(--color-primary,#d0402c);color:#fff;border-radius:9px;font-size:11.5px;font-weight:700}
+.brick-memo-count{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;background:var(--color-primary,#d0402c);color:var(--color-on-primary, #ffffff);border-radius:9px;font-size:11.5px;font-weight:700}
 </style>`;
 
 export { escapeHtml };

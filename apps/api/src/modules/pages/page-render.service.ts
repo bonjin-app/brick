@@ -76,7 +76,13 @@ export class PageRenderService {
     const queryKey = Object.keys(query).length
       ? `?${new URLSearchParams(Object.entries(query).sort()).toString()}`
       : "";
-    const cacheKey = `render:page:${path}${queryKey}`;
+    /**
+     * 캐시 키에 **테마 스탬프**를 섞는다. 없으면 테마 파일을 고쳐도 캐시된 옛
+     * HTML 이 그대로 나가서, 운영자는 "고쳤는데 안 바뀐다"를 겪는다 (테마 활성화
+     * 시에는 무효화되지만, 파일을 직접 손보는 것은 감지할 길이 없었다).
+     */
+    const themeStamp = await this.themes.activeStamp();
+    const cacheKey = `render:page:${themeStamp}:${path}${queryKey}`;
 
     if (cacheable) {
       const cached = await this.cache.get<RenderedPage>(cacheKey);
@@ -101,7 +107,8 @@ export class PageRenderService {
     query: Record<string, string>,
     user: RequestUser | null,
   ): Promise<RenderedPage> {
-    const [site, nav] = await Promise.all([this.siteInfo(), this.menu("header")]);
+    const [site, rawNav] = await Promise.all([this.siteInfo(), this.menu("header")]);
+    const nav = markCurrent(rawNav, path);
     // 블록 렌더 중에 플러그인이 ctx.t 를 부른다 — 언어 캐시를 갱신해 둔다
     await this.loader.refreshLocale();
 
@@ -184,14 +191,38 @@ export class PageRenderService {
       return { html, status: 404 };
     }
 
-    const seo = (page.seo ?? {}) as { title?: string; description?: string };
-    const blocksHtml = await this.renderNodes((page.blocks ?? []) as BlockNode[], blockCtx);
+    const pageSeo = (page.seo ?? {}) as { title?: string; description?: string };
+    const nodes = (page.blocks ?? []) as BlockNode[];
+    /**
+     * 블록이 정한 화면 제목을 받는다 (ctx.setSeo). 게시판 글 상세처럼 한
+     * 페이지가 URL 로 여러 화면을 전환하는 경우, 화면을 아는 쪽은 블록이다.
+     */
+    const fromBlock: { title?: string; description?: string } = {};
+    const blocksHtml = await this.renderNodes(nodes, {
+      ...blockCtx,
+      setSeo: (s) => {
+        if (s.title?.trim()) fromBlock.title = s.title.trim();
+        if (s.description?.trim()) fromBlock.description = s.description.trim();
+      },
+    });
+
+    // 우선순위: 운영자가 명시한 페이지 SEO > 블록이 정한 화면 제목 > 페이지 제목
+    const headingTitle = fromBlock.title ?? page.title;
+    const seo = {
+      ...pageSeo,
+      description: pageSeo.description ?? fromBlock.description,
+    };
     const html = await this.themes.render("page", {
       ...themeCommon,
       site,
       menu: nav,
-      title: page.title,
-      pageTitle: seo.title ?? `${page.title} — ${site.name}`,
+      /**
+       * **블록이 화면 제목을 정했으면 테마는 페이지 제목을 그리지 않는다.**
+       * 히어로도, 게시판 글 상세도 자기 제목을 h1 으로 그리므로 테마까지
+       * 그리면 같은 말이 두 번 크게 적힌다(실제로 홈이 그랬다).
+       */
+      title: fromBlock.title ? "" : page.title,
+      pageTitle: pageSeo.title ?? `${headingTitle} — ${site.name}`,
       blocksHtml,
       seo,
     });
@@ -253,6 +284,33 @@ export class PageRenderService {
     const [row] = await this.db.select().from(menus).where(eq(menus.location, location)).limit(1);
     return (row?.items ?? []) as Array<{ label: string; url: string }>;
   }
+}
+
+/**
+ * 메뉴 항목에 `current` 플래그를 붙인다 — 테마가 현재 위치를 강조할 수 있게.
+ * 손님이 사이트 어디에 있는지 내비게이션이 말해 주지 않으면 길을 잃는다.
+ *
+ * 하위 경로도 그 메뉴에 속한다("board/free/01a0…" 은 "/board/free" 항목).
+ * 그래서 **가장 길게 맞는 항목 하나만** 표시한다 — "/board" 와 "/board/free"
+ * 가 함께 켜지면 강조가 두 곳이 되어 아무 의미가 없다.
+ */
+export function markCurrent<T extends { url: string }>(
+  items: T[],
+  path: string,
+): Array<T & { current?: true }> {
+  const here = `/${String(path ?? "").replace(/^\/+|\/+$/g, "")}`;
+  let bestIdx = -1;
+  let bestLen = -1;
+  items.forEach((item, i) => {
+    const url = `/${String(item.url ?? "").replace(/^\/+|\/+$/g, "")}`;
+    // 홈("/")은 하위 경로를 삼키면 안 된다 — 모든 경로가 "/" 로 시작한다
+    const hit = url === "/" ? here === "/home" || here === "/" : here === url || here.startsWith(`${url}/`);
+    if (hit && url.length > bestLen) {
+      bestLen = url.length;
+      bestIdx = i;
+    }
+  });
+  return items.map((item, i) => (i === bestIdx ? { ...item, current: true as const } : item));
 }
 
 

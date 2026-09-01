@@ -1,8 +1,8 @@
 import {
   BadRequestException, Body, Controller, Get, Inject, NotFoundException,
-  Param, Post, Req, UseGuards,
+  Param, Post, Req, Res, UseGuards,
 } from "@nestjs/common";
-import type { FastifyRequest } from "fastify";
+import type { FastifyReply, FastifyRequest } from "fastify";
 import { eq } from "drizzle-orm";
 import type { BrickDb } from "@brick/database";
 import { installedThemes, siteSettings } from "@brick/database";
@@ -22,6 +22,22 @@ export class ThemesController {
     @Inject(CACHE) private readonly cache: CacheProvider,
     private readonly audit: AuditService,
   ) {}
+
+  /**
+   * 활성 테마 팔레트 (CSS). 인증이 필요 없다 — 색은 공개 정보이고,
+   * 로그인 화면 자체가 이걸 필요로 한다.
+   */
+  @Get("tokens.css")
+  async tokensCss(@Res() reply: FastifyReply) {
+    const { css, version } = await this.themes.activeTokensCss();
+    return reply
+      .header("content-type", "text/css; charset=utf-8")
+      // 짧게 캐시한다 — 관리자가 색을 바꾸면 곧 반영되어야 하지만,
+      // 모든 화면이 부르는 파일이라 매번 디스크를 읽을 이유는 없다
+      .header("cache-control", "public, max-age=60")
+      .header("x-theme-version", version)
+      .send(css);
+  }
 
   @Get()
   async list() {

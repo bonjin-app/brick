@@ -55,19 +55,19 @@ export default function ResetPasswordPage() {
   return (
     <AuthShell title={t("reset.title")}>
 
-      {state === "checking" && <p style={{ textAlign: "center", color: "#6b6b75" }}>{t("reset.checking")}</p>}
+      {state === "checking" && <p style={{ textAlign: "center", color: "var(--color-muted)" }}>{t("reset.checking")}</p>}
 
       {state === "invalid" && (
-        <div style={{ background: "#fdf2f0", border: "1px solid #f3d0ca", borderRadius: 8, padding: 20 }}>
+        <div style={{ background: "var(--color-primary-soft)", border: "1px solid color-mix(in srgb, var(--color-danger) 30%, transparent)", borderRadius: 8, padding: 20 }}>
           <p style={{ margin: 0 }}>{t("reset.invalid")}</p>
           <p style={{ fontSize: 14 }}><a href="/forgot-password">{t("reset.again")}</a></p>
         </div>
       )}
 
       {state === "done" && (
-        <div style={{ background: "#f2f8f4", border: "1px solid #cde8d6", borderRadius: 8, padding: 20 }}>
+        <div style={{ background: "color-mix(in srgb, var(--color-success) 12%, transparent)", border: "1px solid color-mix(in srgb, var(--color-success) 34%, transparent)", borderRadius: 8, padding: 20 }}>
           <p style={{ margin: 0 }}>{t("reset.changed")}</p>
-          <p style={{ color: "#666", fontSize: 14 }}>{t("reset.sessionsCleared")}</p>
+          <p style={{ color: "var(--color-muted)", fontSize: 14 }}>{t("reset.sessionsCleared")}</p>
           <p style={{ fontSize: 14 }}><a href="/login">{t("reset.loginNew")}</a></p>
         </div>
       )}
@@ -87,7 +87,7 @@ export default function ResetPasswordPage() {
           <button disabled={busy} style={authButton}>
             {busy ? t("reset.busy") : t("reset.submit")}
           </button>
-          {error && <p style={{ color: "#c0392b", fontSize: 14 }}>{error}</p>}
+          {error && <p style={{ color: "var(--color-danger)", fontSize: 14 }}>{error}</p>}
         </form>
       )}
     </AuthShell>

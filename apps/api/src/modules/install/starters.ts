@@ -208,9 +208,22 @@ function starterBoards(code: string): Array<{
 function starterPages(code: string, siteName: string): Array<{
   slug: string; title: string; blocks: Node[]; plainText: string;
 }> {
-  const h = (text: string, level = 1): Node => ({ block: "core/heading", props: { text, level } });
   const p = (text: string): Node => ({ block: "core/paragraph", props: { text } });
-  const spacer = (): Node => ({ block: "core/spacer", props: {} });
+  /**
+   * 히어로 — **홈의 첫 블록으로 놓는다.** 이때 테마는 페이지 제목 h1 을 그리지
+   * 않고 히어로의 제목이 그 자리를 맡는다(이중 제목 방지, page-render 참조).
+   * "문단 하나 + 최신글"인 홈은 문서처럼 보인다. 첫 화면이 사이트의 얼굴이다.
+   */
+  const hero = (props: Record<string, unknown>): Node => ({ block: "core/hero", props });
+  const features = (title: string, items: string[]): Node => ({
+    block: "core/features",
+    props: { title, items: items.join("\n") },
+  });
+  const faq = (title: string, items: string[]): Node => ({
+    block: "core/faq",
+    props: { title, items: items.join("\n") },
+  });
+  const cta = (props: Record<string, unknown>): Node => ({ block: "core/cta", props });
 
   /**
    * 라우팅 페이지 — 메뉴가 가리키는 주소가 실제로 렌더되게 한다.
@@ -233,15 +246,30 @@ function starterPages(code: string, siteName: string): Array<{
     plainText: "쇼핑몰 상품",
   };
 
-  // 소개 페이지 — 모든 유형에 있다. 자리표시 문구는 실제로 쓸 법한 예문으로.
+  /**
+   * 소개 페이지 — 모든 유형에 있다.
+   *
+   * 히어로를 첫 블록으로 두지 않는다: 소개는 제목("소개")이 h1 으로 있는 편이
+   * 자연스럽고, 랜딩 얼굴은 홈이 맡는다. 대신 **문단 하나로 끝내지 않는다** —
+   * 특징 카드와 FAQ 로 "이런 식으로 채우면 된다"를 보여준다. 빈 페이지보다
+   * 고칠 페이지가 낫다.
+   */
   const about = {
     slug: "about",
     title: "소개",
-    // 첫 heading 블록을 넣지 않는다 — 테마가 페이지 제목을 h1 으로 그린다 (이중 제목 방지)
     blocks: [
       p(`${siteName}에 오신 것을 환영합니다. 이 문단을 사이트 소개로 바꿔주세요 — 관리자 → 페이지 → 소개 에서 수정할 수 있습니다.`),
+      features("우리가 하는 일", [
+        "첫 번째 | 무엇을 하는 곳인지 한 줄로 적습니다.",
+        "두 번째 | 누구에게 도움이 되는지 적습니다.",
+        "세 번째 | 어떻게 하면 되는지 적습니다.",
+      ]),
+      faq("자주 묻는 질문", [
+        "회원가입은 어떻게 하나요? | 오른쪽 위 회원가입 버튼을 누르고 이메일을 인증하면 끝입니다.",
+        "문의는 어디로 하면 되나요? | 이 문답을 실제 연락처 안내로 바꿔주세요.",
+      ]),
     ],
-    plainText: `${siteName} 소개`,
+    plainText: `${siteName} 소개 우리가 하는 일 자주 묻는 질문`,
   };
 
   switch (code) {
@@ -249,15 +277,26 @@ function starterPages(code: string, siteName: string): Array<{
       return [
         {
           slug: "home",
-          // 테마가 페이지 제목을 h1 으로 그린다 — heading 블록을 또 넣으면
-          // "홈"과 사이트명이 이중 제목이 되므로, 제목 자체를 사이트명으로 둔다.
           title: siteName,
           blocks: [
-            p("커뮤니티에 오신 것을 환영합니다. 아래는 게시판의 최신 글입니다."),
-            spacer(),
+            hero({
+              eyebrow: "커뮤니티",
+              title: siteName,
+              text: "이웃과 이야기를 나누는 곳입니다. 이 문구를 사이트 한 줄 소개로 바꿔주세요.",
+              ctaLabel: "이야기 둘러보기",
+              ctaUrl: "/board/free",
+              altLabel: "소개",
+              altUrl: "/about",
+            }),
             // 스타터가 만든 게시판 세 개를 나란히 — 메인 화면의 완성형을 보여준다
             { block: "brick-board/latest-multi",
               props: { boards: "notice,free,qna", limit: 5, columns: 3 } },
+            cta({
+              title: "함께 이야기하실 분을 기다립니다",
+              text: "회원가입하면 글과 댓글을 남길 수 있습니다.",
+              buttonLabel: "회원가입",
+              buttonUrl: "/register",
+            }),
           ],
           plainText: `${siteName} 커뮤니티 최신글`,
         },
@@ -273,11 +312,22 @@ function starterPages(code: string, siteName: string): Array<{
             // "준비 중입니다"는 첫 상품을 등록하는 순간 거짓말이 된다 — 상품
             // 목록 블록이 빈 상태 안내를 스스로 그리므로, 여기는 상품 유무와
             // 무관하게 참인 소개 문구를 둔다 (바꾸라는 힌트 포함).
-            p(`${siteName}에 오신 것을 환영합니다. 이 문단을 가게 소개로 바꿔주세요 — 첫 상품은 관리자 → 상품 에서 등록합니다.`),
-            spacer(),
+            hero({
+              eyebrow: "새로 문을 열었습니다",
+              title: siteName,
+              text: `${siteName}에 오신 것을 환영합니다. 이 문구를 가게 한 줄 소개로 바꿔주세요 — 첫 상품은 관리자 → 상품 에서 등록합니다.`,
+              ctaLabel: "상품 보기",
+              ctaUrl: "/shop",
+              altLabel: "이용 안내",
+              altUrl: "/guide",
+            }),
             { block: "brick-shop/product-list",
               props: { limit: 8, columns: 4, sort: "recent", title: "새로 나온 상품" } },
-            spacer(),
+            features("", [
+              "빠른 배송 | 오후 2시 이전 주문은 당일 출발합니다.",
+              "안전한 결제 | 카드·계좌이체·간편결제를 지원합니다.",
+              "7일 내 교환·반품 | 받아보시고 마음에 들지 않으면 보내주세요.",
+            ]),
             { block: "brick-board/latest-posts",
               props: { board: "notice", limit: 5, title: "공지사항" } },
           ],
@@ -287,13 +337,27 @@ function starterPages(code: string, siteName: string): Array<{
         {
           slug: "guide",
           title: "이용 안내",
+          // 이용 안내는 문답 형식이 읽기 쉽다 — 손님은 자기 질문만 펴서 본다
           blocks: [
-            h("주문과 배송", 2),
-            p("주문 후 2~3일 안에 배송됩니다. 이 내용을 실제 배송 정책으로 바꿔주세요."),
-            h("교환과 반품", 2),
-            p("상품 수령 후 7일 이내에 신청할 수 있습니다. 단순 변심은 왕복 배송비가 발생합니다."),
+            {
+              block: "core/notice",
+              props: {
+                tone: "info",
+                text: "아래 내용은 예시입니다. 실제 배송·교환 정책으로 바꿔주세요 — 전자상거래법상 표시 의무가 있는 항목입니다.",
+              },
+            },
+            faq("주문과 배송", [
+              "배송은 얼마나 걸리나요? | 주문 후 2~3일 안에 받으실 수 있습니다. 주말과 공휴일은 제외됩니다.",
+              "배송비는 얼마인가요? | 3만원 이상 주문은 무료, 그 미만은 3,000원입니다.",
+              "주문을 취소할 수 있나요? | 상품이 발송되기 전까지는 주문 내역에서 바로 취소할 수 있습니다.",
+            ]),
+            faq("교환과 반품", [
+              "언제까지 신청할 수 있나요? | 상품을 받은 날부터 7일 이내입니다.",
+              "배송비는 누가 내나요? | 단순 변심은 왕복 배송비를 손님이, 상품 하자나 오배송은 저희가 부담합니다.",
+              "어디서 신청하나요? | 주문 내역에서 해당 상품의 교환·반품 신청 버튼을 누르시면 됩니다.",
+            ]),
           ],
-          plainText: "이용 안내 주문 배송 교환 반품",
+          plainText: "이용 안내 주문 배송 교환 반품 배송비",
         },
         boardRouter,
         shopRouter,
@@ -304,21 +368,50 @@ function starterPages(code: string, siteName: string): Array<{
           slug: "home",
           title: siteName,
           blocks: [
-            p(`${siteName}의 공식 홈페이지입니다. 이 문단을 회사의 한 줄 소개로 바꿔주세요.`),
-            spacer(),
+            hero({
+              eyebrow: siteName,
+              title: "고객의 문제를 해결합니다",
+              text: `${siteName}의 공식 홈페이지입니다. 이 문구를 회사의 한 줄 소개로 바꿔주세요.`,
+              ctaLabel: "문의하기",
+              ctaUrl: "/support",
+              altLabel: "회사 소개",
+              altUrl: "/about",
+            }),
+            features("주요 서비스", [
+              "첫 번째 서비스 | 무엇을 제공하는지 한 줄로 적습니다. | /services",
+              "두 번째 서비스 | 어떤 문제를 푸는지 적습니다. | /services",
+              "세 번째 서비스 | 왜 우리에게 맡기면 되는지 적습니다. | /services",
+            ]),
             { block: "brick-board/latest-posts",
               props: { board: "notice", limit: 5, title: "공지사항" } },
+            cta({
+              title: "도움이 필요하신가요?",
+              text: "1:1 문의를 남기시면 담당자가 확인 후 답변드립니다.",
+              buttonLabel: "문의 남기기",
+              buttonUrl: "/support",
+            }),
           ],
-          plainText: `${siteName} 홈페이지`,
+          plainText: `${siteName} 홈페이지 주요 서비스`,
         },
         about,
         {
           slug: "services",
           title: "서비스",
           blocks: [
-            p("제공하는 서비스를 소개해주세요. 항목이 여럿이면 단 나누기 블록이 어울립니다."),
+            p("제공하는 서비스를 소개해주세요. 아래 카드는 관리자 → 페이지 → 서비스 에서 한 줄에 하나씩 고칠 수 있습니다."),
+            features("", [
+              "컨설팅 | 현황을 진단하고 개선 방향을 제안합니다.",
+              "구축 | 필요한 시스템을 만들어 드립니다.",
+              "운영 지원 | 만든 뒤에도 함께 돌봅니다.",
+            ]),
+            cta({
+              title: "어떤 것이 필요한지 아직 모르셔도 됩니다",
+              text: "상황을 알려주시면 맞는 방법을 함께 찾습니다.",
+              buttonLabel: "문의하기",
+              buttonUrl: "/support",
+            }),
           ],
-          plainText: "서비스 소개",
+          plainText: "서비스 소개 컨설팅 구축 운영 지원",
         },
         {
           slug: "support",

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { SocialButtons } from "../../components/SocialButtons";
-import { AuthShell, authButton, authInput, authLabel } from "../../components/AuthShell";
+import { AuthShell, authButton, authInput, authLabel, authLink } from "../../components/AuthShell";
 import { useT } from "../../lib/i18n";
 
 /** 공개 로그인 — 로그인 후 홈으로 이동한다 (관리자 로그인은 /admin/login) */
@@ -49,12 +49,12 @@ export default function LoginPage() {
           {busy ? t("login.busy") : t("login.title")}
         </button>
       </form>
-      {error && <p style={{ color: "#c0392b", fontSize: 14 }}>{error}</p>}
+      {error && <p style={{ color: "var(--color-danger)", fontSize: 14 }}>{error}</p>}
       <SocialButtons next="/" />
-      <p style={{ textAlign: "center", marginTop: 18, fontSize: 14, color: "#4b4b55" }}>
-        {t("login.noAccount")} <a href="/register">{t("login.register")}</a>
+      <p style={{ textAlign: "center", marginTop: 18, fontSize: 14, color: "var(--color-muted)" }}>
+        {t("login.noAccount")} <a href="/register" style={authLink}>{t("login.register")}</a>
         {" · "}
-        <a href="/forgot-password">{t("login.forgot")}</a>
+        <a href="/forgot-password" style={authLink}>{t("login.forgot")}</a>
       </p>
     </AuthShell>
   );

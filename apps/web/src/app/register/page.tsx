@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { SocialButtons } from "../../components/SocialButtons";
-import { AuthShell, authButton, authInput, authLabel } from "../../components/AuthShell";
+import { AuthShell, authButton, authInput, authLabel, authLink } from "../../components/AuthShell";
 import { useT } from "../../lib/i18n";
 
 interface Agreement {
@@ -64,13 +64,13 @@ export default function RegisterPage() {
   }
 
   const checkRow: React.CSSProperties = {
-    display: "flex", alignItems: "baseline", gap: 8, marginTop: 10, fontSize: 14, color: "#333",
+    display: "flex", alignItems: "baseline", gap: 8, marginTop: 10, fontSize: 14, color: "var(--color-text)",
   };
 
   return (
     <AuthShell title={t("register.title")}>
       {state === "done" ? (
-        <p style={{ textAlign: "center", color: "#0a7" }}>{t("register.done")}</p>
+        <p style={{ textAlign: "center", color: "var(--color-success)" }}>{t("register.done")}</p>
       ) : (
         <form onSubmit={submit}>
           <label style={{ ...authLabel, marginTop: 0 }}>{t("register.name")}
@@ -86,7 +86,7 @@ export default function RegisterPage() {
               onChange={(e) => setForm({ ...form, password: e.target.value })} />
           </label>
 
-          <div style={{ marginTop: 18, paddingTop: 14, borderTop: "1px solid #ececf1" }}>
+          <div style={{ marginTop: 18, paddingTop: 14, borderTop: "1px solid var(--color-line)" }}>
             {agreements.map((a) => (
               <div key={a.kind}>
                 <label style={checkRow}>
@@ -94,17 +94,17 @@ export default function RegisterPage() {
                     onChange={(e) => setChecked({ ...checked, [a.kind]: e.target.checked })} />
                   <span>
                     {a.title}{" "}
-                    <em style={{ fontStyle: "normal", fontSize: 12.5, color: a.required ? "#c0392b" : "#8b8b95" }}>
+                    <em style={{ fontStyle: "normal", fontSize: 12.5, color: a.required ? "var(--color-danger)" : "var(--color-muted)" }}>
                       {a.required ? t("register.required") : t("register.optional")}
                     </em>
                   </span>
                 </label>
-                <details style={{ margin: "2px 0 0 24px", fontSize: 12.5, color: "#6b6b75" }}>
+                <details style={{ margin: "2px 0 0 24px", fontSize: 12.5, color: "var(--color-muted)" }}>
                   <summary style={{ cursor: "pointer" }}>{t("register.viewBody")}</summary>
                   <pre style={{
                     whiteSpace: "pre-wrap", font: "inherit", margin: "6px 0 4px",
-                    maxHeight: 180, overflowY: "auto", background: "#f7f7f9",
-                    border: "1px solid #ececf1", borderRadius: 8, padding: 10,
+                    maxHeight: 180, overflowY: "auto", background: "var(--color-bg-soft)",
+                    border: "1px solid var(--color-line)", borderRadius: 8, padding: 10,
                   }}>{a.body}</pre>
                 </details>
               </div>
@@ -114,7 +114,7 @@ export default function RegisterPage() {
                 onChange={(e) => setAgeConfirmed(e.target.checked)} />
               <span>
                 {t("register.age")}{" "}
-                <em style={{ fontStyle: "normal", fontSize: 12.5, color: "#c0392b" }}>{t("register.required")}</em>
+                <em style={{ fontStyle: "normal", fontSize: 12.5, color: "var(--color-danger)" }}>{t("register.required")}</em>
               </span>
             </label>
           </div>
@@ -124,10 +124,10 @@ export default function RegisterPage() {
           </button>
         </form>
       )}
-      {error && <p style={{ color: "#c0392b", fontSize: 14 }}>{error}</p>}
+      {error && <p style={{ color: "var(--color-danger)", fontSize: 14 }}>{error}</p>}
       <SocialButtons next="/" />
-      <p style={{ textAlign: "center", marginTop: 18, fontSize: 14, color: "#4b4b55" }}>
-        {t("register.haveAccount")} <a href="/login">{t("login.title")}</a>
+      <p style={{ textAlign: "center", marginTop: 18, fontSize: 14, color: "var(--color-muted)" }}>
+        {t("register.haveAccount")} <a href="/login" style={authLink}>{t("login.title")}</a>
       </p>
     </AuthShell>
   );

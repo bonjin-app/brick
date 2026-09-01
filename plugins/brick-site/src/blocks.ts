@@ -99,23 +99,23 @@ export function registerSiteBlocks(ctx: PluginContext, db: Db): void {
 
 const VISIT_CSS = `
 <style>
-.brick-visit-inline{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:#888;margin:0}
+.brick-visit-inline{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--color-muted, #6c6c7a);margin:0}
 .brick-visit-inline b{color:inherit;font-weight:600}
-.brick-visit-box{display:flex;gap:0;margin:16px 0;padding:0;border:1px solid #e6e6ee;border-radius:10px;overflow:hidden}
-.brick-visit-box>div{flex:1;padding:14px;text-align:center;border-right:1px solid #e6e6ee}
+.brick-visit-box{display:flex;gap:0;margin:16px 0;padding:0;border:1px solid var(--color-line, #e4e4ea);border-radius:10px;overflow:hidden}
+.brick-visit-box>div{flex:1;padding:14px;text-align:center;border-right:1px solid var(--color-line, #e4e4ea)}
 .brick-visit-box>div:last-child{border-right:0}
-.brick-visit-box dt{font-size:12px;color:#999}
+.brick-visit-box dt{font-size:12px;color:var(--color-muted, #6c6c7a)}
 .brick-visit-box dd{margin:4px 0 0;font-size:18px;font-weight:700}
 .brick-banners{display:grid;gap:12px;margin:16px 0}
 .brick-banner-item{display:block;text-decoration:none;color:inherit;border-radius:10px;overflow:hidden}
 .brick-banner-item img{width:100%;height:auto;display:block}
 .brick-banner-body{line-height:1.7}
-.brick-popup{position:fixed;z-index:9000;background:#fff;border:1px solid #d8d8e0;border-radius:12px;box-shadow:0 18px 48px rgba(0,0,0,.22);overflow:hidden;max-width:calc(100vw - 24px)}
-.brick-popup-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid #eee;font-weight:700;font-size:15px}
-.brick-popup-head button{border:0;background:none;font-size:20px;line-height:1;cursor:pointer;color:#888;padding:0 4px}
+.brick-popup{position:fixed;z-index:9000;background:var(--color-bg, #ffffff);border:1px solid var(--color-line, #e4e4ea);border-radius:12px;box-shadow:0 18px 48px rgba(0,0,0,.22);overflow:hidden;max-width:calc(100vw - 24px)}
+.brick-popup-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid var(--color-line, #e4e4ea);font-weight:700;font-size:15px}
+.brick-popup-head button{border:0;background:none;font-size:20px;line-height:1;cursor:pointer;color:var(--color-muted, #6c6c7a);padding:0 4px}
 .brick-popup-body{padding:14px;line-height:1.7;max-height:60vh;overflow:auto}
 .brick-popup-body img{max-width:100%;height:auto}
-.brick-popup-foot{display:flex;align-items:center;gap:6px;padding:10px 14px;border-top:1px solid #eee;font-size:13px;color:#666}
+.brick-popup-foot{display:flex;align-items:center;gap:6px;padding:10px 14px;border-top:1px solid var(--color-line, #e4e4ea);font-size:13px;color:var(--color-text-soft, #45454f)}
 @media(max-width:640px){
   .brick-popup{left:12px !important;right:12px;top:12px !important;width:auto !important}
 }

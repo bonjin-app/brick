@@ -259,12 +259,12 @@ const pg = require('$ROOT/apps/api/node_modules/pg');
 (async () => {
   const c = new pg.Client({ connectionString: process.env.DATABASE_URL });
   await c.connect();
-  const { rows } = await c.query(\"SELECT key FROM cache_entries WHERE key LIKE 'render:page:board%'\");
+  const { rows } = await c.query(\"SELECT key FROM cache_entries WHERE key LIKE 'render:page:%:board%'\");
   console.log(rows.map(r => r.key).join(','));
   await c.end();
 })();
 ")"
-contains "비로그인 렌더는 캐시됨" "$CACHED" "render:page:board/free"
+contains "비로그인 렌더는 캐시됨" "$CACHED" ":board/free"
 # 로그인 요청 후에도 캐시 항목이 늘지 않아야 한다
 curl -s -b "$ADMIN" "$API/api/render/page?path=board%2Ffree" >/dev/null
 CACHED2="$(node -e "
@@ -272,7 +272,7 @@ const pg = require('$ROOT/apps/api/node_modules/pg');
 (async () => {
   const c = new pg.Client({ connectionString: process.env.DATABASE_URL });
   await c.connect();
-  const { rows } = await c.query(\"SELECT count(*) n FROM cache_entries WHERE key LIKE 'render:page:board%'\");
+  const { rows } = await c.query(\"SELECT count(*) n FROM cache_entries WHERE key LIKE 'render:page:%:board%'\");
   console.log(rows[0].n);
   await c.end();
 })();
@@ -286,7 +286,7 @@ const pg = require('$ROOT/apps/api/node_modules/pg');
 (async () => {
   const c = new pg.Client({ connectionString: process.env.DATABASE_URL });
   await c.connect();
-  const { rows } = await c.query(\"SELECT key FROM cache_entries WHERE key LIKE 'render:page:board/free?%'\");
+  const { rows } = await c.query(\"SELECT key FROM cache_entries WHERE key LIKE 'render:page:%:board/free?%'\");
   console.log(rows.length ? 'has-query-key' : 'none');
   await c.end();
 })();

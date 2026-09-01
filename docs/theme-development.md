@@ -30,14 +30,53 @@ my-theme/
     "page": "templates/page.html"
   },
   "tokens": {
-    "color-primary": "#e2574c",
-    "font-body": "'Pretendard', sans-serif"
+    "color-primary": "#cf4437",
+    "color-bg": "#ffffff",
+    "color-text": "#17171c",
+    "font-body": "'Pretendard', sans-serif",
+
+    "dark-color-primary": "#ff6f5f",
+    "dark-color-bg": "#101116",
+    "dark-color-text": "#ececf1"
   },
   "assets": "assets"
 }
 ```
 
 `tokens`는 CSS 변수(`--color-primary` 등)로 layout에 주입됩니다 — `{{{ themeTokens }}}`.
+
+### 다크 모드는 토큰 한 벌을 더 두는 것으로 끝납니다
+
+**`dark-` 로 시작하는 키는 다크 팔레트입니다.** `dark-color-bg` 는
+`--color-bg` 의 어두운 값이고, 코어가 두 규칙을 만들어 줍니다:
+
+```css
+:root { --color-bg: #ffffff }                                   /* 라이트 */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --color-bg: #101116 }        /* OS 가 다크 */
+}
+:root[data-theme="dark"] { --color-bg: #101116 }                 /* 손님이 고름 */
+```
+
+그래서 **스타일시트에서는 `var(--color-bg)` 만 쓰면 됩니다** — 다크 대응이
+따라옵니다. 하드코딩한 `#fff`·`#888` 은 다크에서 반드시 깨지므로 쓰지 마세요.
+`dark-` 토큰을 주지 않으면 다크 규칙 자체가 나오지 않습니다(라이트 고정).
+
+손님의 선택은 `localStorage` 의 `brick-theme`(`"dark"`/`"light"`)에 있고,
+`<html data-theme>` 로 적용됩니다. 토글을 만들려면 그 두 곳만 바꾸면 됩니다
+(레퍼런스 테마의 `layout.html` 참고). **적용 스크립트는 `<head>` 에서
+스타일시트보다 먼저** 두세요 — 아니면 다크 손님에게 흰 화면이 한 프레임
+번쩍입니다.
+
+로그인·회원가입·마이페이지는 테마가 아니라 Next 가 그리지만, 같은 팔레트를
+`/api/themes/tokens.css` 로 받아 씁니다. 테마 색을 바꾸면 그 화면들도 함께
+바뀝니다.
+
+### 토큰 값 제약
+
+값은 그대로 CSS 에 들어가므로 위생 검사를 통과해야 합니다 — 키는 CSS
+식별자만, 값에는 `;` `{` `}` `<` `>` `\` `/*` `@` `url(` 을 쓸 수 없습니다
+(200자 이내). 통과하지 못한 토큰은 조용히 버려집니다.
 
 ## 템플릿 문법
 
@@ -61,7 +100,7 @@ my-theme/
 | `{{{ content }}}` | 슬롯(home/page)이 렌더된 결과 |
 | `{{{ themeTokens }}}` | tokens가 CSS 변수로 변환된 `<style>` 내용물 |
 | `themeAssets` | `/themes/<name>/assets` 경로 |
-| `themeVersion` | 테마 버전 — 자산 URL 의 캐시버스터로 쓰세요: `style.css?v={{ themeVersion }}`. 버전을 올리면 손님 브라우저의 옛 CSS 캐시가 깨집니다 |
+| `themeVersion` | **테마 스탬프** — 자산 URL 의 캐시버스터로 쓰세요: `style.css?v={{ themeVersion }}`. 테마 버전 + 테마 파일들의 최종 수정 시각이라, **파일을 고치면 자동으로 바뀝니다**(버전을 올리는 것을 기억하지 않아도 됩니다). 서버 렌더 캐시 키에도 같은 값이 섞입니다 |
 | `locale` | 사이트 언어 (`site.locale` — `<html lang="{{ locale }}">` 에 쓰세요) |
 | `t.*` | 번역된 라벨 — 예: `{{ t.footer.company }}`(상호/Company), `{{ t.header.login }}`. 값이 아니라 **라벨**만 번역됩니다 |
 | `site.business.*` | 사업자정보 (값 — 번역되지 않습니다) |
@@ -74,6 +113,29 @@ my-theme/
 
 page.html 슬롯은 추가로 `title`(페이지 제목), `{{{ blocksHtml }}}`(블록 트리 렌더 결과)를 받습니다.
 
+**`title` 은 비어 있을 수 있습니다.** 블록이 자기 화면의 제목을 정한 경우
+(게시판 글 상세, 히어로가 있는 홈) 그 블록이 h1 을 그리므로 페이지 제목은
+내려오지 않습니다 — 같은 말이 두 번 크게 적히지 않게. 그래서 `{{#if title}}`
+로 감싸세요. `pageTitle`(문서 `<title>`)에는 항상 알맞은 값이 들어옵니다.
+
+## 컴포넌트 프리미티브 — 블록이 기대하는 클래스
+
+블록(게시판·상품·랜딩)은 **자기 CSS 로 버튼을 다시 그리지 않고** 테마의
+클래스를 씁니다. 테마를 새로 만들 때 이 클래스들에 스타일을 주면 모든 블록이
+함께 어울립니다 (레퍼런스: `themes/default/assets/style.css`).
+
+| 클래스 | 쓰임 |
+|---|---|
+| `.brick-btn` + `.brick-btn-primary` / `-ghost` / `-danger` / `-sm` / `-lg` | 버튼·링크 버튼 |
+| `.brick-card`, `.brick-card-soft`, `.brick-grid` | 카드와 카드 격자 |
+| `.brick-badge` + `-primary` / `-success` / `-danger` / `-warning` | 상태 표시 |
+| `.brick-notice` + `-info` / `-success` / `-warning` / `-danger` | 알림 박스 |
+| `.brick-empty` | 빈 목록 안내 |
+| `.brick-pager` (`.is-current`, `.is-disabled`) | 페이지네이션 |
+| `.brick-hero`, `.brick-eyebrow`, `.brick-hero-actions` | 히어로 |
+| `.brick-features`, `.brick-cta`, `.brick-faq-item` | 랜딩 섹션 |
+| `.brick-nav a.is-current` | 현재 위치인 메뉴 항목 (코어가 `aria-current="page"` 와 함께 붙여 줍니다) |
+
 ## 최소 layout.html
 
 ```html
@@ -84,8 +146,14 @@ page.html 슬롯은 추가로 `title`(페이지 제목), `{{{ blocksHtml }}}`(�
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{{ pageTitle }}</title>
   {{#if seo.description}}<meta name="description" content="{{ seo.description }}" />{{/if}}
+  <meta name="color-scheme" content="light dark" />
+  <script>
+    /* 손님이 고른 화면 모드를 CSS 보다 먼저 적용 (흰 화면 번쩍임 방지) */
+    (function(){try{var v=localStorage.getItem("brick-theme");
+    if(v==="dark"||v==="light")document.documentElement.dataset.theme=v;}catch(e){}})();
+  </script>
   <style>{{{ themeTokens }}}</style>
-  <link rel="stylesheet" href="{{ themeAssets }}/style.css" />
+  <link rel="stylesheet" href="{{ themeAssets }}/style.css?v={{ themeVersion }}" />
 </head>
 <body>
   <header><a href="/">{{ site.name }}</a></header>

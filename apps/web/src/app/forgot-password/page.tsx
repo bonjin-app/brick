@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AuthShell, authButton, authInput, authLabel } from "../../components/AuthShell";
+import { AuthShell, authButton, authInput, authLabel, authLink } from "../../components/AuthShell";
 import { useT } from "../../lib/i18n";
 
 /**
@@ -30,18 +30,18 @@ export default function ForgotPasswordPage() {
   return (
     <AuthShell title={t("forgot.title")}>
       {sent ? (
-        <div style={{ background: "#f2f8f4", border: "1px solid #cde8d6", borderRadius: 8, padding: 20 }}>
+        <div style={{ background: "color-mix(in srgb, var(--color-success) 12%, transparent)", border: "1px solid color-mix(in srgb, var(--color-success) 34%, transparent)", borderRadius: 8, padding: 20 }}>
           <p style={{ margin: 0 }}>
             <strong>{email}</strong>{t("forgot.sent")}
           </p>
-          <p style={{ color: "#666", fontSize: 14 }}>
+          <p style={{ color: "var(--color-muted)", fontSize: 14 }}>
             {t("forgot.hint")}
           </p>
           <p style={{ fontSize: 14 }}><a href="/login">{t("forgot.back")}</a></p>
         </div>
       ) : (
         <>
-          <p style={{ color: "#6b6b75", fontSize: 14, marginTop: 0 }}>
+          <p style={{ color: "var(--color-muted)", fontSize: 14, marginTop: 0 }}>
             {t("forgot.desc")}
           </p>
           <form onSubmit={submit}>
@@ -54,7 +54,7 @@ export default function ForgotPasswordPage() {
             </button>
           </form>
           <p style={{ textAlign: "center", marginTop: 18, fontSize: 14 }}>
-            <a href="/login">{t("login.title")}</a>
+            <a href="/login" style={authLink}>{t("login.title")}</a>
           </p>
         </>
       )}

@@ -87,6 +87,177 @@ export class CoreBlocksService implements OnModuleInit {
       },
     });
 
+    /**
+     * ── 랜딩 재료 ─────────────────────────────────────
+     *
+     * 소개 페이지·홈을 "문단 + 여백"으로만 만들면 사이트가 문서처럼 보인다.
+     * 랜딩에 필요한 최소 재료(히어로·특징·CTA·FAQ)를 코어가 가진다 — 이걸
+     * 플러그인에 두면 게시판만 쓰는 사이트는 랜딩을 못 만든다.
+     *
+     * **스타일은 블록이 아니라 테마가 소유한다.** 블록은 테마 프리미티브
+     * 클래스(.brick-hero/.brick-btn/.brick-card/.brick-notice)만 쓰고 CSS 를
+     * 싣지 않는다 — 블록이 색과 여백을 들고 다니면 테마를 바꿔도 안 바뀐다.
+     *
+     * 목록형 props 는 **한 줄에 하나, `|` 로 칸을 나눈다**. 관리자 블록
+     * 편집기가 다루는 타입이 string/number/boolean/multiline 이라 배열
+     * 편집기가 없다 — JSON 을 손으로 쓰게 하는 것보다 이 형식이 덜 깨진다.
+     */
+    const rows = (raw: unknown, cols: number): string[][] =>
+      String(raw ?? "")
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => {
+          const parts = line.split("|").map((s) => s.trim());
+          return Array.from({ length: cols }, (_, i) => parts[i] ?? "");
+        });
+
+    b.set("core/hero", {
+      name: "core/hero",
+      displayName: "히어로 (큰 제목 영역)",
+      propsSchema: {
+        type: "object",
+        properties: {
+          eyebrow: { type: "string", title: "작은 위 라벨" },
+          title: { type: "string", title: "제목" },
+          text: { type: "string", title: "설명", format: "multiline" },
+          ctaLabel: { type: "string", title: "버튼 1 문구" },
+          ctaUrl: { type: "string", title: "버튼 1 링크" },
+          altLabel: { type: "string", title: "버튼 2 문구" },
+          altUrl: { type: "string", title: "버튼 2 링크" },
+          plain: { type: "boolean", title: "배경 없이 (글자만)", default: false },
+        },
+      },
+      render: async (props, ctx) => {
+        const eyebrow = String(props.eyebrow ?? "").trim();
+        const title = String(props.title ?? "").trim();
+        const text = String(props.text ?? "").trim();
+        /**
+         * 히어로가 이 화면의 제목이다 — 문서 제목(<title>)도 여기서 나오고,
+         * 테마는 페이지 제목 h1 을 생략한다(같은 말이 두 번 크게 적히지 않게).
+         * 제목을 비운 히어로는 아무것도 주장하지 않는다.
+         */
+        if (title) ctx.setSeo?.({ title, description: text || undefined });
+        const cta = [
+          [props.ctaLabel, props.ctaUrl, "brick-btn-primary"],
+          [props.altLabel, props.altUrl, ""],
+        ]
+          .filter(([label, url]) => String(label ?? "").trim() && String(url ?? "").trim())
+          .map(
+            ([label, url, cls]) =>
+              `<a class="brick-btn brick-btn-lg ${cls}" href="${esc(url)}">${esc(label)}</a>`,
+          )
+          .join("");
+        return `<section class="brick-hero${props.plain ? " brick-hero-plain" : ""}">
+${eyebrow ? `  <span class="brick-eyebrow">${esc(eyebrow)}</span>\n` : ""}${title ? `  <h1>${esc(title)}</h1>\n` : ""}${text ? `  <p>${esc(text).replace(/\n/g, "<br />")}</p>\n` : ""}${cta ? `  <div class="brick-hero-actions">${cta}</div>\n` : ""}</section>`;
+      },
+    });
+
+    b.set("core/features", {
+      name: "core/features",
+      displayName: "특징 카드",
+      propsSchema: {
+        type: "object",
+        properties: {
+          title: { type: "string", title: "묶음 제목 (비우면 표시 안 함)" },
+          items: {
+            type: "string",
+            title: "카드 — 한 줄에 하나: 제목 | 설명 | 링크(선택)",
+            format: "multiline",
+          },
+        },
+      },
+      render: async (props) => {
+        const cards = rows(props.items, 3)
+          .map(([title, body, url]) => {
+            const inner = `<h3>${esc(title)}</h3>${body ? `<p>${esc(body)}</p>` : ""}`;
+            return url
+              ? `<a class="brick-card" href="${esc(url)}">${inner}</a>`
+              : `<div class="brick-card">${inner}</div>`;
+          })
+          .join("");
+        if (!cards) return "";
+        const heading = String(props.title ?? "").trim();
+        return `<section class="brick-features">${heading ? `<h2>${esc(heading)}</h2>` : ""}<div class="brick-grid">${cards}</div></section>`;
+      },
+    });
+
+    b.set("core/cta", {
+      name: "core/cta",
+      displayName: "행동 유도 배너",
+      propsSchema: {
+        type: "object",
+        properties: {
+          title: { type: "string", title: "제목" },
+          text: { type: "string", title: "설명" },
+          buttonLabel: { type: "string", title: "버튼 문구" },
+          buttonUrl: { type: "string", title: "버튼 링크" },
+        },
+      },
+      render: async (props) => {
+        const label = String(props.buttonLabel ?? "").trim();
+        const url = String(props.buttonUrl ?? "").trim();
+        const text = String(props.text ?? "").trim();
+        return `<section class="brick-cta">
+  <div>
+    <h2>${esc(props.title)}</h2>
+    ${text ? `<p>${esc(text)}</p>` : ""}
+  </div>
+  ${label && url ? `<a class="brick-btn brick-btn-primary brick-btn-lg" href="${esc(url)}">${esc(label)}</a>` : ""}
+</section>`;
+      },
+    });
+
+    b.set("core/faq", {
+      name: "core/faq",
+      displayName: "자주 묻는 질문",
+      propsSchema: {
+        type: "object",
+        properties: {
+          title: { type: "string", title: "묶음 제목 (비우면 표시 안 함)" },
+          items: { type: "string", title: "한 줄에 하나: 질문 | 답변", format: "multiline" },
+        },
+      },
+      // details/summary — 접고 펴는 데 JS 가 필요 없고, 검색엔진도 답을 읽는다
+      render: async (props) => {
+        const items = rows(props.items, 2)
+          .filter(([q]) => q)
+          .map(
+            ([q, a]) =>
+              `<details class="brick-faq-item"><summary>${esc(q)}</summary><div>${esc(a)}</div></details>`,
+          )
+          .join("");
+        if (!items) return "";
+        const heading = String(props.title ?? "").trim();
+        return `<section class="brick-faq">${heading ? `<h2>${esc(heading)}</h2>` : ""}${items}</section>`;
+      },
+    });
+
+    b.set("core/notice", {
+      name: "core/notice",
+      displayName: "알림 박스",
+      propsSchema: {
+        type: "object",
+        properties: {
+          text: { type: "string", title: "내용", format: "multiline" },
+          tone: { type: "string", title: "색 (info/success/warning/danger)", default: "info" },
+        },
+      },
+      render: async (props) => {
+        const tone = ["info", "success", "warning", "danger"].includes(String(props.tone))
+          ? String(props.tone)
+          : "info";
+        return `<div class="brick-notice brick-notice-${tone}">${esc(props.text).replace(/\n/g, "<br />")}</div>`;
+      },
+    });
+
+    b.set("core/divider", {
+      name: "core/divider",
+      displayName: "구분선",
+      propsSchema: { type: "object", properties: {} },
+      render: async () => `<hr />`,
+    });
+
     b.set("core/spacer", {
       name: "core/spacer",
       displayName: "여백",

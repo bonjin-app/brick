@@ -93,6 +93,9 @@ const CORE_KO: MessageCatalog = {
   "footer.email": "이메일",
   "footer.privacyOfficer": "개인정보 보호책임자",
   "footer.hosting": "호스팅",
+  "header.skip": "본문으로 바로가기",
+  "header.menu": "메뉴",
+  "header.theme": "화면 모드 전환",
   "header.login": "로그인",
   "header.register": "회원가입",
   "header.logout": "로그아웃",
@@ -109,6 +112,18 @@ const CORE_KO: MessageCatalog = {
   "search.replaced": "\"{from}\" 대신 \"{to}\" 로 검색했습니다.",
   "search.prev": "이전",
   "search.next": "다음",
+  "footer.toTop": "맨 위로",
+  // 홈 페이지가 아직 없을 때 테마가 그리는 폴백 화면 (설치 직후)
+  "home.readyTitle": "설치가 끝났습니다",
+  "home.readyBody": "이 화면은 홈 페이지를 아직 만들지 않았을 때만 보입니다. 관리자에서 페이지를 만들고 블록을 올리면 이 자리에 놓입니다.",
+  "home.readyCta": "관리자에서 홈 만들기",
+  "home.readyDocs": "문서 보기",
+  "home.stepPages": "페이지와 블록",
+  "home.stepPagesBody": "페이지를 만들고 게시판·상품·설문 같은 블록을 끼워 넣습니다.",
+  "home.stepTheme": "테마",
+  "home.stepThemeBody": "색과 글꼴은 테마 토큰에서 옵니다. 라이트·다크 두 벌이 함께 옵니다.",
+  "home.stepPlugins": "플러그인",
+  "home.stepPluginsBody": "게시판·쇼핑몰·회원·포인트를 켜고 끄면서 필요한 것만 씁니다.",
 };
 
 const CORE_EN: MessageCatalog = {
@@ -122,6 +137,9 @@ const CORE_EN: MessageCatalog = {
   "footer.email": "Email",
   "footer.privacyOfficer": "Privacy officer",
   "footer.hosting": "Hosting",
+  "header.skip": "Skip to content",
+  "header.menu": "Menu",
+  "header.theme": "Toggle color scheme",
   "header.login": "Log in",
   "header.register": "Sign up",
   "header.logout": "Log out",
@@ -138,6 +156,17 @@ const CORE_EN: MessageCatalog = {
   "search.replaced": "Searched for \"{to}\" instead of \"{from}\".",
   "search.prev": "Prev",
   "search.next": "Next",
+  "footer.toTop": "Back to top",
+  "home.readyTitle": "Installation complete",
+  "home.readyBody": "This screen only appears while there is no home page yet. Create a page in the admin and it takes this place.",
+  "home.readyCta": "Create a home page",
+  "home.readyDocs": "Read the docs",
+  "home.stepPages": "Pages and blocks",
+  "home.stepPagesBody": "Create a page, then drop in blocks — boards, products, polls.",
+  "home.stepTheme": "Theme",
+  "home.stepThemeBody": "Colors and fonts come from theme tokens. Light and dark ship together.",
+  "home.stepPlugins": "Plugins",
+  "home.stepPluginsBody": "Turn boards, shop, members and points on or off as you need them.",
 };
 
 export const CORE_CATALOGS: Record<Locale, MessageCatalog> = { ko: CORE_KO, en: CORE_EN };
