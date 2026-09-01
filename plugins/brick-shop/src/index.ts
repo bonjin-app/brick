@@ -2179,6 +2179,15 @@ export default definePlugin(async (ctx) => {
 
   registerStorefrontBlocks(ctx, db, settings);
 
+  /**
+   * 헤더에 장바구니. 담기는 상품 상세에서 되지만 **담은 다음에 갈 곳이
+   * 헤더에 없으면** 손님은 주소를 외워야 했다 — 장바구니는 쇼핑몰의 모든
+   * 화면에서 한 번에 닿아야 하는 자리다. 비회원도 담으므로 로그인을
+   * 요구하지 않는다. 담긴 개수는 여기 담지 않는다(비로그인 렌더가 캐시되므로
+   * 남의 값이 새어 나간다).
+   */
+  ctx.registerHeaderAction({ label: "장바구니", path: "/shop/cart", order: 10 });
+
   // 대시보드 — 운영자가 매일 아침 보는 숫자. "오늘"은 리포트와 같은 사이트 시간대다
   ctx.registerDashboardCard({
     title: "오늘 주문",

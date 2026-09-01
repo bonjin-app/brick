@@ -130,6 +130,13 @@ export class PageRenderService {
        */
       user: user ? { displayName: user.displayName, isAdmin: user.role === "admin" } : null,
       guest: !user,
+      /**
+       * 플러그인이 등록한 헤더 링크(장바구니·쪽지함). 테마가 쇼핑몰이나
+       * 쪽지를 알 수는 없으므로 플러그인이 등록하고 테마가 반복해 그린다.
+       * 로그인 전용 항목은 여기서 걸러진다 — 비로그인 렌더만 캐시되므로
+       * 회원용 링크가 캐시에 섞이지 않는다.
+       */
+      headerActions: this.loader.headerActionsFor(Boolean(user)),
     };
 
     /**

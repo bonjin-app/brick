@@ -8,7 +8,7 @@ import type { BrickDb } from "@brick/database";
 import { installedPlugins, siteSettings } from "@brick/database";
 import type { PluginManifest } from "@brick/shared";
 import type { PluginContext, PluginInstance, BlockDefinition, PluginRouteHandler, PluginDb, AdminResource, HookBus, CacheProvider, QueueProvider, StorageProvider, MailProvider, CaptchaProvider, PersonalDataEraser, SitemapSource,
-  SearchSource, LinkTargetSource, DashboardCard, Locale, MessageCatalog } from "@brick/core";
+  SearchSource, LinkTargetSource, DashboardCard, HeaderAction, Locale, MessageCatalog } from "@brick/core";
 import { AVAILABLE_LOCALES, DEFAULT_LOCALE, makeTranslator, normalizeLocale } from "@brick/core";
 import { DB, HOOKS, CACHE, QUEUE, STORAGE, MAIL, CAPTCHA, ENV } from "../../runtime.module.js";
 import type { BrickEnv } from "../../config/env.js";
@@ -100,6 +100,8 @@ export class PluginLoaderService implements OnModuleInit {
   readonly linkTargets: Array<LinkTargetSource & { plugin: string }> = [];
   /** 대시보드 카드 — 관리자 첫 화면의 "오늘의 사이트" 숫자는 플러그인이 안다 */
   readonly dashboardCards: Array<DashboardCard & { plugin: string }> = [];
+  /** 헤더 유틸 영역의 링크 — 테마가 그린다 (쇼핑몰 장바구니, 쪽지함 등) */
+  readonly headerActions: Array<HeaderAction & { plugin: string }> = [];
   /**
    * 플러그인 간 서비스 레지스트리.
    * 훅으로 표현할 수 없는 협력(호출자 트랜잭션 참여 등)에 쓴다.
@@ -265,6 +267,9 @@ export class PluginLoaderService implements OnModuleInit {
     for (let i = this.dashboardCards.length - 1; i >= 0; i--) {
       if (this.dashboardCards[i].plugin === name) this.dashboardCards.splice(i, 1);
     }
+    for (let i = this.headerActions.length - 1; i >= 0; i--) {
+      if (this.headerActions[i].plugin === name) this.headerActions.splice(i, 1);
+    }
     this.logger.log(`plugin "${name}" deactivated`);
   }
 
@@ -351,6 +356,22 @@ export class PluginLoaderService implements OnModuleInit {
    * 실패 격리는 시간 축에도 적용한다 — 느린 카드 하나가 관리자 첫 화면
    * 전체를 붙잡으면 안 되므로, 시간 초과는 그 카드만 오류로 표시한다.
    */
+  /**
+   * 테마 헤더에 그릴 링크 목록.
+   *
+   * 라벨은 관리 라벨과 같은 gettext 방식이다(원문이 번역 키). 값이 아니라
+   * 선언이므로 요청마다 계산할 것이 없다 — 로그인 여부로 걸러 주기만 한다.
+   * 사용자별 숫자(장바구니 개수)는 담지 않는다: 비로그인 렌더는 캐시되므로
+   * 남의 값이 새어 나간다.
+   */
+  headerActionsFor(loggedIn: boolean): Array<{ label: string; url: string }> {
+    return this.headerActions
+      .filter((a) => !a.requiresLogin || loggedIn)
+      .slice()
+      .sort((a, b) => (a.order ?? 100) - (b.order ?? 100))
+      .map((a) => ({ label: this.trCatalog(a.plugin, a.label), url: a.path }));
+  }
+
   async collectDashboardCards(timeoutMs = 3000): Promise<
     Array<{ plugin: string; title: string; link: string | null; value: string | number | null; sub: string | null; error: boolean }>
   > {
@@ -516,6 +537,10 @@ export class PluginLoaderService implements OnModuleInit {
       registerDashboardCard: (card) => {
         this.dashboardCards.push({ ...card, plugin: pluginName });
         this.logger.log(`plugin "${pluginName}" registers dashboard card "${card.title}"`);
+      },
+      registerHeaderAction: (action) => {
+        this.headerActions.push({ ...action, plugin: pluginName });
+        this.logger.log(`plugin "${pluginName}" registers header action "${action.label}"`);
       },
     };
   }

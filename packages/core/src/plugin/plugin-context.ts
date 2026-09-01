@@ -179,6 +179,36 @@ export interface PluginContext {
    * `load` 는 요청 시점에 실행되므로 동적 문구(sub)는 ctx.t 로 만들면 된다.
    */
   registerDashboardCard(card: DashboardCard): void;
+
+  /**
+   * 헤더 유틸 영역(로그인·회원가입 옆)에 링크를 놓는다.
+   *
+   * **쇼핑몰을 켰는데 헤더에 장바구니가 없었다.** 담기는 상품 상세에서
+   * 되지만, 담은 다음에 갈 곳이 헤더에 없으면 손님은 주소를 외워야 한다 —
+   * 장바구니는 쇼핑몰의 모든 화면에서 한 번에 닿아야 하는 자리다. 쪽지도
+   * 같다(안 읽은 쪽지가 있는지 매번 마이페이지로 들어가야 했다).
+   *
+   * 테마가 쇼핑몰·쪽지를 알 수는 없으므로 플러그인이 등록한다. 테마는
+   * `headerActions` 를 반복해서 그린다.
+   *
+   * `requiresLogin` 이 true 면 비로그인 손님에게는 나오지 않는다 —
+   * 장바구니는 비회원도 쓰지만(주문 전에 담는 것이 본질) 쪽지는 회원만이다.
+   * 숫자 배지처럼 사용자별 값은 여기 담지 않는다: 비로그인 렌더는 캐시되므로
+   * 남의 값이 새어 나간다. 배지는 블록이 클라이언트에서 채운다.
+   */
+  registerHeaderAction(action: HeaderAction): void;
+}
+
+/** 헤더 유틸 영역의 링크 하나 */
+export interface HeaderAction {
+  /** 표시 문구 (예: "장바구니"). 원문이 번역 키다 */
+  label: string;
+  /** 사이트 루트 기준 경로 (예: "/shop/cart") */
+  path: string;
+  /** 작을수록 왼쪽 (기본 100) */
+  order?: number;
+  /** 로그인한 손님에게만 보인다 */
+  requiresLogin?: boolean;
 }
 
 /**

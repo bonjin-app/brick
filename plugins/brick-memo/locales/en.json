@@ -57,5 +57,6 @@
   "memo.emptyBlocks": "No blocked members.",
   "memo.colMember": "Member",
   "memo.colBlockedAt": "Blocked at",
-  "memo.unblock": "Unblock"
+  "memo.unblock": "Unblock",
+  "쪽지함": "Messages"
 }

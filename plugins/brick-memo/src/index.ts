@@ -503,6 +503,13 @@ export default definePlugin(async (ctx) => {
    * HTML에 박아 두면 캐시·프록시·브라우저 이력에 남을 위험이 커진다.
    * 껍데기만 서버가 내고 내용은 인증된 API 요청으로만 가져온다.
    */
+  /**
+   * 헤더에 쪽지함. 안 읽은 쪽지가 있는지 보려고 매번 마이페이지로 들어가야
+   * 했다. 회원 전용이므로 비로그인 손님에게는 나오지 않는다 — 안 읽은 개수는
+   * 사용자별 값이라 배지 블록이 클라이언트에서 채운다.
+   */
+  ctx.registerHeaderAction({ label: "쪽지함", path: "/memo", order: 20, requiresLogin: true });
+
   ctx.registerBlock({
     name: "memo",
     displayName: "쪽지함",

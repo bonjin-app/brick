@@ -243,6 +243,11 @@ contains "탭 표시" "$LOGGED" "보낸 쪽지"
 absent   "로그인 렌더에도 본문 없음" "$LOGGED" "유료 쪽지"
 contains "쓰기 화면 렌더" "$(render_as "memo%2Fwrite" "$U1")" 'data-memo-view="write"'
 contains "차단 목록 화면" "$(render_as "memo%2Fblocks" "$U1")" 'data-memo-view="blocks"'
+
+echo "── 헤더의 쪽지함 링크는 회원에게만 보인다"
+# 비로그인 렌더만 캐시되므로, 회원 전용 링크가 거기 섞이면 캐시로 새어 나간다
+absent   "비로그인 헤더에 쪽지함 없음" "$INBOX_HTML" '<a href="/memo">쪽지함</a>'
+contains "로그인 헤더에 쪽지함" "$LOGGED" '<a href="/memo">쪽지함</a>'
 contains "쪽지 배지 블록 등록" "$(curl -s "$API/api/blocks")" "brick-memo/unread-badge"
 
 echo "── 관리 화면 · 설정"

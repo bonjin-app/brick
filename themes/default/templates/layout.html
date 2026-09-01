@@ -68,6 +68,15 @@
           </svg>
         </button>
 
+        {{!--
+          플러그인이 등록한 헤더 링크 (장바구니·쪽지함 등).
+          테마는 쇼핑몰을 알 수 없으므로 플러그인이 registerHeaderAction 으로
+          등록하고, 여기서 반복해 그린다.
+        --}}
+        <nav class="brick-actions">
+          {{#each headerActions}}<a href="{{ url }}">{{ label }}</a>{{/each}}
+        </nav>
+
         <div class="brick-util">
           {{#if guest}}
           <a href="/login">{{ t.header.login }}</a>

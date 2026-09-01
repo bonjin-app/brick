@@ -105,6 +105,7 @@ my-theme/
 | `t.*` | 번역된 라벨 — 예: `{{ t.footer.company }}`(상호/Company), `{{ t.header.login }}`. 값이 아니라 **라벨**만 번역됩니다 |
 | `site.business.*` | 사업자정보 (값 — 번역되지 않습니다) |
 | `user` | 로그인한 사용자 (`user.displayName`, `user.isAdmin`) — 비로그인이면 없음. 로그인 렌더는 캐시되지 않으므로 사용자별 내용이 새지 않습니다 |
+| `headerActions` | 플러그인이 등록한 헤더 링크 (장바구니·쪽지함 등). `{{#each headerActions}}<a href="{{ url }}">{{ label }}</a>{{/each}}` — 테마는 쇼핑몰을 알 수 없으므로 플러그인이 등록하고 테마가 그립니다. 로그인 전용 항목은 걸러진 채로 옵니다 |
 | `guest` | 비로그인 여부 — 엔진에 else 가 없어 `{{#if guest}}로그인 링크{{/if}}` 형태로 씁니다 |
 
 로그아웃은 상태를 바꾸므로 링크(GET)가 아니라 **폼(POST)** 으로 만드세요 —

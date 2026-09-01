@@ -255,6 +255,17 @@ blockquote {
 :root[data-theme="dark"] .brick-theme-btn .i-dark { display: none; }
 :root[data-theme="dark"] .brick-theme-btn .i-light { display: block; }
 
+/* 플러그인이 등록한 헤더 링크 (장바구니·쪽지함) */
+.brick-actions { display: flex; align-items: center; gap: 12px; white-space: nowrap; }
+.brick-actions a {
+  color: var(--color-text-soft);
+  text-decoration: none;
+  font-size: 13.5px;
+  font-weight: 500;
+  transition: color var(--brick-t);
+}
+.brick-actions a:hover { color: var(--color-primary-text); }
+
 /* 로그인/회원가입/로그아웃 — 헤더 우측 유틸 */
 .brick-util { display: flex; align-items: center; gap: 12px; white-space: nowrap; }
 .brick-util a { color: var(--color-muted); text-decoration: none; font-size: 13.5px; transition: color var(--brick-t); }
@@ -763,6 +774,9 @@ a.brick-card:hover {
   .brick-header-search input:focus-visible { width: min(52vw, 240px); cursor: text; padding-right: 12px; }
 
   .brick-util { gap: 10px; }
+  /* 좁은 화면에서는 가장 중요한 하나만 남긴다 — 헤더가 두 줄이 되면 안 된다 */
+  .brick-actions { gap: 10px; }
+  .brick-actions a:not(:first-child) { display: none; }
   .brick-util a:not(.brick-util-cta) { display: none; } /* 로그인 링크는 CTA 하나로 */
   .brick-util .brick-util-cta { padding: 7px 13px; font-size: 13px; }
   .brick-util-name { display: inline !important; }
