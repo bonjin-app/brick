@@ -181,5 +181,6 @@
   "wish.unavailable": "판매 종료",
   "recent.title": "최근 본 상품",
   "recent.empty": "최근 본 상품이 없습니다.",
-  "wish.loginHint": "로그인하면 다른 기기에서도 보입니다."
+  "wish.loginHint": "로그인하면 다른 기기에서도 보입니다.",
+  "cart.title": "장바구니"
 }

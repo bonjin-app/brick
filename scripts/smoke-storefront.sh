@@ -159,6 +159,25 @@ absent "전부 비면 영역이 사라짐" "$EMPTY" "brick-business"
 contains "Brick 크레딧은 남음" "$EMPTY" "Powered by"
 curl -s -b "$CK" -X PUT "$API/api/business-info" -H 'content-type: application/json' --data-binary "@$TMP/biz.json" >/dev/null
 
+echo "── 화면마다 제 이름을 가진다 (장바구니가 \"쇼핑몰\"이면 안 된다)"
+# 이 수트는 스타터 없이 설치하므로 상점 라우터 페이지를 직접 만든다
+printf '{"slug":"shop","title":"쇼핑몰","status":"published","blocks":[{"block":"brick-shop/storefront","props":{}}]}' > "$TMP/shop-page.json"
+curl -s -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' \
+  --data-binary "@$TMP/shop-page.json" -o /dev/null
+# /api/render/page 는 HTML 을 JSON 으로 감싸 준다
+sf_render() {
+  curl -s "$API/api/render/page?path=$1" \
+    | python3 -c "import sys,json;print(json.load(sys.stdin).get('html',''))"
+}
+CART_PAGE="$(sf_render "shop/cart")"
+contains "장바구니의 문서 제목" "$CART_PAGE" "<title>장바구니 —"
+contains "장바구니에도 화면 제목이 있다" "$CART_PAGE" "<h1>장바구니</h1>"
+absent "라우터 페이지 제목이 새지 않는다" "$CART_PAGE" "<h1>쇼핑몰</h1>"
+WISH_PAGE="$(sf_render "shop/wishlist")"
+contains "위시리스트 문서 제목" "$WISH_PAGE" "<title>위시리스트 —"
+ORDERS_PAGE="$(sf_render "shop/orders")"
+contains "주문 내역 문서 제목" "$ORDERS_PAGE" "<title>주문 내역 —"
+
 echo "══ 위시리스트 ══"
 PID="$(curl -s -b "$CK" -X POST "$SHOP/admin/products" -H 'content-type: application/json' \
   -d '{"slug":"wish-item","name":"위시 상품","price":20000,"stock":10,"status":"selling"}' | jq_get "['id']")"

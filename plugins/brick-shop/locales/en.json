@@ -420,5 +420,6 @@
   "wish.unavailable": "Unavailable",
   "recent.title": "Recently viewed",
   "recent.empty": "No recently viewed products.",
-  "wish.loginHint": "Log in to see these on your other devices."
+  "wish.loginHint": "Log in to see these on your other devices.",
+  "cart.title": "Cart"
 }

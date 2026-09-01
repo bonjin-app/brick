@@ -126,6 +126,8 @@ export function registerStorefrontBlocks(
           .replace(/\s+/g, " ")
           .trim()
           .slice(0, 155),
+        // 상품명을 자기 h1 으로 그린다
+        ownHeading: true,
       });
 
       // 관련 상품 — 실패해도 상품 상세는 떠야 한다.
@@ -286,11 +288,29 @@ ${buyScript(`${shopBaseOf(blockCtx)}/cart`)}${GALLERY_SCRIPT}${restockScript()}$
         );
         return `${nav}\n${list}`;
       }
-      if (seg[0] === "cart") return cartBlock.render({}, blockCtx);
-      if (seg[0] === "checkout") return checkoutBlock.render({}, blockCtx);
-      if (seg[0] === "orders") return ordersBlock.render({ orderNo: seg[1] ?? "" }, blockCtx);
-      if (seg[0] === "wishlist") return wishlistBlock.render({}, blockCtx);
+      /**
+       * 화면마다 제목을 선언한다 — 안 하면 라우터 페이지 제목("쇼핑몰")이
+       * 장바구니·주문서·주문내역의 문서 제목이 되고, 테마도 그 제목을 h1 으로
+       * 그려서 무슨 화면인지 알 수 없다.
+       */
+      if (seg[0] === "cart") {
+        blockCtx.setSeo?.({ title: t("cart.title") });
+        return cartBlock.render({}, blockCtx);
+      }
+      if (seg[0] === "checkout") {
+        blockCtx.setSeo?.({ title: t("checkout.title") });
+        return checkoutBlock.render({}, blockCtx);
+      }
+      if (seg[0] === "orders") {
+        blockCtx.setSeo?.({ title: seg[1] ? t("orders.detailTitle") : t("orders.title") });
+        return ordersBlock.render({ orderNo: seg[1] ?? "" }, blockCtx);
+      }
+      if (seg[0] === "wishlist") {
+        blockCtx.setSeo?.({ title: t("wish.title") });
+        return wishlistBlock.render({}, blockCtx);
+      }
       if (seg[0] === "event") {
+        if (!seg[1]) blockCtx.setSeo?.({ title: t("collection.index") });
         return seg[1] ? renderCollectionPage(seg[1], blockCtx) : renderCollectionIndex();
       }
       // 그 외는 상품 상세 — 상세 블록이 없는 slug 는 "찾을 수 없습니다"를 그린다
@@ -336,7 +356,7 @@ ${buyScript(`${shopBaseOf(blockCtx)}/cart`)}${GALLERY_SCRIPT}${restockScript()}$
   }<strong>${won(p.price)}</strong></span>
 </a>`)
       .join("");
-    blockCtx?.setSeo?.({ title: c.title, description: c.description ?? undefined });
+    blockCtx?.setSeo?.({ title: c.title, description: c.description ?? undefined, ownHeading: true });
     return `<div class="brick-collection">
   <h1>${escapeHtml(c.title)}</h1>
   ${c.description ? `<p class="brick-collection-desc">${escapeHtml(c.description)}</p>` : ""}

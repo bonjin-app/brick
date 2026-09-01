@@ -502,8 +502,17 @@ export interface BlockRenderContext {
    * 화면을 아는 블록이 제목을 말한다. 페이지의 SEO 설정이 있으면 그것이
    * 우선한다(운영자가 명시한 값이 자동 추론보다 세다). 여러 블록이 부르면
    * 마지막 호출이 이긴다 — 상세 화면을 그리는 블록이 보통 나중이다.
+   *
+   * `ownHeading` 은 **누가 화면 제목을 그리는가**를 정한다 — 문서 제목과는
+   * 별개 문제다.
+   *   - 생략(기본): 테마가 이 제목을 h1 으로 그린다. 장바구니·주문서처럼
+   *     자기 제목을 그리지 않는 화면이 여기 해당한다.
+   *   - `true`: 블록이 이미 h1 을 그렸다(글 상세, 상품 상세, 히어로).
+   *     테마는 제목을 그리지 않는다 — 그러면 같은 말이 두 번 크게 적힌다.
+   * 잘못 주면 제목이 두 번 나오거나(false 인데 그림) h1 이 없는 문서가
+   * 된다(true 인데 안 그림) — 둘 다 화면을 보면 바로 드러난다.
    */
-  setSeo?: (seo: { title?: string; description?: string }) => void;
+  setSeo?: (seo: { title?: string; description?: string; ownHeading?: boolean }) => void;
 }
 
 /**

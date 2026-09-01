@@ -197,12 +197,13 @@ export class PageRenderService {
      * 블록이 정한 화면 제목을 받는다 (ctx.setSeo). 게시판 글 상세처럼 한
      * 페이지가 URL 로 여러 화면을 전환하는 경우, 화면을 아는 쪽은 블록이다.
      */
-    const fromBlock: { title?: string; description?: string } = {};
+    const fromBlock: { title?: string; description?: string; ownHeading?: boolean } = {};
     const blocksHtml = await this.renderNodes(nodes, {
       ...blockCtx,
       setSeo: (s) => {
         if (s.title?.trim()) fromBlock.title = s.title.trim();
         if (s.description?.trim()) fromBlock.description = s.description.trim();
+        if (s.ownHeading !== undefined) fromBlock.ownHeading = s.ownHeading;
       },
     });
 
@@ -217,11 +218,13 @@ export class PageRenderService {
       site,
       menu: nav,
       /**
-       * **블록이 화면 제목을 정했으면 테마는 페이지 제목을 그리지 않는다.**
-       * 히어로도, 게시판 글 상세도 자기 제목을 h1 으로 그리므로 테마까지
-       * 그리면 같은 말이 두 번 크게 적힌다(실제로 홈이 그랬다).
+       * 화면 제목 h1 — 블록이 이미 그렸다고 알렸으면(ownHeading) 비운다.
+       * 히어로와 글 상세는 자기 제목을 그리므로 테마까지 그리면 같은 말이
+       * 두 번 크게 적힌다. 반대로 장바구니처럼 자기 제목을 그리지 않는
+       * 화면은 블록이 준 제목을 테마가 h1 으로 그려 준다 — 그러지 않으면
+       * "쇼핑몰"이라는 라우터 페이지 제목이 장바구니 화면의 제목이 된다.
        */
-      title: fromBlock.title ? "" : page.title,
+      title: fromBlock.ownHeading ? "" : headingTitle,
       pageTitle: pageSeo.title ?? `${headingTitle} — ${site.name}`,
       blocksHtml,
       seo,

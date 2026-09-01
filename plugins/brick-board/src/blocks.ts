@@ -90,14 +90,14 @@ export function registerBoardBlocks(ctx: PluginContext, db: Db): void {
         html = await renderDetail(db, board, postId, ctx);
       } else if (view === "write") {
         // 글쓰기 화면의 제목은 게시판 이름 + 무엇을 하는 화면인지
-        ctx.setSeo?.({ title: `${board.title} — ${t("write.title")}` });
+        ctx.setSeo?.({ title: `${board.title} — ${t("write.title")}`, ownHeading: true });
         html = await renderWrite(db, board, ctx, postId);
       } else {
         /**
          * 목록 화면의 제목은 게시판 이름이다. 라우터 페이지 제목("게시판")이
          * 그대로 쓰이면 게시판이 몇 개든 문서 제목이 하나가 된다.
          */
-        ctx.setSeo?.({ title: board.title, description: board.description ?? undefined });
+        ctx.setSeo?.({ title: board.title, description: board.description ?? undefined, ownHeading: true });
         html = await renderList(db, board, ctx);
       }
       return `${html}${BOARD_SCRIPT}${BOARD_CSS}`;

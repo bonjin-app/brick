@@ -137,7 +137,7 @@ export class CoreBlocksService implements OnModuleInit {
          * 테마는 페이지 제목 h1 을 생략한다(같은 말이 두 번 크게 적히지 않게).
          * 제목을 비운 히어로는 아무것도 주장하지 않는다.
          */
-        if (title) ctx.setSeo?.({ title, description: text || undefined });
+        if (title) ctx.setSeo?.({ title, description: text || undefined, ownHeading: true });
         const cta = [
           [props.ctaLabel, props.ctaUrl, "brick-btn-primary"],
           [props.altLabel, props.altUrl, ""],

@@ -253,6 +253,8 @@ export async function renderDetail(
       .replace(/\s+/g, " ")
       .trim()
       .slice(0, 155),
+    // 상세 화면은 글 제목을 자기 h1 으로 그린다
+    ownHeading: true,
   });
 
   // 스크랩 여부 — 로그인 사용자에게만 의미가 있다
