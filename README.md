@@ -27,7 +27,7 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-2492%20passing-2ea043.svg" alt="스모크 테스트 2492개" />
+  <img src="https://img.shields.io/badge/E2E-2493%20passing-2ea043.svg" alt="스모크 테스트 2493개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
 </p>
 
@@ -311,7 +311,7 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 2,492개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 2,493개 항목):
 
 | 수트 | 항목 | 무엇을 못박는가 |
 |---|---:|---|
@@ -337,7 +337,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `smoke-coupons.sh` | 54 | 1인 한도(취소 제외) · 발급형 1장 1회 · 취소 반환/환불 미반환 · 생일 자동 지급(월·일만 수집) |
 | `smoke-board.sh` | 85 | 권한 4단계 · 답변형 · 비밀글 · 첨부 원자성 · XSS |
 | `smoke-point.sh` | 53 | FIFO 소모 · 멱등 적립 · 만료 · 동시성 |
-| `smoke-memo.sh` | 72 | 프라이버시 · 차단 · 포인트 차감 트랜잭션 |
+| `smoke-memo.sh` | 73 | 프라이버시 · 차단 · 포인트 차감 트랜잭션 · 슬래시 없는 루트 경로 |
 | `smoke-shop.sh` | 106 | 재고 동시성 · 금액 위조 · 구매 검증 후기 · 비밀 문의 |
 | `smoke-site.sh` | 73 | 방문자 집계(IP 해시) · 팝업 노출 규칙 |
 | `smoke-social.sh` | 76 | state 쿠키 결속 · 코드 1회성 · 계정 탈취 경로 |

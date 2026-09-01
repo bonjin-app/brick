@@ -98,6 +98,13 @@ check "없는 uuid는 404" "$(code -b "$U1" "$MM/01a040ba-0000-0000-0000-0000000
 
 echo "── 발송"
 check "비로그인 발송 차단" "$(code -X POST "$MM/" -H 'content-type: application/json' -d '{"receiverEmail":"u2@mm.test","content":"x"}')" "401"
+# **후행 슬래시 없는 경로**도 같은 라우트에 닿아야 한다 — 웹의 실제 경로다.
+# Next 프록시가 후행 슬래시를 308 로 정규화하므로 브라우저에서 오는 요청은
+# 항상 슬래시가 없다. 컨트롤러가 와일드카드(plugins/:name/*)만 받던 동안
+# **웹에서 쪽지 발송이 항상 404** 였고, 이 수트가 전부 "$MM/" 로 호출해
+# 그것을 놓쳤다. 401(인증 실패)이면 라우트에는 닿았다는 뜻이다.
+check "슬래시 없는 경로도 같은 라우트 (404 면 웹에서 발송 불가)" \
+  "$(code -X POST "$MM" -H 'content-type: application/json' -d '{"receiverEmail":"u2@mm.test","content":"x"}')" "401"
 printf '{"receiverEmail":"u2@mm.test","content":"안녕하세요, 반갑습니다!"}' > "$TMP/s1.json"
 SENT="$(curl -s -b "$U1" -X POST "$MM/" -H 'content-type: application/json' --data-binary "@$TMP/s1.json")"
 MID="$(echo "$SENT" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("id",""))')"

@@ -11,6 +11,8 @@
  * 목록·본문은 로그인 사용자별 내용이므로 서버 렌더 캐시가 적용되지 않는다
  * (코어가 로그인 요청을 캐시하지 않는다 — ADR-24).
  */
+import { t } from "./i18n.js";
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export type MemoView = "inbox" | "sent" | "read" | "write" | "blocks";
@@ -32,29 +34,35 @@ export function resolveMemoView(pathTail: string): { view: MemoView; memoId?: st
  * 쪽지는 사적인 내용이므로 HTML에 박아 두면 캐시·프록시·브라우저 이력에
  * 남을 위험이 커진다. 껍데기만 서버가 내고 본문은 인증된 요청으로만 가져온다.
  */
-export function renderMemoShell(view: MemoView, memoId: string | undefined, loggedIn: boolean): string {
+export function renderMemoShell(
+  view: MemoView,
+  memoId: string | undefined,
+  loggedIn: boolean,
+  /** 이 블록이 놓인 페이지의 기준 경로 — '/memo' 하드코딩이면 다른 slug 에서 깨진다 */
+  base: string,
+): string {
   if (!loggedIn) {
     return `<div class="brick-memo">
-  <div class="brick-memo-head"><h2>쪽지</h2></div>
-  <p class="brick-memo-empty">쪽지는 로그인 후 이용할 수 있습니다. <a href="/login">로그인</a></p>
+  <div class="brick-memo-head"><h2>${t("memo.title")}</h2></div>
+  <p class="brick-memo-empty">${t("memo.loginRequired")} <a href="/login">${t("memo.login")}</a></p>
 </div>`;
   }
 
   const tab = (key: MemoView, label: string, href: string) =>
     `<a href="${href}"${view === key ? ' class="is-active"' : ""}>${label}</a>`;
 
-  return `<div class="brick-memo" data-memo-view="${view}"${memoId ? ` data-memo-id="${memoId}"` : ""}>
+  return `<div class="brick-memo" data-memo-view="${view}" data-memo-base="${base}"${memoId ? ` data-memo-id="${memoId}"` : ""}>
   <div class="brick-memo-head">
-    <h2>쪽지</h2>
+    <h2>${t("memo.title")}</h2>
     <nav class="brick-memo-tabs">
-      ${tab("inbox", "받은 쪽지", "/memo")}
-      ${tab("sent", "보낸 쪽지", "/memo/sent")}
-      ${tab("blocks", "차단 목록", "/memo/blocks")}
-      <a class="brick-memo-write-btn" href="/memo/write">쪽지 쓰기</a>
+      ${tab("inbox", t("memo.tabInbox"), base)}
+      ${tab("sent", t("memo.tabSent"), `${base}/sent`)}
+      ${tab("blocks", t("memo.tabBlocks"), `${base}/blocks`)}
+      <a class="brick-memo-write-btn" href="${base}/write">${t("memo.write")}</a>
     </nav>
   </div>
   <div class="brick-memo-body" aria-live="polite">
-    <p class="brick-memo-empty">불러오는 중…</p>
+    <p class="brick-memo-empty">${t("memo.loading")}</p>
   </div>
 </div>`;
 }
@@ -110,7 +118,7 @@ export const MEMO_CSS = `
  * 클라이언트 스크립트.
  * 순수 JS — 테마가 빌드를 타지 않으므로 프레임워크를 쓸 수 없다.
  */
-export const MEMO_SCRIPT = `
+export const memoScript = () => `
 <script>
 (function () {
   var root = document.querySelector('.brick-memo[data-memo-view]');
@@ -119,6 +127,7 @@ export const MEMO_SCRIPT = `
   var body = root.querySelector('.brick-memo-body');
   var view = root.dataset.memoView;
   var memoId = root.dataset.memoId || '';
+  var base = root.dataset.memoBase || '/memo';
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -148,47 +157,53 @@ export const MEMO_SCRIPT = `
     return sameDay ? p(d.getHours()) + ':' + p(d.getMinutes())
                    : (d.getMonth() + 1) + '.' + d.getDate();
   }
+  function fullDate(v) {
+    var d = new Date(v);
+    if (isNaN(d.getTime())) return '';
+    var p = function (n) { return String(n).padStart(2, '0'); };
+    return d.getFullYear() + '.' + p(d.getMonth() + 1) + '.' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
   function fail(msg) { body.innerHTML = '<p class="brick-memo-empty">' + esc(msg) + '</p>'; }
 
   /* ── 목록 (받은/보낸) ─────────────────────────────── */
   function renderList(kind) {
     req(API + '/' + (kind === 'sent' ? 'sent' : 'inbox')).then(function (res) {
-      if (!res.ok) return fail(res.data.message || '불러올 수 없습니다.');
+      if (!res.ok) return fail(res.data.message || ${JSON.stringify(t("memo.loadFail"))});
       var items = res.data.items || [];
       if (!items.length) {
         body.innerHTML = '<p class="brick-memo-empty">' +
-          (kind === 'sent' ? '보낸 쪽지가 없습니다.' : '받은 쪽지가 없습니다.') + '</p>';
+          (kind === 'sent' ? ${JSON.stringify(t("memo.emptySent"))} : ${JSON.stringify(t("memo.emptyInbox"))}) + '</p>';
         return;
       }
       var isSent = kind === 'sent';
       var rows = items.map(function (m) {
         var unread = !isSent && !m.is_read;
-        var who = isSent ? (m.receiver_name || '(탈퇴)') : (m.sender_name || '(탈퇴)');
+        var who = isSent ? (m.receiver_name || ${JSON.stringify(t("memo.withdrawn"))}) : (m.sender_name || ${JSON.stringify(t("memo.withdrawn"))});
         return '<tr class="' + (unread ? 'is-unread' : '') + '" data-id="' + esc(m.id) + '">' +
           '<td class="brick-memo-who">' + (unread ? '<span class="brick-unread-dot"></span>' : '') + esc(who) + '</td>' +
-          '<td><a href="/memo/' + esc(m.id) + '">' + esc(m.preview || '(내용 없음)') + '</a>' +
-          (isSent ? '<span class="brick-memo-hint">' + (m.is_read ? '읽음' : '읽지 않음') + '</span>' : '') +
+          '<td><a href="' + base + '/' + esc(m.id) + '">' + esc(m.preview || ${JSON.stringify(t("memo.noContent"))}) + '</a>' +
+          (isSent ? '<span class="brick-memo-hint">' + (m.is_read ? ${JSON.stringify(t("memo.read"))} : ${JSON.stringify(t("memo.unread"))}) + '</span>' : '') +
           '</td>' +
           '<td class="brick-memo-date">' + fmtDate(m.created_at) + '</td>' +
-          '<td class="brick-memo-actions"><button type="button" data-del="' + esc(m.id) + '">삭제</button></td>' +
+          '<td class="brick-memo-actions"><button type="button" data-del="' + esc(m.id) + '">' + ${JSON.stringify(t("memo.delete"))} + '</button></td>' +
           '</tr>';
       }).join('');
 
       body.innerHTML =
         (!isSent && res.data.unread > 0
-          ? '<p class="brick-memo-hint">읽지 않은 쪽지 ' + res.data.unread + '개 ' +
-            '<button type="button" class="brick-memo-row-btn" data-read-all>모두 읽음으로</button></p>'
+          ? '<p class="brick-memo-hint">' + ${JSON.stringify(t("memo.unreadCount", { n: "__N__" }))}.replace('__N__', res.data.unread) + ' ' +
+            '<button type="button" class="brick-memo-row-btn" data-read-all>' + ${JSON.stringify(t("memo.markAllRead"))} + '</button></p>'
           : '') +
         '<table class="brick-memo-table"><thead><tr>' +
-        '<th class="brick-memo-who">' + (isSent ? '받는 사람' : '보낸 사람') + '</th>' +
-        '<th>내용</th><th class="brick-memo-date">날짜</th><th></th>' +
+        '<th class="brick-memo-who">' + (isSent ? ${JSON.stringify(t("memo.colTo"))} : ${JSON.stringify(t("memo.colFrom"))}) + '</th>' +
+        '<th>' + ${JSON.stringify(t("memo.colContent"))} + '</th><th class="brick-memo-date">' + ${JSON.stringify(t("memo.colDate"))} + '</th><th></th>' +
         '</tr></thead><tbody>' + rows + '</tbody></table>';
 
       body.querySelectorAll('[data-del]').forEach(function (btn) {
         btn.addEventListener('click', function () {
-          if (!confirm('이 쪽지를 삭제할까요?')) return;
+          if (!confirm(${JSON.stringify(t("memo.deleteConfirm"))})) return;
           send(API + '/' + btn.dataset.del, null, 'DELETE').then(function (r) {
-            if (!r.ok) { alert(r.data.message || '삭제에 실패했습니다.'); return; }
+            if (!r.ok) { alert(r.data.message || ${JSON.stringify(t("memo.deleteFail"))}); return; }
             renderList(kind);
           });
         });
@@ -205,40 +220,40 @@ export const MEMO_SCRIPT = `
   /* ── 읽기 ──────────────────────────────────────────── */
   function renderRead() {
     req(API + '/' + memoId).then(function (res) {
-      if (!res.ok) return fail(res.data.message || '쪽지를 불러올 수 없습니다.');
+      if (!res.ok) return fail(res.data.message || ${JSON.stringify(t("memo.memoLoadFail"))});
       var m = res.data.memo;
       var isReceiver = res.data.role === 'receiver';
-      var who = isReceiver ? (m.sender_name || '(탈퇴)') : (m.receiver_name || '(탈퇴)');
+      var who = isReceiver ? (m.sender_name || ${JSON.stringify(t("memo.withdrawn"))}) : (m.receiver_name || ${JSON.stringify(t("memo.withdrawn"))});
       body.innerHTML =
         '<div class="brick-memo-detail">' +
         '<div class="brick-memo-detail-head">' +
-        '<strong>' + (isReceiver ? '보낸 사람' : '받는 사람') + ': ' + esc(who) + '</strong>' +
-        '<time>' + new Date(m.created_at).toLocaleString('ko-KR') + '</time>' +
-        (!isReceiver ? '<span class="brick-memo-hint">' + (m.is_read ? '읽음' : '읽지 않음') + '</span>' : '') +
+        '<strong>' + (isReceiver ? ${JSON.stringify(t("memo.colFrom"))} : ${JSON.stringify(t("memo.colTo"))}) + ': ' + esc(who) + '</strong>' +
+        '<time>' + fullDate(m.created_at) + '</time>' +
+        (!isReceiver ? '<span class="brick-memo-hint">' + (m.is_read ? ${JSON.stringify(t("memo.read"))} : ${JSON.stringify(t("memo.unread"))}) + '</span>' : '') +
         '</div>' +
         '<div class="brick-memo-content">' + esc(m.content) + '</div>' +
         '<div class="brick-memo-detail-foot">' +
-        '<a href="/memo' + (isReceiver ? '' : '/sent') + '">목록</a>' +
+        '<a href="' + base + (isReceiver ? '' : '/sent') + '">' + ${JSON.stringify(t("memo.list"))} + '</a>' +
         (isReceiver && m.sender_id
-          ? '<a href="/memo/write?to=' + encodeURIComponent(m.sender_id) + '">답장</a>' +
-            '<button type="button" data-block="' + esc(m.sender_id) + '">차단</button>'
+          ? '<a href="' + base + '/write?to=' + encodeURIComponent(m.sender_id) + '">' + ${JSON.stringify(t("memo.reply"))} + '</a>' +
+            '<button type="button" data-block="' + esc(m.sender_id) + '">' + ${JSON.stringify(t("memo.block"))} + '</button>'
           : '') +
-        '<button type="button" data-del-one>삭제</button>' +
+        '<button type="button" data-del-one>' + ${JSON.stringify(t("memo.delete"))} + '</button>' +
         '</div></div>';
 
       body.querySelector('[data-del-one]').addEventListener('click', function () {
-        if (!confirm('이 쪽지를 삭제할까요?')) return;
+        if (!confirm(${JSON.stringify(t("memo.deleteConfirm"))})) return;
         send(API + '/' + memoId, null, 'DELETE').then(function (r) {
-          if (!r.ok) { alert(r.data.message || '삭제에 실패했습니다.'); return; }
-          location.href = '/memo' + (isReceiver ? '' : '/sent');
+          if (!r.ok) { alert(r.data.message || ${JSON.stringify(t("memo.deleteFail"))}); return; }
+          location.href = base + (isReceiver ? '' : '/sent');
         });
       });
       var blockBtn = body.querySelector('[data-block]');
       if (blockBtn) {
         blockBtn.addEventListener('click', function () {
-          if (!confirm('이 회원을 차단하면 앞으로 쪽지를 받지 않습니다. 차단할까요?')) return;
+          if (!confirm(${JSON.stringify(t("memo.blockConfirm"))})) return;
           send(API + '/blocks/' + blockBtn.dataset.block).then(function (r) {
-            alert(r.ok ? '차단했습니다.' : (r.data.message || '차단에 실패했습니다.'));
+            alert(r.ok ? ${JSON.stringify(t("memo.blocked"))} : (r.data.message || ${JSON.stringify(t("memo.blockFail"))}));
           });
         });
       }
@@ -252,16 +267,16 @@ export const MEMO_SCRIPT = `
 
     body.innerHTML =
       '<form class="brick-memo-form">' +
-      '<label class="brick-memo-field">받는 사람' +
-      '<input name="receiver" placeholder="이름 또는 이메일로 검색" autocomplete="off" required />' +
+      '<label class="brick-memo-field">' + ${JSON.stringify(t("memo.colTo"))} + '' +
+      '<input name="receiver" placeholder="' + ${JSON.stringify(t("memo.searchPlaceholder"))} + '" autocomplete="off" required />' +
       '</label>' +
       '<div class="brick-memo-suggest" hidden></div>' +
       '<input type="hidden" name="receiverId" value="' + esc(to) + '" />' +
-      '<label class="brick-memo-field">내용' +
-      '<textarea name="content" required placeholder="내용을 입력하세요"></textarea>' +
+      '<label class="brick-memo-field">' + ${JSON.stringify(t("memo.content"))} + '' +
+      '<textarea name="content" required placeholder="' + ${JSON.stringify(t("memo.contentPlaceholder"))} + '"></textarea>' +
       '</label>' +
       '<p class="brick-memo-msg" role="status"></p>' +
-      '<div><button type="submit" class="brick-memo-submit">보내기</button>' +
+      '<div><button type="submit" class="brick-memo-submit">' + ${JSON.stringify(t("memo.send"))} + '</button>' +
       '<span class="brick-memo-cost" data-cost></span></div>' +
       '</form>';
 
@@ -275,7 +290,7 @@ export const MEMO_SCRIPT = `
     req(API + '/cost').then(function (r) {
       if (r.ok && r.data.sendPoint > 0) {
         body.querySelector('[data-cost]').textContent =
-          '발송 시 ' + r.data.sendPoint.toLocaleString('ko-KR') + ' 포인트가 차감됩니다.';
+          ${JSON.stringify(t("memo.costNote", { n: "__N__" }))}.replace('__N__', r.data.sendPoint.toLocaleString('ko-KR'));
       }
     });
 
@@ -313,18 +328,18 @@ export const MEMO_SCRIPT = `
       else payload.receiverEmail = input.value.trim();
 
       btn.disabled = true;
-      msgEl.textContent = '보내는 중…';
+      msgEl.textContent = ${JSON.stringify(t("memo.sending"))};
       msgEl.style.color = '#666';
-      send(API + '/', payload).then(function (r) {
+      send(API, payload).then(function (r) {
         btn.disabled = false;
         if (!r.ok) {
-          msgEl.textContent = r.data.message || '보내지 못했습니다.';
+          msgEl.textContent = r.data.message || ${JSON.stringify(t("memo.sendFail"))};
           msgEl.style.color = 'crimson';
           return;
         }
         msgEl.style.color = '#0a7';
-        msgEl.textContent = (r.data.receiverName || '') + '님에게 보냈습니다.';
-        setTimeout(function () { location.href = '/memo/sent'; }, 700);
+        msgEl.textContent = ${JSON.stringify(t("memo.sentTo", { name: "__NAME__" }))}.replace('__NAME__', r.data.receiverName || '');
+        setTimeout(function () { location.href = base + '/sent'; }, 700);
       });
     });
   }
@@ -332,18 +347,18 @@ export const MEMO_SCRIPT = `
   /* ── 차단 목록 ─────────────────────────────────────── */
   function renderBlocks() {
     req(API + '/blocks/list').then(function (res) {
-      if (!res.ok) return fail(res.data.message || '불러올 수 없습니다.');
+      if (!res.ok) return fail(res.data.message || ${JSON.stringify(t("memo.loadFail"))});
       var items = res.data.items || [];
       if (!items.length) {
-        body.innerHTML = '<p class="brick-memo-empty">차단한 회원이 없습니다.</p>';
+        body.innerHTML = '<p class="brick-memo-empty">' + ${JSON.stringify(t("memo.emptyBlocks"))} + '</p>';
         return;
       }
       body.innerHTML = '<table class="brick-memo-table"><thead><tr>' +
-        '<th>회원</th><th class="brick-memo-date">차단일</th><th></th></tr></thead><tbody>' +
+        '<th>' + ${JSON.stringify(t("memo.colMember"))} + '</th><th class="brick-memo-date">' + ${JSON.stringify(t("memo.colBlockedAt"))} + '</th><th></th></tr></thead><tbody>' +
         items.map(function (b) {
           return '<tr><td>' + esc(b.display_name) + '</td>' +
             '<td class="brick-memo-date">' + fmtDate(b.created_at) + '</td>' +
-            '<td class="brick-memo-actions"><button type="button" data-unblock="' + esc(b.blocked_id) + '">해제</button></td></tr>';
+            '<td class="brick-memo-actions"><button type="button" data-unblock="' + esc(b.blocked_id) + '">' + ${JSON.stringify(t("memo.unblock"))} + '</button></td></tr>';
         }).join('') + '</tbody></table>';
 
       body.querySelectorAll('[data-unblock]').forEach(function (btn) {

@@ -2,7 +2,8 @@ import { definePlugin } from "@brick/plugin-sdk";
 import type { PluginDb } from "@brick/plugin-sdk";
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
-import { MEMO_CSS, MEMO_SCRIPT, renderMemoShell, resolveMemoView } from "./views.js";
+import { MEMO_CSS, memoScript, renderMemoShell, resolveMemoView } from "./views.js";
+import { bindI18n } from "./i18n.js";
 
 class MemoError extends Error {
   constructor(
@@ -56,6 +57,7 @@ const escapeHtml = (s: unknown) =>
  * 포인트가 없으면 무료로 동작한다 — 서비스 조회가 null을 허용한다.
  */
 export default definePlugin(async (ctx) => {
+  bindI18n(ctx);
   const db = ctx.db as PluginDb;
 
   const settings = async (): Promise<MemoSettings> => ({
@@ -511,7 +513,12 @@ export default definePlugin(async (ctx) => {
     },
     render: async (_props, blockCtx) => {
       const { view, memoId } = resolveMemoView(blockCtx.pathTail);
-      return `${renderMemoShell(view, memoId, Boolean(blockCtx.user))}${MEMO_SCRIPT}${MEMO_CSS}`;
+      const path = String(blockCtx.path ?? "").replace(/^\/+|\/+$/g, "");
+      const tail = String(blockCtx.pathTail ?? "").replace(/^\/+|\/+$/g, "");
+      const base = tail && path.endsWith(tail)
+        ? `/${path.slice(0, path.length - tail.length).replace(/\/+$/g, "")}`
+        : `/${path || "memo"}`;
+      return `${renderMemoShell(view, memoId, Boolean(blockCtx.user), base)}${memoScript()}${MEMO_CSS}`;
     },
   });
 

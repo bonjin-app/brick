@@ -70,7 +70,27 @@ export class PluginsController {
     return { ok: true };
   }
 
-  /** 플러그인이 registerRoute로 등록한 라우트 디스패치 (":param" 지원, 세션 사용자 주입) */
+  /**
+   * 플러그인이 registerRoute로 등록한 라우트 디스패치 (":param" 지원, 세션 사용자 주입).
+   *
+   * 두 경로를 모두 받는다 — `plugins/:name/*` 와 **뒤 경로가 없는**
+   * `plugins/:name`. 플러그인은 자기 루트(`registerRoute("POST", "/")`)에
+   * 등록할 수 있는데, 와일드카드만 있으면 그 라우트에 도달할 수 없다:
+   * 클라이언트가 `/api/plugins/x/` 로 보내도 프록시·브라우저가 후행
+   * 슬래시를 정규화해 `/api/plugins/x` 가 되고, 와일드카드는 최소 한
+   * 세그먼트를 요구하므로 404 가 된다. 실제로 쪽지 발송(POST "/")이
+   * **웹에서 항상 404** 였다 — API 직접 호출만 동작했다.
+   */
+  @All("plugins/:name")
+  async dispatchRoot(
+    @Param("name") name: string,
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+    @Body() body: unknown,
+  ) {
+    return this.dispatch(name, req, reply, body);
+  }
+
   @All("plugins/:name/*")
   async dispatch(
     @Param("name") name: string,
