@@ -346,6 +346,10 @@ curl -s -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' \
 VPAGE="$(curl -s "$API/api/render/page?path=vote/favorite")"
 contains "하위 경로가 개별 설문" "$VPAGE" 'data-slug=\"favorite\"'
 contains "링크는 페이지 기준 경로" "$(curl -s "$API/api/render/page?path=vote")" "/vote/favorite"
+# 설문 링크를 공유하면 질문이 보여야 한다 — 라우터 페이지 제목("설문")이 아니라
+POLL_TITLE="$(curl -s "$API/api/render/page?path=vote/favorite" \
+  | python3 -c "import sys,json,re;h=json.load(sys.stdin).get('html','');m=re.search(r'<title>([^<]*)</title>',h);print(m.group(1) if m else '')")"
+contains "개별 설문의 문서 제목은 질문" "$POLL_TITLE" "좋아하는 색"
 
 echo "── XSS"
 curl -s -b "$CK" -X POST "$PL/admin/polls" -H 'content-type: application/json' \

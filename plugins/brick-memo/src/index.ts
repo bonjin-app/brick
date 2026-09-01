@@ -3,7 +3,7 @@ import type { PluginDb } from "@brick/plugin-sdk";
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import { MEMO_CSS, memoScript, renderMemoShell, resolveMemoView } from "./views.js";
-import { bindI18n } from "./i18n.js";
+import { bindI18n, t } from "./i18n.js";
 
 class MemoError extends Error {
   constructor(
@@ -518,6 +518,12 @@ export default definePlugin(async (ctx) => {
       const base = tail && path.endsWith(tail)
         ? `/${path.slice(0, path.length - tail.length).replace(/\/+$/g, "")}`
         : `/${path || "memo"}`;
+      /**
+       * 화면 제목 — 쪽지는 사적 화면이라 검색엔진에 실릴 일은 없지만,
+       * 브라우저 탭과 뒤로가기 기록에 "쪽지함"이 보여야 한다. 셸이 자기
+       * 제목을 그리므로 테마의 제목 h1 은 생략한다.
+       */
+      blockCtx.setSeo?.({ title: t("memo.title"), ownHeading: true });
       return `${renderMemoShell(view, memoId, Boolean(blockCtx.user), base)}${memoScript()}${MEMO_CSS}`;
     },
   });

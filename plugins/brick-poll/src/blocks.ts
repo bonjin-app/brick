@@ -15,7 +15,11 @@ import { t } from "./i18n.js";
  */
 export function registerPollBlocks(ctx: PluginContext, db: Db): void {
   /** 개별 설문 렌더 — poll 블록과 poll-list 의 하위 경로가 함께 쓴다 */
-  async function renderSinglePoll(slug: string, showTotal = true): Promise<string> {
+  async function renderSinglePoll(
+    slug: string,
+    blockCtx?: { setSeo?: (seo: { title?: string; description?: string; ownHeading?: boolean }) => void },
+    showTotal = true,
+  ): Promise<string> {
     const { rows } = await db.execute(
       slug
         ? sql`
@@ -35,6 +39,15 @@ export function registerPollBlocks(ctx: PluginContext, db: Db): void {
     if (!poll) {
       return `<div class="brick-poll-empty">${escapeHtml(t("poll.empty"))}</div>${POLL_CSS}`;
     }
+    /**
+     * 이 화면의 제목은 설문 질문이다 — 설문 링크를 공유하면 질문이 보여야
+     * 한다. 질문은 h3 로 그리므로(설문은 페이지 안의 한 덩어리다) 테마의
+     * 제목 h1 은 그대로 둔다.
+     */
+    blockCtx?.setSeo?.({
+      title: String(poll.question ?? ""),
+      description: poll.description ? String(poll.description) : undefined,
+    });
     return `
 <section class="brick-poll" data-slug="${escapeHtml(poll.slug)}">
   <h3 class="brick-poll-q">${escapeHtml(poll.question)}</h3>
@@ -61,7 +74,7 @@ export function registerPollBlocks(ctx: PluginContext, db: Db): void {
     render: async (props, blockCtx) => {
       // 주소의 마지막 경로도 받는다 — /poll/<slug> 형태로 페이지를 만들 수 있다
       const slug = String(props.slug ?? blockCtx.pathTail?.replace(/^\/+/, "") ?? "");
-      return renderSinglePoll(slug, props.showTotal !== false);
+      return renderSinglePoll(slug, blockCtx, props.showTotal !== false);
     },
   });
 
@@ -85,7 +98,7 @@ export function registerPollBlocks(ctx: PluginContext, db: Db): void {
       const base = tail && path.endsWith(tail)
         ? `/${path.slice(0, path.length - tail.length).replace(/\/+$/g, "")}`
         : `/${path || "poll"}`;
-      if (tail) return renderSinglePoll(tail);
+      if (tail) return renderSinglePoll(tail, blockCtx);
 
       const limit = Math.min(20, Math.max(1, Number(props.limit ?? 5)));
       const { rows } = await db.execute(sql`
