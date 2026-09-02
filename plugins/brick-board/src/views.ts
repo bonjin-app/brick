@@ -248,7 +248,7 @@ ${!notices.length && !items.length ? `      <tr><td colspan="${showNoticeCol ? 5
   const body = style === "gallery" ? gallery() : style === "webzine" ? webzine() : table();
 
   const searchForm = opts.embedded ? "" : `  <form class="brick-board-search" method="get" action="${base}">
-    <select name="in">
+    <select name="in" aria-label="${escapeHtml(t("list.searchScope"))}">
       <option value="all"${searchIn === "all" ? " selected" : ""}>${escapeHtml(t("list.all"))}</option>
       <option value="title"${searchIn === "title" ? " selected" : ""}>${escapeHtml(t("list.colTitle"))}</option>
       <option value="content"${searchIn === "content" ? " selected" : ""}>${escapeHtml(t("write.content"))}</option>
@@ -507,8 +507,8 @@ ${shareBar}
     ${
       board.allow_vote
         ? `<div class="brick-vote">
-      <button type="button" data-vote="1">&#128077; ${escapeHtml(t("vote.up"))} <span data-up>${Number(post.up_count)}</span></button>
-      <button type="button" data-vote="-1">&#128078; <span data-down>${Number(post.down_count)}</span></button>
+      <button type="button" data-vote="1"><svg class="brick-ico" aria-hidden="true"><use href="#i-thumb-up"></use></svg> ${escapeHtml(t("vote.up"))} <span data-up>${Number(post.up_count)}</span></button>
+      <button type="button" data-vote="-1" aria-label="${escapeHtml(t("vote.down"))}"><svg class="brick-ico" aria-hidden="true"><use href="#i-thumb-down"></use></svg> <span data-down>${Number(post.down_count)}</span></button>
     </div>`
         : ""
     }
@@ -669,12 +669,12 @@ export async function renderWrite(
           <button type="button" data-cmd="insertOrderedList" title="${escapeHtml(t("editor.ol"))}">1.</button>
           <button type="button" data-block="blockquote" title="${escapeHtml(t("editor.quote"))}">&ldquo;</button>
           <span class="brick-sep"></span>
-          <button type="button" data-link title="${escapeHtml(t("editor.link"))}">&#128279;</button>
+          <button type="button" data-link title="${escapeHtml(t("editor.link"))}" aria-label="${escapeHtml(t("editor.link"))}"><svg class="brick-ico" aria-hidden="true"><use href="#i-link"></use></svg></button>
           ${canInlineImage
-            ? `<button type="button" data-image title="${escapeHtml(t("editor.image"))}">&#128247;</button>
+            ? `<button type="button" data-image title="${escapeHtml(t("editor.image"))}" aria-label="${escapeHtml(t("editor.image"))}"><svg class="brick-ico" aria-hidden="true"><use href="#i-image"></use></svg></button>
           <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" data-image-input hidden />`
             : ""}
-          <button type="button" data-cmd="removeFormat" title="${escapeHtml(t("editor.clear"))}">&#10006;</button>
+          <button type="button" data-cmd="removeFormat" title="${escapeHtml(t("editor.clear"))}" aria-label="${escapeHtml(t("editor.clear"))}"><svg class="brick-ico" aria-hidden="true"><use href="#i-close"></use></svg></button>
         </div>
         <div class="brick-editor-body" contenteditable="true" role="textbox" aria-multiline="true"
              data-placeholder="${escapeHtml(t("write.contentPlaceholder"))}">${String(editing?.content ?? "")}</div>

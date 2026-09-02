@@ -88,10 +88,10 @@ export default function AdminMenusPage() {
       <div style={{ background: "var(--color-bg)", borderRadius: 8, padding: 16, maxWidth: 860 }}>
         {items.map((it, i) => (
           <div key={i} style={{ marginBottom: 10 }}>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <input style={{ ...input, flex: 1 }} placeholder={t("menus.labelPh")} value={it.label}
+            <div className="flex flex-wrap items-center gap-2">
+              <input style={{ ...input, flex: 1, minWidth: 140 }} placeholder={t("menus.labelPh")} value={it.label}
                 onChange={(e) => update(i, { label: e.target.value })} />
-              <input style={{ ...input, flex: 2, fontFamily: "ui-monospace, Menlo, monospace", fontSize: 13 }}
+              <input style={{ ...input, flex: 2, minWidth: 200, fontFamily: "ui-monospace, Menlo, monospace", fontSize: 13 }}
                 placeholder="/about 또는 https://…" value={it.url}
                 onChange={(e) => update(i, { url: e.target.value })} />
               <button style={btn} onClick={() => setPickerFor(pickerFor === i ? null : i)}>

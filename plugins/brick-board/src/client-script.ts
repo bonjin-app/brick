@@ -524,7 +524,9 @@ export const BOARD_CSS = `
 .brick-secret-notice{padding:40px;text-align:center;color:var(--color-text-soft, #45454f);background:var(--color-bg-soft, #f6f6f9);border-radius:10px}
 .brick-post-foot{display:flex;align-items:center;gap:14px;margin-top:28px;padding-top:16px;border-top:1px solid var(--color-line, #e4e4ea);flex-wrap:wrap}
 .brick-vote{display:flex;gap:8px}
-.brick-vote button{padding:8px 16px;border:1px solid var(--color-line, #e4e4ea);border-radius:20px;background:var(--color-bg, #ffffff);cursor:pointer;font-size:14px}
+.brick-vote button{display:inline-flex;align-items:center;gap:6px;min-height:38px;padding:8px 16px;border:1px solid var(--color-line, #e4e4ea);border-radius:20px;background:var(--color-bg, #ffffff);cursor:pointer;font-size:14px}
+.brick-main button[data-reply]{min-height:32px;padding:4px 10px}
+.brick-main .brick-author .brick-author-name{min-height:28px;display:inline-flex;align-items:center}
 .brick-scrap{padding:8px 16px;border:1px solid var(--color-line, #e4e4ea);border-radius:20px;background:var(--color-bg, #ffffff);cursor:pointer;font-size:14px}
 .brick-scrap.is-on{border-color:var(--color-primary,#d0402c);color:var(--color-primary,#d0402c)}
 .brick-post-actions{margin-left:auto;display:flex;gap:8px;align-items:center}
@@ -559,6 +561,7 @@ export const BOARD_CSS = `
 .brick-editor{border:1px solid var(--color-line, #e4e4ea);border-radius:6px;overflow:hidden}
 .brick-toolbar{display:flex;gap:2px;padding:6px;background:var(--color-bg-soft, #f6f6f9);border-bottom:1px solid var(--color-line, #e4e4ea);flex-wrap:wrap}
 .brick-toolbar button{min-width:32px;height:30px;border:1px solid transparent;background:none;border-radius:4px;cursor:pointer;font-size:14px}
+.brick-toolbar button .brick-ico{width:17px;height:17px;vertical-align:-3px}
 .brick-toolbar button:hover{background:var(--color-bg, #ffffff);border-color:var(--color-line, #e4e4ea)}
 .brick-sep{width:1px;background:var(--color-line, #e4e4ea);margin:4px 4px}
 .brick-editor-body{min-height:260px;padding:14px;outline:none;line-height:1.8;font-size:15px}
@@ -610,7 +613,7 @@ export const BOARD_CSS = `
 /* ── 링크 필드 ─────────────────────────────────── */
 .brick-links-field input{display:block;width:100%;margin-top:6px}
 .brick-post-links{list-style:none;padding:12px 14px;margin:6px 0 16px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 10px);background:var(--color-bg-soft, #f6f6f9);display:flex;flex-direction:column;gap:6px}
-.brick-post-links li::before{content:"\\1F517";margin-right:8px;font-size:12px}
+.brick-post-links li{display:flex;align-items:center;gap:8px}.brick-post-links li::before{content:"";flex:none;width:6px;height:6px;border-radius:50%;background:var(--color-primary, #cf4437)}
 .brick-post-links a{word-break:break-all;color:var(--color-primary-text, #b63a2e)}
 /* ── 목록 스킨: 갤러리 · 웹진 ─────────────────────── */
 .brick-gallery-grid{display:grid;gap:18px;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));margin:14px 0 4px}
@@ -654,7 +657,7 @@ export const BOARD_CSS = `
 .brick-latest-posts li{display:flex;align-items:baseline;gap:6px;padding:8px 0;border-bottom:1px solid var(--color-line, #e4e4ea)}
 .brick-latest-posts li:last-child{border-bottom:0;padding-bottom:0}
 .brick-latest-posts a:hover{color:var(--color-primary-text, #b63a2e)}
-.brick-latest-posts a{color:inherit;text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.brick-latest-posts a{padding:6px 0;color:inherit;text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .brick-latest-posts time{color:var(--color-muted, #6c6c7a);font-size:12.5px}
 .brick-widget-title{font-size:16px;margin:0 0 4px}
 @media(max-width:640px){

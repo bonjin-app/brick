@@ -72,7 +72,7 @@ export default function SearchAnalyticsPage() {
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
         <h1 style={{ margin: 0, flex: 1 }}>{t("search.title")}</h1>
-        <select style={input} value={days} onChange={(e) => setDays(Number(e.target.value))}>
+        <select style={input} aria-label={t("search.rangeLabel")} value={days} onChange={(e) => setDays(Number(e.target.value))}>
           <option value={7}>{t("search.days7")}</option>
           <option value={30}>{t("search.days30")}</option>
           <option value={90}>{t("search.days90")}</option>
@@ -160,7 +160,7 @@ export default function SearchAnalyticsPage() {
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <input style={{ ...input, width: 160 }} placeholder={t("search.colQuery")} value={form.term}
             onChange={(e) => setForm({ ...form, term: e.target.value })} />
-          <select style={input} value={form.kind}
+          <select style={input} aria-label={t("search.kindLabel")} value={form.kind}
             onChange={(e) => setForm({ ...form, kind: e.target.value })}>
             <option value="replace">{t("search.replace")}</option>
             <option value="block">{t("search.block")}</option>

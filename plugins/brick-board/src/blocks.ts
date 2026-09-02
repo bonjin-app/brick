@@ -380,7 +380,8 @@ ${scrapsScript()}${SCRAPS_CSS}`;
 const LATEST_MULTI_CSS = `
 <style>
 .brick-latest-grid{display:grid;grid-template-columns:repeat(var(--brick-latest-cols,3),1fr);gap:20px;margin:20px 0;align-items:start}
-@media(max-width:900px){.brick-latest-grid{grid-template-columns:1fr}}
+@media(max-width:1024px){.brick-latest-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:640px){.brick-latest-grid{grid-template-columns:1fr}}
 .brick-latest-card{border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius-lg, 16px);padding:18px 20px;background:var(--color-bg, #fff)}
 .brick-latest-card h3{margin:0 0 12px;font-size:16px;display:flex;align-items:baseline;justify-content:space-between;gap:8px}
 .brick-latest-card h3 a{text-decoration:none;color:inherit}

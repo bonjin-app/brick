@@ -212,7 +212,7 @@ const ADMIN_CSS = `
 /* 사이드바는 어두운 채로 고정이므로 위 규칙을 적용하지 않는다 */
 .brick-admin-side a { color: inherit; }
 .brick-admin-side button {
-  border: 0; background: none; color: #c9c9d6; padding: 0; font-size: 13px; font-weight: 400;
+  border: 0; background: none; color: #c9c9d6; padding: 8px 0; min-height: 36px; font-size: 13px; font-weight: 400;
 }
 .brick-admin-side button:hover { background: none; color: #fff; }
 .brick-admin .brick-admin-top a { color: #fff; text-decoration: none; }

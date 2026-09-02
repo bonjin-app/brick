@@ -232,13 +232,13 @@ export default function PluginResourcePage() {
               <span style={{ fontSize: 13.5, color: "var(--color-text-soft)" }}>
                 {t("x.selectedN", { n: selected.size })}
               </span>
-              <select value={bulkCode} onChange={(e) => setBulkCode(e.target.value)}
+              <select aria-label={t("x.bulkPick")} value={bulkCode} onChange={(e) => setBulkCode(e.target.value)}
                 style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid var(--color-line-strong)" }}>
                 <option value="">{t("x.bulkPick")}</option>
                 {res.bulkActions!.map((a) => <option key={a.code} value={a.code}>{a.label}</option>)}
               </select>
               {bulkAction?.input && (
-                <select value={bulkParam} onChange={(e) => setBulkParam(e.target.value)}
+                <select aria-label={bulkAction.input.label} value={bulkParam} onChange={(e) => setBulkParam(e.target.value)}
                   style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid var(--color-line-strong)" }}>
                   <option value="">{bulkAction.input.label}</option>
                   {bulkOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}

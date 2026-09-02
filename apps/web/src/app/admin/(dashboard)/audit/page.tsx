@@ -45,7 +45,7 @@ export default function AdminAuditPage() {
       <p style={{ color: "var(--color-text-soft)", fontSize: 14 }}>
         {t("audit.desc")}
       </p>
-      <select value={filter} onChange={(e) => { setFilter(e.target.value); setPage(1); }}
+      <select aria-label={t("audit.filterLabel")} value={filter} onChange={(e) => { setFilter(e.target.value); setPage(1); }}
         style={{ padding: 8, marginBottom: 16 }}>
         <option value="">{t("audit.allActions")}</option>
         {KNOWN_ACTIONS.map((v) => <option key={v} value={v}>{t(`audit.a.${v}` as never)}</option>)}

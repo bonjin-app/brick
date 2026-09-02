@@ -62,7 +62,7 @@ export function SocialLoginSettings() {
   }
 
   const input = { width: "100%", padding: 8, marginTop: 4, boxSizing: "border-box" as const };
-  const mono = { fontFamily: "ui-monospace, monospace", fontSize: 12 };
+  const mono = { fontFamily: "ui-monospace, monospace", fontSize: 12, wordBreak: "break-all" as const };
 
   return (
     <section className="brick-card" aria-labelledby="settings-social">

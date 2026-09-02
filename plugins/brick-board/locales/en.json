@@ -162,5 +162,7 @@
   "write.links": "Related links",
   "write.linksHint": "Up to 2, starting with http(s)://",
   "detail.links": "Related links",
-  "index.ungrouped": "Other boards"
+  "index.ungrouped": "Other boards",
+  "list.searchScope": "Search in",
+  "vote.down": "Downvote"
 }

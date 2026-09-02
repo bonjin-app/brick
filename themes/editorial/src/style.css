@@ -597,6 +597,15 @@ blockquote {
 .brick-field-hint { font-size: 12.5px; color: var(--color-muted); }
 .brick-field-error { font-size: 12.5px; color: var(--color-danger); font-weight: 500; }
 
+/* 파일 선택 — UA 기본 버튼은 어느 OS 에서도 사이트와 어울리지 않는다 */
+.brick-main input[type="file"] { font: inherit; font-size: 14px; color: var(--color-text-soft); max-width: 100%; }
+.brick-main input[type="file"]::file-selector-button {
+  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; margin-right: 10px;
+  padding: 7px 12px; border-radius: var(--radius); border: 1px solid var(--color-line-strong);
+  background: var(--color-bg); color: var(--color-text); transition: background var(--brick-t), border-color var(--brick-t);
+}
+.brick-main input[type="file"]::file-selector-button:hover { background: var(--color-bg-soft); border-color: var(--color-muted); }
+
 /* ── 카드 — 괘선 상자, 그림자 없음 ─────────────────── */
 .brick-card { background: var(--color-bg); border: 1px solid var(--color-line-strong); border-radius: var(--radius); padding: 22px; }
 .brick-card-soft { background: var(--color-bg-soft); border-color: var(--color-line); }

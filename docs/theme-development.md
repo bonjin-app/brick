@@ -189,7 +189,7 @@ page.html 슬롯은 추가로 `title`(페이지 제목), `{{{ blocksHtml }}}`(�
 제공하세요:
 
 `search` `cart` `message` `user` `heart` `bell` `star` `truck` `shield` `chat` `clock`
-`pin` `mail` `phone` `image` `check` `arrow`
+`pin` `mail` `phone` `image` `check` `arrow` `thumb-up` `thumb-down` `link` `close`
 
 ## 대비 점검 — 눈으로는 안 보이는 것
 
@@ -237,6 +237,14 @@ await brickContrastAudit(["/", "/board/free", "/shop", "/shop/cart"])
 - Preflight 가 지우는 본문 목록·굵게 등은 `@layer base` 에서 `.brick-main` 범위로 되살렸습니다 —
   에디터로 쓴 글에는 클래스가 없습니다.
 - 직접 만드는 테마는 Tailwind 를 쓰지 않아도 됩니다. 계약은 클래스와 토큰이지 도구가 아닙니다.
+
+## 기본기 점검 — 넘침·라벨·터치 영역
+
+[scripts/ui-audit.js](../scripts/ui-audit.js) 를 콘솔에 붙이고 `await brickUiAudit([경로들])` 를
+실행하면 375·1280px 두 폭에서 가로 넘침, alt 없는 이미지, 이름 없는 버튼, 라벨 없는 입력,
+28px 미만 터치 영역, `undefined`/`NaN` 노출을 잡습니다. 대비 점검과 함께 새 테마·새 블록을
+만들었을 때 한 번 돌려 보세요 — 눈으로 보면 넘어가는 것들입니다(모바일에서 관리 메뉴 편집
+행이 575px 로 넘치던 것을 이걸로 찾았습니다).
 
 ## 배포
 
