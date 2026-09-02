@@ -303,7 +303,7 @@ export async function renderDetail(
   const { rows } = await db.execute(sql`
     SELECT p.id, p.title, p.content, p.category, p.author_id, p.author_name, p.created_at, p.updated_at,
            p.view_count, p.up_count, p.down_count, p.comment_count, p.file_count, p.scrap_count,
-           p.is_secret, p.is_notice, p.depth, p.thread_created_at, p.thread_path,
+           p.is_secret, p.is_notice, p.depth, p.thread_created_at, p.thread_path, p.links,
            u.avatar_url AS author_avatar
     FROM board_posts p LEFT JOIN users u ON u.id = p.author_id
     WHERE p.id = ${postId}::uuid AND p.board_id = ${board.id}::uuid LIMIT 1
@@ -493,6 +493,14 @@ ${filesHtml}
 
   <article class="brick-post-content">${contentHtml}</article>
 ${imagesHtml}
+${(() => {
+    const links = Array.isArray(post.links) ? (post.links as unknown[]).map(String).filter(Boolean) : [];
+    if (!links.length) return "";
+    // 외부 링크: 새 창 + nofollow(스팸 링크에 검색 가치를 주지 않는다) + noopener
+    return `  <ul class="brick-post-links">
+${links.map((u) => `    <li><a href="${escapeHtml(u)}" target="_blank" rel="nofollow noopener">${escapeHtml(u.replace(/^https?:\/\//i, ""))}</a></li>`).join("\n")}
+  </ul>`;
+  })()}
 ${shareBar}
 
   <div class="brick-post-foot">
@@ -578,7 +586,7 @@ export async function renderWrite(
   let editing: Record<string, unknown> | null = null;
   if (editPostId) {
     const { rows } = await db.execute(sql`
-      SELECT id, title, content, category, is_secret, author_id
+      SELECT id, title, content, category, is_secret, author_id, links
       FROM board_posts WHERE id = ${editPostId}::uuid AND board_id = ${board.id}::uuid LIMIT 1
     `);
     editing = rows[0] ?? null;
@@ -673,6 +681,16 @@ export async function renderWrite(
       </div>
       <textarea name="content" hidden></textarea>
     </div>
+
+    ${(() => {
+      // 링크 필드 — 최대 2개. 수정이면 기존 값을 채운다
+      const links = Array.isArray(editing?.links) ? (editing!.links as unknown[]).map(String) : [];
+      return `<div class="brick-field brick-links-field">
+      <span class="brick-label">${escapeHtml(t("write.links"))} <small>${escapeHtml(t("write.linksHint"))}</small></span>
+      <input type="url" name="link1" placeholder="https://" value="${escapeHtml(links[0] ?? "")}" />
+      <input type="url" name="link2" placeholder="https://" value="${escapeHtml(links[1] ?? "")}" />
+    </div>`;
+    })()}
 
     ${
       board.allow_upload && board.max_files > 0

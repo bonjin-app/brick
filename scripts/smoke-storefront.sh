@@ -10,6 +10,8 @@
 #   - 남의 위시리스트가 보이지 않는가
 #   - 지역 추가비가 **실제 주문 금액**에 반영되는가 (표시만 하고 안 받으면 손해)
 #
+# 주의: 변수 이름에 HOME 을 쓰지 않는다 — 환경변수 $HOME 을 큰 HTML 로 덮으면
+#       node 가 OpenSSL 설정 파일의 $HOME 확장에서 "variable expansion too long" 으로 죽는다.
 # 사용법: DATABASE_URL=postgresql://... bash scripts/smoke-storefront.sh
 set -euo pipefail
 
@@ -137,14 +139,14 @@ contains "쇼핑몰 개설 불가 상태" "$PARTIAL" '"commerceReady":false'
 curl -s -b "$CK" -X PUT "$API/api/business-info" -H 'content-type: application/json' --data-binary "@$TMP/biz.json" >/dev/null
 
 echo "── 테마 푸터에 실제로 렌더되는가"
-HOME="$(curl -s "$API/api/render/page?path=")"
-contains "상호 렌더" "$HOME" "본진주식회사"
-contains "사업자등록번호 렌더" "$HOME" "220-81-62517"
-contains "통신판매업 신고번호 렌더" "$HOME" "제2026-서울강남-01234호"
-contains "대표자 렌더" "$HOME" "홍길동"
-contains "전화번호 렌더" "$HOME" "02-1234-5678"
-contains "전용 영역으로 감싸짐" "$HOME" "brick-business"
-contains "에스크로 안내가 화면에 나온다 (표시 의무)" "$HOME" "본진에스크로"
+HOME_HTML="$(curl -s "$API/api/render/page?path=")"
+contains "상호 렌더" "$HOME_HTML" "본진주식회사"
+contains "사업자등록번호 렌더" "$HOME_HTML" "220-81-62517"
+contains "통신판매업 신고번호 렌더" "$HOME_HTML" "제2026-서울강남-01234호"
+contains "대표자 렌더" "$HOME_HTML" "홍길동"
+contains "전화번호 렌더" "$HOME_HTML" "02-1234-5678"
+contains "전용 영역으로 감싸짐" "$HOME_HTML" "brick-business"
+contains "에스크로 안내가 화면에 나온다 (표시 의무)" "$HOME_HTML" "본진에스크로"
 # 값이 없으면 라벨만 남지 않아야 한다
 curl -s -b "$CK" -X PUT "$API/api/business-info" -H 'content-type: application/json' \
   -d '{"companyName":"이름만있음"}' >/dev/null

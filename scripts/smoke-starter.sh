@@ -14,6 +14,8 @@
 #   - 모르는 유형은 거부하는가 (조용히 빈 사이트가 되면 안 된다)
 #   - 스타터 실패가 설치를 실패시키지 않는가
 #
+# 주의: 변수 이름에 HOME 을 쓰지 않는다 — 환경변수 $HOME 을 큰 HTML 로 덮으면
+#       node 가 OpenSSL 설정 파일의 $HOME 확장에서 "variable expansion too long" 으로 죽는다.
 # 사용법: DATABASE_URL=postgresql://... bash scripts/smoke-starter.sh
 set -euo pipefail
 
@@ -151,11 +153,11 @@ check "페이지 3개 (홈·소개·게시판)" "$(psql_q "SELECT count(*) FROM 
 check "전부 공개 상태" "$(psql_q "SELECT count(*) FROM pages WHERE status='published'")" "3"
 
 echo "── 홈이 실제로 렌더된다 (블록 이름이 틀리면 조용히 주석이 된다)"
-HOME="$(curl -s "$API/api/render/page?path=")"
-contains "사이트 이름" "$HOME" "달빛마을"
-contains "최신글 모아보기가 렌더됨" "$HOME" "공지사항"
-contains "자유게시판 상자" "$HOME" "자유게시판"
-absent "깨진 블록이 없다" "$HOME" "unknown block"
+HOME_HTML="$(curl -s "$API/api/render/page?path=")"
+contains "사이트 이름" "$HOME_HTML" "달빛마을"
+contains "최신글 모아보기가 렌더됨" "$HOME_HTML" "공지사항"
+contains "자유게시판 상자" "$HOME_HTML" "자유게시판"
+absent "깨진 블록이 없다" "$HOME_HTML" "unknown block"
 
 echo "── 메뉴가 만들어진 것들을 가리킨다"
 MENU="$(curl -s "$API/api/menus/header")"
@@ -212,9 +214,9 @@ contains "설치 성공" "$R" '"ok":true'
 contains "쇼핑몰 플러그인 활성화" "$R" "플러그인 brick-shop"
 check "게시판은 공지 하나" "$(psql_q "SELECT count(*) FROM board_boards")" "1"
 check "페이지 5개 (홈·소개·이용안내·게시판·쇼핑몰)" "$(psql_q "SELECT count(*) FROM pages")" "5"
-HOME="$(curl -s "$API/api/render/page?path=")"
-contains "상품 목록 블록이 렌더됨 (상품이 없어도 깨지지 않는다)" "$HOME" "달빛상점"
-absent "깨진 블록이 없다" "$HOME" "unknown block"
+HOME_HTML="$(curl -s "$API/api/render/page?path=")"
+contains "상품 목록 블록이 렌더됨 (상품이 없어도 깨지지 않는다)" "$HOME_HTML" "달빛상점"
+absent "깨진 블록이 없다" "$HOME_HTML" "unknown block"
 MENU="$(curl -s "$API/api/menus/header")"
 contains "상품 링크" "$MENU" '"url":"/shop"'
 contains "이용 안내 링크" "$MENU" '"url":"/guide"'

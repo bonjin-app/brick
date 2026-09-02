@@ -6,6 +6,8 @@ import { hashGuestPassword } from "./guest.js";
 import { sanitizeHtml } from "./sanitize.js";
 
 export interface WritePostInput {
+  /** 관련 링크 (최대 2개, http/https 만) — 그누보드의 wr_link1/2 */
+  links?: unknown;
   title: string;
   content: string;
   category?: string | null;
@@ -77,6 +79,7 @@ export async function createPost(
 
   const id = uuidv7();
   const authorName = user ? user.displayName : guestName;
+  const links = normalizeLinks(input.links);
 
   return db.transaction(async (tx) => {
     let threadId = id;
@@ -117,13 +120,13 @@ export async function createPost(
       INSERT INTO board_posts (
         id, board_id, author_id, author_name, title, content, category,
         is_notice, is_secret, thread_id, thread_created_at, thread_path, depth,
-        guest_name, guest_password, author_ip, thumb_url
+        guest_name, guest_password, author_ip, thumb_url, links
       ) VALUES (
         ${id}, ${board.id}::uuid, ${user?.id ?? null}::uuid, ${authorName}, ${title}, ${content}, ${category},
         ${isNotice}, ${isSecret}, ${threadId}::uuid,
         ${threadCreatedAt ? threadCreatedAt.toISOString() : null}::timestamptz,
         ${threadPath}, ${depth},
-        ${guestName}, ${guestPasswordHash}, ${ip}, ${extractThumb(content)}
+        ${guestName}, ${guestPasswordHash}, ${ip}, ${extractThumb(content)}, ${JSON.stringify(links)}::jsonb
       )
     `);
     // 원글이면 thread_created_at을 자기 created_at으로 채운다
@@ -174,6 +177,24 @@ export async function refreshThumb(
     thumb = extractThumb(html);
   }
   await db.execute(sql`UPDATE board_posts SET thumb_url = ${thumb} WHERE id = ${postId}::uuid`);
+}
+
+/**
+ * 링크 필드 정리 — 최대 2개, http(s) 만. 빈 값은 버리고, 다른 스킴(javascript: 등)은
+ * 조용히 버리지 않고 **거부**한다: 저장해 놓고 안 보이면 왜 사라졌는지 알 수 없다.
+ */
+export function normalizeLinks(raw: unknown): string[] {
+  const arr = Array.isArray(raw) ? raw : typeof raw === "string" ? [raw] : [];
+  const out: string[] = [];
+  for (const v of arr) {
+    const u = String(v ?? "").trim();
+    if (!u) continue;
+    if (!/^https?:\/\/[^\s<>"']+$/i.test(u)) throw new BoardError(400, `링크는 http:// 또는 https:// 로 시작해야 합니다: ${u.slice(0, 60)}`);
+    if (u.length > 2000) throw new BoardError(400, "링크가 너무 깁니다.");
+    out.push(u);
+    if (out.length >= 2) break;
+  }
+  return out;
 }
 
 /** 글 목록 (스레드 정렬 + 공지 상단 고정) */

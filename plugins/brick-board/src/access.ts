@@ -1,22 +1,26 @@
 import { sql } from "drizzle-orm";
 import type { BoardRow, Db, SessionUser } from "./types.js";
-import { BoardError, hasRole } from "./types.js";
+import { BoardError, effectiveReadRole, hasRole } from "./types.js";
 import { verifyGuestPassword } from "./guest.js";
 
 /** slug로 게시판을 읽고, 없으면 404 */
 export async function loadBoard(db: Db, slug: string): Promise<BoardRow> {
   const { rows } = await db.execute(sql`
-    SELECT id, slug, title, description, read_role, write_role, comment_role, download_role,
-           categories, page_size, allow_reply, allow_secret, allow_vote, allow_upload,
-           max_files, write_interval, list_style, notify_email, notify_comment
-    FROM board_boards WHERE slug = ${slug} AND is_visible = true LIMIT 1
+    SELECT b.id, b.slug, b.title, b.description, b.read_role, b.write_role, b.comment_role, b.download_role,
+           b.categories, b.page_size, b.allow_reply, b.allow_secret, b.allow_vote, b.allow_upload,
+           b.max_files, b.write_interval, b.list_style, b.notify_email, b.notify_comment,
+           b.group_id, g.title AS group_title, g.read_role AS group_read_role
+    FROM board_boards b LEFT JOIN board_groups g ON g.id = b.group_id
+    WHERE b.slug = ${slug} AND b.is_visible = true LIMIT 1
   `);
   const row = rows[0];
   if (!row) throw new BoardError(404, "게시판을 찾을 수 없습니다.");
   return {
     ...(row as unknown as BoardRow),
     categories: Array.isArray(row.categories) ? (row.categories as string[]) : [],
-  };
+    // 그룹 권한과 합친 실효 읽기 권한 — 이후의 모든 검사가 이 값을 쓴다
+    read_role: effectiveReadRole(row.read_role, row.group_read_role),
+    };
 }
 
 /** 권한 검사 — 부족하면 401(비로그인) 또는 403(권한 부족)으로 구분해 던진다 */

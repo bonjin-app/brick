@@ -8,6 +8,28 @@ const ROLE_OPTIONS = [
 ];
 
 /**
+ * 게시판 그룹 — 게시판을 묶고 그룹 단위로 읽기 권한을 건다.
+ * 실제 읽기 권한은 그룹과 게시판 중 더 엄격한 쪽이다.
+ */
+export const GROUP_RESOURCE: AdminResource = {
+  name: "groups",
+  title: "게시판 그룹",
+  itemLabel: "그룹",
+  basePath: "/admin/groups",
+  order: 5,
+  description: "게시판을 묶어 목록에 소제목으로 보이게 하고, 그룹 단위로 읽기 권한을 겁니다. 그룹을 지워도 게시판은 남습니다.",
+  fields: [
+    { name: "title", label: "그룹 이름", type: "text", required: true, inList: true },
+    { name: "slug", label: "주소(slug)", type: "text", required: true, inList: true, help: "영문 소문자·숫자·하이픈 2~50자" },
+    { name: "description", label: "설명", type: "textarea" },
+    { name: "read_role", label: "읽기 권한", type: "select", options: ROLE_OPTIONS, inList: true,
+      help: "그룹 안의 게시판은 이 권한과 자기 권한 중 더 엄격한 쪽을 따릅니다." },
+    { name: "sort_order", label: "표시 순서", type: "number" },
+    { name: "board_count", label: "게시판 수", type: "number", readOnly: true, inList: true },
+  ],
+};
+
+/**
  * 게시판 설정 화면.
  * 게시판 하나의 권한·분류·기능 토글을 여기서 정한다.
  */
@@ -25,6 +47,8 @@ export const BOARD_RESOURCE: AdminResource = {
     { name: "slug", label: "주소(slug)", type: "text", required: true, inList: true,
       help: "영문 소문자/숫자/하이픈. 주소가 됩니다: /board/<slug>" },
     { name: "description", label: "설명", type: "textarea" },
+    { name: "group_id", label: "그룹", type: "select", optionsFrom: "/admin/groups/options", inList: false,
+      help: "목록에서 소제목으로 묶이고, 그룹의 읽기 권한이 함께 적용됩니다." },
     { name: "post_count", label: "글 수", type: "number", readOnly: true, inList: true },
 
     { name: "read_role", label: "읽기 권한", type: "select", options: ROLE_OPTIONS, inList: true },

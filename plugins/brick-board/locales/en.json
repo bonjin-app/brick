@@ -158,5 +158,9 @@
   "mail.newPostSubject": "[{board}] New post: {title}",
   "mail.newPostBody": "A new post was published in {board}.\n\nTitle: {title}\nAuthor: {author}\n\n{url}",
   "mail.commentSubject": "[{board}] New comment on your post: {title}",
-  "mail.commentBody": "{author} commented on \"{title}\".\n\n{excerpt}\n\n{url}"
+  "mail.commentBody": "{author} commented on \"{title}\".\n\n{excerpt}\n\n{url}",
+  "write.links": "Related links",
+  "write.linksHint": "Up to 2, starting with http(s)://",
+  "detail.links": "Related links",
+  "index.ungrouped": "Other boards"
 }

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { PluginContext } from "@brick/plugin-sdk";
-import { escapeHtml, hasRole, shortDate, type BoardRow, type Db } from "./types.js";
+import { effectiveReadRole, escapeHtml, hasRole, shortDate, type BoardRow, type Db } from "./types.js";
 import { BOARD_CSS, BOARD_SCRIPT } from "./client-script.js";
 import { renderDetail, renderList, renderWrite, resolveView } from "./views.js";
 import { bindI18n, t } from "./i18n.js";
@@ -20,17 +20,21 @@ export function registerBoardBlocks(pluginCtx: PluginContext, db: Db): void {
   async function findBoard(slug: string): Promise<BoardRow | null> {
     if (!slug) return null;
     const { rows } = await db.execute(sql`
-      SELECT id, slug, title, description, read_role, write_role, comment_role, download_role,
-             categories, page_size, allow_reply, allow_secret, allow_vote, allow_upload,
-             max_files, write_interval, list_style, notify_email, notify_comment
-      FROM board_boards WHERE slug = ${slug} AND is_visible = true LIMIT 1
+      SELECT b.id, b.slug, b.title, b.description, b.read_role, b.write_role, b.comment_role, b.download_role,
+             b.categories, b.page_size, b.allow_reply, b.allow_secret, b.allow_vote, b.allow_upload,
+             b.max_files, b.write_interval, b.list_style, b.notify_email, b.notify_comment,
+             b.group_id, g.title AS group_title, g.read_role AS group_read_role
+      FROM board_boards b LEFT JOIN board_groups g ON g.id = b.group_id
+      WHERE b.slug = ${slug} AND b.is_visible = true LIMIT 1
     `);
     const row = rows[0];
     if (!row) return null;
     return {
       ...(row as unknown as BoardRow),
       categories: Array.isArray(row.categories) ? (row.categories as string[]) : [],
-    };
+      // 그룹 권한과 합친 실효 읽기 권한 — 이후의 모든 검사가 이 값을 쓴다
+      read_role: effectiveReadRole(row.read_role, row.group_read_role),
+      };
   }
 
   // ── 게시판 (목록 · 상세 · 글쓰기를 URL로 전환) ──────
@@ -76,7 +80,7 @@ export function registerBoardBlocks(pluginCtx: PluginContext, db: Db): void {
         tail = segments.slice(1).join("/");
         if (!slug) {
           // /board 루트 — 게시판 목록을 보여준다 (빈 화면보다 낫다)
-          return renderBoardIndex(db);
+          return renderBoardIndex(db, ctx.user);
         }
       }
       const board = await findBoard(slug);
@@ -121,23 +125,50 @@ export function registerBoardBlocks(pluginCtx: PluginContext, db: Db): void {
   });
 
   /** /board 루트 — 열람 가능한 게시판 목록 */
-  async function renderBoardIndex(database: Db): Promise<string> {
+  async function renderBoardIndex(database: Db, viewer: { id: string; role: string } | null): Promise<string> {
     const { rows } = await database.execute(sql`
-      SELECT slug, title, description FROM board_boards ORDER BY title
+      SELECT b.slug, b.title, b.description, b.read_role, g.title AS group_title, g.read_role AS group_read_role,
+             g.sort_order AS group_order
+      FROM board_boards b LEFT JOIN board_groups g ON g.id = b.group_id
+      WHERE b.is_visible = true
+      ORDER BY g.sort_order NULLS LAST, g.title NULLS LAST, b.sort_order, b.title
     `);
-    if (!rows.length) {
+    // 읽을 수 없는 게시판(그룹 권한 포함)은 목록에서 감춘다
+    const visible = rows.filter((b) => hasRole(viewer, effectiveReadRole(b.read_role, b.group_read_role)));
+    if (!visible.length) {
       return `<div class="brick-board"><p class="brick-board-empty">${escapeHtml(t("index.empty"))}</p></div>${BOARD_CSS}`;
     }
-    const items = rows
-      .map((b) => `<a class="brick-board-index-item" href="/board/${encodeURIComponent(String(b.slug))}">
+    /**
+     * 그룹별 소제목 — 그룹이 하나도 없으면 소제목 없이 그린다(그룹을 안 쓰는 사이트에
+     * "기타"라는 제목이 뜨면 이상하다). 그룹이 있으면 그룹 없는 게시판은 마지막에 묶는다.
+     */
+    const item = (b: Record<string, unknown>) => `<a class="brick-board-index-item" href="/board/${encodeURIComponent(String(b.slug))}">
   <strong>${escapeHtml(b.title)}</strong>
   ${b.description ? `<span>${escapeHtml(b.description)}</span>` : ""}
-</a>`)
-      .join("");
-    return `<div class="brick-board"><div class="brick-board-index">${items}</div></div>
+</a>`;
+    const anyGroup = visible.some((b) => b.group_title);
+    let body: string;
+    if (!anyGroup) {
+      body = `<div class="brick-board-index">${visible.map(item).join("")}</div>`;
+    } else {
+      const groups = new Map<string, Record<string, unknown>[]>();
+      for (const b of visible) {
+        const key = b.group_title ? String(b.group_title) : "";
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key)!.push(b);
+      }
+      body = [...groups.entries()]
+        .sort(([a], [b]) => (a === "" ? 1 : b === "" ? -1 : 0))
+        .map(([title, list]) => `<section class="brick-board-group">
+  <h2>${escapeHtml(title || t("index.ungrouped"))}</h2>
+  <div class="brick-board-index">${list.map(item).join("")}</div>
+</section>`).join("");
+    }
+    return `<div class="brick-board">${body}</div>
 <style>.brick-board-index{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
 .brick-board-index-item{display:block;padding:16px;border:1px solid var(--brick-border,#e5e5ea);border-radius:10px;text-decoration:none;color:inherit}
-.brick-board-index-item span{display:block;color:var(--color-muted, #6c6c7a);font-size:13px;margin-top:4px}</style>${BOARD_CSS}`;
+.brick-board-index-item span{display:block;color:var(--color-muted, #6c6c7a);font-size:13px;margin-top:4px}
+.brick-board-group{margin:0 0 28px}.brick-board-group h2{font-size:17px;margin:0 0 10px;letter-spacing:-.3px}</style>${BOARD_CSS}`;
   }
 
   // ── 게시판 목록 (카드) ─────────────────────────────
@@ -146,12 +177,13 @@ export function registerBoardBlocks(pluginCtx: PluginContext, db: Db): void {
     displayName: "게시판 목록",
     render: async (_props, ctx) => {
       const { rows } = await db.execute(sql`
-        SELECT slug, title, description, read_role,
+        SELECT b.slug, b.title, b.description, b.read_role, g.read_role AS group_read_role,
                (SELECT count(*) FROM board_posts p WHERE p.board_id = b.id) AS n
-        FROM board_boards b WHERE is_visible = true ORDER BY sort_order, title
+        FROM board_boards b LEFT JOIN board_groups g ON g.id = b.group_id
+        WHERE b.is_visible = true ORDER BY g.sort_order NULLS LAST, b.sort_order, b.title
       `);
-      // 읽을 수 없는 게시판은 목록에서 감춘다
-      const visible = rows.filter((b) => hasRole(ctx.user, String(b.read_role)));
+      // 읽을 수 없는 게시판(그룹 권한 포함)은 목록에서 감춘다
+      const visible = rows.filter((b) => hasRole(ctx.user, effectiveReadRole(b.read_role, b.group_read_role)));
       if (!visible.length) return `<p class="brick-board-empty">${escapeHtml(t("cards.empty"))}</p>${BOARD_CSS}`;
 
       const items = visible

@@ -393,6 +393,42 @@ contains "선택 삭제 2건" "$DL" '"affected":2'
 check "지운 글은 404" "$(code "$BD/posts/$GP1")" "404"
 contains "게시글 리소스가 일괄 작업을 선언한다" "$(curl -s -b "$ADMIN" "$API/api/admin/resources/brick-board/posts")" '"bulkActions"'
 
+echo "── 게시판 그룹 · 그룹 권한 · 링크 필드 (M25)"
+GRP="$(curl -s -b "$ADMIN" -X POST "$BD/admin/groups" -H 'content-type: application/json' -d '{"slug":"staff","title":"운영진 공간","read_role":"member","sort_order":1}')"
+GID="$(echo "$GRP" | jf "['id']")"
+[[ -n "$GID" ]] && ok "그룹 생성" || bad "그룹 생성 실패 ($GRP)"
+check "그룹 slug 중복은 409" "$(code -b "$ADMIN" -X POST "$BD/admin/groups" -H 'content-type: application/json' -d '{"slug":"staff","title":"x"}')" "409"
+check "비관리자 그룹 생성 차단" "$(code -X POST "$BD/admin/groups" -H 'content-type: application/json' -d '{"slug":"g2","title":"x"}')" "403"
+contains "그룹 선택지" "$(curl -s -b "$ADMIN" "$BD/admin/groups/options")" '"label":"운영진 공간"'
+# 공개(guest) 게시판 gal 을 회원 그룹에 넣으면 비회원은 못 읽는다 — 그룹 권한이 더 엄격
+curl -s -b "$ADMIN" -X PUT "$BD/admin/boards/$GAL_ID" -H 'content-type: application/json' \
+  -d '{"slug":"gal","title":"갤러리","list_style":"gallery","read_role":"guest","write_role":"guest","comment_role":"guest","allow_upload":true,"write_interval":0,"group_id":"'"$GID"'"}' -o /dev/null
+check "그룹 권한(회원)이 게시판 권한(누구나)보다 세다 — 비회원 401" "$(code "$BD/boards/gal/posts")" "401"
+check "회원은 읽는다" "$(code -b "$ADMIN" "$BD/boards/gal/posts")" "200"
+absent "비회원 공개 목록에서 감춰진다" "$(curl -s "$BD/boards")" '"slug":"gal"'
+contains "회원 목록에는 그룹 이름과 함께" "$(curl -s -b "$ADMIN" "$BD/boards")" '"group_title":"운영진 공간"'
+IDX_GUEST="$(render_html "board")"
+absent "/board 목록에서도 비회원에게 감춘다" "$IDX_GUEST" 'href="/board/gal"'
+contains "그룹이 있으면 소제목으로 묶인다(회원 화면은 로그인 렌더라 API 로 본다)" "$(curl -s -b "$ADMIN" "$BD/boards")" '"group_slug":"staff"'
+absent "사이트맵은 그룹 권한도 본다" "$(curl -s "$API/sitemap.xml" 2>/dev/null || curl -s "$API/api/sitemap.xml")" "/board/gal/"
+check "그룹 삭제" "$(code -b "$ADMIN" -X DELETE "$BD/admin/groups/$GID")" "200"
+check "그룹을 지워도 게시판은 남고 다시 공개된다" "$(code "$BD/boards/gal/posts")" "200"
+
+cat > "$TMP/lk.json" <<'JSON'
+{"title":"링크 있는 글","content":"<p>참고</p>","links":["https://example.test/ref","javascript:alert(1)"],"guestName":"손님","guestPassword":"pass1234"}
+JSON
+check "javascript: 링크는 거부(400)" "$(code -X POST "$BD/boards/gal/posts" -H 'content-type: application/json' --data-binary "@$TMP/lk.json")" "400"
+cat > "$TMP/lk2.json" <<'JSON'
+{"title":"링크 있는 글","content":"<p>참고</p>","links":["https://example.test/ref","https://example.test/two","https://example.test/three"],"guestName":"손님","guestPassword":"pass1234"}
+JSON
+LK="$(curl -s -X POST "$BD/boards/gal/posts" -H 'content-type: application/json' --data-binary "@$TMP/lk2.json" | jf "['id']")"
+[[ -n "$LK" ]] && ok "링크 2개 글 작성" || bad "링크 글 작성 실패"
+LKH="$(render_html "board/gal/$LK")"
+contains "상세에 링크 목록" "$LKH" 'class="brick-post-links"'
+contains "링크는 새 창 + nofollow" "$LKH" 'href="https://example.test/ref" target="_blank" rel="nofollow noopener"'
+absent "세 번째 링크는 잘린다(최대 2개)" "$LKH" "example.test/three"
+contains "수정 화면에 기존 링크가 채워진다" "$(render_html "board/gal/$LK/edit")" 'name="link1" placeholder="https://" value="https://example.test/ref"'
+
 echo "── 삭제 (첨부 정리)"
 check "비관리자 관리 목록 차단" "$(code -b "$MEMBER" "$BD/admin/posts")" "403"
 contains "관리자 글 목록" "$(curl -s -b "$ADMIN" "$BD/admin/posts")" '"total"'

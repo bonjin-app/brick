@@ -1,13 +1,13 @@
 import { definePlugin, searchExcerpt, isUniqueViolation, rawResponse, SITE_TZ } from "@brick/plugin-sdk";
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
-import { BoardError, asListStyle, escapeHtml, hasRole, pgArray, rankOf, type Db, type SessionUser } from "./types.js";
+import { BoardError, asListStyle, effectiveReadRole, escapeHtml, hasRole, pgArray, rankOf, type Db, type SessionUser } from "./types.js";
 import { hashGuestPassword } from "./guest.js";
 import { assertCanModify, canReadSecret, checkWriteInterval, loadBoard, requireRole } from "./access.js";
 import { attachFiles, claimDownload, deleteAttachments, listAttachments } from "./attachments.js";
-import { createPost, listPosts, refreshThumb, type WritePostInput } from "./posts.js";
+import { createPost, listPosts, normalizeLinks, refreshThumb, type WritePostInput } from "./posts.js";
 import { sanitizeHtml, toPlainText } from "./sanitize.js";
-import { BOARD_RESOURCE, POST_RESOURCE } from "./admin-resources.js";
+import { BOARD_RESOURCE, GROUP_RESOURCE, POST_RESOURCE } from "./admin-resources.js";
 import { registerBoardBlocks } from "./blocks.js";
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,50}$/;
@@ -58,12 +58,16 @@ export default definePlugin(async (ctx) => {
   ctx.registerRoute("GET", "/boards", async (req) => {
     const user = userOf(req);
     const { rows } = await db.execute(sql`
-      SELECT slug, title, description, read_role, write_role, categories,
+      SELECT b.slug, b.title, b.description, b.read_role, b.write_role, b.categories,
+             g.slug AS group_slug, g.title AS group_title, g.read_role AS group_read_role,
              (SELECT count(*) FROM board_posts p WHERE p.board_id = b.id) AS post_count
-      FROM board_boards b WHERE is_visible = true ORDER BY sort_order, title
+      FROM board_boards b LEFT JOIN board_groups g ON g.id = b.group_id
+      WHERE b.is_visible = true ORDER BY g.sort_order NULLS LAST, b.sort_order, b.title
     `);
-    // 읽을 수 없는 게시판은 목록에서 감춘다
-    return rows.filter((b) => hasRole(user, String(b.read_role)));
+    // 읽을 수 없는 게시판(그룹 권한 포함)은 목록에서 감춘다
+    return rows
+      .filter((b) => hasRole(user, effectiveReadRole(b.read_role, b.group_read_role)))
+      .map(({ group_read_role, ...b }) => ({ ...b, read_role: effectiveReadRole(b.read_role, group_read_role) }));
   });
 
   /** 글 목록 */
@@ -216,9 +220,11 @@ export default definePlugin(async (ctx) => {
       throw new BoardError(400, `허용되지 않는 분류입니다: ${category}`);
     }
 
+    const links = body.links === undefined ? null : normalizeLinks(body.links);
     await db.execute(sql`
       UPDATE board_posts SET title = ${title}, content = ${content}, category = ${category},
-        is_secret = ${Boolean(body.isSecret) && Boolean(post.allow_secret)}, updated_at = now()
+        is_secret = ${Boolean(body.isSecret) && Boolean(post.allow_secret)}, updated_at = now(),
+        links = COALESCE(${links === null ? null : JSON.stringify(links)}::jsonb, links)
       WHERE id = ${req.params.id}::uuid
     `);
     await refreshThumb(db, ctx.storage, req.params.id, content);
@@ -597,7 +603,7 @@ ${items}
       SELECT id, slug, title, description, read_role, write_role, comment_role, download_role,
              categories, page_size, allow_reply, allow_secret, allow_vote, allow_upload,
              max_files, write_interval, sort_order, is_visible,
-             list_style, notify_email, notify_comment,
+             list_style, notify_email, notify_comment, group_id,
              (SELECT count(*) FROM board_posts p WHERE p.board_id = b.id) AS post_count
       FROM board_boards b ORDER BY sort_order, title
     `);
@@ -666,6 +672,7 @@ ${items}
         return e.slice(0, 255);
       })(),
       notifyComment: b.notify_comment !== false,
+      groupId: /^[0-9a-f-]{36}$/i.test(String(b.group_id ?? "")) ? String(b.group_id) : null,
     };
   };
 
@@ -679,13 +686,13 @@ ${items}
           id, slug, title, description, read_role, write_role, comment_role, download_role,
           categories, page_size, allow_reply, allow_secret, allow_vote, allow_upload,
           max_files, write_interval, sort_order, is_visible,
-          list_style, notify_email, notify_comment
+          list_style, notify_email, notify_comment, group_id
         ) VALUES (
           ${id}, ${v.slug}, ${v.title}, ${v.description}, ${v.readRole}, ${v.writeRole},
           ${v.commentRole}, ${v.downloadRole}, ${JSON.stringify(v.categories)}::jsonb, ${v.pageSize},
           ${v.allowReply}, ${v.allowSecret}, ${v.allowVote}, ${v.allowUpload},
           ${v.maxFiles}, ${v.writeInterval}, ${v.sortOrder}, ${v.isVisible},
-          ${v.listStyle}, ${v.notifyEmail}, ${v.notifyComment}
+          ${v.listStyle}, ${v.notifyEmail}, ${v.notifyComment}, ${v.groupId}::uuid
         )
       `);
     } catch (err) {
@@ -712,7 +719,8 @@ ${items}
           allow_vote = ${v.allowVote}, allow_upload = ${v.allowUpload},
           max_files = ${v.maxFiles}, write_interval = ${v.writeInterval},
           sort_order = ${v.sortOrder}, is_visible = ${v.isVisible},
-          list_style = ${v.listStyle}, notify_email = ${v.notifyEmail}, notify_comment = ${v.notifyComment}
+          list_style = ${v.listStyle}, notify_email = ${v.notifyEmail}, notify_comment = ${v.notifyComment},
+          group_id = ${v.groupId}::uuid
         WHERE id = ${req.params.id}::uuid RETURNING id
       `);
       if (!rows.length) throw new BoardError(404, "게시판을 찾을 수 없습니다.");
@@ -752,6 +760,68 @@ ${items}
     `);
     const { rows: cnt } = await db.execute(sql`SELECT count(*) AS n FROM board_posts`);
     return { items: rows, total: Number(cnt[0]?.n ?? 0), page, pageSize: 30 };
+  });
+
+  // ── 게시판 그룹 (관리) ──────────────────────────────
+  ctx.registerRoute("GET", "/admin/groups/options", async (req) => {
+    requireManager(req);
+    const { rows } = await db.execute(sql`SELECT id, title FROM board_groups ORDER BY sort_order, title`);
+    return rows.map((r) => ({ value: String(r.id), label: String(r.title) }));
+  });
+  ctx.registerRoute("GET", "/admin/groups", async (req) => {
+    requireManager(req);
+    const { rows } = await db.execute(sql`
+      SELECT g.id, g.slug, g.title, g.description, g.read_role, g.sort_order,
+             (SELECT count(*) FROM board_boards b WHERE b.group_id = g.id) AS board_count
+      FROM board_groups g ORDER BY g.sort_order, g.title
+    `);
+    return { items: rows, total: rows.length };
+  });
+  const parseGroup = (g: Record<string, unknown>) => {
+    const slug = String(g.slug ?? "").trim();
+    if (!SLUG_RE.test(slug)) throw new BoardError(400, "주소(slug)는 영문 소문자/숫자/하이픈 2~50자로 입력해주세요.");
+    const title = String(g.title ?? "").trim().slice(0, 200);
+    if (!title) throw new BoardError(400, "그룹 이름을 입력해주세요.");
+    const role = String(g.read_role ?? "guest");
+    if (!["guest", "member", "manager", "admin"].includes(role)) throw new BoardError(400, `알 수 없는 권한입니다: ${role}`);
+    const order = Math.floor(Number(g.sort_order ?? 0));
+    return { slug, title, description: String(g.description ?? "").trim() || null, readRole: role,
+             sortOrder: Number.isFinite(order) ? order : 0 };
+  };
+  ctx.registerRoute("POST", "/admin/groups", async (req) => {
+    requireManager(req);
+    const v = parseGroup(req.body as Record<string, unknown>);
+    const id = uuidv7();
+    try {
+      await db.execute(sql`
+        INSERT INTO board_groups (id, slug, title, description, read_role, sort_order)
+        VALUES (${id}, ${v.slug}, ${v.title}, ${v.description}, ${v.readRole}, ${v.sortOrder})
+      `);
+    } catch (err) {
+      if (isUniqueViolation(err, "board_groups_slug")) throw new BoardError(409, `이미 사용 중인 주소입니다: ${v.slug}`);
+      throw err;
+    }
+    await ctx.cache.invalidateTag("pages");
+    return { id };
+  });
+  ctx.registerRoute("PUT", "/admin/groups/:id", async (req) => {
+    requireManager(req);
+    const v = parseGroup(req.body as Record<string, unknown>);
+    const { rows } = await db.execute(sql`
+      UPDATE board_groups SET slug = ${v.slug}, title = ${v.title}, description = ${v.description},
+        read_role = ${v.readRole}, sort_order = ${v.sortOrder}
+      WHERE id = ${req.params.id}::uuid RETURNING id
+    `);
+    if (!rows.length) throw new BoardError(404, "그룹을 찾을 수 없습니다.");
+    await ctx.cache.invalidateTag("pages");
+    return { ok: true };
+  });
+  /** 그룹 삭제 — 게시판은 남는다(group_id 가 NULL 로). 그룹을 지웠다고 글이 사라지면 안 된다 */
+  ctx.registerRoute("DELETE", "/admin/groups/:id", async (req) => {
+    requireManager(req);
+    await db.execute(sql`DELETE FROM board_groups WHERE id = ${req.params.id}::uuid`);
+    await ctx.cache.invalidateTag("pages");
+    return { ok: true };
   });
 
   /** 관리 화면의 이동/복사 대상 선택지 */
@@ -803,10 +873,10 @@ ${items}
             const newId = uuidv7();
             const { rows } = await tx.execute(sql`
               INSERT INTO board_posts (id, board_id, author_id, author_name, title, content, category,
-                is_notice, is_secret, thread_id, thread_created_at, thread_path, depth, author_ip, thumb_url, created_at)
+                is_notice, is_secret, thread_id, thread_created_at, thread_path, depth, author_ip, thumb_url, links, created_at)
               SELECT ${newId}, ${target}::uuid, author_id, author_name, title, content,
                 CASE WHEN category = ANY(${pgArray(targetCats)}::text[]) THEN category ELSE NULL END,
-                false, is_secret, ${newId}::uuid, now(), '', 0, author_ip, thumb_url, now()
+                false, is_secret, ${newId}::uuid, now(), '', 0, author_ip, thumb_url, links, now()
               FROM board_posts WHERE id = ${id}::uuid RETURNING id
             `);
             affected += rows.length;
@@ -834,6 +904,7 @@ ${items}
   });
 
   // ════════════════════════════════════════════════════
+  ctx.registerAdminResource(GROUP_RESOURCE);
   ctx.registerAdminResource(BOARD_RESOURCE);
   ctx.registerAdminResource(POST_RESOURCE);
   /**
@@ -949,18 +1020,22 @@ ${items}
     async list({ query, limit }) {
       const like = `%${query.replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
       const { rows } = await db.execute(sql`
-        SELECT slug, title, read_role FROM board_boards
-        ${query ? sql`WHERE title ILIKE ${like} OR slug ILIKE ${like}` : sql``}
-        ORDER BY title
+        SELECT b.slug, b.title, b.read_role, g.read_role AS group_read_role FROM board_boards b
+        LEFT JOIN board_groups g ON g.id = b.group_id
+        ${query ? sql`WHERE b.title ILIKE ${like} OR b.slug ILIKE ${like}` : sql``}
+        ORDER BY b.title
         LIMIT ${limit}
       `);
-      return rows.map((r) => ({
-        path: `/board/${String(r.slug)}`,
-        label: String(r.title),
-        // 비공개 게시판을 메뉴에 넣으면 손님이 눌러서 권한 오류를 본다.
-        // 막지는 않는다(운영진 메뉴를 따로 두는 경우가 있다) — 알려준다.
-        hint: String(r.read_role) === "guest" ? null : `${String(r.read_role)} 이상만 읽을 수 있음`,
-      }));
+      return rows.map((r) => {
+        const role = effectiveReadRole(r.read_role, r.group_read_role);
+        return {
+          path: `/board/${String(r.slug)}`,
+          label: String(r.title),
+          // 비공개 게시판을 메뉴에 넣으면 손님이 눌러서 권한 오류를 본다.
+          // 막지는 않는다(운영진 메뉴를 따로 두는 경우가 있다) — 알려준다.
+          hint: role === "guest" ? null : `${role} 이상만 읽을 수 있음`,
+        };
+      });
     },
   });
 
@@ -1002,7 +1077,8 @@ ${items}
       const { rows } = await db.execute(sql`
         SELECT count(*) AS n FROM board_posts p
         JOIN board_boards b ON b.id = p.board_id
-        WHERE p.is_secret = false AND b.read_role = 'guest'
+        LEFT JOIN board_groups g ON g.id = b.group_id
+        WHERE p.is_secret = false AND b.read_role = 'guest' AND coalesce(g.read_role, 'guest') = 'guest'
       `);
       return Number(rows[0]?.n ?? 0);
     },

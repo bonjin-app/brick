@@ -69,6 +69,18 @@ export interface BoardRow {
   notify_email: string | null;
   /** 댓글이 달리면 원글 작성자에게 메일 */
   notify_comment: boolean;
+  /** 소속 그룹 (없으면 null). read_role 은 이미 그룹과 합쳐진 실효 권한이다 */
+  group_id?: string | null;
+  group_title?: string | null;
+}
+
+/**
+ * 실효 읽기 권한 — 게시판과 그룹 중 더 엄격한 쪽.
+ * 그룹을 "회원"으로 두면 안의 게시판이 "누구나"여도 회원만 읽는다(그누보드의 그룹 권한).
+ */
+export function effectiveReadRole(boardRole: unknown, groupRole: unknown): string {
+  const b = String(boardRole ?? "guest"), g = String(groupRole ?? "guest");
+  return rankOf(b) >= rankOf(g) ? b : g;
 }
 
 export const LIST_STYLES = ["basic", "gallery", "webzine"] as const;

@@ -231,6 +231,7 @@ export const BOARD_SCRIPT = `
       if (fd.get('guestName')) payload.guestName = fd.get('guestName');
       if (fd.get('guestPassword')) payload.guestPassword = fd.get('guestPassword');
       if (replyTo) payload.replyTo = replyTo;
+      payload.links = [fd.get('link1') || '', fd.get('link2') || ''].filter(function (x) { return String(x).trim(); });
       Object.keys(cap.fields).forEach(function (k) { payload[k] = cap.fields[k]; });
 
       submitBtn.disabled = true;
@@ -606,6 +607,11 @@ export const BOARD_CSS = `
 .brick-main .brick-profile-card .brick-profile-close:hover{background:var(--color-bg-soft, #f6f6f9);color:var(--color-text, #17171c);border:0}
 .brick-profile-loading{color:var(--color-muted, #6c6c7a)}
 .brick-post-meta .brick-author{margin-right:2px}
+/* ── 링크 필드 ─────────────────────────────────── */
+.brick-links-field input{display:block;width:100%;margin-top:6px}
+.brick-post-links{list-style:none;padding:12px 14px;margin:6px 0 16px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 10px);background:var(--color-bg-soft, #f6f6f9);display:flex;flex-direction:column;gap:6px}
+.brick-post-links li::before{content:"\\1F517";margin-right:8px;font-size:12px}
+.brick-post-links a{word-break:break-all;color:var(--color-primary-text, #b63a2e)}
 /* ── 목록 스킨: 갤러리 · 웹진 ─────────────────────── */
 .brick-gallery-grid{display:grid;gap:18px;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));margin:14px 0 4px}
 .brick-gallery-item{display:flex;flex-direction:column;gap:8px;text-decoration:none;color:inherit;min-width:0}

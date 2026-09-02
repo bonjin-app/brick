@@ -118,5 +118,9 @@
   "mail.newPostSubject": "[{board}] 새 글: {title}",
   "mail.newPostBody": "{board} 게시판에 새 글이 등록되었습니다.\n\n제목: {title}\n작성자: {author}\n\n{url}",
   "mail.commentSubject": "[{board}] 내 글에 댓글이 달렸습니다: {title}",
-  "mail.commentBody": "{author} 님이 \"{title}\" 글에 댓글을 남겼습니다.\n\n{excerpt}\n\n{url}"
+  "mail.commentBody": "{author} 님이 \"{title}\" 글에 댓글을 남겼습니다.\n\n{excerpt}\n\n{url}",
+  "write.links": "관련 링크",
+  "write.linksHint": "최대 2개, http(s):// 로 시작",
+  "detail.links": "관련 링크",
+  "index.ungrouped": "기타 게시판"
 }
