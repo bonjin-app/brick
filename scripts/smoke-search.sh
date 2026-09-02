@@ -208,6 +208,17 @@ d=json.load(sys.stdin)
 print(d['groups'][0]['total'])")" "2"
 contains "가격을 함께 보여준다" "$PROD" "10,000원"
 
+echo "── 색인은 글이지 블록 CSS 가 아니다"
+# 게시판 블록은 자기 CSS 를 <style> 로 함께 내놓는다. 태그만 벗겨 색인하면 "border-radius" 로
+# 페이지가 검색되고 발췌문에 CSS 가 찍힌다 — 실제로 그랬다.
+printf '{"slug":"yellow-umbrella","title":"노란우산 분실물 안내","status":"published","blocks":[{"block":"brick-board/board","props":{"board":"open"}}]}' > "$TMP/css-page.json"
+curl -s -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' --data-binary "@$TMP/css-page.json" -o /dev/null
+check "제목으로는 찾는다" "$(srch - "노란우산" --data-urlencode "scope=pages" | jq_get "['total']")" "1"
+check "블록 CSS 원문(border-radius)으로는 페이지가 나오지 않는다" "$(srch - "border-radius" --data-urlencode "scope=pages" | jq_get "['total']")" "0"
+check "CSS 선택자(.brick-board)로도 나오지 않는다" "$(srch - ".brick-board" --data-urlencode "scope=pages" | jq_get "['total']")" "0"
+PLAIN="$(psql_q "SELECT plain_text FROM pages WHERE slug='yellow-umbrella'")"
+absent "색인 본문에 중괄호(CSS)가 없다" "$PLAIN" "{"
+
 echo "── 분류를 지정하면 그것만 검색한다"
 ONLY_POSTS="$(srch - "우산" --data-urlencode "scope=posts")"
 check "게시글 그룹만" "$(echo "$ONLY_POSTS" | python3 -c "

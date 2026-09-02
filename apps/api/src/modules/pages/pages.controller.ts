@@ -180,8 +180,20 @@ export class PagesController {
   }
 
   /** FTS 색인용 텍스트 — 블록을 렌더한 뒤 태그를 벗겨 저장 */
+  /**
+   * 검색 색인용 본문. 블록은 자기 CSS 를 <style> 로 함께 내놓으므로(게시판·상점 블록)
+   * 태그만 벗기면 CSS 원문이 색인되어 "border-radius" 로 페이지가 검색되고 발췌문에 CSS 가 찍힌다.
+   * style/script/template 은 내용까지 지우고, 자주 나오는 엔티티는 글자로 되돌린다.
+   */
   private async toPlainText(blocks: BlockNode[]): Promise<string> {
     const html = await this.renderer.renderNodes(blocks);
-    return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 10000);
+    return html
+      .replace(/<(style|script|template|noscript)\b[^>]*>[\s\S]*?<\/\1>/gi, " ")
+      .replace(/<!--[\s\S]*?-->/g, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 10000);
   }
 }
