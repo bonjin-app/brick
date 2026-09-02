@@ -10,6 +10,7 @@ import type { CacheProvider, HookBus } from "@brick/core";
 import { AVAILABLE_LOCALES, normalizeLocale } from "@brick/core";
 import { AdminGuard } from "../auth/auth.guard.js";
 import { ipAllowed, parseAllowlist } from "../auth/ip-allowlist.js";
+import { ModerationService } from "../moderation/moderation.service.js";
 import { AuditService } from "../audit/audit.service.js";
 import { CACHE, DB, HOOKS } from "../../runtime.module.js";
 import {
@@ -44,6 +45,11 @@ const EDITABLE_SETTINGS: Record<string, "string" | "boolean"> = {
   // 닉네임(표시 이름) 변경 주기(일). "0" 이면 제한 없음. 그누보드의 닉네임 변경 제한 —
   // 이름을 자주 바꿔 글의 책임을 흐리는 것을 막는다. 숫자 검증은 읽는 쪽(users.controller)이 한다.
   "member.nick_change_days": "string",
+  // 모더레이션 (그누보드 기본 설정 동등성) — 줄바꿈/쉼표 구분 목록
+  "moderation.banned_words": "string",         // 글·댓글·쪽지·이름에 못 쓰는 단어
+  "moderation.denied_names": "string",         // 닉네임 금지 목록 (기본: admin·관리자·운영자 등은 항상)
+  "moderation.denied_email_domains": "string", // 가입 금지 이메일 도메인
+  "security.blocked_ips": "string",            // 접속 차단 IP (IPv4·CIDR·IPv6). 저장 시 자기잠금을 막는다
 };
 
 /** 사업자정보를 담는 설정 키 (단일 JSON) */
@@ -56,6 +62,7 @@ export class SiteController {
     @Inject(CACHE) private readonly cache: CacheProvider,
     @Inject(HOOKS) private readonly hooks: HookBus,
     private readonly audit: AuditService,
+    private readonly moderation: ModerationService,
   ) {}
 
   /** 사이트 언어 — **공개**. 로그인·가입 화면이 첫 페인트에 쓴다 */
@@ -178,11 +185,23 @@ export class SiteController {
           );
         }
       }
+      // 접속 차단 IP — 형식과 **자기잠금**을 저장 시점에 막는다. 지금 접속한 IP 를 차단하면
+      // 저장하는 순간 관리자 자신이 403 을 본다.
+      if (key === "security.blocked_ips" && String(value).trim() !== "") {
+        const parsed = parseAllowlist(String(value));
+        if (parsed.invalid.length) {
+          throw new BadRequestException(`IP 형식이 올바르지 않습니다: ${parsed.invalid.join(", ")}`);
+        }
+        if (ipAllowed(req.ip, String(value))) {
+          throw new BadRequestException(`지금 접속한 IP(${req.ip})가 차단 목록에 있습니다 — 저장하면 스스로 차단됩니다.`);
+        }
+      }
       await this.db
         .insert(siteSettings)
         .values({ key, value: value as never })
         .onConflictDoUpdate({ target: siteSettings.key, set: { value: value as never, updatedAt: new Date() } });
     }
+    this.moderation.invalidate(); // 금지 단어·차단 IP 는 다음 요청부터 바로
     await this.cache.invalidateTag("pages"); // 사이트명 등이 모든 페이지에 렌더된다
     // 언어 등 설정 캐시를 가진 쪽(플러그인 로더)이 즉시 새로 읽게 알린다
     await this.hooks.doAction("site.settings_changed", { keys: Object.keys(body ?? {}) });

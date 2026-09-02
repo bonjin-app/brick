@@ -22,7 +22,7 @@ export function registerBoardBlocks(pluginCtx: PluginContext, db: Db): void {
     const { rows } = await db.execute(sql`
       SELECT b.id, b.slug, b.title, b.description, b.read_role, b.write_role, b.comment_role, b.download_role,
              b.categories, b.page_size, b.allow_reply, b.allow_secret, b.allow_vote, b.allow_upload,
-             b.max_files, b.write_interval, b.list_style, b.notify_email, b.notify_comment,
+             b.max_files, b.write_interval, b.list_style, b.notify_email, b.notify_comment, b.category_required,
              b.group_id, g.title AS group_title, g.read_role AS group_read_role
       FROM board_boards b LEFT JOIN board_groups g ON g.id = b.group_id
       WHERE b.slug = ${slug} AND b.is_visible = true LIMIT 1

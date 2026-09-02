@@ -69,6 +69,8 @@ export interface BoardRow {
   notify_email: string | null;
   /** 댓글이 달리면 원글 작성자에게 메일 */
   notify_comment: boolean;
+  /** 분류가 있는 게시판에서 분류 선택을 강제한다 */
+  category_required?: boolean;
   /** 소속 그룹 (없으면 null). read_role 은 이미 그룹과 합쳐진 실효 권한이다 */
   group_id?: string | null;
   group_title?: string | null;

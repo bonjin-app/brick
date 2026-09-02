@@ -1,4 +1,5 @@
 import { Injectable, Inject, Logger, OnModuleInit } from "@nestjs/common";
+import { ModerationService } from "../moderation/moderation.service.js";
 import { readFile, readdir, mkdir, symlink, stat, lstat, rm, readlink, realpath } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, resolve, sep } from "node:path";
@@ -117,6 +118,7 @@ export class PluginLoaderService implements OnModuleInit {
     @Inject(MAIL) private readonly mail: MailProvider,
     @Inject(CAPTCHA) private readonly captcha: CaptchaProvider,
     @Inject(ENV) private readonly env: BrickEnv,
+    private readonly moderation: ModerationService,
   ) {}
 
   /**
@@ -465,6 +467,9 @@ export class PluginLoaderService implements OnModuleInit {
         log: (m: string) => this.logger.log(`[${pluginName}] ${m}`),
         warn: (m: string) => this.logger.warn(`[${pluginName}] ${m}`),
         error: (m: string) => this.logger.error(`[${pluginName}] ${m}`),
+      },
+      moderation: {
+        findBannedWord: (text: string) => this.moderation.findBannedWord(text),
       },
       site: {
         url: this.env.siteUrl,

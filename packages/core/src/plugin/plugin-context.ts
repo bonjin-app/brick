@@ -58,6 +58,15 @@ export interface PluginContext {
     error(message: string): void;
   };
 
+  /**
+   * 모더레이션 — 사이트 설정의 금지 단어 목록으로 본문을 검사한다.
+   * 글·댓글·쪽지처럼 손님이 쓰는 문자열은 저장 전에 한 번 통과시킨다. 걸린 단어를
+   * 돌려주므로 "사용할 수 없는 단어가 있습니다: ○○"처럼 알려줄 수 있다 — 무엇이
+   * 문제인지 모르는 400 은 고칠 수 없는 오류다.
+   */
+  readonly moderation: {
+    findBannedWord(text: string): Promise<string | null>;
+  };
   readonly site: {
     /** 후행 슬래시 없는 사이트 주소 */
     readonly url: string;

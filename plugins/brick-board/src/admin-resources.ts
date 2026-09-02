@@ -57,6 +57,8 @@ export const BOARD_RESOURCE: AdminResource = {
     { name: "comment_role", label: "댓글 권한", type: "select", options: ROLE_OPTIONS },
     { name: "download_role", label: "다운로드 권한", type: "select", options: ROLE_OPTIONS },
 
+    { name: "category_required", label: "분류 선택 필수", type: "boolean",
+      help: "분류가 있는 게시판에서 분류를 고르지 않으면 글을 올릴 수 없게 합니다." },
     { name: "categories", label: "분류", type: "text",
       help: "쉼표로 구분해 입력하세요. 예: 공지, 질문, 자유 — 비우면 분류를 쓰지 않습니다." },
     { name: "page_size", label: "페이지당 글 수", type: "number", help: "5~100" },

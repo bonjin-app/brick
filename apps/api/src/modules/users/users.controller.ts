@@ -17,6 +17,7 @@ import type { CaptchaProvider } from "@brick/core";
 import { AuditService } from "../audit/audit.service.js";
 import { CAPTCHA, DB, HOOKS, STORAGE } from "../../runtime.module.js";
 import type { StorageProvider } from "@brick/core";
+import { ModerationService } from "../moderation/moderation.service.js";
 import { extname } from "node:path";
 import { isUniqueViolation } from "@brick/core";
 import { AgreementsService } from "../members/agreements.service.js";
@@ -38,6 +39,7 @@ export class UsersController {
     private readonly agreements: AgreementsService,
     private readonly emailVerify: EmailVerifyService,
     @Inject(STORAGE) private readonly storage: StorageProvider,
+    private readonly moderation: ModerationService,
   ) {}
 
   /** 닉네임(표시 이름) 변경 주기(일). 설정이 없거나 이상하면 0 = 제한 없음 */
@@ -102,6 +104,11 @@ export class UsersController {
     if (displayName.length < 2 || displayName.length > 30) {
       throw new BadRequestException("이름은 2~30자로 입력하세요.");
     }
+    // 운영진 사칭 이름·금지 단어·가입 금지 도메인 (사이트 설정)
+    const nameProblem = await this.moderation.nameProblem(displayName);
+    if (nameProblem) throw new BadRequestException(nameProblem);
+    const emailProblem = await this.moderation.emailProblem(email);
+    if (emailProblem) throw new BadRequestException(emailProblem);
 
     // 만 14세 미만은 법정대리인 동의 절차 없이 가입시킬 수 없다.
     // 생년월일 전체를 받지 않는다 — 확인에 필요한 최소는 "14세 이상인가" 뿐이다.
@@ -194,6 +201,8 @@ export class UsersController {
     if (body.displayName !== undefined) {
       const name = body.displayName.trim();
       if (name.length < 2 || name.length > 30) throw new BadRequestException("이름은 2~30자로 입력하세요.");
+      const problem = await this.moderation.nameProblem(name);
+      if (problem) throw new BadRequestException(problem);
       const [cur] = await this.db
         .select({ displayName: users.displayName, changedAt: users.displayNameChangedAt })
         .from(users).where(eq(users.id, req.user.id)).limit(1);

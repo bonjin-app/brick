@@ -173,6 +173,8 @@ export default definePlugin(async (ctx) => {
     if (content.length > s.maxLength) {
       throw new MemoError(400, `쪽지는 ${s.maxLength}자까지 보낼 수 있습니다.`);
     }
+    const banned = await ctx.moderation.findBannedWord(content);
+    if (banned) throw new MemoError(400, `사용할 수 없는 단어가 있습니다: ${banned}`);
 
     // 수신자 확인 — 이메일 또는 id
     const { rows: receivers } = await db.execute(sql`

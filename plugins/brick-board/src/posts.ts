@@ -59,6 +59,9 @@ export async function createPost(
   if (category && board.categories.length && !board.categories.includes(category)) {
     throw new BoardError(400, `허용되지 않는 분류입니다: ${category}`);
   }
+  if (board.category_required && board.categories.length && !category) {
+    throw new BoardError(400, "분류를 선택해주세요.");
+  }
 
   // 공지는 관리자만
   const isNotice = Boolean(input.isNotice) && hasRole(user, "manager");

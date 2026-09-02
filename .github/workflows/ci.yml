@@ -119,6 +119,9 @@ jobs:
       - name: E2E 스모크 테스트 (테마 · 랜딩 · 화면 제목)
         run: bash scripts/smoke-theme.sh
 
+      - name: E2E 스모크 테스트 (모더레이션 · 금지 단어 · 차단 IP)
+        run: bash scripts/smoke-moderation.sh
+
       - name: E2E 스모크 테스트 (원클릭 업데이트 · 서명 검증)
         run: bash scripts/smoke-updates.sh
 

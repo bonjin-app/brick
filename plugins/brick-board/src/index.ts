@@ -27,6 +27,12 @@ export default definePlugin(async (ctx) => {
   /** 요청 IP — 코어가 프록시 헤더를 해석해 넣어준다 (도배 방지에 쓴다) */
   const ipOf = (req: { ip: string }): string | null => req.ip ?? null;
 
+  /** 금지 단어(사이트 설정) — 걸린 단어를 알려준다. 무엇이 문제인지 모르는 400 은 고칠 수 없다 */
+  const assertClean = async (text: string) => {
+    const hit = await ctx.moderation.findBannedWord(text);
+    if (hit) throw new BoardError(400, `사용할 수 없는 단어가 있습니다: ${hit}`);
+  };
+
   const requireManager = (req: { user: unknown }) => {
     if (!hasRole(userOf(req), "manager")) throw new BoardError(403, "관리자 권한이 필요합니다.");
   };
@@ -90,6 +96,7 @@ export default definePlugin(async (ctx) => {
     requireRole(user, board.write_role, "글쓰기");
     await requireCaptchaForGuest(user, req.body as never);
     await checkWriteInterval(db, board, user, ipOf(req));
+    await assertClean(`${String((req.body as WritePostInput).title ?? "")} ${String((req.body as WritePostInput).content ?? "")}`);
 
     const result = await createPost(db, {
       board,
@@ -199,7 +206,7 @@ export default definePlugin(async (ctx) => {
   ctx.registerRoute("PUT", "/posts/:id", async (req) => {
     const body = req.body as WritePostInput & { guestPassword?: string };
     const { rows } = await db.execute(sql`
-      SELECT p.id, p.author_id, p.guest_password, b.categories, b.allow_secret
+      SELECT p.id, p.author_id, p.guest_password, b.categories, b.allow_secret, b.category_required
       FROM board_posts p JOIN board_boards b ON b.id = p.board_id
       WHERE p.id = ${req.params.id}::uuid LIMIT 1
     `);
@@ -208,8 +215,9 @@ export default definePlugin(async (ctx) => {
     assertCanModify(post as never, userOf(req), body.guestPassword);
 
     const title = String(body.title ?? "").trim();
-    // 수정 경로에서도 새니타이즈를 빼먹으면 우회 통로가 된다
+    // 수정 경로에서도 새니타이즈를 빼먹으면 우회 통로가 된다 — 금지 단어도 같다
     const content = sanitizeHtml(String(body.content ?? "").trim());
+    await assertClean(`${title} ${content}`);
     if (!title || !content.replace(/<[^>]*>/g, "").trim()) {
       throw new BoardError(400, "제목과 내용을 입력해주세요.");
     }
@@ -219,6 +227,7 @@ export default definePlugin(async (ctx) => {
     if (category && cats.length && !cats.includes(category)) {
       throw new BoardError(400, `허용되지 않는 분류입니다: ${category}`);
     }
+    if (post.category_required === true && cats.length && !category) throw new BoardError(400, "분류를 선택해주세요.");
 
     const links = body.links === undefined ? null : normalizeLinks(body.links);
     await db.execute(sql`
@@ -351,6 +360,7 @@ export default definePlugin(async (ctx) => {
     const content = String(body.content ?? "").replace(/<[^>]*>/g, "").trim();
     if (!content) throw new BoardError(400, "댓글 내용을 입력해주세요.");
     if (content.length > 5000) throw new BoardError(400, "댓글이 너무 깁니다.");
+    await assertClean(content);
 
     let guestName: string | null = null;
     let guestHash: string | null = null;
@@ -603,7 +613,7 @@ ${items}
       SELECT id, slug, title, description, read_role, write_role, comment_role, download_role,
              categories, page_size, allow_reply, allow_secret, allow_vote, allow_upload,
              max_files, write_interval, sort_order, is_visible,
-             list_style, notify_email, notify_comment, group_id,
+             list_style, notify_email, notify_comment, group_id, category_required,
              (SELECT count(*) FROM board_posts p WHERE p.board_id = b.id) AS post_count
       FROM board_boards b ORDER BY sort_order, title
     `);
@@ -673,6 +683,7 @@ ${items}
       })(),
       notifyComment: b.notify_comment !== false,
       groupId: /^[0-9a-f-]{36}$/i.test(String(b.group_id ?? "")) ? String(b.group_id) : null,
+      categoryRequired: b.category_required === true,
     };
   };
 
@@ -686,13 +697,13 @@ ${items}
           id, slug, title, description, read_role, write_role, comment_role, download_role,
           categories, page_size, allow_reply, allow_secret, allow_vote, allow_upload,
           max_files, write_interval, sort_order, is_visible,
-          list_style, notify_email, notify_comment, group_id
+          list_style, notify_email, notify_comment, group_id, category_required
         ) VALUES (
           ${id}, ${v.slug}, ${v.title}, ${v.description}, ${v.readRole}, ${v.writeRole},
           ${v.commentRole}, ${v.downloadRole}, ${JSON.stringify(v.categories)}::jsonb, ${v.pageSize},
           ${v.allowReply}, ${v.allowSecret}, ${v.allowVote}, ${v.allowUpload},
           ${v.maxFiles}, ${v.writeInterval}, ${v.sortOrder}, ${v.isVisible},
-          ${v.listStyle}, ${v.notifyEmail}, ${v.notifyComment}, ${v.groupId}::uuid
+          ${v.listStyle}, ${v.notifyEmail}, ${v.notifyComment}, ${v.groupId}::uuid, ${v.categoryRequired}
         )
       `);
     } catch (err) {
@@ -720,7 +731,7 @@ ${items}
           max_files = ${v.maxFiles}, write_interval = ${v.writeInterval},
           sort_order = ${v.sortOrder}, is_visible = ${v.isVisible},
           list_style = ${v.listStyle}, notify_email = ${v.notifyEmail}, notify_comment = ${v.notifyComment},
-          group_id = ${v.groupId}::uuid
+          group_id = ${v.groupId}::uuid, category_required = ${v.categoryRequired}
         WHERE id = ${req.params.id}::uuid RETURNING id
       `);
       if (!rows.length) throw new BoardError(404, "게시판을 찾을 수 없습니다.");

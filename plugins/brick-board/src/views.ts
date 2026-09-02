@@ -629,8 +629,8 @@ export async function renderWrite(
   <form class="brick-write-form">
     ${
       cats.length
-        ? `<label class="brick-field">${escapeHtml(t("write.category"))}
-      <select name="category">
+        ? `<label class="brick-field">${escapeHtml(t("write.category"))}${board.category_required ? ' <small>*</small>' : ""}
+      <select name="category"${board.category_required ? " required" : ""}>
         <option value="">${escapeHtml(t("write.noCategory"))}</option>
         ${cats.map((c) => `<option value="${escapeHtml(c)}"${currentCat === c ? " selected" : ""}>${escapeHtml(c)}</option>`).join("\n        ")}
       </select>
