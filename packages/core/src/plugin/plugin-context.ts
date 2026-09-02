@@ -209,6 +209,12 @@ export interface HeaderAction {
   order?: number;
   /** 로그인한 손님에게만 보인다 */
   requiresLogin?: boolean;
+  /**
+   * 아이콘 이름 (선택). 테마가 가진 스프라이트의 심볼 이름이다 — cart, message, user,
+   * heart, bell, search, star, truck, shield, chat, clock, pin, mail, phone, image, check, arrow.
+   * 테마에 그 심볼이 없으면 아무것도 그리지 않으므로 문구만 남는다 — 깨진 자리가 없다.
+   */
+  icon?: string;
 }
 
 /**

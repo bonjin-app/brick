@@ -265,9 +265,9 @@ function starterPages(code: string, siteName: string): Array<{
     blocks: [
       p(`${siteName}에 오신 것을 환영합니다. 이 문단을 사이트 소개로 바꿔주세요 — 관리자 → 페이지 → 소개 에서 수정할 수 있습니다.`),
       features("우리가 하는 일", [
-        "첫 번째 | 무엇을 하는 곳인지 한 줄로 적습니다.",
-        "두 번째 | 누구에게 도움이 되는지 적습니다.",
-        "세 번째 | 어떻게 하면 되는지 적습니다.",
+        "첫 번째 | 무엇을 하는 곳인지 한 줄로 적습니다. | | star",
+        "두 번째 | 누구에게 도움이 되는지 적습니다. | | user",
+        "세 번째 | 어떻게 하면 되는지 적습니다. | | arrow",
       ]),
       faq("자주 묻는 질문", [
         "회원가입은 어떻게 하나요? | 오른쪽 위 회원가입 버튼을 누르고 이메일을 인증하면 끝입니다.",
@@ -331,9 +331,9 @@ function starterPages(code: string, siteName: string): Array<{
             { block: "brick-shop/product-list",
               props: { limit: 8, columns: 4, sort: "recent", title: "새로 나온 상품" } },
             features("", [
-              "빠른 배송 | 오후 2시 이전 주문은 당일 출발합니다.",
-              "안전한 결제 | 카드·계좌이체·간편결제를 지원합니다.",
-              "7일 내 교환·반품 | 받아보시고 마음에 들지 않으면 보내주세요.",
+              "빠른 배송 | 오후 2시 이전 주문은 당일 출발합니다. | | truck",
+              "안전한 결제 | 카드·계좌이체·간편결제를 지원합니다. | | shield",
+              "7일 내 교환·반품 | 받아보시고 마음에 들지 않으면 보내주세요. | | check",
             ]),
             { block: "core/testimonials", props: {
               title: "먼저 써 본 분들의 이야기",
@@ -393,9 +393,9 @@ function starterPages(code: string, siteName: string): Array<{
               altUrl: "/about",
             }),
             features("주요 서비스", [
-              "첫 번째 서비스 | 무엇을 제공하는지 한 줄로 적습니다. | /services",
-              "두 번째 서비스 | 어떤 문제를 푸는지 적습니다. | /services",
-              "세 번째 서비스 | 왜 우리에게 맡기면 되는지 적습니다. | /services",
+              "첫 번째 서비스 | 무엇을 제공하는지 한 줄로 적습니다. | /services | chat",
+              "두 번째 서비스 | 어떤 문제를 푸는지 적습니다. | /services | shield",
+              "세 번째 서비스 | 왜 우리에게 맡기면 되는지 적습니다. | /services | clock",
             ]),
             { block: "core/stats", props: { items: "2012 | 창립\n1,200+ | 함께한 고객\n98% | 재계약률\n24시간 | 문의 응답" } },
             { block: "core/media-text", props: {
@@ -422,9 +422,9 @@ function starterPages(code: string, siteName: string): Array<{
           blocks: [
             p("제공하는 서비스를 소개해주세요. 아래 카드는 관리자 → 페이지 → 서비스 에서 한 줄에 하나씩 고칠 수 있습니다."),
             features("", [
-              "컨설팅 | 현황을 진단하고 개선 방향을 제안합니다.",
-              "구축 | 필요한 시스템을 만들어 드립니다.",
-              "운영 지원 | 만든 뒤에도 함께 돌봅니다.",
+              "컨설팅 | 현황을 진단하고 개선 방향을 제안합니다. | | chat",
+              "구축 | 필요한 시스템을 만들어 드립니다. | | check",
+              "운영 지원 | 만든 뒤에도 함께 돌봅니다. | | shield",
             ]),
             cta({
               title: "어떤 것이 필요한지 아직 모르셔도 됩니다",

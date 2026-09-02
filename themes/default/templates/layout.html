@@ -38,6 +38,32 @@
   <link rel="stylesheet" href="{{ themeAssets }}/style.css?v={{ themeVersion }}" />
 </head>
 <body>
+  {{!--
+    아이콘 스프라이트 — 한 번 정의하고 <use href="#i-…"> 로 쓴다. 이모지는 OS 마다 모양이
+    달라 "템플릿"의 인상을 깨고, 아이콘 폰트는 로드 실패 시 네모가 남는다. 인라인 SVG 는
+    둘 다 없다. 블록·플러그인은 심볼 **이름**만 말하고(icon: "cart"), 모양은 테마가 정한다.
+    stroke 는 currentColor 라 글자색·다크를 그대로 따른다.
+  --}}
+  <svg hidden aria-hidden="true" focusable="false" style="display:none">
+    <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+    <symbol id="i-cart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h8.5a2 2 0 0 0 2-1.5L21.5 8H6"/><circle cx="10" cy="20" r="1.4"/><circle cx="17.5" cy="20" r="1.4"/></symbol>
+    <symbol id="i-message" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H8l-4 4z"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+    <symbol id="i-heart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7-4.6-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.4-7 10-7 10z"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 21h4"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.8 5.8 6.2.9-4.5 4.4 1.1 6.3L12 17.4l-5.6 3 1.1-6.3L3 9.7l6.2-.9z"/></symbol>
+    <symbol id="i-truck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h11v10H3zM14 9h4l3 3v4h-7"/><circle cx="7" cy="18" r="1.6"/><circle cx="17" cy="18" r="1.6"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 5 6v6c0 4.5 3 7.5 7 9 4-1.5 7-4.5 7-9V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h12v9H9l-4 3.5V15H4z"/><path d="M20 10v9l-3-2.5"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/></symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l1.5 4-2.2 1.5a11 11 0 0 0 6.2 6.2L16 13.5l4 1.5v4a2 2 0 0 1-2 2A15 15 0 0 1 3 6a2 2 0 0 1 2-2z"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m21 16-5.5-5.5L7 19"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  </svg>
+
   {{!-- 키보드 사용자가 헤더 링크를 다 지나지 않고 본문으로 갈 수 있게 --}}
   <a class="brick-skip" href="#brick-content">{{ t.header.skip }}</a>
 
@@ -81,7 +107,7 @@
           등록하고, 여기서 반복해 그린다.
         --}}
         <nav class="brick-actions">
-          {{#each headerActions}}<a href="{{ url }}">{{ label }}</a>{{/each}}
+          {{#each headerActions}}<a href="{{ url }}">{{#if icon}}<svg class="brick-ico" aria-hidden="true"><use href="#i-{{ icon }}"></use></svg>{{/if}}<span>{{ label }}</span></a>{{/each}}
         </nav>
 
         <div class="brick-util">
@@ -123,9 +149,9 @@
         </nav>
         {{#if site.business}}
         <div class="brick-footer-col brick-footer-contact">
-          {{#if site.business.phone}}<a href="tel:{{ site.business.phone }}">{{ site.business.phone }}</a>{{/if}}
-          {{#if site.business.email}}<a href="mailto:{{ site.business.email }}">{{ site.business.email }}</a>{{/if}}
-          {{#if site.business.address}}<span>{{ site.business.address }}</span>{{/if}}
+          {{#if site.business.phone}}<a href="tel:{{ site.business.phone }}"><svg class="brick-ico" aria-hidden="true"><use href="#i-phone"></use></svg>{{ site.business.phone }}</a>{{/if}}
+          {{#if site.business.email}}<a href="mailto:{{ site.business.email }}"><svg class="brick-ico" aria-hidden="true"><use href="#i-mail"></use></svg>{{ site.business.email }}</a>{{/if}}
+          {{#if site.business.address}}<span><svg class="brick-ico" aria-hidden="true"><use href="#i-pin"></use></svg>{{ site.business.address }}</span>{{/if}}
         </div>
         {{/if}}
         <a class="brick-totop" href="#brick-content">

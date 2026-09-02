@@ -178,15 +178,19 @@ ${eyebrow ? `  <span class="brick-eyebrow">${esc(eyebrow)}</span>\n` : ""}${titl
           title: { type: "string", title: "묶음 제목 (비우면 표시 안 함)" },
           items: {
             type: "string",
-            title: "카드 — 한 줄에 하나: 제목 | 설명 | 링크(선택)",
+            title: "카드 — 한 줄에 하나: 제목 | 설명 | 링크(선택) | 아이콘(선택: truck, shield, chat, clock, star, check, heart, pin, mail, phone, image, cart, user, bell)",
             format: "multiline",
           },
         },
       },
       render: async (props) => {
-        const cards = rows(props.items, 3)
-          .map(([title, body, url]) => {
-            const inner = `<h3>${esc(title)}</h3>${body ? `<p>${esc(body)}</p>` : ""}`;
+        const cards = rows(props.items, 4)
+          .map(([title, body, url, icon]) => {
+            // 아이콘은 테마 스프라이트의 심볼 이름 — 없는 이름이면 테마가 아무것도 그리지 않는다
+            const ico = /^[a-z][a-z0-9-]{0,30}$/.test(icon)
+              ? `<span class="brick-card-icon"><svg class="brick-ico" aria-hidden="true"><use href="#i-${esc(icon)}"></use></svg></span>`
+              : "";
+            const inner = `${ico}<h3>${esc(title)}</h3>${body ? `<p>${esc(body)}</p>` : ""}`;
             return url
               ? `<a class="brick-card" href="${esc(url)}">${inner}</a>`
               : `<div class="brick-card">${inner}</div>`;

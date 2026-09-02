@@ -176,6 +176,21 @@ page.html 슬롯은 추가로 `title`(페이지 제목), `{{{ blocksHtml }}}`(�
 
 테마가 `<html>`부터 문서 전체를 소유합니다. React를 몰라도 테마를 만들 수 있습니다.
 
+## 아이콘 스프라이트
+
+기본 테마는 `layout.html` 맨 위에 SVG 심볼 시트를 한 번 심고, 화면 어디서든
+`<svg class="brick-ico"><use href="#i-cart"></use></svg>` 로 씁니다. 이모지는 OS 마다
+모양이 달라 "템플릿"의 인상을 깨고, 아이콘 폰트는 로드 실패 시 네모가 남습니다 —
+인라인 SVG 는 둘 다 없습니다. `stroke: currentColor` 라 글자색과 다크를 그대로 따릅니다.
+
+**블록·플러그인은 심볼 이름만 말합니다.** 헤더 링크의 `icon: "cart"`, 특징 카드의
+네 번째 칸 `| truck` 처럼요. 모양은 테마가 정하고, 테마에 그 심볼이 없으면 아무것도
+그리지 않아 문구만 남습니다 — 깨진 자리가 없습니다. 새 테마를 만들 때 이 이름들을
+제공하세요:
+
+`search` `cart` `message` `user` `heart` `bell` `star` `truck` `shield` `chat` `clock`
+`pin` `mail` `phone` `image` `check` `arrow`
+
 ## 대비 점검 — 눈으로는 안 보이는 것
 
 라이트·다크 두 벌을 만들면 **보기엔 괜찮은데 읽기 힘든** 조합이 생깁니다.

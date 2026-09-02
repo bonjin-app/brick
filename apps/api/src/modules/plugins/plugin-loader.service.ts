@@ -370,12 +370,17 @@ export class PluginLoaderService implements OnModuleInit {
    * 사용자별 숫자(장바구니 개수)는 담지 않는다: 비로그인 렌더는 캐시되므로
    * 남의 값이 새어 나간다.
    */
-  headerActionsFor(loggedIn: boolean): Array<{ label: string; url: string }> {
+  headerActionsFor(loggedIn: boolean): Array<{ label: string; url: string; icon: string | null }> {
     return this.headerActions
       .filter((a) => !a.requiresLogin || loggedIn)
       .slice()
       .sort((a, b) => (a.order ?? 100) - (b.order ?? 100))
-      .map((a) => ({ label: this.trCatalog(a.plugin, a.label), url: a.path }));
+      .map((a) => ({
+        label: this.trCatalog(a.plugin, a.label),
+        url: a.path,
+        // 이름만 통과시킨다 — 템플릿이 href="#i-…" 에 넣으므로 식별자 문자만
+        icon: a.icon && /^[a-z][a-z0-9-]{0,30}$/.test(a.icon) ? a.icon : null,
+      }));
   }
 
   async collectDashboardCards(timeoutMs = 3000): Promise<

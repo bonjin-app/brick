@@ -2186,7 +2186,7 @@ export default definePlugin(async (ctx) => {
    * 요구하지 않는다. 담긴 개수는 여기 담지 않는다(비로그인 렌더가 캐시되므로
    * 남의 값이 새어 나간다).
    */
-  ctx.registerHeaderAction({ label: "장바구니", path: "/shop/cart", order: 10 });
+  ctx.registerHeaderAction({ label: "장바구니", path: "/shop/cart", order: 10, icon: "cart" });
 
   // 대시보드 — 운영자가 매일 아침 보는 숫자. "오늘"은 리포트와 같은 사이트 시간대다
   ctx.registerDashboardCard({

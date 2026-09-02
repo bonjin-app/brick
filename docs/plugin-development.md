@@ -99,6 +99,23 @@ ctx.registerBlock({
 - 권한이 없어 내용을 감춘 화면(비밀글)에서는 **부르지 마세요** — 제목과 요약이
   캐시와 검색엔진에 남습니다.
 
+## 헤더 링크 (registerHeaderAction)
+
+장바구니·쪽지함처럼 **모든 화면에서 한 번에 닿아야 하는 자리**는 헤더 유틸 영역입니다.
+테마는 쇼핑몰·쪽지를 모르므로 플러그인이 등록합니다.
+
+```ts
+ctx.registerHeaderAction({ label: "장바구니", path: "/shop/cart", order: 10, icon: "cart" });
+ctx.registerHeaderAction({ label: "쪽지함", path: "/memo", requiresLogin: true, icon: "message" });
+```
+
+- `label` 은 원문이 번역 키입니다(locales/en.json 에 `"장바구니": "Cart"`).
+- `requiresLogin` 이 true 면 비로그인 손님에게는 나오지 않습니다.
+- `icon` 은 테마 스프라이트의 심볼 이름입니다(테마 개발 가이드의 목록). 테마에 없으면
+  문구만 남습니다.
+- **숫자 배지처럼 사용자별 값은 여기 담지 마세요** — 비로그인 렌더는 캐시되므로 남의
+  값이 새어 나갑니다. 배지는 블록이 클라이언트에서 채웁니다.
+
 ## 대시보드 카드 (registerDashboardCard)
 
 관리자 첫 화면에 "오늘의 숫자"를 올립니다. 등록하지 않으면 운영자는

@@ -508,7 +508,7 @@ export default definePlugin(async (ctx) => {
    * 했다. 회원 전용이므로 비로그인 손님에게는 나오지 않는다 — 안 읽은 개수는
    * 사용자별 값이라 배지 블록이 클라이언트에서 채운다.
    */
-  ctx.registerHeaderAction({ label: "쪽지함", path: "/memo", order: 20, requiresLogin: true });
+  ctx.registerHeaderAction({ label: "쪽지함", path: "/memo", order: 20, requiresLogin: true, icon: "message" });
 
   ctx.registerBlock({
     name: "memo",

@@ -257,7 +257,7 @@ check "갤러리 항목은 2개만 (나쁜 주소 제외)" "$(count_of "$L" '<fi
 printf '{"slug":"herotest","title":"히어로시험","status":"published","blocks":[{"block":"core/hero","props":{"title":"사진 위 제목","image":"https://example.test/bg.jpg) } body{display:none} .x{"}}]}' > "$TMP/hero.json"
 curl -s -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' --data-binary "@$TMP/hero.json" -o /dev/null
 H="$(render "herotest")"
-absent "url() 을 닫는 값은 주소 전체를 버린다" "$H" 'display:none'
+absent "url() 을 닫는 값은 주소 전체를 버린다" "$H" '--hero-image'
 absent "버린 주소로는 사진 히어로가 되지 않는다" "$H" 'has-image'
 printf '{"slug":"herook","title":"히어로정상","status":"published","blocks":[{"block":"core/hero","props":{"title":"사진 위 제목","image":"https://example.test/bg.jpg"}}]}' > "$TMP/hero2.json"
 curl -s -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' --data-binary "@$TMP/hero2.json" -o /dev/null
@@ -265,6 +265,19 @@ H2="$(render "herook")"
 contains "정상 주소는 사진 히어로(has-image)" "$H2" 'brick-hero has-image'
 contains "배경 이미지 변수" "$H2" '--hero-image: url(https://example.test/bg.jpg)'
 contains "웹폰트 링크(실패 시 시스템 글꼴)" "$HOME_HTML" 'pretendardvariable-dynamic-subset'
+echo "── 아이콘 스프라이트"
+contains "스프라이트 시트가 문서에 한 번" "$HOME_HTML" '<symbol id="i-cart"'
+check "스프라이트는 한 번만" "$(count_of "$HOME_HTML" '<symbol id="i-cart"')" "1"
+contains "특징 카드의 아이콘은 이름으로 참조" "$(render "about")" '<use href="#i-star"></use>'
+# JSON 은 인용 heredoc 으로 — bash printf 는 \n 을 실제 줄바꿈으로 바꿔 JSON 을 깨뜨린다
+cat > "$TMP/ico.json" <<'JSON'
+{"slug":"icotest","title":"아이콘시험","status":"published","blocks":[{"block":"core/features","props":{"items":"가 | 나 | | truck\n다 | 라 | | <script>x</script>"}}]}
+JSON
+ICO_CREATE="$(curl -s -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' --data-binary "@$TMP/ico.json")"
+ICO="$(render "icotest")"
+contains "아이콘 이름이 심볼 참조로 (생성 응답: ${ICO_CREATE:0:80})" "$ICO" 'href="#i-truck"'
+absent "이름이 아닌 값은 아이콘이 되지 않는다" "$ICO" 'href="#i-<'
+check "아이콘은 유효한 것 하나만" "$(count_of "$ICO" 'class="brick-card-icon"')" "1"
 contains "푸터 3열" "$HOME_HTML" 'class="brick-footer-cols"'
 
 echo "── 히어로가 첫 블록이면 페이지 제목을 히어로가 맡는다"
