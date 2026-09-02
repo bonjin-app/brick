@@ -36,6 +36,17 @@ export const BOARD_RESOURCE: AdminResource = {
     { name: "categories", label: "분류", type: "text",
       help: "쉼표로 구분해 입력하세요. 예: 공지, 질문, 자유 — 비우면 분류를 쓰지 않습니다." },
     { name: "page_size", label: "페이지당 글 수", type: "number", help: "5~100" },
+    { name: "list_style", label: "목록 스킨", type: "select", inList: true,
+      options: [
+        { value: "basic", label: "기본 (표)" },
+        { value: "gallery", label: "갤러리 (썸네일 격자)" },
+        { value: "webzine", label: "웹진 (카드 목록)" },
+      ],
+      help: "갤러리·웹진은 첫 이미지 첨부(없으면 본문 첫 이미지)를 썸네일로 씁니다." },
+    { name: "notify_email", label: "새 글 알림 메일", type: "text",
+      help: "새 글이 등록되면 이 주소로 알립니다. 비우면 보내지 않습니다." },
+    { name: "notify_comment", label: "댓글 알림", type: "boolean",
+      help: "댓글이 달리면 원글 작성자(회원)에게 메일로 알립니다." },
 
     { name: "allow_reply", label: "답변형 허용", type: "boolean",
       help: "글에 답변을 달아 계층으로 표시합니다." },
@@ -68,7 +79,19 @@ export const POST_RESOURCE: AdminResource = {
     { name: "board", label: "게시판", type: "text", readOnly: true, inList: true },
     { name: "title", label: "제목", type: "text", readOnly: true, inList: true },
     { name: "author_name", label: "작성자", type: "text", readOnly: true, inList: true },
+    { name: "is_notice", label: "공지", type: "boolean", readOnly: true, inList: true },
     { name: "view_count", label: "조회", type: "number", readOnly: true, inList: true },
     { name: "comment_count", label: "댓글", type: "number", readOnly: true, inList: true },
+  ],
+  /**
+   * 일괄 작업 — 그누보드 관리자의 기본기. 이동은 답변 스레드를 통째로 옮기고,
+   * 복사는 원글만 새 스레드로 만든다(첨부는 복사하지 않는다 — 본문 이미지는 URL 이라 보인다).
+   */
+  bulkActions: [
+    { code: "delete", label: "선택 삭제", destructive: true, confirm: "선택한 글을 삭제할까요? 첨부파일도 함께 지워지며 되돌릴 수 없습니다." },
+    { code: "move", label: "게시판 이동", input: { name: "board", label: "대상 게시판", optionsFrom: "/admin/boards/options" } },
+    { code: "copy", label: "게시판 복사", input: { name: "board", label: "대상 게시판", optionsFrom: "/admin/boards/options" } },
+    { code: "notice-on", label: "공지로 지정" },
+    { code: "notice-off", label: "공지 해제" },
   ],
 };

@@ -117,13 +117,13 @@ export async function createPost(
       INSERT INTO board_posts (
         id, board_id, author_id, author_name, title, content, category,
         is_notice, is_secret, thread_id, thread_created_at, thread_path, depth,
-        guest_name, guest_password, author_ip
+        guest_name, guest_password, author_ip, thumb_url
       ) VALUES (
         ${id}, ${board.id}::uuid, ${user?.id ?? null}::uuid, ${authorName}, ${title}, ${content}, ${category},
         ${isNotice}, ${isSecret}, ${threadId}::uuid,
         ${threadCreatedAt ? threadCreatedAt.toISOString() : null}::timestamptz,
         ${threadPath}, ${depth},
-        ${guestName}, ${guestPasswordHash}, ${ip}
+        ${guestName}, ${guestPasswordHash}, ${ip}, ${extractThumb(content)}
       )
     `);
     // 원글이면 thread_created_at을 자기 created_at으로 채운다
@@ -134,6 +134,46 @@ export async function createPost(
     }
     return { id };
   });
+}
+
+/**
+ * 본문의 첫 이미지 주소 — 갤러리/웹진 스킨의 썸네일 후보.
+ * 목록을 그릴 때마다 본문을 파싱하지 않도록 저장 시점에 뽑아 둔다.
+ * 새니타이즈를 거친 HTML 만 들어오므로 src 는 http(s)/상대 경로만 남아 있다.
+ */
+export function extractThumb(html: string): string | null {
+  const m = /<img\b[^>]*\bsrc=["']([^"']+)["']/i.exec(String(html ?? ""));
+  if (!m) return null;
+  const src = m[1].trim();
+  if (!/^(https?:\/\/|\/)/i.test(src)) return null;
+  return src.slice(0, 2000);
+}
+
+/**
+ * 글의 썸네일을 다시 정한다 — **첫 이미지 첨부가 우선**, 없으면 본문 첫 이미지.
+ * 첨부가 우선인 이유: 그누보드 갤러리 게시판의 관례가 "이미지를 첨부하면 목록에
+ * 뜬다"이고, 본문 이미지는 외부 링크(깨질 수 있음)인 경우가 많다.
+ * 글 저장·수정·첨부 뒤에 부른다. 첨부 삭제 뒤에도 불러야 죽은 URL 이 남지 않는다.
+ */
+export async function refreshThumb(
+  db: Db,
+  storage: { publicUrl(key: string): string },
+  postId: string,
+  content?: string,
+): Promise<void> {
+  const { rows } = await db.execute(sql`
+    SELECT a.storage_key FROM board_attachments a
+    WHERE a.post_id = ${postId}::uuid AND a.content_type LIKE 'image/%'
+    ORDER BY a.sort_order, a.created_at LIMIT 1
+  `);
+  let thumb: string | null = rows[0] ? storage.publicUrl(String(rows[0].storage_key)) : null;
+  if (!thumb) {
+    const html = content ?? String(
+      (await db.execute(sql`SELECT content FROM board_posts WHERE id = ${postId}::uuid`)).rows[0]?.content ?? "",
+    );
+    thumb = extractThumb(html);
+  }
+  await db.execute(sql`UPDATE board_posts SET thumb_url = ${thumb} WHERE id = ${postId}::uuid`);
 }
 
 /** 글 목록 (스레드 정렬 + 공지 상단 고정) */

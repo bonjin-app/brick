@@ -293,6 +293,106 @@ const pg = require('$ROOT/apps/api/node_modules/pg');
 ")"
 check "쿼리별로 캐시 분리" "$QCACHE" "has-query-key"
 
+echo "── 목록 스킨 · 썸네일 · 이전/다음 · 일괄 작업 · 이미지 삽입 · 알림 설정 (M25)"
+# JSON 한 필드 꺼내기 (jq 없이)
+jf() { python3 -c "import sys,json;d=json.load(sys.stdin);print(eval('d'+sys.argv[1]))" "$1" 2>/dev/null || echo ""; }
+render_html() { curl -s "$API/api/render/page?path=$1" | python3 -c "import sys,json;print(json.load(sys.stdin).get('html',''))"; }
+
+printf '{"slug":"gal","title":"갤러리","list_style":"gallery","notify_email":"alerts@st.test","notify_comment":true,"read_role":"guest","write_role":"guest","comment_role":"guest","allow_upload":true,"write_interval":0}' > "$TMP/gal.json"
+GAL_ID="$(curl -s -b "$ADMIN" -X POST "$BD/admin/boards" -H 'content-type: application/json' --data-binary "@$TMP/gal.json" | jf "['id']")"
+[[ -n "$GAL_ID" ]] && ok "갤러리 게시판 생성" || bad "갤러리 게시판 생성 실패"
+GALS="$(curl -s -b "$ADMIN" "$BD/admin/boards")"
+contains "목록 스킨이 저장된다" "$GALS" '"list_style":"gallery"'
+contains "알림 주소가 저장된다" "$GALS" '"notify_email":"alerts@st.test"'
+check "잘못된 알림 주소는 400" "$(code -b "$ADMIN" -X PUT "$BD/admin/boards/$GAL_ID" -H 'content-type: application/json' \
+  -d '{"slug":"gal","title":"갤러리","notify_email":"not-an-email"}')" "400"
+check "모르는 스킨은 기본으로" "$(curl -s -b "$ADMIN" -X POST "$BD/admin/boards" -H 'content-type: application/json' \
+  -d '{"slug":"gal2","title":"갤러리2","list_style":"fancy"}' >/dev/null; curl -s -b "$ADMIN" "$BD/admin/boards" \
+  | python3 -c "import sys,json;print(next(b['list_style'] for b in json.load(sys.stdin)['items'] if b['slug']=='gal2'))")" "basic"
+
+# 이 수트는 라우터 페이지 없이 게시판별 페이지만 만든다 — /board/gal 이 뜨려면 라우터가 필요하다
+printf '{"slug":"board","title":"게시판","status":"published","blocks":[{"block":"brick-board/board","props":{}}]}' > "$TMP/router.json"
+curl -s -b "$ADMIN" -X POST "$API/api/pages" -H 'content-type: application/json' --data-binary "@$TMP/router.json" -o /dev/null
+
+# 본문 첫 이미지가 썸네일이 된다 (첨부가 없을 때).
+# JSON 은 인용 heredoc 으로 쓴다 — bash 의 printf 는 \" 를 " 로 바꿔 JSON 을 깨뜨린다(zsh 는 안 그래서 놓치기 쉽다)
+cat > "$TMP/gp1.json" <<'JSON'
+{"title":"사진 하나","content":"<p>봄</p><img src=\"https://example.test/a.jpg\" alt=\"\">","guestName":"손님","guestPassword":"pass1234"}
+JSON
+GP1_RAW="$(curl -s -X POST "$BD/boards/gal/posts" -H 'content-type: application/json' --data-binary "@$TMP/gp1.json")"
+GP1="$(echo "$GP1_RAW" | jf "['id']")"
+cat > "$TMP/gp2.json" <<'JSON'
+{"title":"사진 둘","content":"<p>글만</p>","guestName":"손님","guestPassword":"pass1234"}
+JSON
+GP2="$(curl -s -X POST "$BD/boards/gal/posts" -H 'content-type: application/json' --data-binary "@$TMP/gp2.json" | jf "['id']")"
+cat > "$TMP/gp3.json" <<'JSON'
+{"title":"사진 셋","content":"<p>x</p><img src=\"javascript:alert(1)\">","guestName":"손님","guestPassword":"pass1234"}
+JSON
+GP3="$(curl -s -X POST "$BD/boards/gal/posts" -H 'content-type: application/json' --data-binary "@$TMP/gp3.json" | jf "['id']")"
+[[ -n "$GP1" && -n "$GP2" && -n "$GP3" ]] && ok "갤러리 글 3개 작성" || bad "갤러리 글 작성 실패 ($GP1/$GP2/$GP3) 첫 응답: ${GP1_RAW:0:200}"
+
+GAL_HTML="$(render_html "board/gal")"
+contains "갤러리 스킨으로 렌더" "$GAL_HTML" 'class="brick-board brick-list-gallery"'
+contains "썸네일이 본문 첫 이미지" "$GAL_HTML" 'src="https://example.test/a.jpg"'
+contains "이미지 없는 글은 자리표시" "$GAL_HTML" 'brick-thumb-empty'
+absent "javascript: 는 썸네일이 되지 않는다" "$GAL_HTML" 'src="javascript:'
+absent "갤러리에는 표가 없다" "$GAL_HTML" '<table class="brick-board-table"'
+
+echo "── 블록 속성이 게시판 스킨을 덮는다 (홈엔 웹진, 목록엔 표)"
+printf '{"slug":"galweb","title":"웹진시험","status":"published","blocks":[{"block":"brick-board/board","props":{"board":"gal","listStyle":"webzine"}}]}' > "$TMP/galweb.json"
+curl -s -b "$ADMIN" -X POST "$API/api/pages" -H 'content-type: application/json' --data-binary "@$TMP/galweb.json" -o /dev/null
+WEB_HTML="$(render_html "galweb")"
+contains "웹진 스킨" "$WEB_HTML" 'brick-list-webzine'
+contains "웹진은 발췌를 보여준다" "$WEB_HTML" 'brick-webzine-excerpt'
+contains "고정 게시판 위젯은 페이지 제목을 가져가지 않는다" "$WEB_HTML" '<title>웹진시험 —'
+contains "위젯의 게시판 이름은 h2 (페이지 h1 은 따로 있다)" "$WEB_HTML" '<h2><a href="/board/gal">갤러리</a></h2>'
+absent "위젯에는 검색폼이 없다" "$WEB_HTML" 'class="brick-board-search"'
+
+echo "── 이전글 · 다음글"
+D2="$(render_html "board/gal/$GP2")"
+contains "다음글(더 새 글)은 사진 셋" "$D2" 'is-next" href="/board/gal/'"$GP3"'"'
+contains "이전글(더 오래된 글)은 사진 하나" "$D2" 'is-prev" href="/board/gal/'"$GP1"'"'
+D3="$(render_html "board/gal/$GP3")"
+contains "가장 새 글에는 다음글이 없다" "$D3" 'is-next is-empty'
+contains "공유 막대" "$D3" 'data-share-bar'
+contains "인쇄 버튼" "$D3" 'data-print'
+contains "댓글 앵커(메일 링크가 가리킨다)" "$D3" 'id="comments"'
+
+echo "── 이미지 삽입은 회원만"
+printf 'PNGDATA' > "$TMP/x.png"
+check "비회원 이미지 업로드는 401" "$(code -X POST "$BD/boards/gal/images" -F "files=@$TMP/x.png;type=image/png")" "401"
+IMG_R="$(curl -s -b "$ADMIN" -X POST "$BD/boards/gal/images" -F "files=@$TMP/x.png;type=image/png")"
+contains "회원(관리자)은 URL 을 받는다" "$IMG_R" '"url"'
+check "이미지가 아닌 파일은 400" "$(printf 'x' > "$TMP/x.txt"; code -b "$ADMIN" -X POST "$BD/boards/gal/images" -F "files=@$TMP/x.txt;type=text/plain")" "400"
+
+echo "── 글쓰기 화면: 회원에게만 이미지 버튼 · 임시저장 키"
+W_GUEST="$(render_html "board/gal/write")"
+absent "비회원 글쓰기에는 이미지 버튼이 없다" "$W_GUEST" '<button type="button" data-image'
+contains "임시저장 키가 있다" "$W_GUEST" 'data-draft-key="brick-draft:gal:new"'
+contains "복원 안내 자리" "$W_GUEST" 'data-draft-note'
+
+echo "── 관리 일괄 작업"
+OPTS="$(curl -s -b "$ADMIN" "$BD/admin/boards/options")"
+contains "이동 대상 선택지에 게시판 이름" "$OPTS" '"label":"갤러리"'
+FREE_ID="$(echo "$OPTS" | python3 -c "import sys,json;print(next(o['value'] for o in json.load(sys.stdin) if o['label']=='자유게시판'))" 2>/dev/null || echo "")"
+[[ -n "$FREE_ID" ]] || FREE_ID="$(echo "$OPTS" | python3 -c "import sys,json;print(json.load(sys.stdin)[0]['value'])")"
+check "비관리자 일괄 작업 차단" "$(code -X POST "$BD/admin/posts/bulk" -H 'content-type: application/json' -d '{"action":"delete","ids":["'"$GP2"'"]}')" "403"
+NB="$(curl -s -b "$ADMIN" -X POST "$BD/admin/posts/bulk" -H 'content-type: application/json' -d '{"action":"notice-on","ids":["'"$GP1"'","'"$GP2"'"]}')"
+contains "공지 지정 2건" "$NB" '"affected":2'
+contains "공지가 갤러리 목록에 배지로" "$(render_html "board/gal")" 'brick-list-badge'
+CP="$(curl -s -b "$ADMIN" -X POST "$BD/admin/posts/bulk" -H 'content-type: application/json' -d '{"action":"copy","ids":["'"$GP3"'"],"params":{"board":"'"$FREE_ID"'"}}')"
+contains "복사 1건" "$CP" '"affected":1'
+check "원본은 남아 있다" "$(code "$API/api/render/page?path=board/gal/$GP3")" "200"
+MV="$(curl -s -b "$ADMIN" -X POST "$BD/admin/posts/bulk" -H 'content-type: application/json' -d '{"action":"move","ids":["'"$GP2"'"],"params":{"board":"'"$FREE_ID"'"}}')"
+contains "이동 1건" "$MV" '"affected":1'
+absent "옮긴 글은 원래 게시판에 없다" "$(render_html "board/gal")" "사진 둘"
+check "대상 없는 이동은 400" "$(code -b "$ADMIN" -X POST "$BD/admin/posts/bulk" -H 'content-type: application/json' -d '{"action":"move","ids":["'"$GP1"'"],"params":{}}')" "400"
+check "모르는 작업은 400" "$(code -b "$ADMIN" -X POST "$BD/admin/posts/bulk" -H 'content-type: application/json' -d '{"action":"explode","ids":["'"$GP1"'"]}')" "400"
+DL="$(curl -s -b "$ADMIN" -X POST "$BD/admin/posts/bulk" -H 'content-type: application/json' -d '{"action":"delete","ids":["'"$GP1"'","'"$GP3"'"]}')"
+contains "선택 삭제 2건" "$DL" '"affected":2'
+check "지운 글은 404" "$(code "$BD/posts/$GP1")" "404"
+contains "게시글 리소스가 일괄 작업을 선언한다" "$(curl -s -b "$ADMIN" "$API/api/admin/resources/brick-board/posts")" '"bulkActions"'
+
 echo "── 삭제 (첨부 정리)"
 check "비관리자 관리 목록 차단" "$(code -b "$MEMBER" "$BD/admin/posts")" "403"
 contains "관리자 글 목록" "$(curl -s -b "$ADMIN" "$BD/admin/posts")" '"total"'

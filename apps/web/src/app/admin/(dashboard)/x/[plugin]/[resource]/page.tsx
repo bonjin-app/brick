@@ -18,6 +18,13 @@ interface AdminField {
   readOnly?: boolean;
   placeholder?: string;
 }
+interface AdminBulkAction {
+  code: string;
+  label: string;
+  confirm?: string;
+  destructive?: boolean;
+  input?: { name: string; label: string; optionsFrom: string };
+}
 interface AdminResource {
   plugin: string;
   name: string;
@@ -28,6 +35,7 @@ interface AdminResource {
   idField?: string;
   can?: { create?: boolean; update?: boolean; delete?: boolean };
   description?: string;
+  bulkActions?: AdminBulkAction[];
 }
 type Row = Record<string, unknown>;
 
@@ -48,6 +56,11 @@ export default function PluginResourcePage() {
   const [editing, setEditing] = useState<Row | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  // 일괄 작업 — 선택된 행, 고른 작업, 작업에 딸린 값(예: 이동 대상)
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkCode, setBulkCode] = useState("");
+  const [bulkParam, setBulkParam] = useState("");
+  const [bulkOptions, setBulkOptions] = useState<Array<{ value: string; label: string }>>([]);
 
   const api = res ? `/api/plugins/${res.plugin}${res.basePath}` : null;
   const idField = res?.idField ?? "id";
@@ -123,6 +136,44 @@ export default function PluginResourcePage() {
     }
   }
 
+  // 작업을 고르면 필요한 선택지(대상 게시판 등)를 그때 받는다
+  const bulkAction = res?.bulkActions?.find((a) => a.code === bulkCode);
+  useEffect(() => {
+    setBulkParam("");
+    setBulkOptions([]);
+    if (!res || !bulkAction?.input) return;
+    fetch(`/api/plugins/${res.plugin}${bulkAction.input.optionsFrom}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => setBulkOptions(Array.isArray(d) ? d : []))
+      .catch(() => setBulkOptions([]));
+  }, [res, bulkAction]);
+
+  async function runBulk() {
+    if (!api || !bulkAction || selected.size === 0) return;
+    if (bulkAction.input && !bulkParam) { setMessage(t("x.bulkNeedParam", { label: bulkAction.input.label })); return; }
+    if (bulkAction.confirm && !confirm(bulkAction.confirm)) return;
+    const params: Row = {};
+    if (bulkAction.input) params[bulkAction.input.name] = bulkParam;
+    const r = await fetch(`${api}/bulk`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: bulkAction.code, ids: [...selected], params }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok) {
+      setMessage(t("x.bulkDone", { n: Number(d.affected ?? selected.size) }));
+      setSelected(new Set());
+      setBulkCode("");
+      void reload();
+    } else {
+      setMessage(`${t("common.saveFailPrefix")}${d.message ?? r.status}`);
+    }
+  }
+  const toggleAll = (on: boolean) =>
+    setSelected(on ? new Set(rows.map((r) => String(r[idField]))) : new Set());
+  const toggleOne = (id: string, on: boolean) =>
+    setSelected((prev) => { const next = new Set(prev); on ? next.add(id) : next.delete(id); return next; });
+
   async function remove(row: Row) {
     if (!api) return;
     if (!confirm(t("x.confirmDelete", { label: res!.itemLabel }))) return;
@@ -147,6 +198,8 @@ export default function PluginResourcePage() {
 
   const listFields = res.fields.filter((f) => f.inList);
   const can = { create: true, update: true, delete: true, ...res.can };
+  const hasBulk = Boolean(res.bulkActions?.length);
+  const allChecked = rows.length > 0 && rows.every((r) => selected.has(String(r[idField])));
 
   return (
     <div>
@@ -171,10 +224,42 @@ export default function PluginResourcePage() {
         />
       ) : (
         <>
+          {hasBulk && (
+            <div style={{
+              display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", margin: "0 0 10px",
+              padding: "10px 12px", borderRadius: 8, background: "var(--color-bg)", border: "1px solid var(--color-line)",
+            }}>
+              <span style={{ fontSize: 13.5, color: "var(--color-text-soft)" }}>
+                {t("x.selectedN", { n: selected.size })}
+              </span>
+              <select value={bulkCode} onChange={(e) => setBulkCode(e.target.value)}
+                style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid var(--color-line-strong)" }}>
+                <option value="">{t("x.bulkPick")}</option>
+                {res.bulkActions!.map((a) => <option key={a.code} value={a.code}>{a.label}</option>)}
+              </select>
+              {bulkAction?.input && (
+                <select value={bulkParam} onChange={(e) => setBulkParam(e.target.value)}
+                  style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid var(--color-line-strong)" }}>
+                  <option value="">{bulkAction.input.label}</option>
+                  {bulkOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              )}
+              <button onClick={runBulk} disabled={!bulkAction || selected.size === 0}
+                style={{ ...btnSm, ...(bulkAction?.destructive ? { color: "var(--color-danger)", borderColor: "var(--color-danger)" } : {}) }}>
+                {t("x.bulkRun")}
+              </button>
+            </div>
+          )}
           <div style={{ overflowX: "auto", background: "var(--color-bg)", borderRadius: 8 }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
               <thead>
                 <tr style={{ textAlign: "left", borderBottom: "1px solid var(--color-line)" }}>
+                  {hasBulk && (
+                    <th style={{ padding: 12, width: 36 }}>
+                      <input type="checkbox" checked={allChecked} onChange={(e) => toggleAll(e.target.checked)}
+                        aria-label={t("x.selectAll")} />
+                    </th>
+                  )}
                   {listFields.map((f) => <th key={f.name} style={{ padding: 12 }}>{f.label}</th>)}
                   <th style={{ padding: 12, width: 130 }}></th>
                 </tr>
@@ -182,6 +267,12 @@ export default function PluginResourcePage() {
               <tbody>
                 {rows.map((row, i) => (
                   <tr key={String(row[idField] ?? i)} style={{ borderBottom: "1px solid var(--color-line)" }}>
+                    {hasBulk && (
+                      <td style={{ padding: 12 }}>
+                        <input type="checkbox" checked={selected.has(String(row[idField]))}
+                          onChange={(e) => toggleOne(String(row[idField]), e.target.checked)} />
+                      </td>
+                    )}
                     {listFields.map((f) => (
                       <td key={f.name} style={{ padding: 12 }}>{formatCell(row[f.name], f)}</td>
                     ))}
@@ -192,7 +283,7 @@ export default function PluginResourcePage() {
                   </tr>
                 ))}
                 {!rows.length && (
-                  <tr><td colSpan={listFields.length + 1} style={{ padding: 24, color: "var(--color-muted)" }}>
+                  <tr><td colSpan={listFields.length + 1 + (hasBulk ? 1 : 0)} style={{ padding: 24, color: "var(--color-muted)" }}>
                     {t("x.emptyItems", { label: res.itemLabel })}
                   </td></tr>
                 )}

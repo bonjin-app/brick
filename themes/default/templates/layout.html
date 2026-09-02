@@ -27,6 +27,13 @@
       } catch (e) {}
     })();
   </script>
+  {{!--
+    Pretendard 웹폰트(동적 서브셋). 시스템 글꼴만으로는 OS 마다 인상이 달라
+    "템플릿"이 아니라 "기본 화면"으로 보인다. CDN 이 막힌 환경에서는 조용히
+    시스템 글꼴로 떨어진다(font-body 토큰의 다음 후보) — 내용은 그대로 읽힌다.
+  --}}
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
   <style>{{{ themeTokens }}}</style>
   <link rel="stylesheet" href="{{ themeAssets }}/style.css?v={{ themeVersion }}" />
 </head>
@@ -101,11 +108,26 @@
 
   <footer class="brick-footer">
     <div class="brick-footer-inner">
-      <div class="brick-footer-top">
-        <a class="brick-footer-logo" href="/">{{ site.name }}</a>
-        <nav class="brick-footer-nav" aria-label="{{ t.header.menu }}">
+      {{!--
+        3열 푸터 — 소개 · 바로가기 · 연락처. 한 줄 푸터는 "끝"이 아니라 "잘림"으로
+        보인다. 소개는 사이트 설명(관리자 → 설정)에서, 연락처는 사업자정보에서 온다 —
+        값이 없는 열은 그리지 않는다.
+      --}}
+      <div class="brick-footer-cols">
+        <div class="brick-footer-col brick-footer-about">
+          <a class="brick-footer-logo" href="/">{{ site.name }}</a>
+          {{#if site.description}}<p>{{ site.description }}</p>{{/if}}
+        </div>
+        <nav class="brick-footer-col brick-footer-nav" aria-label="{{ t.header.menu }}">
           {{#each menu}}<a href="{{ url }}">{{ label }}</a>{{/each}}
         </nav>
+        {{#if site.business}}
+        <div class="brick-footer-col brick-footer-contact">
+          {{#if site.business.phone}}<a href="tel:{{ site.business.phone }}">{{ site.business.phone }}</a>{{/if}}
+          {{#if site.business.email}}<a href="mailto:{{ site.business.email }}">{{ site.business.email }}</a>{{/if}}
+          {{#if site.business.address}}<span>{{ site.business.address }}</span>{{/if}}
+        </div>
+        {{/if}}
         <a class="brick-totop" href="#brick-content">
           <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3.2 3.4 7.8M8 3.2l4.6 4.6M8 3.6v9"
             fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /></svg>

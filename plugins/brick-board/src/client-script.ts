@@ -119,8 +119,35 @@ export const BOARD_SCRIPT = `
           return;
         }
         apply(function () { document.execCommand('createLink', false, url); });
+      } else if (btn.hasAttribute('data-image')) {
+        var picker = toolbar.querySelector('[data-image-input]');
+        if (picker) picker.click();
       }
     });
+
+    // 이미지 삽입 — 글보다 먼저 올릴 수 있는 회원 전용 통로(/boards/:slug/images)로
+    // 업로드하고 URL 을 본문에 넣는다. 서버가 회원·권한·형식을 다시 검사한다.
+    var imagePicker = toolbar.querySelector('[data-image-input]');
+    if (imagePicker) {
+      imagePicker.addEventListener('change', function () {
+        var file = imagePicker.files && imagePicker.files[0];
+        if (!file) return;
+        var root = document.querySelector('.brick-write');
+        var slug = root ? root.dataset.board : '';
+        var status = root ? root.querySelector('.brick-write-msg') : null;
+        var fd = new FormData(); fd.append('files', file);
+        msg(status, '이미지 업로드 중…');
+        fetch(API + '/boards/' + encodeURIComponent(slug) + '/images', { method: 'POST', body: fd })
+          .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, d: d }; }); })
+          .then(function (r) {
+            imagePicker.value = '';
+            if (!r.ok) { msg(status, r.d.message || '이미지를 올리지 못했습니다.', true); return; }
+            msg(status, '');
+            apply(function () { document.execCommand('insertImage', false, r.d.url); });
+            body.dispatchEvent(new Event('input'));
+          });
+      });
+    }
 
     // 붙여넣기는 서식을 버리고 평문으로 넣는다.
     // 다른 사이트에서 복사한 HTML이 그대로 들어오면 서버 새니타이저가 대부분 걷어내
@@ -140,6 +167,50 @@ export const BOARD_SCRIPT = `
     var slug = writeRoot.dataset.board;
     var editId = writeRoot.dataset.edit || '';
     var replyTo = writeRoot.dataset.replyTo || '';
+
+    /* ── 자동 임시저장 ──────────────────────────────
+       길게 쓴 글이 새로고침·뒤로가기·세션 만료로 사라지는 것이 게시판의 가장 흔한
+       상실이다. 입력마다 브라우저 저장소에 적고, 다시 열면 복원한다.
+       서버에 저장하지 않는 이유: 비회원도 쓰고, 초안은 사적이며, 서버 표면을 넓힐 이유가 없다. */
+    var draftKey = writeRoot.dataset.draftKey || '';
+    var titleField = form.querySelector('input[name=title]');
+    var catField = form.querySelector('select[name=category]');
+    var editorBody = writeRoot.querySelector('.brick-editor-body');
+    var draftNote = writeRoot.querySelector('[data-draft-note]');
+    var draftTimer = null;
+    function readDraft() { try { return JSON.parse(localStorage.getItem(draftKey) || 'null'); } catch (e) { return null; } }
+    function clearDraft() { try { localStorage.removeItem(draftKey); } catch (e) {} if (draftNote) draftNote.hidden = true; }
+    function saveDraft() {
+      if (!draftKey || !editorBody) return;
+      var data = { title: titleField ? titleField.value : '', content: editorBody.innerHTML,
+                   category: catField ? catField.value : '', at: Date.now() };
+      var empty = !data.title.trim() && !editorBody.textContent.trim() && !editorBody.querySelector('img');
+      try { if (empty) localStorage.removeItem(draftKey); else localStorage.setItem(draftKey, JSON.stringify(data)); } catch (e) {}
+    }
+    if (draftKey && editorBody) {
+      var saved = readDraft();
+      // 수정 화면은 서버 값이 이미 채워져 있다 — 비어 있을 때(새 글)만 되살린다
+      var isBlank = !(titleField && titleField.value.trim()) && !editorBody.textContent.trim() && !editorBody.querySelector('img');
+      if (saved && isBlank && (saved.title || saved.content)) {
+        if (titleField) titleField.value = saved.title || '';
+        editorBody.innerHTML = saved.content || '';
+        if (catField && saved.category) catField.value = saved.category;
+        editorBody.dispatchEvent(new Event('input'));
+        if (draftNote) draftNote.hidden = false;
+      }
+      var discard = writeRoot.querySelector('[data-draft-discard]');
+      if (discard) discard.addEventListener('click', function () {
+        clearDraft();
+        if (titleField) titleField.value = '';
+        editorBody.innerHTML = '';
+        editorBody.dispatchEvent(new Event('input'));
+      });
+      var schedule = function () { clearTimeout(draftTimer); draftTimer = setTimeout(saveDraft, 600); };
+      if (titleField) titleField.addEventListener('input', schedule);
+      if (catField) catField.addEventListener('change', schedule);
+      editorBody.addEventListener('input', schedule);
+      window.addEventListener('pagehide', saveDraft);
+    }
 
     form.addEventListener('submit', function (e) {
       e.preventDefault();
@@ -175,7 +246,8 @@ export const BOARD_SCRIPT = `
           return;
         }
         var postId = editId || res.data.id;
-        var fileInput = form.querySelector('input[type=file]');
+        clearDraft(); // 저장됐으니 초안은 필요 없다 — 남으면 다음 글쓰기에 되살아난다
+        var fileInput = form.querySelector('input[name=files]');
         var files = fileInput && fileInput.files.length ? fileInput.files : null;
         if (!files) { location.href = '/board/' + encodeURIComponent(slug) + '/' + postId; return; }
 
@@ -229,6 +301,33 @@ export const BOARD_SCRIPT = `
           });
       });
     });
+
+    // 공유 — Web Share API 가 있으면(모바일) OS 공유창을 연다: 카카오톡·문자 등이 거기 다 있다.
+    // 없으면 링크 복사와 X·페이스북 링크. 카카오 SDK 는 앱 키가 필요해 기본 테마가 가정하지 않는다.
+    var shareBar = postRoot.querySelector('[data-share-bar]');
+    if (shareBar) {
+      var pageUrl = location.href.split('#')[0];
+      var pageTitle = document.title;
+      var nativeBtn = shareBar.querySelector('[data-share=native]');
+      if (nativeBtn && navigator.share) {
+        nativeBtn.hidden = false;
+        nativeBtn.addEventListener('click', function () {
+          navigator.share({ title: pageTitle, url: pageUrl }).catch(function () {});
+        });
+      }
+      var copyBtn = shareBar.querySelector('[data-share=copy]');
+      if (copyBtn) copyBtn.addEventListener('click', function () {
+        var done = function () { var old = copyBtn.textContent; copyBtn.textContent = '복사됨'; setTimeout(function () { copyBtn.textContent = old; }, 1600); };
+        if (navigator.clipboard) navigator.clipboard.writeText(pageUrl).then(done, function () { prompt('주소를 복사하세요', pageUrl); });
+        else prompt('주소를 복사하세요', pageUrl);
+      });
+      var x = shareBar.querySelector('[data-share=x]');
+      if (x) { x.href = 'https://twitter.com/intent/tweet?url=' + encodeURIComponent(pageUrl) + '&text=' + encodeURIComponent(pageTitle); x.target = '_blank'; }
+      var fb = shareBar.querySelector('[data-share=facebook]');
+      if (fb) { fb.href = 'https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(pageUrl); fb.target = '_blank'; }
+      var pr = shareBar.querySelector('[data-print]');
+      if (pr) pr.addEventListener('click', function () { window.print(); });
+    }
 
     // 스크랩 토글
     var scrapBtn = postRoot.querySelector('[data-scrap]');
@@ -331,6 +430,8 @@ export const BOARD_CSS = `
 .brick-board{margin:20px 0}
 .brick-board-head{display:flex;align-items:baseline;gap:10px;padding-bottom:6px}
 .brick-board-head h1,.brick-board-head h2{margin:0;font-size:23px;letter-spacing:-0.6px;font-weight:800}
+.brick-board-head h2 a{color:inherit;text-decoration:none}
+.brick-board-head h2 a:hover{color:var(--color-primary-text, #b63a2e)}
 .brick-board-total{color:var(--color-muted, #6c6c7a);font-size:13px}
 .brick-board-desc{color:var(--color-text-soft, #45454f);font-size:14px;margin:10px 0}
 .brick-cat-nav{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}
@@ -440,6 +541,44 @@ export const BOARD_CSS = `
 .brick-board-card strong{display:block;font-size:16px}
 .brick-board-count{color:var(--color-muted, #6c6c7a);font-size:12.5px}
 .brick-board-card p{margin:8px 0 0;color:var(--color-text-soft, #45454f);font-size:13.5px}
+/* ── 목록 스킨: 갤러리 · 웹진 ─────────────────────── */
+.brick-gallery-grid{display:grid;gap:18px;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));margin:14px 0 4px}
+.brick-gallery-item{display:flex;flex-direction:column;gap:8px;text-decoration:none;color:inherit;min-width:0}
+.brick-gallery-thumb,.brick-webzine-thumb{position:relative;display:block;aspect-ratio:4/3;overflow:hidden;border-radius:var(--radius, 10px);background:var(--color-bg-soft, #f6f6f9);border:1px solid var(--color-line, #e4e4ea)}
+.brick-gallery-thumb img,.brick-webzine-thumb img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .35s ease}
+.brick-gallery-item:hover .brick-gallery-thumb img,.brick-webzine-item:hover .brick-webzine-thumb img{transform:scale(1.04)}
+/* 자리표시 — 아이콘 위, 글자 아래. 절대 배치로 겹치게 두면 글자가 아이콘 위에 얹힌다 */
+.brick-thumb-empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;font-size:12.5px;color:var(--color-muted, #6c6c7a)}
+.brick-thumb-empty::before{content:"";width:34px;height:28px;border:2px solid currentColor;border-radius:5px;opacity:.45}
+.brick-gallery-title,.brick-webzine-title{font-weight:600;font-size:14.5px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.brick-gallery-item:hover .brick-gallery-title,.brick-webzine-item:hover .brick-webzine-title{color:var(--color-primary-text, #b63a2e)}
+.brick-list-meta{display:flex;gap:10px;font-size:12.5px;color:var(--color-muted, #6c6c7a)}
+.brick-list-badge{position:absolute;top:8px;left:8px;background:var(--color-primary, #cf4437);color:var(--color-on-primary, #fff);font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:999px;z-index:1}
+.brick-webzine{list-style:none;padding:0;margin:8px 0 4px}
+.brick-webzine-item{border-bottom:1px solid var(--color-line, #e4e4ea)}
+.brick-webzine-item>a{display:grid;grid-template-columns:220px 1fr;gap:20px;padding:18px 0;text-decoration:none;color:inherit;align-items:start}
+.brick-webzine-thumb{aspect-ratio:16/10}
+.brick-webzine-body{display:flex;flex-direction:column;gap:8px;min-width:0}
+.brick-webzine-title{font-size:17px;-webkit-line-clamp:2}
+.brick-webzine-excerpt{font-size:14px;line-height:1.6;color:var(--color-text-soft, #45454f);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+@media(max-width:640px){.brick-webzine-item>a{grid-template-columns:120px 1fr;gap:14px;padding:14px 0}.brick-webzine-title{font-size:15px}.brick-webzine-excerpt{display:none}.brick-gallery-grid{grid-template-columns:repeat(2,1fr);gap:12px}}
+/* ── 상세: 첨부 이미지 · 공유 · 이전/다음 ─────────── */
+.brick-post-images{display:flex;flex-direction:column;gap:14px;margin:8px 0 18px}
+.brick-post-images figure{margin:0}
+.brick-post-images img{max-width:100%;height:auto;border-radius:var(--radius, 10px);display:block}
+.brick-share{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:18px 0 0;padding-top:14px;border-top:1px dashed var(--color-line, #e4e4ea)}
+.brick-share-label{font-size:12.5px;color:var(--color-muted, #6c6c7a);margin-right:4px}
+.brick-share a,.brick-share button{font:inherit;font-size:13px;padding:6px 12px;border-radius:999px;border:1px solid var(--color-line, #e4e4ea);background:var(--color-bg, #fff);color:var(--color-text-soft, #45454f);text-decoration:none;cursor:pointer}
+.brick-share a:hover,.brick-share button:hover{border-color:var(--color-muted, #6c6c7a);color:var(--color-text, #17171c)}
+.brick-post-nav{display:grid;gap:10px;margin:26px 0 8px}
+.brick-post-nav-item{display:flex;align-items:baseline;gap:14px;padding:12px 14px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 10px);text-decoration:none;color:inherit;min-width:0}
+.brick-post-nav-item small{flex:0 0 auto;font-size:12px;color:var(--color-muted, #6c6c7a);font-weight:600}
+.brick-post-nav-item span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14.5px}
+.brick-post-nav-item:not(.is-empty):hover{border-color:var(--color-line-strong, #d0d0d9);background:var(--color-bg-soft, #f6f6f9)}
+.brick-post-nav-item.is-empty{color:var(--color-muted, #6c6c7a)}
+.brick-draft-note{font-size:13px;color:var(--color-success, #11795a);margin:6px 0 0}
+.brick-draft-note button{font:inherit;font-size:12.5px;margin-left:6px;padding:2px 8px;border-radius:6px;border:1px solid var(--color-line, #e4e4ea);background:var(--color-bg, #fff);color:var(--color-text-soft, #45454f);cursor:pointer}
+@media print{.brick-share,.brick-post-nav,.brick-comments,.brick-post-foot,.brick-files{display:none!important}}
 .brick-latest-posts{list-style:none;padding:0;margin:10px 0}
 .brick-latest-posts li{display:flex;align-items:baseline;gap:6px;padding:8px 0;border-bottom:1px solid var(--color-line, #e4e4ea)}
 .brick-latest-posts li:last-child{border-bottom:0;padding-bottom:0}

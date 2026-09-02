@@ -17,6 +17,14 @@ import { registerWishlistView } from "./wishlist-view.js";
  * 장바구니 담기 같은 상호작용은 인라인 스크립트로 처리한다
  * (테마가 빌드를 타지 않으므로 프레임워크에 의존하지 않는다).
  */
+/** 정가 대비 할인율(%) — 5% 미만은 배지로 쓸 가치가 없어 0 을 돌려준다 */
+function discountPct(p: Record<string, unknown>): number {
+  const list = Number(p.list_price ?? 0), price = Number(p.price ?? 0);
+  if (!list || !price || list <= price) return 0;
+  const pct = Math.round((1 - price / list) * 100);
+  return pct >= 5 ? pct : 0;
+}
+
 export function registerStorefrontBlocks(
   ctx: PluginContext,
   db: Db,
@@ -71,7 +79,7 @@ export function registerStorefrontBlocks(
   <a class="brick-product-card${soldout ? " is-soldout" : ""}" href="/shop/${encodeURIComponent(String(p.slug))}">
     <div class="brick-product-thumb">
       ${p.image_url ? `<img src="${escapeHtml(p.image_url)}" alt="${escapeHtml(p.name)}" loading="lazy" />` : `<span class="brick-noimg">${escapeHtml(t("common.noImage"))}</span>`}
-      ${soldout ? `<span class="brick-badge-soldout">${escapeHtml(t("common.soldout"))}</span>` : ""}
+      ${soldout ? `<span class="brick-badge-soldout">${escapeHtml(t("common.soldout"))}</span>` : discountPct(p) ? `<span class="brick-badge-sale">-${discountPct(p)}%</span>` : ""}
     </div>
     <div class="brick-product-name">${escapeHtml(p.name)}</div>
     ${Number(p.review_count) > 0 ? `<div class="brick-card-rating"><span class="brick-stars">${"★".repeat(Math.round(Number(p.rating_sum) / Number(p.review_count)))}</span> <span>(${Number(p.review_count)})</span></div>` : ""}
@@ -593,6 +601,7 @@ const STOREFRONT_CSS = `
     linear-gradient(135deg, transparent 55%, currentColor 55%, currentColor 72%, transparent 72%);
 }
 .brick-badge-soldout{position:absolute;top:8px;left:8px;padding:4px 10px;border-radius:999px;background:rgba(20,20,28,.82);color:#fff;font-size:12px;font-weight:700;line-height:1.4}
+.brick-badge-sale{position:absolute;top:8px;left:8px;padding:4px 10px;border-radius:999px;background:var(--color-primary, #cf4437);color:var(--color-on-primary, #fff);font-size:12px;font-weight:800;line-height:1.4;letter-spacing:-.2px}
 .brick-product-card.is-soldout .brick-product-thumb img{opacity:.55}
 .brick-product-card.is-soldout .brick-product-name{color:var(--color-muted, #6c6c7a)}
 .brick-product-name{margin-top:10px;font-size:15px;line-height:1.4}

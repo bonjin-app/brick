@@ -49,7 +49,7 @@ export const STARTERS: StarterDefinition[] = [
     label: "커뮤니티",
     description: "공지사항·자유게시판·질문답변을 갖춘 게시판 중심 사이트",
     plugins: ["brick-board"],
-    creates: ["홈 (최신글 모아보기)", "소개 페이지", "게시판 3개", "헤더 메뉴"],
+    creates: ["홈 (최신글 모아보기 · 갤러리)", "소개 페이지", "게시판 4개 (갤러리 포함)", "헤더 메뉴"],
   },
   {
     code: "shop",
@@ -123,9 +123,9 @@ export async function applyStarter(code: string, ctx: SeedContext): Promise<{ ap
   for (const b of boards) {
     try {
       await ctx.db.execute(sql`
-        INSERT INTO board_boards (id, slug, title, description, read_role, write_role)
+        INSERT INTO board_boards (id, slug, title, description, read_role, write_role, list_style)
         VALUES (${uuidv7()}, ${b.slug}, ${b.title}, ${b.description},
-                ${b.readRole}, ${b.writeRole})
+                ${b.readRole}, ${b.writeRole}, ${b.listStyle ?? "basic"})
         ON CONFLICT (slug) DO NOTHING
       `);
       applied.push(`게시판 ${b.title}`);
@@ -181,6 +181,8 @@ export async function applyStarter(code: string, ctx: SeedContext): Promise<{ ap
 
 function starterBoards(code: string): Array<{
   slug: string; title: string; description: string; readRole: string; writeRole: string;
+  /** 목록 스킨 (기본 basic) */
+  listStyle?: string;
 }> {
   // 공지사항은 모든 유형에 있다 — 없는 사이트가 없다.
   // 쓰기는 manager 다: 공지에 아무나 쓰면 공지가 아니다.
@@ -196,6 +198,9 @@ function starterBoards(code: string): Array<{
           readRole: "guest", writeRole: "member" },
         { slug: "qna", title: "질문답변", description: "궁금한 것을 묻고 답합니다.",
           readRole: "guest", writeRole: "member" },
+        // 갤러리 — 사진이 주인공인 게시판. 목록 스킨이 다른 것을 스타터가 보여준다
+        { slug: "gallery", title: "갤러리", description: "사진과 함께 이야기를 남기는 곳입니다.",
+          readRole: "guest", writeRole: "member", listStyle: "gallery" },
       ];
     case "shop":
     case "company":
@@ -291,6 +296,8 @@ function starterPages(code: string, siteName: string): Array<{
             // 스타터가 만든 게시판 세 개를 나란히 — 메인 화면의 완성형을 보여준다
             { block: "brick-board/latest-multi",
               props: { boards: "notice,free,qna", limit: 5, columns: 3 } },
+            // 갤러리 게시판을 홈에서는 갤러리 스킨으로 — 사진이 있는 홈이 "문서"와 다르다
+            { block: "brick-board/board", props: { board: "gallery", listStyle: "gallery" } },
             cta({
               title: "함께 이야기하실 분을 기다립니다",
               text: "회원가입하면 글과 댓글을 남길 수 있습니다.",
@@ -328,10 +335,18 @@ function starterPages(code: string, siteName: string): Array<{
               "안전한 결제 | 카드·계좌이체·간편결제를 지원합니다.",
               "7일 내 교환·반품 | 받아보시고 마음에 들지 않으면 보내주세요.",
             ]),
+            { block: "core/testimonials", props: {
+              title: "먼저 써 본 분들의 이야기",
+              items: [
+                "포장이 꼼꼼하고 배송이 빨랐어요. 재구매 의사 있습니다. | 김민수 | 서울",
+                "문의에 답이 빨라서 믿고 살 수 있었어요. | 이서연 | 부산",
+                "사진보다 실물이 더 좋았습니다. | 박지훈 | 대구",
+              ].join("\n"),
+            } },
             { block: "brick-board/latest-posts",
               props: { board: "notice", limit: 5, title: "공지사항" } },
           ],
-          plainText: `${siteName} 상품`,
+          plainText: `${siteName} 상품 후기`,
         },
         about,
         {
@@ -382,6 +397,13 @@ function starterPages(code: string, siteName: string): Array<{
               "두 번째 서비스 | 어떤 문제를 푸는지 적습니다. | /services",
               "세 번째 서비스 | 왜 우리에게 맡기면 되는지 적습니다. | /services",
             ]),
+            { block: "core/stats", props: { items: "2012 | 창립\n1,200+ | 함께한 고객\n98% | 재계약률\n24시간 | 문의 응답" } },
+            { block: "core/media-text", props: {
+              eyebrow: "우리의 방식",
+              title: "문제를 먼저 듣고, 그다음 만듭니다",
+              text: "이 자리에 회사 사진을 넣고(관리자 → 미디어) 소개 문단을 적어주세요. 이미지가 없으면 글만 보입니다.",
+              ctaLabel: "회사 소개", ctaUrl: "/about",
+            } },
             { block: "brick-board/latest-posts",
               props: { board: "notice", limit: 5, title: "공지사항" } },
             cta({
@@ -437,6 +459,7 @@ function starterMenu(code: string): Array<{ label: string; url: string }> {
         { label: "공지사항", url: "/board/notice" },
         { label: "자유게시판", url: "/board/free" },
         { label: "질문답변", url: "/board/qna" },
+        { label: "갤러리", url: "/board/gallery" },
         { label: "소개", url: "/about" },
       ];
     case "shop":

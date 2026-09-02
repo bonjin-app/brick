@@ -404,6 +404,7 @@ export interface AdminField {
  *   POST   <basePath>            → 생성
  *   PUT    <basePath>/:id        → 수정
  *   DELETE <basePath>/:id        → 삭제
+ *   POST   <basePath>/bulk       → { action, ids, params } (bulkActions 를 선언한 경우)
  */
 export interface AdminResource {
   /** URL 슬러그. 관리자에서 /admin/x/<plugin>/<name> 으로 접근 */
@@ -423,6 +424,32 @@ export interface AdminResource {
   description?: string;
   /** 관리자 메뉴에 표시할 순서 (작을수록 위) */
   order?: number;
+  /**
+   * 목록에서 여러 행을 골라 한 번에 하는 작업 (선택 삭제 · 이동 · 상태 변경).
+   *
+   * 스팸이 수십 건 올라오면 하나씩 지우는 관리자는 없다 — 그누보드 관리자의
+   * 기본기다. 선언하면 코어 관리 화면이 체크박스 열과 작업 막대를 그리고
+   * `POST <basePath>/bulk` 로 `{ action, ids, params }` 를 보낸다. 실행 규칙(권한·
+   * 트랜잭션)은 플러그인의 라우트가 책임진다.
+   */
+  bulkActions?: AdminBulkAction[];
+}
+
+/** 일괄 작업 하나 */
+export interface AdminBulkAction {
+  /** 라우트가 받는 식별자. 예: "delete", "move" */
+  code: string;
+  /** 버튼 문구. 원문이 번역 키다 */
+  label: string;
+  /** 실행 전 확인 문구. 되돌릴 수 없는 작업이면 반드시 준다 */
+  confirm?: string;
+  /** 파괴적 작업 — 화면이 붉게 표시한다 */
+  destructive?: boolean;
+  /**
+   * 작업에 필요한 값 하나 (예: 이동 대상 게시판). 선택지는 플러그인 라우트에서
+   * `[{ value, label }]` 로 받는다. `params[name]` 으로 전달된다.
+   */
+  input?: { name: string; label: string; optionsFrom: string };
 }
 
 /**

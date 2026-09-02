@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { BlockRenderContext } from "@brick/plugin-sdk";
-import { escapeHtml, fullDate, hasRole, humanSize, shortDate, type BoardRow, type Db } from "./types.js";
+import { asListStyle, escapeHtml, fullDate, hasRole, humanSize, shortDate, type BoardRow, type Db } from "./types.js";
 import { t } from "./i18n.js";
 
 /**
@@ -54,8 +54,13 @@ export async function renderList(
   db: Db,
   board: BoardRow,
   ctx: BlockRenderContext,
+  opts: { listStyle?: string; embedded?: boolean } = {},
 ): Promise<string> {
   const base = `/board/${encodeURIComponent(board.slug)}`;
+  // 위젯으로 끼운 목록: 제목은 h2(페이지에 이미 h1 이 있다), 검색폼은 뺀다(위젯이 아니라 화면의 일이다)
+  const H = opts.embedded ? "h2" : "h1";
+  // 스킨: 블록 속성이 게시판 설정보다 세다 (같은 게시판을 홈에서는 갤러리로, 목록에서는 표로)
+  const style = asListStyle(opts.listStyle || board.list_style);
   const page = Math.max(1, Number(ctx.query.page ?? 1));
   const category = (ctx.query.category ?? "").trim();
   const q = (ctx.query.q ?? "").trim();
@@ -84,7 +89,8 @@ export async function renderList(
     ? { rows: [] as Record<string, unknown>[] }
     : await db.execute(sql`
         SELECT p.id, p.title, p.category, p.author_name, p.created_at, p.view_count,
-               p.comment_count, p.file_count, p.is_secret, p.depth
+               p.comment_count, p.file_count, p.is_secret, p.depth, p.thumb_url,
+               left(regexp_replace(p.content, '<[^>]*>', ' ', 'g'), 240) AS excerpt
         FROM board_posts p
         WHERE p.board_id = ${board.id}::uuid AND p.is_notice = true
         ORDER BY p.created_at DESC LIMIT 5
@@ -92,7 +98,8 @@ export async function renderList(
 
   const { rows: items } = await db.execute(sql`
     SELECT p.id, p.title, p.category, p.author_name, p.created_at, p.view_count,
-           p.comment_count, p.file_count, p.is_secret, p.depth
+           p.comment_count, p.file_count, p.is_secret, p.depth, p.thumb_url,
+           left(regexp_replace(p.content, '<[^>]*>', ' ', 'g'), 240) AS excerpt
     FROM board_posts p
     WHERE ${filter} AND p.is_notice = false
     ORDER BY p.thread_created_at DESC, p.thread_path ASC
@@ -154,14 +161,54 @@ export async function renderList(
 
   const canWrite = hasRole(ctx.user, board.write_role);
 
-  return `<div class="brick-board">
-  <div class="brick-board-head">
-    <h1>${escapeHtml(board.title)}</h1>
-    <span class="brick-board-total">${t("list.total", { n: total })}${q ? escapeHtml(t("list.searchLabel", { q })) : ""}</span>
-  </div>
-  ${board.description && !q ? `<p class="brick-board-desc">${escapeHtml(board.description)}</p>` : ""}
-${catNav}
-  <table class="brick-board-table">
+  /**
+   * 스킨 — 같은 데이터를 세 가지 모양으로. 그누보드의 게시판 스킨(basic/gallery/webzine)에
+   * 해당한다. 갤러리는 사진, 웹진은 글 소개가 주인공이므로 썸네일·발췌를 함께 그린다.
+   */
+  const thumb = (p: Record<string, unknown>) =>
+    p.thumb_url
+      ? `<img src="${escapeHtml(String(p.thumb_url))}" alt="" loading="lazy" />`
+      : `<span class="brick-thumb-empty">${escapeHtml(t("list.noThumb"))}</span>`;
+  const flags = (p: Record<string, unknown>) =>
+    `${p.is_secret ? `<span class="brick-lock" title="${escapeHtml(t("list.secretTitle"))}">&#128274;</span>` : ""}` +
+    `${Number(p.comment_count) > 0 ? `<span class="brick-cmt">[${Number(p.comment_count)}]</span>` : ""}`;
+  const meta = (p: Record<string, unknown>) =>
+    `<span class="brick-list-meta"><span>${escapeHtml(p.author_name ?? "-")}</span><span>${shortDate(p.created_at)}</span><span>${escapeHtml(t("detail.views", { n: Number(p.view_count) }))}</span></span>`;
+  type Listed = Record<string, unknown> & { _notice: boolean };
+  const all: Listed[] = [
+    ...notices.map((p): Listed => ({ ...p, _notice: true })),
+    ...items.map((p): Listed => ({ ...p, _notice: false })),
+  ];
+  const emptyMsg = `<p class="brick-board-empty">${escapeHtml(q ? t("list.emptySearch") : t("list.emptyFirst"))}</p>`;
+
+  const gallery = () =>
+    all.length
+      ? `  <div class="brick-gallery-grid">
+${all.map((p) => `    <a class="brick-gallery-item${p._notice ? " is-notice" : ""}" href="${base}/${escapeHtml(p.id)}">
+      <span class="brick-gallery-thumb">${thumb(p)}${p._notice ? `<span class="brick-list-badge">${escapeHtml(t("list.notice"))}</span>` : ""}</span>
+      <span class="brick-gallery-title">${p.category ? `<span class="brick-cat">${escapeHtml(p.category)}</span>` : ""}${escapeHtml(p.title)} ${flags(p)}</span>
+      ${meta(p)}
+    </a>`).join("\n")}
+  </div>`
+      : emptyMsg;
+
+  const webzine = () =>
+    all.length
+      ? `  <ul class="brick-webzine">
+${all.map((p) => `    <li class="brick-webzine-item${p._notice ? " is-notice" : ""}">
+      <a href="${base}/${escapeHtml(p.id)}">
+        <span class="brick-webzine-thumb">${thumb(p)}</span>
+        <span class="brick-webzine-body">
+          <span class="brick-webzine-title">${p._notice ? `<span class="brick-list-badge">${escapeHtml(t("list.notice"))}</span>` : ""}${p.category ? `<span class="brick-cat">${escapeHtml(p.category)}</span>` : ""}${escapeHtml(p.title)} ${flags(p)}</span>
+          <span class="brick-webzine-excerpt">${escapeHtml(String(p.excerpt ?? "").replace(/\s+/g, " ").trim())}</span>
+          ${meta(p)}
+        </span>
+      </a>
+    </li>`).join("\n")}
+  </ul>`
+      : emptyMsg;
+
+  const table = () => `  <table class="brick-board-table">
     <thead>
       <tr>${showNoticeCol ? '<th class="brick-c-num"></th>' : ""}<th>${escapeHtml(t("list.colTitle"))}</th><th class="brick-c-author">${escapeHtml(t("list.colAuthor"))}</th>
           <th class="brick-c-date">${escapeHtml(t("list.colDate"))}</th><th class="brick-c-view">${escapeHtml(t("list.colView"))}</th></tr>
@@ -171,9 +218,11 @@ ${notices.map((p) => row(p, true)).join("\n")}
 ${items.map((p) => row(p, false)).join("\n")}
 ${!notices.length && !items.length ? `      <tr><td colspan="${showNoticeCol ? 5 : 4}" class="brick-board-empty">${escapeHtml(q ? t("list.emptySearch") : t("list.emptyFirst"))}</td></tr>` : ""}
     </tbody>
-  </table>
-${pager}
-  <form class="brick-board-search" method="get" action="${base}">
+  </table>`;
+
+  const body = style === "gallery" ? gallery() : style === "webzine" ? webzine() : table();
+
+  const searchForm = opts.embedded ? "" : `  <form class="brick-board-search" method="get" action="${base}">
     <select name="in">
       <option value="all"${searchIn === "all" ? " selected" : ""}>${escapeHtml(t("list.all"))}</option>
       <option value="title"${searchIn === "title" ? " selected" : ""}>${escapeHtml(t("list.colTitle"))}</option>
@@ -183,7 +232,18 @@ ${pager}
     <input type="search" name="q" value="${escapeHtml(q)}" placeholder="${escapeHtml(t("list.searchPlaceholder"))}" />
     <button type="submit">${escapeHtml(t("list.searchBtn"))}</button>
     ${canWrite ? `<a class="brick-write-btn" href="${base}/write">${escapeHtml(t("list.writeBtn"))}</a>` : ""}
-  </form>
+  </form>`;
+
+  return `<div class="brick-board brick-list-${style}${opts.embedded ? " is-embedded" : ""}">
+  <div class="brick-board-head">
+    <${H}>${opts.embedded ? `<a href="${base}">${escapeHtml(board.title)}</a>` : escapeHtml(board.title)}</${H}>
+    <span class="brick-board-total">${t("list.total", { n: total })}${q ? escapeHtml(t("list.searchLabel", { q })) : ""}</span>
+  </div>
+  ${board.description && !q && !opts.embedded ? `<p class="brick-board-desc">${escapeHtml(board.description)}</p>` : ""}
+${catNav}
+${body}
+${pager}
+${searchForm}
 </div>`;
 }
 
@@ -212,12 +272,13 @@ export async function renderDetail(
   board: BoardRow,
   postId: string,
   ctx: BlockRenderContext,
+  storage?: { publicUrl(key: string): string },
 ): Promise<string> {
   const base = `/board/${encodeURIComponent(board.slug)}`;
   const { rows } = await db.execute(sql`
     SELECT id, title, content, category, author_id, author_name, created_at, updated_at,
            view_count, up_count, down_count, comment_count, file_count, scrap_count,
-           is_secret, is_notice, depth
+           is_secret, is_notice, depth, thread_created_at, thread_path
     FROM board_posts WHERE id = ${postId}::uuid AND board_id = ${board.id}::uuid LIMIT 1
   `);
   const post = rows[0];
@@ -267,20 +328,87 @@ export async function renderDetail(
   }
 
   const { rows: files } = await db.execute(sql`
-    SELECT id, file_name, content_type, size, download_count
+    SELECT id, file_name, content_type, size, download_count, storage_key
     FROM board_attachments WHERE post_id = ${postId}::uuid ORDER BY sort_order, created_at
   `);
+
+  /**
+   * 이전글·다음글 — 목록 순서(thread_created_at DESC, thread_path ASC)를 그대로 따른다.
+   * "다음글"은 목록에서 위(더 새로운 글), "이전글"은 아래(더 오래된 글) — 그누보드의 관례.
+   * 비밀글은 제목이 새므로 관리자가 아니면 건너뛴다.
+   */
+  const secretFilter = isManager ? sql`TRUE` : sql`p.is_secret = false`;
+  const tca = post.thread_created_at as unknown;
+  const tpath = String(post.thread_path ?? "");
+  const [{ rows: prevRows }, { rows: nextRows }] = await Promise.all([
+    db.execute(sql`
+      SELECT p.id, p.title FROM board_posts p
+      WHERE p.board_id = ${board.id}::uuid AND p.is_notice = false AND ${secretFilter}
+        AND (p.thread_created_at < ${tca}::timestamptz
+             OR (p.thread_created_at = ${tca}::timestamptz AND p.thread_path > ${tpath}))
+      ORDER BY p.thread_created_at DESC, p.thread_path ASC LIMIT 1
+    `),
+    db.execute(sql`
+      SELECT p.id, p.title FROM board_posts p
+      WHERE p.board_id = ${board.id}::uuid AND p.is_notice = false AND ${secretFilter}
+        AND (p.thread_created_at > ${tca}::timestamptz
+             OR (p.thread_created_at = ${tca}::timestamptz AND p.thread_path < ${tpath}))
+      ORDER BY p.thread_created_at ASC, p.thread_path DESC LIMIT 1
+    `),
+  ]);
+  const navItem = (label: string, row: Record<string, unknown> | undefined, emptyLabel: string, cls: string) =>
+    row
+      ? `<a class="brick-post-nav-item ${cls}" href="${base}/${escapeHtml(row.id)}"><small>${escapeHtml(label)}</small><span>${escapeHtml(row.title)}</span></a>`
+      : `<span class="brick-post-nav-item ${cls} is-empty"><small>${escapeHtml(label)}</small><span>${escapeHtml(emptyLabel)}</span></span>`;
+  const postNav = `  <nav class="brick-post-nav" aria-label="${escapeHtml(t("detail.prev"))} / ${escapeHtml(t("detail.next"))}">
+    ${navItem(t("detail.next"), nextRows[0], t("detail.noNext"), "is-next")}
+    ${navItem(t("detail.prev"), prevRows[0], t("detail.noPrev"), "is-prev")}
+  </nav>`;
+
+  /**
+   * 이미지 첨부는 본문 아래에 바로 보여준다 — 그누보드 갤러리의 관례이고, 사진을 올린
+   * 사람은 그것이 화면에 보이길 기대한다("다운로드" 링크만 있으면 사진 게시판이 아니다).
+   * 본문 안에 이미 같은 이미지가 삽입되어 있으면 두 번 그리지 않는다.
+   */
+  const contentHtml = String(post.content ?? "");
+  const imageFiles: Array<{ url: string; file_name: string }> = storage
+    ? files
+        .filter((f) => /^image\//.test(String(f.content_type)))
+        .map((f) => ({ url: storage.publicUrl(String(f.storage_key)), file_name: String(f.file_name ?? "") }))
+        .filter((f) => !contentHtml.includes(f.url))
+    : [];
+  const imagesHtml = imageFiles.length
+    ? `  <div class="brick-post-images">
+${imageFiles.map((f) => `    <figure><img src="${escapeHtml(f.url)}" alt="${escapeHtml(f.file_name)}" loading="lazy" /></figure>`).join("\n")}
+  </div>`
+    : "";
+
+  const shareBar = `  <div class="brick-share" data-share-bar>
+    <span class="brick-share-label">${escapeHtml(t("detail.share"))}</span>
+    <button type="button" data-share="native" hidden>${escapeHtml(t("detail.share"))}</button>
+    <button type="button" data-share="copy">${escapeHtml(t("detail.copyLink"))}</button>
+    <a data-share="x" href="#" rel="noopener">${escapeHtml(t("detail.shareX"))}</a>
+    <a data-share="facebook" href="#" rel="noopener">${escapeHtml(t("detail.shareFacebook"))}</a>
+    <button type="button" data-print>${escapeHtml(t("detail.print"))}</button>
+  </div>`;
   const { rows: comments } = await db.execute(sql`
     SELECT id, parent_id, author_id, author_name, content, is_secret, depth, created_at
     FROM board_comments WHERE post_id = ${postId}::uuid ORDER BY created_at
   `);
 
   const canDownload = hasRole(ctx.user, board.download_role);
-  const filesHtml = files.length
+  // 이미지 첨부는 아래(imagesHtml)에서 본문에 바로 그리므로 목록에는 나머지 파일만 싣는다
+  const inlineKeys = new Set(
+    storage
+      ? files.filter((f) => /^image\//.test(String(f.content_type))).map((f) => String(f.storage_key))
+      : [],
+  );
+  const listedFiles = files.filter((f) => !inlineKeys.has(String(f.storage_key)));
+  const filesHtml = listedFiles.length
     ? `  <div class="brick-files">
-    <strong>${escapeHtml(t("files.heading", { n: files.length }))}</strong>
+    <strong>${escapeHtml(t("files.heading", { n: listedFiles.length }))}</strong>
     <ul>
-${files
+${listedFiles
   .map(
     (f) => `      <li>
         ${
@@ -296,6 +424,7 @@ ${files
   </div>`
     : "";
 
+  const canComment = hasRole(ctx.user, board.comment_role);
   const commentsHtml = comments
     .map((c) => {
       const hidden = c.is_secret && !isManager && !(ctx.user && ctx.user.id === c.author_id);
@@ -317,7 +446,6 @@ ${files
     })
     .join("\n");
 
-  const canComment = hasRole(ctx.user, board.comment_role);
   const canModify = isOwner || isManager || !post.author_id;
 
   return `<div class="brick-board brick-post" data-board="${escapeHtml(board.slug)}" data-post="${escapeHtml(post.id)}">
@@ -334,7 +462,9 @@ ${files
 
 ${filesHtml}
 
-  <article class="brick-post-content">${String(post.content ?? "")}</article>
+  <article class="brick-post-content">${contentHtml}</article>
+${imagesHtml}
+${shareBar}
 
   <div class="brick-post-foot">
     ${
@@ -362,10 +492,12 @@ ${filesHtml}
     </div>
   </div>
 
-  <section class="brick-comments">
+${postNav}
+
+  <section class="brick-comments" id="comments">
     <h3>${escapeHtml(t("comments.heading"))} <span data-comment-count>${Number(post.comment_count)}</span></h3>
     <ul class="brick-comment-list">
-${commentsHtml || `      <li class="brick-board-empty">${escapeHtml(t("comment.first"))}</li>`}
+${commentsHtml || (canComment ? `      <li class="brick-board-empty">${escapeHtml(t("comment.first"))}</li>` : "")}
     </ul>
     ${
       canComment
@@ -443,8 +575,13 @@ export async function renderWrite(
   const cats = board.categories;
   const currentCat = String(editing?.category ?? "");
 
+  // 임시저장 키 — 게시판·(수정이면) 글 단위로 따로 둔다. 다른 글의 초안이 섞이면 안 된다
+  const draftKey = `brick-draft:${board.slug}:${editing ? String(editing.id) : replyTo ? `re-${replyTo}` : "new"}`;
+  const canInlineImage = Boolean(ctx.user) && board.allow_upload;
+
   return `<div class="brick-board brick-write"
      data-board="${escapeHtml(board.slug)}"
+     data-draft-key="${escapeHtml(draftKey)}"
      ${editing ? `data-edit="${escapeHtml(editing.id)}"` : ""}
      ${replyTo && replyTitle ? `data-reply-to="${escapeHtml(replyTo)}"` : ""}>
   <div class="brick-board-head">
@@ -496,6 +633,10 @@ export async function renderWrite(
           <button type="button" data-block="blockquote" title="${escapeHtml(t("editor.quote"))}">&ldquo;</button>
           <span class="brick-sep"></span>
           <button type="button" data-link title="${escapeHtml(t("editor.link"))}">&#128279;</button>
+          ${canInlineImage
+            ? `<button type="button" data-image title="${escapeHtml(t("editor.image"))}">&#128247;</button>
+          <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" data-image-input hidden />`
+            : ""}
           <button type="button" data-cmd="removeFormat" title="${escapeHtml(t("editor.clear"))}">&#10006;</button>
         </div>
         <div class="brick-editor-body" contenteditable="true" role="textbox" aria-multiline="true"
@@ -520,6 +661,7 @@ export async function renderWrite(
     </div>
 
     <p class="brick-write-msg" role="status"></p>
+    <p class="brick-draft-note" data-draft-note hidden>${escapeHtml(t("write.draftRestored"))} <button type="button" data-draft-discard>${escapeHtml(t("write.draftDiscard"))}</button></p>
     <div class="brick-write-actions">
       <button type="submit" class="brick-primary">${escapeHtml(editing ? t("write.submitEdit") : t("common.submit"))}</button>
       <a href="${base}">${escapeHtml(t("common.cancel"))}</a>

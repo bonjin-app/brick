@@ -3,7 +3,7 @@ import { uuidv7 } from "uuidv7";
 import { extname } from "node:path";
 import type { StorageProvider } from "@brick/plugin-sdk";
 import type { BoardRow, Db } from "./types.js";
-import { ALLOWED_UPLOAD, BoardError } from "./types.js";
+import { ALLOWED_UPLOAD, BoardError, pgArray } from "./types.js";
 
 export interface UploadInput {
   fileName: string;
@@ -86,7 +86,7 @@ export async function attachFiles(
     for (const key of written) await storage.delete(key).catch(() => undefined);
     await db.execute(sql`
       DELETE FROM board_attachments
-      WHERE post_id = ${postId}::uuid AND storage_key = ANY(${written})
+      WHERE post_id = ${postId}::uuid AND storage_key = ANY(${pgArray(written)}::text[])
     `).catch(() => undefined);
     throw err;
   }

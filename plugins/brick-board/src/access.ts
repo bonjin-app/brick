@@ -8,7 +8,7 @@ export async function loadBoard(db: Db, slug: string): Promise<BoardRow> {
   const { rows } = await db.execute(sql`
     SELECT id, slug, title, description, read_role, write_role, comment_role, download_role,
            categories, page_size, allow_reply, allow_secret, allow_vote, allow_upload,
-           max_files, write_interval
+           max_files, write_interval, list_style, notify_email, notify_comment
     FROM board_boards WHERE slug = ${slug} AND is_visible = true LIMIT 1
   `);
   const row = rows[0];

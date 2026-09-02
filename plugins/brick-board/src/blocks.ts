@@ -12,7 +12,8 @@ import { bindI18n, t } from "./i18n.js";
  * 상호작용(에디터·댓글·추천)은 인라인 스크립트로 붙인다 —
  * 테마가 빌드를 타지 않으므로 프레임워크에 의존할 수 없다.
  */
-export function registerBoardBlocks(ctx: PluginContext, db: Db): void {
+export function registerBoardBlocks(pluginCtx: PluginContext, db: Db): void {
+  const ctx = pluginCtx;
   bindI18n(ctx);
 
   /** slug로 게시판 조회 (블록 렌더용 — 없으면 null) */
@@ -21,7 +22,7 @@ export function registerBoardBlocks(ctx: PluginContext, db: Db): void {
     const { rows } = await db.execute(sql`
       SELECT id, slug, title, description, read_role, write_role, comment_role, download_role,
              categories, page_size, allow_reply, allow_secret, allow_vote, allow_upload,
-             max_files, write_interval
+             max_files, write_interval, list_style, notify_email, notify_comment
       FROM board_boards WHERE slug = ${slug} AND is_visible = true LIMIT 1
     `);
     const row = rows[0];
@@ -46,6 +47,10 @@ export function registerBoardBlocks(ctx: PluginContext, db: Db): void {
             "지정하면 이 페이지가 그 게시판 전용이 됩니다. 비우면 주소의 다음 " +
             "구간을 게시판 slug 로 씁니다 — 'board' 페이지 하나로 모든 게시판이 동작합니다.",
         },
+        listStyle: {
+          type: "string",
+          title: "목록 스킨 (비우면 게시판 설정) — basic / gallery / webzine",
+        },
       },
     },
     render: async (props, ctx) => {
@@ -59,6 +64,12 @@ export function registerBoardBlocks(ctx: PluginContext, db: Db): void {
        */
       let slug = String(props.board ?? "");
       let tail = ctx.pathTail;
+      /**
+       * 고정 게시판(prop)으로 끼운 블록은 **위젯**이다 — 홈에 갤러리를 놓는 식이다.
+       * 그 목록이 페이지 제목을 가져가면 홈의 문서 제목이 "갤러리"가 된다(실제로 그랬다).
+       * 목록일 때만 그렇다: 상세·글쓰기는 화면이 그 글이므로 여전히 제목을 정한다.
+       */
+      const embedded = Boolean(slug);
       if (!slug) {
         const segments = ctx.pathTail.split("/").filter(Boolean);
         slug = segments[0] ?? "";
@@ -87,7 +98,7 @@ export function registerBoardBlocks(ctx: PluginContext, db: Db): void {
       const { view, postId } = resolveView(tail);
       let html: string;
       if (view === "detail" && postId) {
-        html = await renderDetail(db, board, postId, ctx);
+        html = await renderDetail(db, board, postId, ctx, pluginCtx.storage);
       } else if (view === "write") {
         // 글쓰기 화면의 제목은 게시판 이름 + 무엇을 하는 화면인지
         ctx.setSeo?.({ title: `${board.title} — ${t("write.title")}`, ownHeading: true });
@@ -97,8 +108,13 @@ export function registerBoardBlocks(ctx: PluginContext, db: Db): void {
          * 목록 화면의 제목은 게시판 이름이다. 라우터 페이지 제목("게시판")이
          * 그대로 쓰이면 게시판이 몇 개든 문서 제목이 하나가 된다.
          */
-        ctx.setSeo?.({ title: board.title, description: board.description ?? undefined, ownHeading: true });
-        html = await renderList(db, board, ctx);
+        if (!embedded) {
+          ctx.setSeo?.({ title: board.title, description: board.description ?? undefined, ownHeading: true });
+        }
+        html = await renderList(db, board, ctx, {
+          listStyle: props.listStyle ? String(props.listStyle) : undefined,
+          embedded,
+        });
       }
       return `${html}${BOARD_SCRIPT}${BOARD_CSS}`;
     },

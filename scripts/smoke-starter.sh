@@ -142,7 +142,7 @@ contains "적용 내역을 알려준다" "$R" "게시판 자유게시판"
 contains "홈 페이지 (제목=사이트명)" "$R" "페이지 달빛마을"
 contains "메뉴" "$R" "헤더 메뉴"
 
-check "게시판 3개" "$(psql_q "SELECT count(*) FROM board_boards")" "3"
+check "게시판 4개 (갤러리 포함)" "$(psql_q "SELECT count(*) FROM board_boards")" "4"
 check "공지사항 쓰기는 manager (아무나 쓰면 공지가 아니다)" \
   "$(psql_q "SELECT write_role FROM board_boards WHERE slug='notice'")" "manager"
 check "자유게시판 쓰기는 member" \

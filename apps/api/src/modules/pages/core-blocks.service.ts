@@ -102,6 +102,19 @@ export class CoreBlocksService implements OnModuleInit {
      * 편집기가 다루는 타입이 string/number/boolean/multiline 이라 배열
      * 편집기가 없다 — JSON 을 손으로 쓰게 하는 것보다 이 형식이 덜 깨진다.
      */
+    /**
+     * 이미지 주소 — http(s) 또는 사이트 상대 경로만.
+     * CSS `url()` 과 `src` 양쪽에 들어가므로, url() 을 닫거나 규칙을 열 수 있는
+     * 문자(인용부호·괄호·중괄호·세미콜론·공백·꺾쇠)가 하나라도 있으면 **주소 전체를
+     * 버린다.** 걷어내고 남기면 "https://x/a.jpg body{display:none" 같은 조각이
+     * 스타일에 실린다 — 정상 URL 에는 그런 문자가 없으니 버려도 잃는 것이 없다.
+     */
+    const safeUrl = (raw: unknown): string => {
+      const u = String(raw ?? "").trim();
+      if (!/^(https?:\/\/|\/)/i.test(u) || /["'(){};<>\\\s]/.test(u)) return "";
+      return u.slice(0, 2000);
+    };
+
     const rows = (raw: unknown, cols: number): string[][] =>
       String(raw ?? "")
         .split("\n")
@@ -126,12 +139,14 @@ export class CoreBlocksService implements OnModuleInit {
           altLabel: { type: "string", title: "버튼 2 문구" },
           altUrl: { type: "string", title: "버튼 2 링크" },
           plain: { type: "boolean", title: "배경 없이 (글자만)", default: false },
+          image: { type: "string", title: "배경 이미지 URL (있으면 그 위에 글자를 얹는다)" },
         },
       },
       render: async (props, ctx) => {
         const eyebrow = String(props.eyebrow ?? "").trim();
         const title = String(props.title ?? "").trim();
         const text = String(props.text ?? "").trim();
+        const image = safeUrl(props.image);
         /**
          * 히어로가 이 화면의 제목이다 — 문서 제목(<title>)도 여기서 나오고,
          * 테마는 페이지 제목 h1 을 생략한다(같은 말이 두 번 크게 적히지 않게).
@@ -148,7 +163,8 @@ export class CoreBlocksService implements OnModuleInit {
               `<a class="brick-btn brick-btn-lg ${cls}" href="${esc(url)}">${esc(label)}</a>`,
           )
           .join("");
-        return `<section class="brick-hero${props.plain ? " brick-hero-plain" : ""}">
+        // 이미지 위 글자는 테마가 어둡게 깔고 흰 글자로 그린다(has-image) — 사진 밝기와 무관하게 읽힌다
+        return `<section class="brick-hero${props.plain ? " brick-hero-plain" : ""}${image ? " has-image" : ""}"${image ? ` style="--hero-image: url(${image})"` : ""}>
 ${eyebrow ? `  <span class="brick-eyebrow">${esc(eyebrow)}</span>\n` : ""}${title ? `  <h1>${esc(title)}</h1>\n` : ""}${text ? `  <p>${esc(text).replace(/\n/g, "<br />")}</p>\n` : ""}${cta ? `  <div class="brick-hero-actions">${cta}</div>\n` : ""}</section>`;
       },
     });
@@ -248,6 +264,112 @@ ${eyebrow ? `  <span class="brick-eyebrow">${esc(eyebrow)}</span>\n` : ""}${titl
           ? String(props.tone)
           : "info";
         return `<div class="brick-notice brick-notice-${tone}">${esc(props.text).replace(/\n/g, "<br />")}</div>`;
+      },
+    });
+
+    /**
+     * 이미지 + 글 분할 — 프리미엄 템플릿의 기본 리듬. 사진 한 장과 문단 하나가
+     * 번갈아 나오는 것이 "문서"와 "랜딩"을 가르는 가장 큰 차이다.
+     * 이미지가 없으면 글만 그린다(깨진 자리를 남기지 않는다).
+     */
+    b.set("core/media-text", {
+      name: "core/media-text",
+      displayName: "이미지 + 글",
+      propsSchema: {
+        type: "object",
+        properties: {
+          image: { type: "string", title: "이미지 URL" },
+          alt: { type: "string", title: "이미지 설명(대체 텍스트)" },
+          eyebrow: { type: "string", title: "작은 위 라벨" },
+          title: { type: "string", title: "제목" },
+          text: { type: "string", title: "본문", format: "multiline" },
+          ctaLabel: { type: "string", title: "버튼 문구" },
+          ctaUrl: { type: "string", title: "버튼 링크" },
+          reverse: { type: "boolean", title: "이미지를 오른쪽에", default: false },
+        },
+      },
+      render: async (props) => {
+        const image = safeUrl(props.image);
+        const eyebrow = String(props.eyebrow ?? "").trim();
+        const title = String(props.title ?? "").trim();
+        const text = String(props.text ?? "").trim();
+        const label = String(props.ctaLabel ?? "").trim();
+        const url = String(props.ctaUrl ?? "").trim();
+        return `<section class="brick-media-text${props.reverse ? " is-reverse" : ""}${image ? "" : " no-media"}">
+${image ? `  <div class="brick-media"><img src="${esc(image)}" alt="${esc(props.alt)}" loading="lazy" /></div>
+` : ""}  <div class="brick-media-body">
+${eyebrow ? `    <span class="brick-eyebrow">${esc(eyebrow)}</span>
+` : ""}${title ? `    <h2>${esc(title)}</h2>
+` : ""}${text ? `    <p>${esc(text).replace(/\n/g, "<br />")}</p>
+` : ""}${label && url ? `    <a class="brick-btn brick-btn-primary" href="${esc(url)}">${esc(label)}</a>
+` : ""}  </div>
+</section>`;
+      },
+    });
+
+    /** 숫자 강조 — "누적 주문 12,000건 · 만족도 98%". 한 줄에 하나: 숫자 | 라벨 */
+    b.set("core/stats", {
+      name: "core/stats",
+      displayName: "숫자 강조",
+      propsSchema: {
+        type: "object",
+        properties: {
+          items: { type: "string", title: "한 줄에 하나: 숫자 | 라벨", format: "multiline" },
+        },
+      },
+      render: async (props) => {
+        const items = rows(props.items, 2).filter(([n]) => n);
+        if (!items.length) return "";
+        return `<section class="brick-stats">${items
+          .map(([n, label]) => `<div class="brick-stat"><strong>${esc(n)}</strong>${label ? `<span>${esc(label)}</span>` : ""}</div>`)
+          .join("")}</section>`;
+      },
+    });
+
+    /** 고객 후기 — 한 줄에 하나: 인용문 | 이름 | 소속(선택) */
+    b.set("core/testimonials", {
+      name: "core/testimonials",
+      displayName: "고객 후기",
+      propsSchema: {
+        type: "object",
+        properties: {
+          title: { type: "string", title: "묶음 제목 (비우면 표시 안 함)" },
+          items: { type: "string", title: "한 줄에 하나: 인용문 | 이름 | 소속(선택)", format: "multiline" },
+        },
+      },
+      render: async (props) => {
+        const items = rows(props.items, 3).filter(([q]) => q);
+        if (!items.length) return "";
+        const heading = String(props.title ?? "").trim();
+        return `<section class="brick-testimonials">${heading ? `<h2>${esc(heading)}</h2>` : ""}<div class="brick-grid">${items
+          .map(([quote, name, org]) => `<figure class="brick-quote"><blockquote>${esc(quote)}</blockquote>${name ? `<figcaption><strong>${esc(name)}</strong>${org ? `<span>${esc(org)}</span>` : ""}</figcaption>` : ""}</figure>`)
+          .join("")}</div></section>`;
+      },
+    });
+
+    /** 이미지 갤러리 — 한 줄에 하나: 이미지 URL | 캡션(선택) | 링크(선택) */
+    b.set("core/image-gallery", {
+      name: "core/image-gallery",
+      displayName: "이미지 갤러리",
+      propsSchema: {
+        type: "object",
+        properties: {
+          title: { type: "string", title: "묶음 제목 (비우면 표시 안 함)" },
+          items: { type: "string", title: "한 줄에 하나: 이미지 URL | 캡션 | 링크(선택)", format: "multiline" },
+          columns: { type: "number", title: "열 수 (2~5)", default: 3 },
+        },
+      },
+      render: async (props) => {
+        const items = rows(props.items, 3).map(([u, cap, link]) => [safeUrl(u), cap, link]).filter(([u]) => u);
+        if (!items.length) return "";
+        const cols = Math.min(5, Math.max(2, Number(props.columns ?? 3) || 3));
+        const heading = String(props.title ?? "").trim();
+        return `<section class="brick-image-gallery">${heading ? `<h2>${esc(heading)}</h2>` : ""}<div class="brick-image-grid" style="--cols:${cols}">${items
+          .map(([u, cap, link]) => {
+            const fig = `<figure><img src="${esc(u)}" alt="${esc(cap)}" loading="lazy" />${cap ? `<figcaption>${esc(cap)}</figcaption>` : ""}</figure>`;
+            return link ? `<a href="${esc(link)}">${fig}</a>` : fig;
+          })
+          .join("")}</div></section>`;
       },
     });
 

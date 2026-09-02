@@ -216,6 +216,11 @@ cat > "$PAGE_JSON" <<'JSON'
         "title": "지금 시작하세요", "text": "가입은 1분", "buttonLabel": "가입", "buttonUrl": "/register" } },
     { "block": "core/faq", "props": { "items": "질문하나 | 답변하나\n질문둘 | 답변둘" } },
     { "block": "core/notice", "props": { "text": "알림 문장", "tone": "warning" } },
+    { "block": "core/media-text", "props": { "image": "https://example.test/pic.jpg", "alt": "사진", "title": "분할 제목", "text": "분할 본문", "reverse": true } },
+    { "block": "core/media-text", "props": { "title": "이미지 없는 분할", "text": "글만" } },
+    { "block": "core/stats", "props": { "items": "1,200+ | 고객\n98% | 만족" } },
+    { "block": "core/testimonials", "props": { "title": "후기", "items": "정말 좋아요 | 김민수 | 서울\n다시 살게요 | 이서연" } },
+    { "block": "core/image-gallery", "props": { "columns": 4, "items": "https://example.test/1.jpg | 첫 장 | /about\nhttps://example.test/2.jpg\njavascript:alert(1) | 나쁜 주소" } },
     { "block": "core/divider", "props": {} }
   ]
 }
@@ -237,6 +242,30 @@ contains "FAQ 는 details (JS 없이 접힌다)" "$L" '<details class="brick-faq
 contains "FAQ 답도 문서에 있다 (검색엔진이 읽는다)" "$L" "답변하나"
 contains "알림 박스 색" "$L" 'brick-notice-warning'
 contains "구분선" "$L" "<hr />"
+
+echo "── 프리미엄 템플릿 재료 (이미지+글 · 숫자 · 후기 · 갤러리 · 사진 히어로)"
+contains "이미지+글 분할" "$L" 'class="brick-media-text is-reverse"'
+contains "분할의 이미지" "$L" 'src="https://example.test/pic.jpg"'
+contains "이미지 없는 분할은 글만(no-media)" "$L" 'brick-media-text no-media'
+contains "숫자 강조" "$L" '<div class="brick-stat"><strong>1,200+</strong><span>고객</span></div>'
+contains "후기 카드" "$L" '<figure class="brick-quote"><blockquote>정말 좋아요</blockquote>'
+contains "후기 소속은 선택" "$L" '<strong>이서연</strong></figcaption>'
+contains "갤러리 열 수" "$L" 'style="--cols:4"'
+contains "갤러리 링크 있는 항목은 <a>" "$L" '<a href="/about"><figure>'
+absent "javascript: 이미지는 버린다" "$L" 'javascript:alert'
+check "갤러리 항목은 2개만 (나쁜 주소 제외)" "$(count_of "$L" '<figure><img src="https://example.test/')" "2"
+printf '{"slug":"herotest","title":"히어로시험","status":"published","blocks":[{"block":"core/hero","props":{"title":"사진 위 제목","image":"https://example.test/bg.jpg) } body{display:none} .x{"}}]}' > "$TMP/hero.json"
+curl -s -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' --data-binary "@$TMP/hero.json" -o /dev/null
+H="$(render "herotest")"
+absent "url() 을 닫는 값은 주소 전체를 버린다" "$H" 'display:none'
+absent "버린 주소로는 사진 히어로가 되지 않는다" "$H" 'has-image'
+printf '{"slug":"herook","title":"히어로정상","status":"published","blocks":[{"block":"core/hero","props":{"title":"사진 위 제목","image":"https://example.test/bg.jpg"}}]}' > "$TMP/hero2.json"
+curl -s -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' --data-binary "@$TMP/hero2.json" -o /dev/null
+H2="$(render "herook")"
+contains "정상 주소는 사진 히어로(has-image)" "$H2" 'brick-hero has-image'
+contains "배경 이미지 변수" "$H2" '--hero-image: url(https://example.test/bg.jpg)'
+contains "웹폰트 링크(실패 시 시스템 글꼴)" "$HOME_HTML" 'pretendardvariable-dynamic-subset'
+contains "푸터 3열" "$HOME_HTML" 'class="brick-footer-cols"'
 
 echo "── 히어로가 첫 블록이면 페이지 제목을 히어로가 맡는다"
 contains "문서 제목은 히어로 제목" "$L" "<title>히어로 제목입니다 — 테마시험</title>"

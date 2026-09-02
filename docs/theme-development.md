@@ -136,6 +136,17 @@ page.html 슬롯은 추가로 `title`(페이지 제목), `{{{ blocksHtml }}}`(�
 | `.brick-hero`, `.brick-eyebrow`, `.brick-hero-actions` | 히어로 |
 | `.brick-features`, `.brick-cta`, `.brick-faq-item` | 랜딩 섹션 |
 | `.brick-nav a.is-current` | 현재 위치인 메뉴 항목 (코어가 `aria-current="page"` 와 함께 붙여 줍니다) |
+| `.brick-hero.has-image` (`--hero-image`) | 사진 위 히어로 — 어둡게 깔고 흰 글자 |
+| `.brick-media-text` (`.is-reverse`, `.no-media`), `.brick-media`, `.brick-media-body` | 이미지 + 글 분할 |
+| `.brick-stats`, `.brick-stat` | 숫자 강조 띠 |
+| `.brick-testimonials`, `.brick-quote` | 고객 후기 카드 |
+| `.brick-image-gallery`, `.brick-image-grid` (`--cols`) | 이미지 갤러리 |
+| `.brick-footer-cols`, `.brick-footer-col`, `.brick-footer-about/-nav/-contact` | 3열 푸터 |
+| `.brick-actions` | 플러그인이 등록한 헤더 링크(장바구니·쪽지함) |
+
+게시판 블록은 목록 스킨(`brick-list-basic/-gallery/-webzine`)·이전/다음(`brick-post-nav`)·
+공유 막대(`brick-share`)의 CSS 를 **자기 것으로 들고 있습니다**(토큰만 씁니다) — 테마가
+덮어 쓸 수 있습니다.
 
 ## 최소 layout.html
 

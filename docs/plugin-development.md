@@ -219,6 +219,34 @@ ctx.registerAdminResource({
 | PUT | `<basePath>/:id` | 수정 |
 | DELETE | `<basePath>/:id` | 삭제 |
 
+### 일괄 작업 (bulkActions)
+
+목록에서 여러 행을 골라 한 번에 처리해야 한다면(선택 삭제·이동·상태 변경)
+`bulkActions` 를 선언하세요. 코어 관리 화면이 체크박스 열과 작업 막대를 그리고
+`POST <basePath>/bulk` 로 `{ action, ids, params }` 를 보냅니다.
+
+```ts
+ctx.registerAdminResource({
+  name: "posts", title: "게시글 관리", itemLabel: "게시글", basePath: "/admin/posts",
+  fields: [...],
+  bulkActions: [
+    { code: "delete", label: "선택 삭제", destructive: true, confirm: "되돌릴 수 없습니다. 삭제할까요?" },
+    { code: "move", label: "게시판 이동",
+      input: { name: "board", label: "대상 게시판", optionsFrom: "/admin/boards/options" } },
+  ],
+});
+ctx.registerRoute("POST", "/admin/posts/bulk", async (req) => {
+  requireManager(req);                         // 권한은 라우트가 검사한다
+  const { action, ids, params } = req.body as { action: string; ids: string[]; params?: Record<string, unknown> };
+  // … 트랜잭션 안에서 처리하고 { ok: true, affected } 를 돌려준다
+});
+```
+
+- `input.optionsFrom` 은 플러그인 라우트 경로입니다 — `[{ value, label }]` 을 돌려주세요.
+- **배열 파라미터 주의**: `sql\`ANY(${ids}::uuid[])\`` 는 동작하지 않습니다(drizzle 이 배열을
+  파라미터 나열로 풉니다). PG 배열 리터럴 문자열 `{"a","b"}` 로 만들어 하나의 파라미터로
+  넘기세요(brick-board 의 `pgArray` 참고).
+
 ### 필드 타입
 
 `text` · `textarea` · `richtext` · `number` · `money`(원 단위 표시) ·

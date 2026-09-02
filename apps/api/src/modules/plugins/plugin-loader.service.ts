@@ -333,6 +333,12 @@ export class PluginLoaderService implements OnModuleInit {
           (o) => ({ ...o, label: tr(o.label) }),
         ),
       })),
+      bulkActions: resource.bulkActions?.map((a) => ({
+        ...a,
+        label: tr(a.label),
+        confirm: tr(a.confirm),
+        input: a.input ? { ...a.input, label: tr(a.input.label) } : undefined,
+      })),
     };
   }
 

@@ -63,7 +63,18 @@ export interface BoardRow {
   allow_upload: boolean;
   max_files: number;
   write_interval: number;
+  /** 목록 스킨 — basic(표) | gallery(썸네일 격자) | webzine(카드 목록) */
+  list_style: string;
+  /** 새 글 알림을 받을 주소. 비우면 보내지 않는다 */
+  notify_email: string | null;
+  /** 댓글이 달리면 원글 작성자에게 메일 */
+  notify_comment: boolean;
 }
+
+export const LIST_STYLES = ["basic", "gallery", "webzine"] as const;
+export type ListStyle = (typeof LIST_STYLES)[number];
+export const asListStyle = (v: unknown): ListStyle =>
+  (LIST_STYLES as readonly string[]).includes(String(v)) ? (v as ListStyle) : "basic";
 
 /** 업로드 허용 확장자 — 화이트리스트 (실행 가능한 형식은 절대 허용하지 않는다) */
 export const ALLOWED_UPLOAD: Record<string, string[]> = {
@@ -124,4 +135,16 @@ export function shortDate(value: unknown): string {
   return sameDay
     ? `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
     : `${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * PostgreSQL 배열 리터럴 — `$1::uuid[]` 에 넣을 문자열.
+ *
+ * drizzle 의 sql 템플릿은 JS 배열을 **파라미터 나열**로 푼다: `ANY(${ids})` 는
+ * `ANY(($1, $2))` 가 되어 구문 오류가 나고, 원소가 하나면 스칼라로 넘어가
+ * "malformed array literal" 이 난다. 배열 하나를 문자열 리터럴로 만들어 넘기면
+ * 파라미터 하나로 안전하게 캐스팅된다. 값의 `"` `\` 는 리터럴 규칙대로 이스케이프한다.
+ */
+export function pgArray(values: readonly string[]): string {
+  return `{${values.map((v) => `"${String(v).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join(",")}}`;
 }

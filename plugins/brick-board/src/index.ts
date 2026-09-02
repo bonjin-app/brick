@@ -1,11 +1,11 @@
 import { definePlugin, searchExcerpt, isUniqueViolation, rawResponse, SITE_TZ } from "@brick/plugin-sdk";
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
-import { BoardError, escapeHtml, hasRole, rankOf, type Db, type SessionUser } from "./types.js";
+import { BoardError, asListStyle, escapeHtml, hasRole, pgArray, rankOf, type Db, type SessionUser } from "./types.js";
 import { hashGuestPassword } from "./guest.js";
 import { assertCanModify, canReadSecret, checkWriteInterval, loadBoard, requireRole } from "./access.js";
 import { attachFiles, claimDownload, deleteAttachments, listAttachments } from "./attachments.js";
-import { createPost, listPosts, type WritePostInput } from "./posts.js";
+import { createPost, listPosts, refreshThumb, type WritePostInput } from "./posts.js";
 import { sanitizeHtml, toPlainText } from "./sanitize.js";
 import { BOARD_RESOURCE, POST_RESOURCE } from "./admin-resources.js";
 import { registerBoardBlocks } from "./blocks.js";
@@ -97,6 +97,18 @@ export default definePlugin(async (ctx) => {
       postId: result.id, board: board.slug, authorId: user?.id ?? null,
     });
     await ctx.cache.invalidateTag("pages"); // 목록 블록이 실린 페이지를 갱신
+    // 새 글 알림 — 게시판에 주소가 설정된 경우만. 실패해도 글쓰기는 성공이다
+    if (board.notify_email) {
+      const title = String((req.body as WritePostInput).title ?? "").trim().slice(0, 200);
+      void ctx.mail.send({
+        to: board.notify_email,
+        subject: ctx.t("mail.newPostSubject", { board: board.title, title }),
+        text: ctx.t("mail.newPostBody", {
+          board: board.title, title, author: user?.displayName ?? String((req.body as WritePostInput).guestName ?? ""),
+          url: `${ctx.site.url}/board/${encodeURIComponent(board.slug)}/${result.id}`,
+        }),
+      }).catch(() => undefined);
+    }
     return result;
   });
 
@@ -195,6 +207,7 @@ export default definePlugin(async (ctx) => {
         is_secret = ${Boolean(body.isSecret) && Boolean(post.allow_secret)}, updated_at = now()
       WHERE id = ${req.params.id}::uuid
     `);
+    await refreshThumb(db, ctx.storage, req.params.id, content);
     await ctx.cache.invalidateTag("pages");
     return { ok: true };
   });
@@ -238,7 +251,40 @@ export default definePlugin(async (ctx) => {
       files,
       existingCount: Number(post.file_count),
     });
+    // 이미지 첨부는 갤러리·웹진 목록의 썸네일이 된다 — 목록 캐시도 갈아야 한다
+    await refreshThumb(db, ctx.storage, String(post.id));
+    await ctx.cache.invalidateTag("pages");
     return { ok: true, saved };
+  });
+
+  /**
+   * 본문 이미지 삽입용 업로드 (회원 전용).
+   *
+   * 첨부(/posts/:id/files)는 글이 저장된 뒤에만 가능하다 — 글 id 가 필요하다.
+   * 에디터에서 쓰는 도중 이미지를 넣으려면 글보다 먼저 올릴 수 있어야 하므로
+   * 별도 통로를 둔다. **회원만** 쓸 수 있다: 비회원에게 열면 익명 이미지 호스팅이
+   * 된다(스팸·불법 이미지의 저장소). 비회원은 첨부를 쓰면 된다.
+   * 확장자·MIME 은 첨부와 같은 화이트리스트 중 이미지만 허용한다.
+   */
+  ctx.registerRoute("POST", "/boards/:slug/images", async (req) => {
+    const user = userOf(req);
+    if (!user) throw new BoardError(401, "이미지 삽입은 회원만 할 수 있습니다.");
+    const board = await loadBoard(db, req.params.slug);
+    requireRole(user, board.write_role, "글쓰기");
+    if (!board.allow_upload) throw new BoardError(400, "이 게시판은 이미지 업로드를 허용하지 않습니다.");
+    const files = await req.files();
+    const file = files[0];
+    if (!file) throw new BoardError(400, "이미지 파일이 없습니다.");
+    const ext = (file.fileName.match(/\.[a-z0-9]+$/i)?.[0] ?? "").toLowerCase();
+    const okExt = [".png", ".jpg", ".jpeg", ".gif", ".webp"];
+    if (!okExt.includes(ext) || !/^image\//.test(file.contentType)) {
+      throw new BoardError(400, `이미지 파일만 넣을 수 있습니다 (${okExt.join(", ")}).`);
+    }
+    if (file.buffer.length > 8 * 1024 * 1024) throw new BoardError(400, "이미지는 8MB 이하만 넣을 수 있습니다.");
+    const now = new Date();
+    const key = `board/inline/${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}/${uuidv7()}${ext}`;
+    await ctx.storage.put(key, file.buffer, file.contentType);
+    return { url: ctx.storage.publicUrl(key) };
   });
 
   /** 다운로드 — 권한 검사 후 스토리지 URL로 안내 */
@@ -269,7 +315,8 @@ export default definePlugin(async (ctx) => {
       captchaToken?: string; captchaAnswer?: string;
     };
     const { rows } = await db.execute(sql`
-      SELECT p.id, b.slug, b.comment_role FROM board_posts p JOIN board_boards b ON b.id = p.board_id
+      SELECT p.id, p.title, p.author_id, b.slug, b.title AS board_title, b.comment_role, b.notify_comment
+      FROM board_posts p JOIN board_boards b ON b.id = p.board_id
       WHERE p.id = ${req.params.id}::uuid LIMIT 1
     `);
     const post = rows[0];
@@ -326,6 +373,32 @@ export default definePlugin(async (ctx) => {
       board: String(post.slug),
       authorId: user?.id ?? null,
     });
+    /**
+     * 댓글 알림 — 원글 작성자(회원)에게. 자기 글에 자기가 단 댓글은 알리지 않는다.
+     * 비밀댓글이라도 "댓글이 달렸다"는 사실은 작성자가 볼 수 있으므로 내용을 빼고 알린다.
+     * 메일 실패는 댓글 등록을 막지 않는다.
+     */
+    if (post.notify_comment && post.author_id && post.author_id !== (user?.id ?? null)) {
+      void (async () => {
+        const { rows: u } = await db.execute(sql`
+          SELECT email FROM users WHERE id = ${String(post.author_id)}::uuid
+            AND is_active = true AND withdrawn_at IS NULL LIMIT 1
+        `);
+        const to = u[0]?.email ? String(u[0].email) : null;
+        if (!to) return;
+        const title = String(post.title ?? "").slice(0, 200);
+        await ctx.mail.send({
+          to,
+          subject: ctx.t("mail.commentSubject", { board: String(post.board_title), title }),
+          text: ctx.t("mail.commentBody", {
+            author: user ? user.displayName : (guestName ?? ""),
+            title,
+            excerpt: Boolean(body.isSecret) ? "(비밀댓글)" : content.slice(0, 200),
+            url: `${ctx.site.url}/board/${encodeURIComponent(String(post.slug))}/${String(post.id)}#comments`,
+          }),
+        });
+      })().catch(() => undefined);
+    }
     return { id };
   });
 
@@ -510,6 +583,7 @@ ${items}
       SELECT id, slug, title, description, read_role, write_role, comment_role, download_role,
              categories, page_size, allow_reply, allow_secret, allow_vote, allow_upload,
              max_files, write_interval, sort_order, is_visible,
+             list_style, notify_email, notify_comment,
              (SELECT count(*) FROM board_posts p WHERE p.board_id = b.id) AS post_count
       FROM board_boards b ORDER BY sort_order, title
     `);
@@ -568,6 +642,16 @@ ${items}
       writeInterval: num(b.write_interval, 5, 0, 3600),
       sortOrder: num(b.sort_order, 0, -9999, 9999),
       isVisible: b.is_visible !== false,
+      // 목록 스킨 — 모르는 값은 기본으로 (관리 화면 select 밖에서 들어와도 안전하게)
+      listStyle: asListStyle(b.list_style),
+      // 새 글 알림 주소 — 형식만 가볍게 본다. 잘못 적으면 메일이 안 갈 뿐이다
+      notifyEmail: (() => {
+        const e = String(b.notify_email ?? "").trim();
+        if (!e) return null;
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) throw new BoardError(400, "알림 메일 주소 형식이 올바르지 않습니다.");
+        return e.slice(0, 255);
+      })(),
+      notifyComment: b.notify_comment !== false,
     };
   };
 
@@ -580,12 +664,14 @@ ${items}
         INSERT INTO board_boards (
           id, slug, title, description, read_role, write_role, comment_role, download_role,
           categories, page_size, allow_reply, allow_secret, allow_vote, allow_upload,
-          max_files, write_interval, sort_order, is_visible
+          max_files, write_interval, sort_order, is_visible,
+          list_style, notify_email, notify_comment
         ) VALUES (
           ${id}, ${v.slug}, ${v.title}, ${v.description}, ${v.readRole}, ${v.writeRole},
           ${v.commentRole}, ${v.downloadRole}, ${JSON.stringify(v.categories)}::jsonb, ${v.pageSize},
           ${v.allowReply}, ${v.allowSecret}, ${v.allowVote}, ${v.allowUpload},
-          ${v.maxFiles}, ${v.writeInterval}, ${v.sortOrder}, ${v.isVisible}
+          ${v.maxFiles}, ${v.writeInterval}, ${v.sortOrder}, ${v.isVisible},
+          ${v.listStyle}, ${v.notifyEmail}, ${v.notifyComment}
         )
       `);
     } catch (err) {
@@ -611,7 +697,8 @@ ${items}
           allow_reply = ${v.allowReply}, allow_secret = ${v.allowSecret},
           allow_vote = ${v.allowVote}, allow_upload = ${v.allowUpload},
           max_files = ${v.maxFiles}, write_interval = ${v.writeInterval},
-          sort_order = ${v.sortOrder}, is_visible = ${v.isVisible}
+          sort_order = ${v.sortOrder}, is_visible = ${v.isVisible},
+          list_style = ${v.listStyle}, notify_email = ${v.notifyEmail}, notify_comment = ${v.notifyComment}
         WHERE id = ${req.params.id}::uuid RETURNING id
       `);
       if (!rows.length) throw new BoardError(404, "게시판을 찾을 수 없습니다.");
@@ -651,6 +738,77 @@ ${items}
     `);
     const { rows: cnt } = await db.execute(sql`SELECT count(*) AS n FROM board_posts`);
     return { items: rows, total: Number(cnt[0]?.n ?? 0), page, pageSize: 30 };
+  });
+
+  /** 관리 화면의 이동/복사 대상 선택지 */
+  ctx.registerRoute("GET", "/admin/boards/options", async (req) => {
+    requireManager(req);
+    const { rows } = await db.execute(sql`SELECT id, title FROM board_boards ORDER BY sort_order, title`);
+    return rows.map((r) => ({ value: String(r.id), label: String(r.title) }));
+  });
+
+  /**
+   * 관리 일괄 작업 — 선택 삭제 · 이동 · 복사 · 공지 지정/해제.
+   *
+   * 그누보드 관리자의 기본기다. 스팸이 수십 건 올라오면 하나씩 지우는 관리자는
+   * 없다. 이동·복사는 게시판을 재편할 때(분류 → 별도 게시판) 쓴다.
+   * 한 트랜잭션에서 처리한다 — 절반만 이동된 상태가 남으면 안 된다.
+   */
+  ctx.registerRoute("POST", "/admin/posts/bulk", async (req) => {
+    requireManager(req);
+    const body = req.body as { action?: string; ids?: string[]; params?: Record<string, unknown> };
+    const ids = Array.isArray(body.ids) ? body.ids.map(String).filter((x) => /^[0-9a-f-]{36}$/i.test(x)).slice(0, 500) : [];
+    if (!ids.length) throw new BoardError(400, "선택된 글이 없습니다.");
+    const action = String(body.action ?? "");
+    let affected = 0;
+
+    if (action === "delete") {
+      for (const id of ids) await deleteAttachments(db, ctx.storage, id);
+      const { rows } = await db.execute(sql`DELETE FROM board_posts WHERE id = ANY(${pgArray(ids)}::uuid[]) RETURNING id`);
+      affected = rows.length;
+    } else if (action === "move" || action === "copy") {
+      const target = String(body.params?.board ?? "");
+      if (!/^[0-9a-f-]{36}$/i.test(target)) throw new BoardError(400, "대상 게시판을 선택해주세요.");
+      const { rows: t } = await db.execute(sql`SELECT id, categories FROM board_boards WHERE id = ${target}::uuid`);
+      if (!t[0]) throw new BoardError(404, "대상 게시판을 찾을 수 없습니다.");
+      const targetCats = Array.isArray(t[0].categories) ? (t[0].categories as string[]) : [];
+      await db.transaction(async (tx) => {
+        if (action === "move") {
+          // 답변 스레드는 통째로 옮긴다 — 원글만 옮기면 답변이 고아가 된다.
+          // 대상 게시판에 없는 분류는 비운다.
+          const { rows } = await tx.execute(sql`
+            UPDATE board_posts SET board_id = ${target}::uuid,
+              category = CASE WHEN category = ANY(${pgArray(targetCats)}::text[]) THEN category ELSE NULL END
+            WHERE thread_id IN (SELECT thread_id FROM board_posts WHERE id = ANY(${pgArray(ids)}::uuid[]))
+            RETURNING id
+          `);
+          affected = rows.length;
+        } else {
+          // 복사는 원글만, 새 id·새 스레드로. 첨부는 복사하지 않는다(스토리지 중복) — 본문 이미지는 URL 이라 그대로 보인다.
+          for (const id of ids) {
+            const newId = uuidv7();
+            const { rows } = await tx.execute(sql`
+              INSERT INTO board_posts (id, board_id, author_id, author_name, title, content, category,
+                is_notice, is_secret, thread_id, thread_created_at, thread_path, depth, author_ip, thumb_url, created_at)
+              SELECT ${newId}, ${target}::uuid, author_id, author_name, title, content,
+                CASE WHEN category = ANY(${pgArray(targetCats)}::text[]) THEN category ELSE NULL END,
+                false, is_secret, ${newId}::uuid, now(), '', 0, author_ip, thumb_url, now()
+              FROM board_posts WHERE id = ${id}::uuid RETURNING id
+            `);
+            affected += rows.length;
+          }
+        }
+      });
+    } else if (action === "notice-on" || action === "notice-off") {
+      const { rows } = await db.execute(sql`
+        UPDATE board_posts SET is_notice = ${action === "notice-on"} WHERE id = ANY(${pgArray(ids)}::uuid[]) RETURNING id
+      `);
+      affected = rows.length;
+    } else {
+      throw new BoardError(400, `알 수 없는 작업입니다: ${action}`);
+    }
+    await ctx.cache.invalidateTag("pages");
+    return { ok: true, affected };
   });
 
   ctx.registerRoute("DELETE", "/admin/posts/:id", async (req) => {
