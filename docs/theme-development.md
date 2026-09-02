@@ -210,6 +210,34 @@ await brickContrastAudit(["/", "/board/free", "/shop", "/shop/cart"])
 사람 눈에 닿는 색을 봅니다. 새 테마를 만들었다면 CSS 를 눈으로 다시 보는
 것보다 이걸 돌리는 편이 빠릅니다.
 
+## 동봉 테마의 CSS 는 Tailwind 로 씁니다 (선택)
+
+동봉 테마 둘은 `src/style.css` 를 **Tailwind v4 소스**로 두고, `pnpm build:themes` 가
+`assets/style.css` 로 컴파일합니다. 런타임은 그대로 빌드가 없습니다 — 서버와 ZIP 설치는
+컴파일된 파일만 봅니다. 그래서 컴파일 결과를 **저장소에 함께 커밋**하고, CI 가 다시 컴파일해
+어긋나면 실패시킵니다(소스만 고치고 컴파일을 잊는 실수 방지).
+
+```css
+@import "tailwindcss" source(none);
+@source "../templates";                       /* 템플릿에서 쓴 유틸리티만 나온다 */
+@source "../../../apps/api/src/modules/pages"; /* 코어 블록 */
+@source "../../../plugins/*/src";              /* 동봉 플러그인 화면 */
+
+@theme inline {
+  --color-brand: var(--color-primary);   /* bg-brand → background: var(--color-primary) */
+  --color-surface: var(--color-bg);
+  /* … 토큰 별칭. Tailwind 의 --color-* 와 이름이 겹치지 않게 brand/surface/ink 를 씁니다 */
+}
+```
+
+- **유틸리티는 반응형 배치에**(`md:grid-cols-2`, `lg:hidden`), **프리미티브는 클래스로**(`.brick-btn`).
+  블록은 클래스만 말하므로 프리미티브는 그대로 두고, 템플릿의 헤더·푸터·격자를 유틸리티로 짭니다.
+- 프리미티브 CSS 는 `@layer` **밖**에 둡니다. 플러그인이 자기 CSS 를 `<style>` 로 끼워 넣는데,
+  계층에 넣으면 특이성과 무관하게 플러그인 CSS 가 항상 이겨 테마의 덮어쓰기가 무력해집니다.
+- Preflight 가 지우는 본문 목록·굵게 등은 `@layer base` 에서 `.brick-main` 범위로 되살렸습니다 —
+  에디터로 쓴 글에는 클래스가 없습니다.
+- 직접 만드는 테마는 Tailwind 를 쓰지 않아도 됩니다. 계약은 클래스와 토큰이지 도구가 아닙니다.
+
 ## 배포
 
 ```bash

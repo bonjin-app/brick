@@ -17,6 +17,14 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? "";
   const [user, setUser] = useState<{ displayName: string } | null | undefined>(undefined);
   const [nav, setNav] = useState<{ menus: NavMenu[]; resources: NavResource[] }>({ menus: [], resources: [] });
+  const [open, setOpen] = useState(false);
+
+  // Esc 로 드로어 닫기
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -71,50 +79,74 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
    * 팔레트가 바뀔 때마다 다시 맞추는 것보다 고정하는 편이 안전하다.
    * colorScheme 을 dark 로 알려 그 안의 UA 위젯도 어둡게 그려지게 한다.
    */
+  const sideNav = (
+    <nav onClick={() => setOpen(false)}>
+      <NavLink href="/admin">{t("nav.dashboard")}</NavLink>
+      <NavLink href="/admin/pages">{t("nav.pages")}</NavLink>
+      <NavLink href="/admin/media">{t("nav.media")}</NavLink>
+      <NavLink href="/admin/menus">{t("nav.menus")}</NavLink>
+      <NavLink href="/admin/users">{t("nav.users")}</NavLink>
+
+      {(nav.resources.length > 0 || nav.menus.length > 0) && (
+        <>
+          <div style={sectionLabel}>{t("nav.plugins")}</div>
+          {nav.resources.map((r) => (
+            <NavLink key={`${r.plugin}/${r.name}`} href={`/admin/x/${r.plugin}/${r.name}`}>
+              {r.title}
+            </NavLink>
+          ))}
+          {nav.menus.map((m) => (
+            <NavLink key={m.path} href={m.path}>{m.icon ? `${m.icon} ` : ""}{m.label}</NavLink>
+          ))}
+        </>
+      )}
+
+      <div style={sectionLabel}>{t("nav.system")}</div>
+      <NavLink href="/admin/plugins">{t("nav.plugins")}</NavLink>
+      <NavLink href="/admin/themes">{t("nav.themes")}</NavLink>
+      <NavLink href="/admin/settings">{t("nav.settings")}</NavLink>
+      <NavLink href="/admin/search">{t("nav.search")}</NavLink>
+      <NavLink href="/admin/audit">{t("nav.audit")}</NavLink>
+    </nav>
+  );
+
+  /*
+   * 반응형: 1024px 미만에서는 사이드바가 드로어가 된다 — 상단 막대의 메뉴 버튼으로 열고,
+   * 항목을 누르거나 바깥을 누르거나 Esc 로 닫는다. 마크업은 하나다(데스크톱용·모바일용
+   * 메뉴가 둘이면 한쪽만 고쳐져 어긋난다). Tailwind 유틸리티는 globals.css 에서 온다.
+   */
   return (
-    <div className="brick-admin" style={{
-      fontFamily: "var(--font-body)", display: "flex", minHeight: "100dvh",
-      color: "var(--color-text)", background: "var(--color-bg-soft)",
-    }}>
+    <div className="brick-admin flex min-h-dvh text-ink bg-surface-soft" style={{ fontFamily: "var(--font-body)" }}>
       <style dangerouslySetInnerHTML={{ __html: ADMIN_CSS }} />
-      <aside className="brick-admin-side" style={{
-        width: 210, background: "#1e1e2e", color: "#fff", flexShrink: 0, colorScheme: "dark",
-      }}>
-        <div style={{ padding: 16, fontWeight: 700, fontSize: 18 }}>BRICK</div>
-        <nav>
-          <NavLink href="/admin">{t("nav.dashboard")}</NavLink>
-          <NavLink href="/admin/pages">{t("nav.pages")}</NavLink>
-          <NavLink href="/admin/media">{t("nav.media")}</NavLink>
-          <NavLink href="/admin/menus">{t("nav.menus")}</NavLink>
-          <NavLink href="/admin/users">{t("nav.users")}</NavLink>
 
-          {(nav.resources.length > 0 || nav.menus.length > 0) && (
-            <>
-              <div style={sectionLabel}>{t("nav.plugins")}</div>
-              {nav.resources.map((r) => (
-                <NavLink key={`${r.plugin}/${r.name}`} href={`/admin/x/${r.plugin}/${r.name}`}>
-                  {r.title}
-                </NavLink>
-              ))}
-              {nav.menus.map((m) => (
-                <NavLink key={m.path} href={m.path}>{m.icon ? `${m.icon} ` : ""}{m.label}</NavLink>
-              ))}
-            </>
-          )}
+      {/* 좁은 화면의 상단 막대 */}
+      <header className="brick-admin-top fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-3 bg-side px-3 text-white lg:hidden" style={{ colorScheme: "dark" }}>
+        <button type="button" className="brick-admin-burger" aria-label={t("nav.openMenu")} aria-expanded={open}
+          aria-controls="brick-admin-side" onClick={() => setOpen((v) => !v)}>
+          <span /><span /><span />
+        </button>
+        <a href="/admin" className="text-lg font-bold tracking-tight">BRICK</a>
+        <span className="ml-auto text-sm text-side-text">{user.displayName}</span>
+      </header>
+      {open && <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={() => setOpen(false)} aria-hidden="true" />}
 
-          <div style={sectionLabel}>{t("nav.system")}</div>
-          <NavLink href="/admin/plugins">{t("nav.plugins")}</NavLink>
-          <NavLink href="/admin/themes">{t("nav.themes")}</NavLink>
-          <NavLink href="/admin/settings">{t("nav.settings")}</NavLink>
-          <NavLink href="/admin/search">{t("nav.search")}</NavLink>
-          <NavLink href="/admin/audit">{t("nav.audit")}</NavLink>
-        </nav>
-        <div style={{ padding: 16, marginTop: 20, fontSize: 13, color: "#aaa", borderTop: "1px solid #2c2c40" }}>
+      <aside id="brick-admin-side" className={
+        "brick-admin-side fixed inset-y-0 left-0 z-50 flex w-60 shrink-0 flex-col overflow-y-auto bg-side text-white transition-transform lg:static lg:z-auto lg:w-[210px] lg:translate-x-0 " +
+        (open ? "translate-x-0" : "-translate-x-full")
+      } style={{ colorScheme: "dark" }}>
+        <div className="hidden p-4 text-lg font-bold lg:block">BRICK</div>
+        <div className="flex h-14 items-center justify-between px-4 lg:hidden">
+          <span className="text-lg font-bold">BRICK</span>
+          <button type="button" className="brick-admin-close" aria-label={t("nav.closeMenu")} onClick={() => setOpen(false)}>×</button>
+        </div>
+        {sideNav}
+        <div className="mt-5 border-t border-side-line p-4 text-[13px] text-side-text">
           {user.displayName}
           <button onClick={logout} style={{ display: "block", marginTop: 8, cursor: "pointer" }}>{t("nav.logout")}</button>
         </div>
       </aside>
-      <main style={{ flex: 1, padding: 32, background: "var(--color-bg-soft)", minWidth: 0 }}>{children}</main>
+
+      <main className="min-w-0 flex-1 bg-surface-soft p-4 pt-[72px] md:p-6 md:pt-[80px] lg:p-8">{children}</main>
     </div>
   );
 }
@@ -183,6 +215,14 @@ const ADMIN_CSS = `
   border: 0; background: none; color: #c9c9d6; padding: 0; font-size: 13px; font-weight: 400;
 }
 .brick-admin-side button:hover { background: none; color: #fff; }
+.brick-admin .brick-admin-top a { color: #fff; text-decoration: none; }
+.brick-admin .brick-admin-burger { display: inline-grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; background: none; position: relative; cursor: pointer; }
+.brick-admin-burger span { position: absolute; left: 10px; right: 10px; height: 2px; background: #fff; border-radius: 2px; }
+.brick-admin-burger span:nth-child(1) { top: 13px; } .brick-admin-burger span:nth-child(2) { top: 19px; } .brick-admin-burger span:nth-child(3) { top: 25px; }
+.brick-admin-burger[aria-expanded="true"] span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
+.brick-admin-burger[aria-expanded="true"] span:nth-child(2) { opacity: 0; }
+.brick-admin-burger[aria-expanded="true"] span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
+.brick-admin .brick-admin-close { border: 0; background: none; font-size: 26px; line-height: 1; color: #fff !important; padding: 4px 8px !important; }
 `;
 
 const link = {

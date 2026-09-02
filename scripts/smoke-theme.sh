@@ -148,11 +148,12 @@ echo "── 폼은 type 을 안 적은 input 까지 스타일한다"
 # `<input name="x">` 는 text 로 동작하지만 [type="text"] 에는 안 걸린다.
 # 이 규칙이 빠지면 type 을 생략한 폼이 다크에서 흰 칸 + 흰 글자가 된다.
 STYLE_CSS="$(cat "$ROOT/themes/default/assets/style.css")"
+contains "테마 CSS 는 Tailwind 소스에서 컴파일된 산출물 (@layer theme)" "$STYLE_CSS" "@layer theme"
 contains "type 없는 input 도 포함" "$STYLE_CSS" 'input:not([type])'
 contains "포커스 링은 input 전체에" "$STYLE_CSS" '.brick-main input:focus-visible'
 # 손님이 고른 밝기를 UA 위젯에도 알려야 한다 — 아니면 다크 화면에 흰 체크박스가 남는다
-contains "고른 다크는 UA 위젯까지" "$STYLE_CSS" ':root[data-theme="dark"] { color-scheme: dark; }'
-contains "고른 라이트도 마찬가지" "$STYLE_CSS" ':root[data-theme="light"] { color-scheme: light; }'
+contains "고른 다크는 UA 위젯까지" "$STYLE_CSS" '[data-theme=dark]{color-scheme:dark}'
+contains "고른 라이트도 마찬가지" "$STYLE_CSS" '[data-theme=light]{color-scheme:light}'
 
 echo "── 에셋 캐시버스터는 파일을 고치면 바뀐다"
 V1="$(grep -o 'style\.css?v=[^"]*' <<< "$HOME_HTML" | head -1)"

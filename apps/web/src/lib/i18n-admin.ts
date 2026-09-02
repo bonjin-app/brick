@@ -26,6 +26,8 @@ const KO = {
   "nav.search": "검색 분석",
   "nav.audit": "감사 로그",
   "nav.logout": "로그아웃",
+  "nav.openMenu": "메뉴 열기",
+  "nav.closeMenu": "메뉴 닫기",
 
   "common.save": "저장",
   "common.saved": "저장되었습니다.",
@@ -297,6 +299,8 @@ const EN: Record<keyof typeof KO, string> = {
   "nav.search": "Search analytics",
   "nav.audit": "Audit log",
   "nav.logout": "Log out",
+  "nav.openMenu": "Open menu",
+  "nav.closeMenu": "Close menu",
 
   "common.save": "Save",
   "common.saved": "Saved.",

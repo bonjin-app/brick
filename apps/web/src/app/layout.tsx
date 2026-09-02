@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import "./globals.css";
 
 /**
  * 웹(CSR 화면: 로그인·가입·내 정보·관리자)의 루트.

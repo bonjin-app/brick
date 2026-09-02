@@ -1,0 +1,48 @@
+/*
+ * 웹(Next) 화면의 Tailwind.
+ *
+ * preflight 는 넣지 않는다 — 로그인·마이페이지·관리 화면은 인라인 스타일과 ADMIN_CSS 로
+ * 이미 그려져 있고, 리셋을 들이면 그 화면들의 제목·버튼이 한꺼번에 UA 기본으로 떨어진다.
+ * 여기서 필요한 것은 **반응형 유틸리티**(md:/lg:, hidden, flex …)다.
+ *
+ * 색은 사이트 테마 토큰(/api/themes/tokens.css → --color-*)을 그대로 가리킨다 —
+ * Tailwind 의 --color-* 와 이름이 겹치지 않게 brand/surface 별칭을 쓴다 (테마 소스와 같은 규약).
+ */
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+@theme inline {
+  --color-brand: var(--color-primary);
+  --color-brand-hover: var(--color-primary-hover);
+  --color-brand-soft: var(--color-primary-soft);
+  --color-brand-text: var(--color-primary-text);
+  --color-on-brand: var(--color-on-primary);
+  --color-surface: var(--color-bg);
+  --color-surface-soft: var(--color-bg-soft);
+  --color-surface-sunken: var(--color-bg-sunken);
+  --color-ink: var(--color-text);
+  --color-ink-soft: var(--color-text-soft);
+  --color-muted: var(--color-muted);
+  --color-line: var(--color-line);
+  --color-line-strong: var(--color-line-strong);
+  --color-danger: var(--color-danger);
+  --color-success: var(--color-success);
+  --color-warning: var(--color-warning);
+  --color-side: #1e1e2e;
+  --color-side-line: #2c2c40;
+  --color-side-text: #c9c9d6;
+  --font-body: var(--font-body);
+}
+
+/*
+ * 관리 화면의 좁은 화면 규칙 — 화면마다 표를 감싸는 대신 셸이 한 번에 처리한다.
+ * 표는 가로 스크롤(내용을 잘라내지 않는다), 제목 줄의 버튼은 줄바꿈.
+ */
+@media (max-width: 1023px) {
+  /* 표는 제 폭을 유지하고 가로로 스크롤한다 — 칸을 짜부라뜨려 세로로 글자를 쌓지 않는다 */
+  .brick-admin table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .brick-admin table thead, .brick-admin table tbody { display: table; min-width: 100%; }
+  .brick-admin th, .brick-admin td { white-space: nowrap; }
+  .brick-admin td textarea, .brick-admin td input { min-width: 160px; }
+  .brick-admin h1 { font-size: 22px; }
+}

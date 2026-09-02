@@ -2926,3 +2926,35 @@ title/label/help/placeholder/options)이다. 여기에 `ctx.t()` 를 쓰면 활�
 **기각.** 기본 테마 CSS 를 `@import` 하고 덮어쓰는 "자식 테마" — 부모의 우연한 스타일에 의존하게
 되어 계약 실증이 되지 않는다. 대신 `style.css` 를 포크해 프리미티브 절을 전부 다시 썼다(~700줄).
 자식 테마 메커니즘은 운영자 커스터마이즈 용도로 따로 검토한다.
+
+## ADR-91. Tailwind 는 저작 도구다 — 컴파일 결과를 동봉하고, 런타임은 여전히 빌드가 없다
+
+**상황.** 사용자가 Tailwind CSS 와 반응형을 요구했다. Brick 의 핵심 결정 하나는 "테마 = 빌드 없는
+런타임 템플릿, 서버는 절대 빌드 안 함"(ADR-2)이다. Tailwind 는 소스를 스캔해 CSS 를 만드는 빌드
+도구라 둘이 정면으로 부딪히는 것처럼 보인다.
+
+**결정.**
+
+1. **Tailwind 는 동봉 테마·관리 화면의 저작 도구로만 쓴다.** `themes/*/src/style.css` 가 소스,
+   `pnpm build:themes` 가 `assets/style.css` 를 만든다. 산출물을 저장소에 커밋하므로 서버·ZIP 설치·
+   FTP 배포본은 컴파일된 파일만 본다 — 런타임에 Node 빌드도, CDN 스크립트(Play CDN)도 없다.
+   Play CDN 은 기각: 첫 렌더 뒤 스타일이 붙어 번쩍이고, CDN 이 막힌 환경에서 사이트가 통째로 벗겨진다.
+2. **드리프트는 CI 가 잡는다.** 빌드 뒤 다시 컴파일해 `git diff --exit-code themes/*/assets/style.css`.
+   소스만 고치고 컴파일을 잊으면 CI 가 실패한다(컴파일은 멱등 — 같은 소스는 같은 바이트).
+3. **토큰은 그대로 brick.theme.json 이 소유한다.** Tailwind 의 `--color-*` 변수와 이름이 겹치므로
+   `@theme inline` 에 brand/surface/ink 별칭을 두고 `var(--color-primary)` 를 가리킨다. `bg-brand` 는
+   `background: var(--color-primary)` 로 컴파일되어 다크 모드가 기존 방식(`[data-theme]`/media) 그대로
+   따라온다 — `dark:` 변형을 쓰지 않는다.
+4. **프리미티브 CSS 는 `@layer` 밖.** 플러그인은 자기 CSS 를 `<style>` 로 끼워 넣는다(unlayered).
+   테마 프리미티브를 계층에 넣으면 특이성과 무관하게 플러그인 CSS 가 항상 이겨, 테마가 블록을 덮어
+   쓰는 계약(ADR-90 의 editorial 사례)이 무력해진다. 유틸리티는 계층에, 프리미티브는 밖에.
+5. **Preflight 는 테마에만.** Next 관리 화면은 인라인 스타일과 ADMIN_CSS 로 이미 그려져 있어 리셋을
+   들이면 제목·버튼이 한꺼번에 UA 기본으로 떨어진다 — `theme.css`+`utilities.css` 만 들여 반응형
+   유틸리티를 얻는다. 테마 쪽은 Preflight 를 쓰되 사용자가 쓴 본문(클래스 없는 ul/ol/strong)을
+   `@layer base` 에서 되살린다.
+6. **관리 화면의 좁은 화면은 셸이 책임진다.** 사이드바는 1024px 미만에서 드로어(마크업 하나, 상태만
+   토글), 표는 `display:block; overflow-x:auto` 로 가로 스크롤 — 화면마다 감싸는 대신 한 규칙으로.
+   칸을 짜부라뜨려 글자를 세로로 쌓는 것(첫 시도에서 실제로 그랬다)보다 스크롤이 읽기 낫다.
+
+**검증.** smoke-theme 이 서빙되는 CSS 에 `@layer theme` 가 있는지 본다(컴파일 산출물). Playwright
+375/1280 으로 홈·상점·상품·장바구니·주문서·게시판·글쓰기·마이페이지·관리 대시보드·관리 표를 확인했다.

@@ -48,6 +48,11 @@ jobs:
 
       - name: 빌드 (타입검사 포함)
         run: pnpm build
+      - name: 테마 CSS 컴파일 산출물 일치 (소스만 고치고 컴파일을 잊지 않았는가)
+        run: |
+          bash scripts/build-themes.sh
+          git diff --exit-code -- themes/*/assets/style.css \
+            || { echo "::error::themes/*/src 를 고쳤으면 pnpm build:themes 결과(assets/style.css)도 커밋해야 합니다"; exit 1; }
 
       - name: 마이그레이션
         run: node apps/api/dist/migrate.js
