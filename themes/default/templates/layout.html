@@ -68,7 +68,8 @@
   <a class="brick-skip" href="#brick-content">{{ t.header.skip }}</a>
 
   <header class="brick-header">
-    <div class="brick-header-inner">
+    {{!-- 배치는 유틸리티로, 색·모양은 프리미티브 클래스로 (docs/theme-development.md) --}}
+    <div class="brick-header-inner mx-auto flex h-(--brick-header-h) max-w-(--content-width) items-center gap-2.5 px-(--brick-pad-x) md:gap-5">
       <a class="brick-logo" href="/">{{ site.name }}</a>
 
       <button type="button" class="brick-burger" id="brick-burger"
@@ -76,11 +77,11 @@
         <span></span><span></span><span></span>
       </button>
 
-      <nav class="brick-nav" id="brick-nav" aria-label="{{ t.header.menu }}">
+      <nav class="brick-nav md:flex md:min-w-0 md:flex-1 md:items-center md:gap-0.5" id="brick-nav" aria-label="{{ t.header.menu }}">
         {{#each menu}}<a href="{{ url }}"{{#if current}} class="is-current" aria-current="page"{{/if}}>{{ label }}</a>{{/each}}
       </nav>
 
-      <div class="brick-header-right">
+      <div class="brick-header-right ml-auto flex items-center gap-2 md:gap-3">
         <form class="brick-header-search" method="get" action="/search" role="search">
           <svg class="brick-search-icon" viewBox="0 0 20 20" aria-hidden="true">
             <circle cx="9" cy="9" r="5.5" fill="none" stroke="currentColor" stroke-width="1.8" />
@@ -128,19 +129,19 @@
     </div>
   </header>
 
-  <main class="brick-main" id="brick-content">
+  <main class="brick-main mx-auto w-full max-w-(--content-width) flex-auto px-(--brick-pad-x) pt-7 pb-16 md:pt-10 md:pb-20" id="brick-content">
     {{{ content }}}
   </main>
 
   <footer class="brick-footer">
-    <div class="brick-footer-inner">
+    <div class="brick-footer-inner mx-auto max-w-(--content-width) px-(--brick-pad-x) pt-8 pb-10">
       {{!--
         3열 푸터 — 소개 · 바로가기 · 연락처. 한 줄 푸터는 "끝"이 아니라 "잘림"으로
         보인다. 소개는 사이트 설명(관리자 → 설정)에서, 연락처는 사업자정보에서 온다 —
         값이 없는 열은 그리지 않는다.
       --}}
-      <div class="brick-footer-cols">
-        <div class="brick-footer-col brick-footer-about">
+      <div class="brick-footer-cols mb-5 grid grid-cols-2 items-start gap-x-10 gap-y-7 border-b border-line pb-6 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
+        <div class="brick-footer-col brick-footer-about col-span-2 md:col-span-1">
           <a class="brick-footer-logo" href="/">{{ site.name }}</a>
           {{#if site.description}}<p>{{ site.description }}</p>{{/if}}
         </div>
@@ -154,7 +155,7 @@
           {{#if site.business.address}}<span><svg class="brick-ico" aria-hidden="true"><use href="#i-pin"></use></svg>{{ site.business.address }}</span>{{/if}}
         </div>
         {{/if}}
-        <a class="brick-totop" href="#brick-content">
+        <a class="brick-totop col-span-2 justify-self-start md:col-span-1 md:justify-self-auto" href="#brick-content">
           <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3.2 3.4 7.8M8 3.2l4.6 4.6M8 3.6v9"
             fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /></svg>
           {{ t.footer.toTop }}

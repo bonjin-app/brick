@@ -302,7 +302,7 @@ ICO="$(render "icotest")"
 contains "아이콘 이름이 심볼 참조로 (생성 응답: ${ICO_CREATE:0:80})" "$ICO" 'href="#i-truck"'
 absent "이름이 아닌 값은 아이콘이 되지 않는다" "$ICO" 'href="#i-<'
 check "아이콘은 유효한 것 하나만" "$(count_of "$ICO" 'class="brick-card-icon"')" "1"
-contains "푸터 3열" "$HOME_HTML" 'class="brick-footer-cols"'
+contains "푸터 3열" "$HOME_HTML" 'class="brick-footer-cols'
 
 echo "── 히어로가 첫 블록이면 페이지 제목을 히어로가 맡는다"
 contains "문서 제목은 히어로 제목" "$L" "<title>히어로 제목입니다 — 테마시험</title>"
