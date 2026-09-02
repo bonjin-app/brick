@@ -329,6 +329,49 @@ check "로그인 후 휴면 해제" "$DORM2" "true"
 LAST="$(psql_q "SELECT last_login_at > now() - interval '1 minute' FROM users WHERE id='$U3'")"
 check "마지막 로그인 기록" "$LAST" "true"
 
+echo "── 프로필 이미지 · 공개 카드 · 닉네임 변경 주기 (M25)"
+cat > "$TMP/ua.json" <<'JSON'
+{"email":"avatar@mem.test","password":"password123","displayName":"아바타",
+ "agreements":{"terms":true,"privacy":true,"marketing":false},"ageConfirmed":true}
+JSON
+UA="$(curl -s -X POST "$API/api/register" -H 'content-type: application/json' --data-binary "@$TMP/ua.json" | jq_get "['id']")"
+CKA="$TMP/avatar.txt"
+curl -s -c "$CKA" -X POST "$API/api/auth/login" -H 'content-type: application/json' \
+  -d '{"email":"avatar@mem.test","password":"password123"}' -o /dev/null
+[[ -n "$UA" ]] && ok "프로필 시험용 회원 가입" || bad "프로필 시험용 회원 가입 실패"
+python3 - "$TMP/av.png" <<'PY2'
+import zlib, struct, sys
+w,h=64,64; raw=b''.join(b'\x00'+bytes((207,68,55))*w for _ in range(h))
+def ch(t,d): return struct.pack('>I',len(d))+t+d+struct.pack('>I',zlib.crc32(t+d)&0xffffffff)
+open(sys.argv[1],'wb').write(b'\x89PNG\r\n\x1a\n'+ch(b'IHDR',struct.pack('>IIBBBBB',w,h,8,2,0,0,0))+ch(b'IDAT',zlib.compress(raw,9))+ch(b'IEND',b''))
+PY2
+printf 'not an image' > "$TMP/av.txt"
+check "비로그인 업로드는 401" "$(code -X POST "$API/api/me/avatar" -F "file=@$TMP/av.png;type=image/png")" "401"
+check "이미지가 아니면 400" "$(code -b "$CKA" -X POST "$API/api/me/avatar" -F "file=@$TMP/av.txt;type=text/plain")" "400"
+AV="$(curl -s -b "$CKA" -X POST "$API/api/me/avatar" -F "file=@$TMP/av.png;type=image/png")"
+contains "업로드하면 공개 URL 을 준다" "$AV" '"avatarUrl":"'
+AV_URL="$(echo "$AV" | jq_get "['avatarUrl']")"
+contains "내 정보에 반영" "$(curl -s -b "$CKA" "$API/api/me/profile")" "\"avatar_url\":\"$AV_URL\""
+contains "세션 사용자에도 (헤더가 그린다)" "$(curl -s -b "$CKA" "$API/api/auth/me")" "\"avatarUrl\":\"$AV_URL\""
+CARD="$(curl -s "$API/api/members/$UA/card")"
+contains "공개 카드는 비로그인도 본다" "$CARD" '"displayName"'
+contains "카드에 이미지" "$CARD" "$AV_URL"
+absent "카드에 이메일은 없다" "$CARD" "@mem.test"
+absent "카드에 생일도 없다" "$CARD" "birth"
+check "잘못된 id 는 400" "$(code "$API/api/members/not-a-uuid/card")" "400"
+check "탈퇴한 회원의 카드는 404 (없는 사람으로 보인다)" "$(code "$API/api/members/$U1/card")" "404"
+check "이미지 삭제" "$(code -b "$CKA" -X DELETE "$API/api/me/avatar")" "200"
+contains "삭제 후 내 정보에는 null" "$(curl -s -b "$CKA" "$API/api/me/profile")" '"avatar_url":null'
+
+# 닉네임 변경 주기 — 설정이 0(기본)이면 자유, 30 이면 한 번 바꾼 뒤 막힌다. 첫 변경은 언제나 된다
+curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"member.nick_change_days":"30"}' -o /dev/null
+check "첫 이름 변경은 된다" "$(code -b "$CKA" -X PUT "$API/api/me" -H 'content-type: application/json' -d '{"displayName":"새이름하나"}')" "200"
+R2="$(curl -s -b "$CKA" -X PUT "$API/api/me" -H 'content-type: application/json' -d '{"displayName":"새이름둘"}')"
+contains "30일 안의 두 번째 변경은 막힌다" "$R2" "30일마다"
+check "같은 이름으로 다시 저장은 변경이 아니다" "$(code -b "$CKA" -X PUT "$API/api/me" -H 'content-type: application/json' -d '{"displayName":"새이름하나"}')" "200"
+curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"member.nick_change_days":"0"}' -o /dev/null
+check "제한을 0 으로 풀면 바로 바꿀 수 있다" "$(code -b "$CKA" -X PUT "$API/api/me" -H 'content-type: application/json' -d '{"displayName":"새이름둘"}')" "200"
+
 echo "── 권한"
 check "비로그인은 내 정보 접근 불가" "$(code "$API/api/me/profile")" "401"
 check "비로그인은 탈퇴 불가" "$(code -X POST "$API/api/me/withdraw" -H 'content-type: application/json' -d '{}')" "401"

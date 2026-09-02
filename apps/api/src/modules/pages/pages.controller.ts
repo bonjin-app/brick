@@ -47,7 +47,7 @@ export class PagesController {
     const user = await this.auth.resolveFromRequest(req);
     const result = await this.renderer.renderPath(path ?? "", {
       query: rest,
-      user: user ? { id: user.id, role: user.role, displayName: user.displayName } : null,
+      user: user ? { id: user.id, role: user.role, displayName: user.displayName, avatarUrl: user.avatarUrl ?? null } : null,
     });
 
     /**

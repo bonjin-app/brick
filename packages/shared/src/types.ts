@@ -12,6 +12,8 @@ export interface Paginated<T> {
 export type UserRole = "admin" | "manager" | "member" | "guest";
 
 export interface SessionUser {
+  /** 프로필 이미지 URL (없으면 null) — 헤더·마이페이지가 그린다 */
+  avatarUrl?: string | null;
   id: Id;
   email: string;
   displayName: string;

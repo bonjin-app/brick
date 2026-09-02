@@ -41,6 +41,9 @@ const EDITABLE_SETTINGS: Record<string, "string" | "boolean"> = {
   "security.admin_ip_allowlist": "string",
   // 사이트 언어 — 공개 화면(테마·404 등)의 문자열이 이것을 따른다. 기본 ko.
   "site.locale": "string",
+  // 닉네임(표시 이름) 변경 주기(일). "0" 이면 제한 없음. 그누보드의 닉네임 변경 제한 —
+  // 이름을 자주 바꿔 글의 책임을 흐리는 것을 막는다. 숫자 검증은 읽는 쪽(users.controller)이 한다.
+  "member.nick_change_days": "string",
 };
 
 /** 사업자정보를 담는 설정 키 (단일 JSON) */

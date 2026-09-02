@@ -133,7 +133,7 @@ export class MembersController {
     const { rows } = await this.db.execute(sql`
       SELECT id, email, display_name, role, email_verified_at, marketing_opt_in,
              age_confirmed, last_login_at, created_at, birth_month, birth_day,
-             password_login_enabled
+             password_login_enabled, avatar_url, display_name_changed_at
       FROM users WHERE id = ${req.user.id}::uuid LIMIT 1
     `);
     const me = rows[0];

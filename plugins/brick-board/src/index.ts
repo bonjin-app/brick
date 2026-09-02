@@ -112,6 +112,20 @@ export default definePlugin(async (ctx) => {
     return result;
   });
 
+  /**
+   * 작성자 활동 수 — 프로필 카드(글쓴이 이름을 누르면 뜨는 작은 카드)가 부른다.
+   * 코어는 게시판 테이블을 모르므로 글·댓글 수는 여기서 준다. 비밀글·비공개 게시판의
+   * 글도 "수"에는 들어간다 — 내용이 아니라 활동량이고, 그누보드도 그렇게 센다.
+   */
+  ctx.registerRoute("GET", "/authors/:id/stats", async (req) => {
+    if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) throw new BoardError(400, "잘못된 요청입니다.");
+    const { rows } = await db.execute(sql`
+      SELECT (SELECT count(*) FROM board_posts WHERE author_id = ${req.params.id}::uuid) AS posts,
+             (SELECT count(*) FROM board_comments WHERE author_id = ${req.params.id}::uuid) AS comments
+    `);
+    return { posts: Number(rows[0]?.posts ?? 0), comments: Number(rows[0]?.comments ?? 0) };
+  });
+
   /** 글 읽기 */
   ctx.registerRoute("GET", "/posts/:id", async (req) => {
     const { rows } = await db.execute(sql`

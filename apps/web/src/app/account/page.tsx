@@ -12,6 +12,8 @@ interface Profile {
   birth_month: number | null;
   birth_day: number | null;
   password_login_enabled: boolean;
+  avatar_url?: string | null;
+  display_name_changed_at?: string | null;
 }
 
 interface Session {
@@ -192,11 +194,47 @@ export default function AccountPage() {
                 </>
               )}
             </p>
+            {/* ── 프로필 이미지 — 글·댓글·헤더에 이름 옆에 보인다 ── */}
+            <div style={{ display: "flex", alignItems: "center", gap: 14, margin: "14px 0 4px" }}>
+              {me.avatar_url ? (
+                <img src={String(me.avatar_url)} alt="" style={{ width: 56, height: 56, borderRadius: "50%", objectFit: "cover", border: "1px solid var(--color-line)" }} />
+              ) : (
+                <span aria-hidden style={{ width: 56, height: 56, borderRadius: "50%", display: "grid", placeItems: "center",
+                  background: "var(--color-primary-soft)", color: "var(--color-primary-text)", fontWeight: 800, fontSize: 22 }}>
+                  {(me.display_name || "?").trim().slice(0, 1)}
+                </span>
+              )}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <span style={{ ...authLabel, marginTop: 0 }}>{t("account.avatar")}</span>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <label style={{ ...saveBtn, marginTop: 0, cursor: "pointer", display: "inline-block" }}>
+                    {t("account.avatarChange")}
+                    <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden
+                      onChange={async (e) => {
+                        const f = e.target.files?.[0]; if (!f) return;
+                        const fd = new FormData(); fd.append("file", f);
+                        const r = await fetch("/api/me/avatar", { method: "POST", body: fd });
+                        const d = await r.json().catch(() => ({}));
+                        if (r.ok) { setNotice(t("account.avatarSaved")); load(); } else oops(d.message ?? t("account.fail"));
+                        e.target.value = "";
+                      }} />
+                  </label>
+                  {me.avatar_url && (
+                    <button type="button" style={{ ...saveBtn, marginTop: 0, background: "transparent", color: "var(--color-text-soft)", border: "1px solid var(--color-line-strong)" }}
+                      onClick={async () => { if (await call("/api/me/avatar", { method: "DELETE" }, t("account.saved"))) load(); }}>
+                      {t("account.avatarRemove")}
+                    </button>
+                  )}
+                </div>
+                <span style={small}>{t("account.avatarHint")}</span>
+              </div>
+            </div>
             <form onSubmit={saveProfile}>
               <label style={authLabel}>{t("account.name")}
                 <input style={authInput} required minLength={2} maxLength={30} value={name}
                   onChange={(e) => setName(e.target.value)} />
               </label>
+              <span style={small}>{t("account.nameHint")}</span>
               <label style={authLabel}>{t("account.birth")}
                 <span style={{ display: "flex", gap: 8 }}>
                   <input style={{ ...authInput, width: 90 }} type="number" min={1} max={12} placeholder="MM"

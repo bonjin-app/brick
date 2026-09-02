@@ -34,6 +34,8 @@ export interface RequestUser {
   id: string;
   role: string;
   displayName: string;
+  /** 프로필 이미지 — 테마 헤더가 이름 옆에 그린다 */
+  avatarUrl?: string | null;
 }
 
 /**
@@ -128,7 +130,9 @@ export class PageRenderService {
        * (위 cacheable 정책) 사용자별 내용이 다른 사람에게 새지 않는다.
        * 템플릿 엔진에 else 가 없어 비로그인 분기는 guest 로 준다.
        */
-      user: user ? { displayName: user.displayName, isAdmin: user.role === "admin" } : null,
+      user: user
+        ? { displayName: user.displayName, isAdmin: user.role === "admin", avatarUrl: user.avatarUrl ?? null }
+        : null,
       guest: !user,
       /**
        * 플러그인이 등록한 헤더 링크(장바구니·쪽지함). 테마가 쇼핑몰이나

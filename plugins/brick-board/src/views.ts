@@ -33,6 +33,31 @@ const captchaField = () => `<div class="brick-field brick-captcha" data-captcha>
       <input type="hidden" name="captchaToken" value="" />
     </div>`;
 
+/**
+ * 작성자 표시 — 아바타 + 이름.
+ * 이미지가 없으면 이름 첫 글자로 원을 그린다(색은 이름 해시). 회원이면 이름이
+ * 프로필 카드 버튼이 된다(가입일·글·댓글 수). 비회원은 이름만.
+ */
+export function authorChip(
+  name: unknown,
+  authorId: unknown,
+  avatar: unknown,
+  size: "sm" | "md" = "sm",
+): string {
+  const n = String(name ?? "-");
+  const initial = [...n.trim()][0] ?? "?";
+  let hash = 0;
+  for (const ch of n) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  const hue = hash % 360;
+  const pic = avatar
+    ? `<img class="brick-avatar brick-avatar-${size}" src="${escapeHtml(String(avatar))}" alt="" loading="lazy" />`
+    : `<span class="brick-avatar brick-avatar-${size}" style="--h:${hue}" aria-hidden="true">${escapeHtml(initial)}</span>`;
+  const label = authorId
+    ? `<button type="button" class="brick-author-name" data-author="${escapeHtml(String(authorId))}" data-author-name="${escapeHtml(n)}">${escapeHtml(n)}</button>`
+    : `<span class="brick-author-name">${escapeHtml(n)}</span>`;
+  return `<span class="brick-author">${pic}${label}</span>`;
+}
+
 /** pathTail로 어떤 화면인지 판별 */
 export function resolveView(pathTail: string): { view: "list" | "detail" | "write"; postId?: string } {
   const tail = pathTail.replace(/^\/+|\/+$/g, "");
@@ -276,10 +301,12 @@ export async function renderDetail(
 ): Promise<string> {
   const base = `/board/${encodeURIComponent(board.slug)}`;
   const { rows } = await db.execute(sql`
-    SELECT id, title, content, category, author_id, author_name, created_at, updated_at,
-           view_count, up_count, down_count, comment_count, file_count, scrap_count,
-           is_secret, is_notice, depth, thread_created_at, thread_path
-    FROM board_posts WHERE id = ${postId}::uuid AND board_id = ${board.id}::uuid LIMIT 1
+    SELECT p.id, p.title, p.content, p.category, p.author_id, p.author_name, p.created_at, p.updated_at,
+           p.view_count, p.up_count, p.down_count, p.comment_count, p.file_count, p.scrap_count,
+           p.is_secret, p.is_notice, p.depth, p.thread_created_at, p.thread_path,
+           u.avatar_url AS author_avatar
+    FROM board_posts p LEFT JOIN users u ON u.id = p.author_id
+    WHERE p.id = ${postId}::uuid AND p.board_id = ${board.id}::uuid LIMIT 1
   `);
   const post = rows[0];
   if (!post) {
@@ -392,8 +419,10 @@ ${imageFiles.map((f) => `    <figure><img src="${escapeHtml(f.url)}" alt="${esca
     <button type="button" data-print>${escapeHtml(t("detail.print"))}</button>
   </div>`;
   const { rows: comments } = await db.execute(sql`
-    SELECT id, parent_id, author_id, author_name, content, is_secret, depth, created_at
-    FROM board_comments WHERE post_id = ${postId}::uuid ORDER BY created_at
+    SELECT c.id, c.parent_id, c.author_id, c.author_name, c.content, c.is_secret, c.depth, c.created_at,
+           u.avatar_url AS author_avatar
+    FROM board_comments c LEFT JOIN users u ON u.id = c.author_id
+    WHERE c.post_id = ${postId}::uuid ORDER BY c.created_at
   `);
 
   const canDownload = hasRole(ctx.user, board.download_role);
@@ -431,7 +460,7 @@ ${listedFiles
       const own = Boolean(ctx.user && ctx.user.id === c.author_id) || isManager || !c.author_id;
       return `    <li class="brick-comment" style="--d:${Math.min(3, Number(c.depth ?? 0))}" data-id="${escapeHtml(c.id)}">
       <div class="brick-comment-head">
-        <strong>${escapeHtml(c.author_name ?? "-")}</strong>
+        ${authorChip(c.author_name, c.author_id, c.author_avatar)}
         <time>${shortDate(c.created_at)}</time>
         ${c.is_secret ? `<span class="brick-lock" title="${escapeHtml(t("comment.secretTitle"))}">&#128274;</span>` : ""}
       </div>
@@ -453,7 +482,7 @@ ${listedFiles
     ${post.category ? `<span class="brick-cat">${escapeHtml(post.category)}</span>` : ""}
     <h1>${escapeHtml(post.title)}</h1>
     <div class="brick-post-meta">
-      <span>${escapeHtml(post.author_name ?? "-")}</span>
+      ${authorChip(post.author_name, post.author_id, post.author_avatar, "md")}
       <time>${fullDate(post.created_at)}</time>
       <span>${escapeHtml(t("detail.views", { n: Number(post.view_count) }))}</span>
       ${String(post.updated_at) !== String(post.created_at) ? `<span class="brick-edited">${escapeHtml(t("detail.edited"))}</span>` : ""}

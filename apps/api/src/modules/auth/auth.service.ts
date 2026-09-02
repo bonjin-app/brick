@@ -188,6 +188,9 @@ export class AuthService {
   }
 
   private toSessionUser(row: typeof users.$inferSelect): SessionUser {
-    return { id: row.id, email: row.email, displayName: row.displayName, role: row.role as SessionUser["role"] };
+    return {
+      id: row.id, email: row.email, displayName: row.displayName, role: row.role as SessionUser["role"],
+      avatarUrl: row.avatarUrl ?? null,
+    };
   }
 }

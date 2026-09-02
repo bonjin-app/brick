@@ -27,6 +27,10 @@ export const users = pgTable(
      */
     birthMonth: smallint("birth_month"),
     birthDay: smallint("birth_day"),
+    /** 프로필 이미지(스토리지 공개 URL). 없으면 화면이 이니셜 원을 그린다 */
+    avatarUrl: text("avatar_url"),
+    /** 마지막으로 표시 이름을 바꾼 시각 — 변경 주기(member.nick_change_days) 판정 */
+    displayNameChangedAt: timestamp("display_name_changed_at", { withTimezone: true }),
     /** 마지막 로그인 — 휴면 판정의 기준 */
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
     /** 휴면 전환 시점. NULL 이면 정상 계정 */

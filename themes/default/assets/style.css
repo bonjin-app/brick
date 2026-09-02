@@ -279,7 +279,8 @@ blockquote {
   transition: background var(--brick-t);
 }
 .brick-util .brick-util-cta:hover { color: var(--color-on-primary); background: var(--color-primary-hover); }
-.brick-util-name { font-size: 13.5px; font-weight: 600; color: var(--color-text) !important; }
+.brick-util-name { font-size: 13.5px; font-weight: 600; color: var(--color-text) !important; display: inline-flex; align-items: center; gap: 7px; }
+.brick-avatar-hd { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; border: 1px solid var(--color-line); }
 .brick-util-name:hover { color: var(--color-primary-text) !important; }
 .brick-logout { display: inline; margin: 0; }
 .brick-logout button {

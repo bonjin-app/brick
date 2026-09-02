@@ -90,7 +90,7 @@
           <a class="brick-util-cta" href="/register">{{ t.header.register }}</a>
           {{/if}}
           {{#if user}}
-          <a class="brick-util-name" href="/account">{{ user.displayName }}</a>
+          <a class="brick-util-name" href="/account">{{#if user.avatarUrl}}<img class="brick-avatar-hd" src="{{ user.avatarUrl }}" alt="" />{{/if}}{{ user.displayName }}</a>
           {{#if user.isAdmin}}<a href="/admin">{{ t.header.admin }}</a>{{/if}}
           {{!-- 로그아웃은 상태를 바꾸므로 링크(GET)가 아니라 폼(POST)이다 --}}
           <form class="brick-logout" method="post" action="/api/auth/logout">

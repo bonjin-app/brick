@@ -270,6 +270,48 @@ export const BOARD_SCRIPT = `
     });
   }
 
+  /* ── 프로필 카드 — 글쓴이 이름을 누르면 가입일·글·댓글 수 ─────────
+     코어(/api/members/:id/card)와 게시판(/authors/:id/stats)이 각자 아는 것을 준다. */
+  var cardEl = null;
+  function closeCard() { if (cardEl) { cardEl.remove(); cardEl = null; } }
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-author]');
+    if (!btn) { if (cardEl && !e.target.closest('.brick-profile-card')) closeCard(); return; }
+    e.preventDefault();
+    closeCard();
+    var id = btn.dataset.author;
+    var card = document.createElement('div');
+    card.className = 'brick-profile-card';
+    card.setAttribute('role', 'dialog');
+    card.innerHTML = '<div class="brick-profile-loading">불러오는 중…</div>';
+    btn.parentElement.insertAdjacentElement('afterend', card);
+    cardEl = card;
+    Promise.all([
+      fetch('/api/members/' + id + '/card').then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }),
+      fetch(API + '/authors/' + id + '/stats').then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; })
+    ]).then(function (res) {
+      var m = res[0], st = res[1];
+      if (!m) { card.innerHTML = '<div class="brick-profile-loading">회원 정보를 볼 수 없습니다.</div>'; return; }
+      var joined = m.joinedAt ? new Date(m.joinedAt) : null;
+      var joinedText = joined ? joined.getFullYear() + '.' + String(joined.getMonth() + 1).padStart(2, '0') + '.' + String(joined.getDate()).padStart(2, '0') : '-';
+      card.innerHTML =
+        '<div class="brick-profile-head">' +
+          (m.avatarUrl ? '<img class="brick-avatar brick-avatar-lg" src="' + esc(m.avatarUrl) + '" alt="">'
+                       : '<span class="brick-avatar brick-avatar-lg" style="--h:' + (hashHue(m.displayName)) + '">' + esc((m.displayName || '?').trim()[0]) + '</span>') +
+          '<div><strong>' + esc(m.displayName) + '</strong>' +
+          (m.roleLabel ? '<span class="brick-profile-role">' + esc(m.roleLabel) + '</span>' : '') + '</div>' +
+        '</div>' +
+        '<dl class="brick-profile-stats">' +
+          '<div><dt>가입</dt><dd>' + joinedText + '</dd></div>' +
+          (st ? '<div><dt>글</dt><dd>' + st.posts + '</dd></div><div><dt>댓글</dt><dd>' + st.comments + '</dd></div>' : '') +
+        '</dl>' +
+        '<button type="button" class="brick-profile-close" aria-label="닫기">&times;</button>';
+      card.querySelector('.brick-profile-close').addEventListener('click', closeCard);
+    });
+  });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeCard(); });
+  function hashHue(s) { var h = 0; for (var i = 0; i < (s || '').length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h % 360; }
+
   /* ── 상세: 추천 · 삭제 · 첨부 · 댓글 ───────────── */
   var postRoot = document.querySelector('.brick-post');
   if (postRoot) {
@@ -541,6 +583,28 @@ export const BOARD_CSS = `
 .brick-board-card strong{display:block;font-size:16px}
 .brick-board-count{color:var(--color-muted, #6c6c7a);font-size:12.5px}
 .brick-board-card p{margin:8px 0 0;color:var(--color-text-soft, #45454f);font-size:13.5px}
+/* ── 작성자 아바타 · 프로필 카드 ─────────────────── */
+.brick-author{display:inline-flex;align-items:center;gap:7px;position:relative}
+.brick-avatar{display:inline-grid;place-items:center;border-radius:50%;object-fit:cover;flex:0 0 auto;font-weight:700;color:#fff;
+  background:hsl(var(--h,200) 45% 48%);letter-spacing:0;line-height:1}
+.brick-avatar-sm{width:22px;height:22px;font-size:11px}
+.brick-avatar-md{width:30px;height:30px;font-size:13px}
+.brick-avatar-lg{width:48px;height:48px;font-size:20px}
+.brick-author-name{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;font-weight:600}
+.brick-author-name:hover{color:var(--color-primary-text, #b63a2e);text-decoration:underline}
+span.brick-author-name{cursor:default;font-weight:500}
+.brick-profile-card{position:absolute;z-index:30;top:calc(100% + 8px);left:0;min-width:240px;padding:14px 16px 12px;border-radius:var(--radius-lg, 14px);
+  background:var(--color-bg, #fff);border:1px solid var(--color-line, #e4e4ea);box-shadow:var(--shadow-md, 0 8px 28px rgba(0,0,0,.12));font-size:13.5px}
+.brick-profile-head{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.brick-profile-head strong{display:block;font-size:15px}
+.brick-profile-role{font-size:12px;color:var(--color-muted, #6c6c7a)}
+.brick-profile-stats{display:flex;gap:16px;margin:0}
+.brick-profile-stats div{display:flex;flex-direction:column;gap:2px}
+.brick-profile-stats dt{font-size:11.5px;color:var(--color-muted, #6c6c7a)}
+.brick-profile-stats dd{margin:0;font-weight:700;font-variant-numeric:tabular-nums}
+.brick-profile-close{position:absolute;top:6px;right:8px;border:0;background:none;font-size:18px;line-height:1;color:var(--color-muted, #6c6c7a);cursor:pointer;padding:4px}
+.brick-profile-loading{color:var(--color-muted, #6c6c7a)}
+.brick-post-meta .brick-author{margin-right:2px}
 /* ── 목록 스킨: 갤러리 · 웹진 ─────────────────────── */
 .brick-gallery-grid{display:grid;gap:18px;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));margin:14px 0 4px}
 .brick-gallery-item{display:flex;flex-direction:column;gap:8px;text-decoration:none;color:inherit;min-width:0}

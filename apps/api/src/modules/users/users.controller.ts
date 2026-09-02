@@ -1,5 +1,5 @@
 import {
-  BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, HttpException,
+  BadRequestException, Body, ConflictException, Controller, Delete, ForbiddenException, Get, HttpException,
   HttpStatus, Inject, Param, Post, Put, Query, Req, UseGuards,
 } from "@nestjs/common";
 import { count, desc, eq, sql } from "drizzle-orm";
@@ -15,7 +15,9 @@ import { RateLimitService } from "../auth/rate-limit.service.js";
 import { ReauthService } from "../auth/reauth.service.js";
 import type { CaptchaProvider } from "@brick/core";
 import { AuditService } from "../audit/audit.service.js";
-import { CAPTCHA, DB, HOOKS } from "../../runtime.module.js";
+import { CAPTCHA, DB, HOOKS, STORAGE } from "../../runtime.module.js";
+import type { StorageProvider } from "@brick/core";
+import { extname } from "node:path";
 import { isUniqueViolation } from "@brick/core";
 import { AgreementsService } from "../members/agreements.service.js";
 import { EmailVerifyService } from "../members/email-verify.service.js";
@@ -35,7 +37,15 @@ export class UsersController {
     @Inject(CAPTCHA) private readonly captcha: CaptchaProvider,
     private readonly agreements: AgreementsService,
     private readonly emailVerify: EmailVerifyService,
+    @Inject(STORAGE) private readonly storage: StorageProvider,
   ) {}
+
+  /** 닉네임(표시 이름) 변경 주기(일). 설정이 없거나 이상하면 0 = 제한 없음 */
+  private async nickChangeDays(): Promise<number> {
+    const [row] = await this.db.select().from(siteSettings).where(eq(siteSettings.key, "member.nick_change_days")).limit(1);
+    const n = Math.floor(Number(row?.value ?? 0));
+    return Number.isFinite(n) && n > 0 ? Math.min(n, 3650) : 0;
+  }
 
   /** 회원가입 — site.registration_open 설정으로 열고 닫을 수 있다 */
   @Post("register")
@@ -184,7 +194,25 @@ export class UsersController {
     if (body.displayName !== undefined) {
       const name = body.displayName.trim();
       if (name.length < 2 || name.length > 30) throw new BadRequestException("이름은 2~30자로 입력하세요.");
-      patch.displayName = name;
+      const [cur] = await this.db
+        .select({ displayName: users.displayName, changedAt: users.displayNameChangedAt })
+        .from(users).where(eq(users.id, req.user.id)).limit(1);
+      if (cur && cur.displayName !== name) {
+        /**
+         * 변경 주기 — 이름을 자주 바꿔 글의 책임을 흐리는 것을 막는다(그누보드의 닉네임
+         * 변경 제한). 첫 변경(changedAt 없음)은 언제나 허용한다.
+         */
+        const days = await this.nickChangeDays();
+        if (days > 0 && cur.changedAt) {
+          const until = new Date(cur.changedAt.getTime() + days * 86_400_000);
+          if (until.getTime() > Date.now()) {
+            const left = Math.ceil((until.getTime() - Date.now()) / 86_400_000);
+            throw new BadRequestException(`이름은 ${days}일마다 바꿀 수 있습니다. ${left}일 후에 다시 시도해주세요.`);
+          }
+        }
+        patch.displayName = name;
+        patch.displayNameChangedAt = new Date();
+      }
     }
 
     if (body.newPassword) {
@@ -201,6 +229,75 @@ export class UsersController {
     // 비밀번호를 바꾸면 다른 모든 세션을 무효화한다
     if (patch.passwordHash) await this.auth.revokeAllSessions(req.user.id);
     return { ok: true };
+  }
+
+  /**
+   * 프로필 이미지 업로드 (multipart, 한 장).
+   * 이미지 형식만, 4MB 이하. 저장 키는 서버가 만든다(원본 파일명은 경로에 쓰지 않는다).
+   * 이전 이미지는 지운다 — 바꿀 때마다 스토리지에 쌓이면 안 된다.
+   */
+  @Post("me/avatar")
+  @UseGuards(AuthGuard)
+  async uploadAvatar(@Req() req: FastifyRequest & { user: { id: string } }) {
+    const file = await req.file();
+    if (!file) throw new BadRequestException("이미지 파일이 없습니다.");
+    const ext = extname(file.filename ?? "").toLowerCase();
+    const okExt: Record<string, string[]> = {
+      ".png": ["image/png"], ".jpg": ["image/jpeg"], ".jpeg": ["image/jpeg"],
+      ".gif": ["image/gif"], ".webp": ["image/webp"],
+    };
+    if (!okExt[ext] || !okExt[ext].includes(file.mimetype)) {
+      throw new BadRequestException("프로필 이미지는 png·jpg·gif·webp 만 올릴 수 있습니다.");
+    }
+    const buffer = await file.toBuffer();
+    if (!buffer.length) throw new BadRequestException("빈 파일입니다.");
+    if (buffer.length > 4 * 1024 * 1024) throw new BadRequestException("프로필 이미지는 4MB 이하만 올릴 수 있습니다.");
+
+    const [cur] = await this.db.select({ avatarUrl: users.avatarUrl }).from(users).where(eq(users.id, req.user.id)).limit(1);
+    const key = `avatars/${req.user.id}/${uuidv7()}${ext}`;
+    await this.storage.put(key, buffer, file.mimetype);
+    const url = this.storage.publicUrl(key);
+    await this.db.update(users).set({ avatarUrl: url, updatedAt: new Date() }).where(eq(users.id, req.user.id));
+    await this.deleteAvatarObject(cur?.avatarUrl ?? null);
+    return { ok: true, avatarUrl: url };
+  }
+
+  @Delete("me/avatar")
+  @UseGuards(AuthGuard)
+  async removeAvatar(@Req() req: FastifyRequest & { user: { id: string } }) {
+    const [cur] = await this.db.select({ avatarUrl: users.avatarUrl }).from(users).where(eq(users.id, req.user.id)).limit(1);
+    await this.db.update(users).set({ avatarUrl: null, updatedAt: new Date() }).where(eq(users.id, req.user.id));
+    await this.deleteAvatarObject(cur?.avatarUrl ?? null);
+    return { ok: true };
+  }
+
+  /** 공개 URL 에서 스토리지 키를 되짚어 지운다. 우리 스토리지의 avatars/ 아래가 아니면 건드리지 않는다 */
+  private async deleteAvatarObject(url: string | null): Promise<void> {
+    if (!url) return;
+    const i = url.indexOf("avatars/");
+    if (i < 0) return;
+    await this.storage.delete(url.slice(i)).catch(() => undefined);
+  }
+
+  /**
+   * 공개 프로필 카드 — 글쓴이 이름을 눌렀을 때 뜨는 작은 카드가 부른다.
+   * 이메일·생일 같은 개인정보는 절대 내보내지 않는다. 이름·이미지·가입월·역할 라벨만.
+   * 탈퇴·비활성 회원은 404 — "없는 사람"으로 보이는 것이 맞다.
+   */
+  @Get("members/:id/card")
+  async publicCard(@Param("id") id: string) {
+    if (!/^[0-9a-f-]{36}$/i.test(id)) throw new BadRequestException("잘못된 요청입니다.");
+    const [row] = await this.db
+      .select({ displayName: users.displayName, avatarUrl: users.avatarUrl, role: users.role, createdAt: users.createdAt,
+                isActive: users.isActive, withdrawnAt: users.withdrawnAt })
+      .from(users).where(eq(users.id, id)).limit(1);
+    if (!row || !row.isActive || row.withdrawnAt) throw new HttpException("회원을 찾을 수 없습니다.", HttpStatus.NOT_FOUND);
+    return {
+      displayName: row.displayName,
+      avatarUrl: row.avatarUrl ?? null,
+      joinedAt: row.createdAt,
+      roleLabel: row.role === "admin" || row.role === "manager" ? "운영자" : null,
+    };
   }
 
   // ── 관리자: 회원 관리 ──────────────────────────────
