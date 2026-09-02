@@ -578,7 +578,8 @@ const STOREFRONT_CSS = `
 .brick-related{margin:48px 0 0}
 .brick-related h2{font-size:19px;margin:0 0 4px;padding-top:24px;border-top:1px solid var(--brick-border,#e5e5ea)}
 .brick-product-grid{display:grid;grid-template-columns:repeat(var(--brick-cols,4),1fr);gap:20px;margin:20px 0}
-@media(max-width:900px){.brick-product-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:1024px){.brick-product-grid{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}}
+@media(max-width:640px){.brick-product-grid{grid-template-columns:repeat(2,1fr);gap:14px}}
 .brick-product-card{display:block;text-decoration:none;color:inherit;transition:transform .16s ease}
 .brick-product-card:hover{transform:translateY(-2px)}
 .brick-product-card:hover .brick-product-name{color:var(--color-primary-text, #b63a2e)}
@@ -605,7 +606,7 @@ const STOREFRONT_CSS = `
 .brick-category-list a{padding:7px 14px;border:1px solid var(--color-line, #e4e4ea);border-radius:20px;text-decoration:none;color:inherit;font-size:14px}
 .brick-category-list a span{color:var(--color-muted, #6c6c7a);font-size:12px}
 .brick-product-detail{display:grid;grid-template-columns:1fr 1fr;gap:36px;margin:20px 0}
-@media(max-width:800px){.brick-product-detail{grid-template-columns:1fr}}
+@media(max-width:640px){.brick-product-detail{grid-template-columns:1fr;gap:20px}}
 .brick-detail-media{aspect-ratio:1;background:var(--color-bg-soft, #f6f6f9);border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius-lg, 14px);overflow:hidden;display:flex;align-items:center;justify-content:center}
 .brick-detail-media img{width:100%;height:100%;object-fit:cover}
 .brick-detail-info h1{margin:0 0 8px;font-size:26px;line-height:1.3}

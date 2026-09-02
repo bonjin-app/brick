@@ -92,7 +92,7 @@ export function SocialLoginSettings() {
             )}
           </label>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 10 }}>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2" style={{ marginTop: 10 }}>
             <label style={{ fontSize: 13 }}>
               Client ID
               <input

@@ -64,7 +64,7 @@ export default function AdminThemesPage() {
       {message && <p style={{ color: "var(--color-success)" }}>{message}</p>}
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
         {data.themes.map((th) => (
-          <div key={th.name} className="brick-card" style={{ width: 280, marginTop: 0 }}>
+          <div key={th.name} className="brick-card w-full sm:w-[280px]" style={{ marginTop: 0 }}>
             {th.tokens ? (
               <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
                 <Swatches tokens={th.tokens} prefix="" label={t("themes.paletteLight")} />

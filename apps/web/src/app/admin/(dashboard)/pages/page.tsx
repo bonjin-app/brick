@@ -147,7 +147,7 @@ function PageEditor(props: {
   const input = { width: "100%", padding: 8, boxSizing: "border-box" as const, marginTop: 4 };
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+      <div className="flex flex-wrap items-center gap-3" style={{ marginBottom: 16 }}>
         <button onClick={props.onClose} style={{ cursor: "pointer" }}>{t("pages.backToList")}</button>
         <h1 style={{ margin: 0, flex: 1 }}>{draft.id ? t("pages.editTitle") : t("pages.newTitle")}</h1>
         {draft.status === "published" && draft.slug && (
@@ -160,7 +160,8 @@ function PageEditor(props: {
       </div>
       {props.message && <p style={{ color: "var(--color-success)" }}>{props.message}</p>}
 
-      <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
+      {/* 좁은 화면에서는 설정 패널이 아래로 내려간다 — 편집 영역이 먼저 */}
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
         {/* 좌: 블록 캔버스 */}
         <div style={{ flex: 1 }}>
           {draft.blocks.map((node, i) => (
@@ -193,7 +194,7 @@ function PageEditor(props: {
         </div>
 
         {/* 우: 페이지 설정 */}
-        <aside style={{ width: 280, background: "var(--color-bg)", borderRadius: 8, padding: 16, flexShrink: 0 }}>
+        <aside className="w-full shrink-0 lg:w-[280px]" style={{ background: "var(--color-bg)", borderRadius: 8, padding: 16 }}>
           <label>{t("common.title")}<input style={input} value={draft.title}
             onChange={(e) => onChange({ ...draft, title: e.target.value })} /></label>
           <label style={{ display: "block", marginTop: 12 }}>{t("pages.fieldSlug")}<input style={input} value={draft.slug}
