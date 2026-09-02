@@ -421,11 +421,21 @@ export function excerpt(text: string, query: string): string {
   const body = String(text ?? "");
   if (!body) return "";
   const idx = body.toLowerCase().indexOf(query.toLowerCase());
-  if (idx < 0) return body.slice(0, 150);
-  const start = Math.max(0, idx - 60);
-  return (
-    (start > 0 ? "…" : "") +
-    body.slice(start, start + 150) +
-    (start + 150 < body.length ? "…" : "")
-  );
+  if (idx < 0) return cutAtWord(body, 0, 150, body.length);
+  return cutAtWord(body, Math.max(0, idx - 60), 150, body.length);
+}
+
+/** 단어 중간에서 끊지 않는다 — "…배송비는 얼마인가" 가 "…송비는 얼마인가" 로 보이지 않게 */
+function cutAtWord(body: string, start: number, len: number, total: number): string {
+  let s = start;
+  if (s > 0) {
+    const sp = body.indexOf(" ", s);
+    if (sp > 0 && sp - s <= 20) s = sp + 1;
+  }
+  let e = Math.min(total, s + len);
+  if (e < total) {
+    const sp = body.lastIndexOf(" ", e);
+    if (sp > s + len - 30) e = sp;
+  }
+  return (s > 0 ? "…" : "") + body.slice(s, e).trim() + (e < total ? "…" : "");
 }

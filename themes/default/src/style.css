@@ -305,7 +305,8 @@ blockquote {
 :root[data-theme="dark"] .brick-theme-btn .i-light { display: block; }
 
 /* 아이콘 — 스프라이트의 <use>. 글자 크기를 따르고 currentColor 로 칠한다 */
-.brick-ico { width: 1.15em; height: 1.15em; flex: 0 0 auto; vertical-align: -0.2em; }
+/* Preflight 가 svg 를 block 으로 두므로 글 사이에 끼우는 아이콘은 inline 으로 되돌린다 */
+.brick-ico { display: inline-block; width: 1.15em; height: 1.15em; flex: 0 0 auto; vertical-align: -0.2em; }
 
 /* 플러그인이 등록한 헤더 링크 (장바구니·쪽지함) */
 .brick-actions { display: flex; align-items: center; gap: 4px; white-space: nowrap; }

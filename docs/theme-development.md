@@ -189,7 +189,7 @@ page.html 슬롯은 추가로 `title`(페이지 제목), `{{{ blocksHtml }}}`(�
 제공하세요:
 
 `search` `cart` `message` `user` `heart` `bell` `star` `truck` `shield` `chat` `clock`
-`pin` `mail` `phone` `image` `check` `arrow` `thumb-up` `thumb-down` `link` `close`
+`pin` `mail` `phone` `image` `check` `arrow` `thumb-up` `thumb-down` `link` `close` `lock` `clip`
 
 ## 대비 점검 — 눈으로는 안 보이는 것
 

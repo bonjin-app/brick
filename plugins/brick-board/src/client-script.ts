@@ -485,6 +485,7 @@ export const BOARD_CSS = `
 .brick-board-table td{padding:11px 8px;border-bottom:1px solid var(--color-line, #e4e4ea)}
 .brick-board-table a{color:inherit;text-decoration:none}
 .brick-board-table a:hover{text-decoration:underline}
+.brick-board-table .brick-ico{width:14px;height:14px;vertical-align:-2px;color:var(--color-muted, #6c6c7a)}
 .brick-notice{background:var(--color-bg-soft, #f6f6f9)}
 .brick-notice .brick-c-num{color:var(--color-primary,#d0402c);font-weight:700;font-size:12px}
 .brick-c-num{width:52px;text-align:center;color:var(--color-muted, #6c6c7a);font-size:12px}
@@ -661,7 +662,18 @@ export const BOARD_CSS = `
 .brick-latest-posts time{color:var(--color-muted, #6c6c7a);font-size:12.5px}
 .brick-widget-title{font-size:16px;margin:0 0 4px}
 @media(max-width:640px){
-  .brick-c-author,.brick-c-view{display:none}
+  /* 좁은 화면의 표 목록은 줄로 쌓는다: 제목 한 줄, 그 아래 글쓴이 · 날짜 · 조회 — 열을 숨기지 않는다 */
+  .brick-board-table thead{display:none}
+  .brick-board-table,.brick-board-table tbody,.brick-board-table tr,.brick-board-table td{display:block}
+  .brick-board-table tr{padding:11px 0;border-bottom:1px solid var(--color-line, #e4e4ea)}
+  .brick-board-table td{padding:0;border:0;text-align:left}
+  .brick-board-table td.brick-c-num:empty{display:none}
+  .brick-board-table .brick-c-num{display:inline-block;margin:0 6px 2px 0;font-size:12px;font-weight:700;color:var(--color-primary-text, #b63a2e)}
+  .brick-board-table .brick-c-title{font-size:15px;line-height:1.45}
+  .brick-board-table .brick-c-author,.brick-board-table .brick-c-date,.brick-board-table .brick-c-view{display:inline;width:auto;font-size:12.5px;color:var(--color-muted, #6c6c7a)}
+  .brick-board-table .brick-c-author::after,.brick-board-table .brick-c-date::after{content:" · "}
+  .brick-board-table .brick-c-view::before{content:attr(data-label) " "}
+  .brick-board-table .brick-c-title{margin-bottom:5px}
   .brick-board-head h1,.brick-board-head h2{font-size:20px}
 }
 </style>`;

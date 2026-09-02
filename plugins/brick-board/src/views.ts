@@ -150,13 +150,13 @@ export async function renderList(
         <td class="brick-c-title">
           ${p.category ? `<span class="brick-cat">${escapeHtml(p.category)}</span>` : ""}${indent}
           <a href="${base}/${escapeHtml(p.id)}">${escapeHtml(p.title)}</a>
-          ${p.is_secret ? `<span class="brick-lock" title="${escapeHtml(t("list.secretTitle"))}">&#128274;</span>` : ""}
+          ${p.is_secret ? `<span class="brick-lock" title="${escapeHtml(t("list.secretTitle"))}" aria-label="${escapeHtml(t("list.secretTitle"))}"><svg class="brick-ico" aria-hidden="true"><use href="#i-lock"></use></svg></span>` : ""}
           ${Number(p.comment_count) > 0 ? `<span class="brick-cmt">[${Number(p.comment_count)}]</span>` : ""}
-          ${Number(p.file_count) > 0 ? `<span class="brick-clip" title="${escapeHtml(t("list.attachment"))}">&#128206;</span>` : ""}
+          ${Number(p.file_count) > 0 ? `<span class="brick-clip" title="${escapeHtml(t("list.attachment"))}" aria-label="${escapeHtml(t("list.attachment"))}"><svg class="brick-ico" aria-hidden="true"><use href="#i-clip"></use></svg></span>` : ""}
         </td>
         <td class="brick-c-author">${escapeHtml(p.author_name ?? "-")}</td>
         <td class="brick-c-date">${shortDate(p.created_at)}</td>
-        <td class="brick-c-view">${Number(p.view_count)}</td>
+        <td class="brick-c-view" data-label="${escapeHtml(t("list.colView"))}">${Number(p.view_count)}</td>
       </tr>`;
   };
 
