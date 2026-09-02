@@ -5,7 +5,7 @@ import { useAdminT } from "../../../../lib/i18n-admin";
 
 interface UserRow {
   id: string; email: string; displayName: string;
-  role: string; isActive: boolean; createdAt: string;
+  role: string; isActive: boolean; createdAt: string; adminMemo?: string | null;
 }
 
 const ROLES = ["admin", "manager", "member"] as const;
@@ -91,7 +91,7 @@ export default function AdminUsersPage() {
       <table style={{ width: "100%", background: "var(--color-bg)", borderRadius: 8, borderCollapse: "collapse" }}>
         <thead>
           <tr style={{ textAlign: "left", borderBottom: "1px solid var(--color-line)" }}>
-            <th style={{ padding: 12 }}>{t("common.name")}</th><th>{t("common.email")}</th><th>{t("users.role")}</th><th>{t("common.status")}</th><th>{t("users.colJoined")}</th>
+            <th style={{ padding: 12 }}>{t("common.name")}</th><th>{t("common.email")}</th><th>{t("users.role")}</th><th>{t("common.status")}</th><th>{t("users.memo")}</th><th>{t("users.colJoined")}</th>
           </tr>
         </thead>
         <tbody>
@@ -108,6 +108,19 @@ export default function AdminUsersPage() {
                 <button onClick={() => patch(u.id, { isActive: !u.isActive })} style={{ cursor: "pointer" }}>
                   {u.isActive ? t("users.active") : t("users.suspended")}
                 </button>
+              </td>
+              <td style={{ padding: "6px 8px 6px 0", minWidth: 200 }}>
+                {/* 회원에게 보이지 않는 운영 메모 — 포커스를 벗어나면 저장한다 */}
+                <textarea
+                  key={u.id + (u.adminMemo ?? "")}
+                  defaultValue={u.adminMemo ?? ""}
+                  placeholder={t("users.memoPlaceholder")}
+                  rows={1}
+                  maxLength={2000}
+                  aria-label={t("users.memo")}
+                  onBlur={(e) => { if (e.target.value.trim() !== (u.adminMemo ?? "")) patch(u.id, { adminMemo: e.target.value }); }}
+                  style={{ width: "100%", fontSize: 13, resize: "vertical", minHeight: 32 }}
+                />
               </td>
               <td style={{ color: "var(--color-muted)", fontSize: 13 }}>{new Date(u.createdAt).toLocaleDateString()}</td>
             </tr>

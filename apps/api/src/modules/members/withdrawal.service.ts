@@ -103,6 +103,7 @@ export class WithdrawalService {
       const deadHash = `withdrawn:${randomBytes(32).toString("hex")}`;
       await tx.execute(sql`
         UPDATE users SET
+          admin_memo = NULL,
           email = ${anonymizedEmail},
           display_name = '탈퇴한 회원',
           password_hash = ${deadHash},

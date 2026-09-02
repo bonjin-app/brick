@@ -172,7 +172,7 @@ sf_render() {
     | python3 -c "import sys,json;print(json.load(sys.stdin).get('html',''))"
 }
 # 담은 다음에 갈 곳이 헤더에 있어야 한다 — 비회원도 담으므로 로그인 전에도
-contains "헤더에 장바구니 링크" "$(sf_render "")" '<a href="/shop/cart">장바구니</a>'
+contains "헤더에 장바구니 링크" "$(sf_render "")" '<a href="/shop/cart"><svg class="brick-ico" aria-hidden="true"><use href="#i-cart"></use></svg><span>장바구니</span></a>'
 
 CART_PAGE="$(sf_render "shop/cart")"
 contains "장바구니의 문서 제목" "$CART_PAGE" "<title>장바구니 —"

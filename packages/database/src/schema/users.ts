@@ -31,6 +31,8 @@ export const users = pgTable(
     avatarUrl: text("avatar_url"),
     /** 마지막으로 표시 이름을 바꾼 시각 — 변경 주기(member.nick_change_days) 판정 */
     displayNameChangedAt: timestamp("display_name_changed_at", { withTimezone: true }),
+    /** 운영자만 보는 메모(문의 이력·제재 사유). 회원 본인에게는 어떤 응답에도 담지 않는다 */
+    adminMemo: text("admin_memo"),
     /** 마지막 로그인 — 휴면 판정의 기준 */
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
     /** 휴면 전환 시점. NULL 이면 정상 계정 */

@@ -38,6 +38,8 @@ export default function AccountPage() {
   const t = useT();
   const siteName = useSiteName();
   const [me, setMe] = useState<Profile | null>(null);
+  const [newEmail, setNewEmail] = useState("");
+  const [emailOpen, setEmailOpen] = useState(false);
   const [needLogin, setNeedLogin] = useState(false);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [notice, setNotice] = useState("");
@@ -193,7 +195,27 @@ export default function AccountPage() {
                   </button>
                 </>
               )}
+              {" · "}
+              <button type="button" style={{ ...small, border: 0, background: "none", color: "var(--color-primary)", cursor: "pointer", padding: 0 }}
+                aria-expanded={emailOpen} onClick={() => setEmailOpen((v) => !v)}>
+                {t("account.changeEmail")}
+              </button>
             </p>
+            {emailOpen && (
+              /* 이메일 변경 — 새 주소로 인증 메일을 보내고, 링크를 열어야 바뀐다 (탈취 세션만으로는 못 바꾼다) */
+              <form style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", margin: "4px 0 8px" }}
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (await call("/api/me/email/verify/send", { method: "POST", body: JSON.stringify({ email: newEmail }) }, t("account.changeEmailSent"))) {
+                    setNewEmail(""); setEmailOpen(false);
+                  }
+                }}>
+                <input type="email" required value={newEmail} onChange={(e) => setNewEmail(e.target.value)}
+                  placeholder={t("account.newEmail")} aria-label={t("account.newEmail")} style={{ fontSize: 14, padding: "6px 8px", minWidth: 240 }} />
+                <button type="submit" style={{ ...small, cursor: "pointer" }}>{t("account.sendVerify")}</button>
+                <span style={{ color: "var(--color-muted)", fontSize: 12.5, flexBasis: "100%" }}>{t("account.changeEmailHint")}</span>
+              </form>
+            )}
             {/* ── 프로필 이미지 — 글·댓글·헤더에 이름 옆에 보인다 ── */}
             <div style={{ display: "flex", alignItems: "center", gap: 14, margin: "14px 0 4px" }}>
               {me.avatar_url ? (

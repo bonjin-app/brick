@@ -372,6 +372,39 @@ check "같은 이름으로 다시 저장은 변경이 아니다" "$(code -b "$CK
 curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"member.nick_change_days":"0"}' -o /dev/null
 check "제한을 0 으로 풀면 바로 바꿀 수 있다" "$(code -b "$CKA" -X PUT "$API/api/me" -H 'content-type: application/json' -d '{"displayName":"새이름둘"}')" "200"
 
+echo "── 회원별 관리자 메모 · 이메일 변경 (M26)"
+# 회원 목록은 개인정보라 10분 재인증이 필요하다 (ADR-75)
+curl -s -b "$CK" -X POST "$API/api/me/security/reauth" -H 'content-type: application/json' -d '{"password":"adminpass123"}' -o /dev/null
+# 메모는 운영자만 본다 — 회원 본인의 어떤 응답에도 담기지 않아야 한다
+check "관리자가 메모를 남긴다" "$(code -b "$CK" -X PUT "$API/api/users/$UA" -H 'content-type: application/json' -d '{"adminMemo":"VIP 고객 · 9월 문의 2건"}')" "200"
+contains "회원 목록에 메모가 보인다" "$(curl -s -b "$CK" "$API/api/users")" '"adminMemo":"VIP 고객 · 9월 문의 2건"'
+absent "회원 본인 정보에는 없다" "$(curl -s -b "$CKA" "$API/api/me/profile")" "VIP 고객"
+absent "세션 사용자에도 없다" "$(curl -s -b "$CKA" "$API/api/auth/me")" "VIP 고객"
+absent "공개 카드에도 없다" "$(curl -s "$API/api/members/$UA/card")" "VIP 고객"
+check "일반 회원은 메모를 쓸 수 없다" "$(code -b "$CKA" -X PUT "$API/api/users/$UA" -H 'content-type: application/json' -d '{"adminMemo":"x"}')" "403"
+MEMO_AUD="$(psql_q "SELECT count(*) FROM audit_logs WHERE action='user.memo_change'")"
+[[ "$MEMO_AUD" -ge 1 ]] && ok "메모 수정이 감사 로그에 남음" || bad "메모 수정이 감사 로그에 남음"
+MEMO_LEAK="$(psql_q "SELECT count(*) FROM audit_logs WHERE summary LIKE '%VIP 고객%'")"
+check "감사 로그에 메모 본문은 남기지 않음" "$MEMO_LEAK" "0"
+python3 -c 'import json;print(json.dumps({"adminMemo":"가"*2001}))' > "$TMP/memo-long.json"
+check "2,000자 초과는 400" "$(code -b "$CK" -X PUT "$API/api/users/$UA" -H 'content-type: application/json' --data-binary "@$TMP/memo-long.json")" "400"
+curl -s -b "$CK" -X PUT "$API/api/users/$UA" -H 'content-type: application/json' -d '{"adminMemo":"   "}' -o /dev/null
+contains "빈 메모는 null 로 지운다" "$(curl -s -b "$CK" "$API/api/users")" '"adminMemo":null'
+
+# 이메일 변경 — 새 주소로 인증 메일을 보내고, 링크를 열어야 바뀐다. 보내기만으로는 주소가 그대로다
+check "형식이 틀린 새 주소는 400" "$(code -b "$CKA" -X POST "$API/api/me/email/verify/send" -H 'content-type: application/json' -d '{"email":"not-an-email"}')" "400"
+# 가입 때 보낸 인증 메일의 도배 방지 쿨다운 안이다 — 시간을 되감는다(상태 변경이 아니라 시계 조작)
+psql_q "UPDATE email_verifications SET created_at = created_at - interval '1 day' WHERE user_id='$UA'" > /dev/null
+check "새 주소로 인증 메일 발송" "$(code -b "$CKA" -X POST "$API/api/me/email/verify/send" -H 'content-type: application/json' -d '{"email":"avatar-new@mem.test"}')" "201"
+PENDING="$(psql_q "SELECT count(*) FROM email_verifications WHERE user_id='$UA' AND email='avatar-new@mem.test' AND used_at IS NULL")"
+check "새 주소가 대기 토큰에 기록됨" "$PENDING" "1"
+check "인증 전에는 기존 주소 유지" "$(psql_q "SELECT email FROM users WHERE id='$UA'")" "avatar@mem.test"
+
+# 탈퇴 익명화는 메모도 지운다 — 개인정보 파기 대상이다
+curl -s -b "$CK" -X PUT "$API/api/users/$UA" -H 'content-type: application/json' -d '{"adminMemo":"파기 대상 메모"}' -o /dev/null
+curl -s -b "$CK" -X POST "$API/api/admin/users/$UA/withdraw" -H 'content-type: application/json' -d '{"reason":"시험"}' -o /dev/null
+check "탈퇴 익명화 때 메모도 지움" "$(psql_q "SELECT admin_memo IS NULL FROM users WHERE id='$UA'")" "true"
+
 echo "── 권한"
 check "비로그인은 내 정보 접근 불가" "$(code "$API/api/me/profile")" "401"
 check "비로그인은 탈퇴 불가" "$(code -X POST "$API/api/me/withdraw" -H 'content-type: application/json' -d '{}')" "401"

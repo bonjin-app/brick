@@ -323,6 +323,7 @@ export class UsersController {
         .select({
           id: users.id, email: users.email, displayName: users.displayName,
           role: users.role, isActive: users.isActive, createdAt: users.createdAt,
+          adminMemo: users.adminMemo,
         })
         .from(users)
         .orderBy(desc(users.createdAt))
@@ -337,7 +338,7 @@ export class UsersController {
   @UseGuards(AdminGuard)
   async updateUser(
     @Param("id") id: string,
-    @Body() body: { role?: string; isActive?: boolean },
+    @Body() body: { role?: string; isActive?: boolean; adminMemo?: string | null },
     @Req() req: FastifyRequest & { user: { id: string } },
   ) {
     // 자기 자신의 권한을 내리거나 계정을 잠그는 것을 막는다 (관리자 전멸 방지)
@@ -350,6 +351,12 @@ export class UsersController {
       patch.role = body.role;
     }
     if (body.isActive !== undefined) patch.isActive = body.isActive;
+    // 관리자 메모 — 회원에게 보이지 않는 운영 기록. 빈 문자열은 지운 것으로 본다.
+    if (body.adminMemo !== undefined) {
+      const memo = body.adminMemo === null ? "" : String(body.adminMemo).trim();
+      if (memo.length > 2000) throw new BadRequestException("관리자 메모는 2,000자까지입니다.");
+      patch.adminMemo = memo || null;
+    }
 
     const [before] = await this.db
       .select({ email: users.email, role: users.role, isActive: users.isActive })
@@ -363,8 +370,12 @@ export class UsersController {
     const changes: string[] = [];
     if (body.role !== undefined && before) changes.push(`권한 ${before.role} → ${body.role}`);
     if (body.isActive !== undefined && before) changes.push(body.isActive ? "계정 활성화" : "계정 정지");
+    // 메모 본문은 감사 로그에 남기지 않는다 — 로그 열람 권한과 메모 열람 권한이 다를 수 있다
+    if (body.adminMemo !== undefined) changes.push("관리자 메모 수정");
     await this.audit.fromRequest(req as never, {
-      action: body.role !== undefined ? "user.role_change" : "user.status_change",
+      action: body.role !== undefined ? "user.role_change"
+        : body.isActive !== undefined ? "user.status_change"
+        : "user.memo_change",
       targetType: "user",
       targetId: id,
       summary: `${before?.email ?? id}: ${changes.join(", ")}`,
