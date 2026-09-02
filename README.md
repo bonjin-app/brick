@@ -36,6 +36,28 @@
 
 ---
 
+<details>
+<summary><strong>English</strong> — what Brick is, in one screen</summary>
+
+**Brick is a self-hosted open-source CMS that runs when you just upload the files.** Modern stack
+(Next.js · NestJS · PostgreSQL) with the install story of classic PHP CMSes: Docker one-liner, or FTP upload
+plus a browser install wizard — no build step on the server.
+
+- **Bundled**: page builder, boards (Gnuboard-class), members, media, menus, search, two themes (light/dark),
+  eight plugins (board · shop with Toss payments · messages · points · polls · helpdesk · site tools), Gnuboard migration tool.
+- **Extensible without builds**: plugins and themes are ZIPs applied at runtime; admin screens are generated from declarations.
+- **Operable**: auto DB migrations on boot, `update.mjs` (download · SHA-256 · swap · rollback) or `docker compose pull`,
+  update notice on the dashboard, 2,700+ end-to-end smoke checks in CI.
+
+```bash
+curl -O https://raw.githubusercontent.com/bonjin-app/brick/main/docker-compose.yml
+echo "BRICK_SECRET=$(openssl rand -base64 32)" > .env
+docker compose up -d      # then open http://localhost:3000
+```
+
+Docs are in Korean; the code, ADRs and this README's structure are the map. Issues and PRs in English are welcome.
+</details>
+
 ## 왜 Brick인가
 
 오래 살아남은 CMS 들의 공통점은 언어가 좋아서가 아니라 **파일을 올리면 그냥 돌아갔기** 때문입니다.

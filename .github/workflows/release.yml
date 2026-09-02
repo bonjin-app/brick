@@ -110,6 +110,14 @@ jobs:
           tags: |
             ghcr.io/bonjin-app/brick:${{ steps.v.outputs.version }}
             ghcr.io/bonjin-app/brick:latest
+          labels: |
+            org.opencontainers.image.title=Brick
+            org.opencontainers.image.description=파일만 올리면 돌아가는 설치형 오픈소스 CMS — Next.js + NestJS + PostgreSQL
+            org.opencontainers.image.version=${{ steps.v.outputs.version }}
+            org.opencontainers.image.source=https://github.com/bonjin-app/brick
+            org.opencontainers.image.url=https://bonjin-app.github.io/brick/
+            org.opencontainers.image.documentation=https://github.com/bonjin-app/brick/blob/main/docs/installation.md
+            org.opencontainers.image.licenses=MIT
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Docker Hub 로그인
