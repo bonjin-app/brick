@@ -38,6 +38,7 @@ ok()  { PASS=$((PASS+1)); echo "  ✅ $1"; }
 bad() { FAIL=$((FAIL+1)); echo "  ❌ $1"; }
 check()    { [[ "$2" == "$3" ]] && ok "$1" || bad "$1 (기대 $3, 실제 $2)"; }
 contains() { [[ "$2" == *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 없음: ${2:0:140})"; }
+absent()   { [[ "$2" != *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 가 있음)"; }
 code()     { curl -s -o /dev/null -w "%{http_code}" "$@"; }
 
 # 런처 PID를 파일로 받아둔다.
@@ -252,6 +253,30 @@ check "두 번째 동봉 테마(editorial)도 배포본에" "$(code "$BASE/theme
 
 echo "── 공개 사이트 렌더"
 contains "테마가 문서 소유" "$(curl -s "$BASE/")" "doctype html"
+
+echo "── 업데이트 도구 (update.mjs) — 프로세스 밖에서 교체·롤백"
+[[ -f "$APP/update.mjs" ]] && ok "update.mjs 동봉" || bad "update.mjs 동봉"
+VER="$(curl -s -b "$CK" "$BASE/api/admin/version")"
+contains "관리자 버전 API 가 배포본 버전을 안다" "$VER" '"version":"0.0.0-smoke"'
+check "비로그인은 버전을 볼 수 없다 (공격자에게 유용한 정보)" "$(code "$BASE/api/admin/version")" "401"
+absent "헬스체크에는 버전이 없다" "$(curl -s "$BASE/healthz")" "version"
+UPD_OUT="$(cd "$APP" && node update.mjs --from "$TARBALL" --force --yes 2>&1 || true)"
+contains "서버가 실행 중이면 거부한다" "$UPD_OUT" "실행 중"
+stop_app
+UPD_OUT="$(cd "$APP" && node update.mjs --from "$TARBALL" --force --yes 2>&1 || true)"
+contains "같은 배포본으로 강제 재설치 (백업 생성)" "$UPD_OUT" "백업: backup/"
+[[ -f "$APP/backup/LATEST" && -d "$APP/backup/$(cat "$APP/backup/LATEST")/api" ]] && ok "이전 api 가 backup/ 에 보존됨" || bad "이전 api 가 backup/ 에 보존됨"
+[[ -f "$APP/data/brick.config.json" ]] && ok "data(설정 파일)는 건드리지 않음" || bad "data 는 건드리지 않음"
+[[ ! -d "$APP/.update" ]] && ok "임시 디렉터리 정리" || bad "임시 디렉터리 정리"
+start_app 5 ready
+check "업데이트 후 부팅·readyz 200" "$(code "$BASE/readyz")" "200"
+contains "업데이트 후에도 사이트가 그대로" "$(curl -s "$BASE/")" "doctype html"
+stop_app
+RB_OUT="$(cd "$APP" && node update.mjs --rollback --yes 2>&1 || true)"
+contains "롤백" "$RB_OUT" "되돌렸습니다"
+[[ ! -f "$APP/backup/LATEST" ]] && ok "롤백 뒤 백업 포인터 제거" || bad "롤백 뒤 백업 포인터 제거"
+start_app 6 ready
+check "롤백 후 부팅·readyz 200" "$(code "$BASE/readyz")" "200"
 
 echo
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"

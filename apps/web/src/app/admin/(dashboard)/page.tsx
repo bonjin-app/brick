@@ -18,6 +18,14 @@ interface Dashboard {
   cards: DashCard[];
 }
 
+interface VersionInfo {
+  version: string;
+  updateCheck: boolean;
+  latest: { version: string; url: string; publishedAt: string | null } | null;
+  updateAvailable: boolean;
+  error: string | null;
+}
+
 interface AuditRow {
   id: string;
   action: string;
@@ -33,6 +41,7 @@ export default function AdminDashboard() {
   const [dashFailed, setDashFailed] = useState(false);
   const [stats, setStats] = useState({ plugins: 0, activePlugins: 0, themes: 0, activeTheme: "-" });
   const [recent, setRecent] = useState<AuditRow[] | null>(null);
+  const [ver, setVer] = useState<VersionInfo | null>(null);
 
   useEffect(() => {
     // 서버는 카드 실패를 격리한다 — 클라이언트도 같은 원칙: fetch 실패(401·500·
@@ -51,6 +60,8 @@ export default function AdminDashboard() {
         }),
       )
       .catch(() => {});
+    // 버전·새 릴리스 — 실패해도 카드만 비운다
+    fetch("/api/admin/version").then((r) => (r.ok ? r.json() : null)).then((v) => v && setVer(v)).catch(() => {});
     // 최근 활동 — 감사 로그 첫 페이지의 앞 8건. 실패하면 영역을 비운다(대시보드를 죽이지 않는다)
     fetch("/api/audit?page=1")
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
@@ -98,6 +109,16 @@ export default function AdminDashboard() {
         ))}
       </div>
 
+      {/* 새 버전 알림 — 교체는 운영자가 프로세스 밖에서 한다(update.mjs · docker pull). 여기서는 알리기만 */}
+      {ver?.updateAvailable && ver.latest ? (
+        <div className="brick-card" role="status" style={{ marginTop: 0, marginBottom: 16, borderColor: "var(--color-primary)", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12 }}>
+          <strong>{t("dash.updateAvailable", { v: ver.latest.version })}</strong>
+          <span style={{ color: "var(--color-muted)", fontSize: 13.5 }}>{t("dash.updateCurrent", { v: ver.version })}</span>
+          <a className="btn-link" href={ver.latest.url} target="_blank" rel="noopener" style={{ marginLeft: "auto" }}>{t("dash.releaseNotes")} ↗</a>
+          <a className="btn-link" href="https://github.com/bonjin-app/brick/blob/main/docs/upgrade.md" target="_blank" rel="noopener">{t("dash.howToUpdate")} ↗</a>
+        </div>
+      ) : null}
+
       {/* 오늘의 사이트 — 코어(회원·페이지) + 플러그인 카드(오늘 방문자·주문·글·문의) */}
       <div className="brick-stat-grid">
         {dashFailed ? <div className="brick-card brick-stat">⚠ {t("dash.cardError")}</div> : null}
@@ -118,6 +139,9 @@ export default function AdminDashboard() {
           : null}
         {stat("plugins", t("nav.plugins"), `${stats.activePlugins} / ${stats.plugins}`, null, "/admin/plugins")}
         {stat("theme", t("dash.activeTheme"), stats.activeTheme, t("dash.themesN", { n: stats.themes }), "/admin/themes")}
+        {ver ? stat("version", t("dash.version"), `v${ver.version}`,
+          !ver.updateCheck ? t("dash.updateCheckOff") : ver.error ? t("dash.updateCheckFailed") : ver.updateAvailable && ver.latest ? t("dash.updateTo", { v: ver.latest.version }) : t("dash.upToDate"),
+          "https://github.com/bonjin-app/brick/releases") : null}
       </div>
 
       {/* 최근 활동 — 무슨 일이 있었는지 한 화면에서. 자세한 필터는 감사 로그로 */}

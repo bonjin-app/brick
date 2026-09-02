@@ -212,6 +212,20 @@ cleanup() { local rc=$?; kill "$API_PID" 2>/dev/null; wait "$API_PID" 2>/dev/nul
 - PR 하나 = 하나의 관심사. 스키마 마이그레이션은 별도 커밋 권장.
 - 이슈 없는 대형 PR보다, 방향을 논의하는 이슈를 먼저 열어주세요.
 
+## 릴리스 절차 (메인테이너)
+
+배포 채널은 GitHub Releases 의 배포본(tar.gz + SHA256SUMS)과 GHCR 이미지 둘이며, 태그 하나로 둘 다 만들어집니다 (ADR-92).
+
+1. `CHANGELOG.md` 의 **Unreleased** 를 새 버전 절로 옮기고 날짜를 적습니다.
+2. 루트 `package.json` 의 `version` 을 올립니다 (유의적 버전 — 마이그레이션이 있으면 최소 minor).
+3. 커밋 → CI 통과 확인 → `git tag vX.Y.Z && git push origin vX.Y.Z`.
+4. `release.yml` 이 배포본을 만들어 릴리스에 첨부하고, `ghcr.io/bonjin-app/brick:X.Y.Z` 와 `:latest` 를 발행합니다.
+5. 확인: 릴리스 페이지에 `brick-X.Y.Z.tar.gz`·`SHA256SUMS.txt` 가 있고, `docker pull ghcr.io/bonjin-app/brick:X.Y.Z` 가 됩니다.
+   설치된 사이트의 대시보드에는 "새 버전" 알림이 뜨고, `node update.mjs --check` 가 그 버전을 가리킵니다.
+
+프리릴리스(알파·베타)는 릴리스를 만들 때 **pre-release** 로 표시합니다 — 알림과 `update.mjs` 는
+`/releases/latest` 가 404 면 목록의 첫 릴리스로 폴백하므로 알파만 있는 동안에도 동작합니다.
+
 ## 플러그인/테마 제작
 
 코어에 기여하지 않아도 생태계에 기여할 수 있습니다:

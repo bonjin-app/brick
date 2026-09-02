@@ -50,6 +50,8 @@ const EDITABLE_SETTINGS: Record<string, "string" | "boolean"> = {
   "moderation.denied_names": "string",         // 닉네임 금지 목록 (기본: admin·관리자·운영자 등은 항상)
   "moderation.denied_email_domains": "string", // 가입 금지 이메일 도메인
   "security.blocked_ips": "string",            // 접속 차단 IP (IPv4·CIDR·IPv6). 저장 시 자기잠금을 막는다
+  // 새 버전 알림 — 관리자가 대시보드를 열 때 GitHub Releases 를 확인한다(6시간 캐시). 폐쇄망은 끈다.
+  "system.update_check": "boolean",
 };
 
 /** 사업자정보를 담는 설정 키 (단일 JSON) */

@@ -456,3 +456,18 @@ M25 를 닫고 다시 대조했다. 남은 빈 곳은 **운영자가 첫 주에 
   가지 않는다(콘솔 오류 제거). 안내 상자에 로그인 버튼(`/login?next=`)을 두고, 로그인 화면은 같은 사이트 경로만
   `next` 로 받아 원래 화면으로 돌려보낸다(프로토콜 상대 주소 차단 — OAuth 쪽 safeNext 와 같은 규칙)
 - [x] 회사 스타터(company)도 점검 — 홈·서비스·문의·소개 0건
+
+## M30 — 배포·업데이트: 오픈소스 설치형의 기본기
+
+사용자 질문: "npm 으로 공개가 맞나? 마이그레이션은? 업데이트는?" — 답과 함께 빈 곳을 채웠다 (ADR-92).
+
+- [x] **Docker 이미지 발행** — docker-compose.yml 이 가리키는 `ghcr.io/bonjin-app/brick` 이 어디서도
+  만들어지지 않았다(CI 는 push:false). 릴리스 태그마다 `X.Y.Z`·`latest` 로 GHCR 에 발행
+- [x] **버전 인식** — BRICK_VERSION(런처·이미지가 심음) → `/api/admin/version`(관리자만, 헬스체크엔 없음)
+- [x] **새 버전 알림** — 대시보드 카드·배너(GitHub Releases, 6시간 캐시, 4초 타임아웃, 설정으로 끔)
+- [x] **배포본 `update.mjs`** — 내려받기·SHA256 검증·교체·롤백을 프로세스 밖에서. 실행 중이면 거부.
+  data/uploads/운영자 설치 확장 보존. smoke-release 가 강제 재설치→부팅→롤백→부팅 왕복을 검증
+- [x] CHANGELOG.md (Keep a Changelog)
+- [ ] npm 공개는 **보류** — 플러그인 SDK 는 workspace 의존(@brick/core·shared)을 함께 공개해야 하고,
+  ZIP 설치 플러그인은 로더가 SDK 를 링크해 주므로 npm 없이도 동작한다. 외부 개발자 수요가 생기면
+  `@brick` 스코프 확보(npm 조직) 후 SDK 만 공개

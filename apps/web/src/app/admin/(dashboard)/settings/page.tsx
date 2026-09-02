@@ -124,10 +124,11 @@ export default function AdminSettingsPage() {
         </Field>
       </Card>
 
-      <Card id="extensions" title={t("settings.extensions")} keys={["extensions.registry_url"]}>
+      <Card id="extensions" title={t("settings.extensions")} keys={["extensions.registry_url", "system.update_check"]}>
         <Field label={t("settings.registryUrl")} hint={t("settings.registryUrlHint")}>
           <input style={input} placeholder="https://" value={str("extensions.registry_url")} onChange={(e) => set("extensions.registry_url", e.target.value)} />
         </Field>
+        <Check k="system.update_check" label={t("settings.updateCheck")} hint={t("settings.updateCheckHint")} fallback />
       </Card>
 
       <SocialLoginSettings />
@@ -136,4 +137,4 @@ export default function AdminSettingsPage() {
 }
 
 /** 서버가 boolean 으로 검증하는 키 — 미설정이면 false 로 보낸다 ("" 를 보내면 400) */
-const BOOLEAN_KEYS = new Set(["site.registration_open", "site.seo_noindex", "security.require_2fa_for_staff"]);
+const BOOLEAN_KEYS = new Set(["site.registration_open", "site.seo_noindex", "security.require_2fa_for_staff", "system.update_check"]);

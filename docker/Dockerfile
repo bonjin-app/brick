@@ -29,6 +29,9 @@ RUN bash scripts/collect-plugins.sh /seed/plugins
 # ── 2. 런타임 ─────────────────────────────────────────
 FROM node:24-alpine AS runtime
 WORKDIR /app
+# 릴리스 워크플로가 태그 버전을 넣는다 — 대시보드의 "새 버전" 알림이 이 값과 비교한다
+ARG BRICK_VERSION=0.0.0-dev
+ENV BRICK_VERSION=$BRICK_VERSION
 ENV NODE_ENV=production \
     BRICK_API_PORT=3001 \
     BRICK_API_URL=http://127.0.0.1:3001 \

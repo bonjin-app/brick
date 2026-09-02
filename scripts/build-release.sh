@@ -95,8 +95,12 @@ const PORT = Number(process.env.PORT || 3000);
 // 내부 API 포트. 외부에 노출되지 않는다.
 const API_PORT = Number(process.env.BRICK_API_PORT || PORT + 1);
 
+let VERSION = "0.0.0-dev";
+try { VERSION = String(JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")).version || VERSION); } catch {}
+
 const env = {
   ...process.env,
+  BRICK_VERSION: process.env.BRICK_VERSION || VERSION,
   PORT: String(PORT),
   BRICK_API_PORT: String(API_PORT),
   BRICK_API_URL: process.env.BRICK_API_URL || `http://127.0.0.1:${API_PORT}`,
@@ -224,6 +228,164 @@ const deadline = Date.now() + 60_000;
 LAUNCHER
 chmod +x "$STAGE/server.js"
 
+# 운영자가 프로세스 밖에서 실행하는 업데이트·롤백 도구 (docs/upgrade.md)
+cat > "$STAGE/update.mjs" <<'UPDATER'
+#!/usr/bin/env node
+/**
+ * Brick 업데이트 도구 — 서버를 멈춘 뒤 실행한다.
+ *
+ *   node update.mjs                         최신 릴리스로
+ *   node update.mjs 0.3.0                   특정 버전으로
+ *   node update.mjs --from brick-0.3.0.tar.gz   내려받아 둔 파일로 (폐쇄망)
+ *   node update.mjs --check                 새 버전이 있는지만 본다
+ *   node update.mjs --rollback              직전 백업으로 되돌린다
+ *   옵션: --yes(질문 생략) --force(같거나 낮은 버전도 허용)
+ *
+ * 하는 일: 내려받기 → SHA256 검증 → 풀기 → 앱 파일(server.js·api·web·node_modules 등)을
+ * backup/ 으로 옮기고 새 파일을 제자리에 → 동봉 플러그인·테마는 같은 이름만 갱신.
+ * data · uploads · 운영자가 설치한 플러그인/테마는 건드리지 않는다. DB 마이그레이션은
+ * 다음 부팅에서 자동 적용된다. 앱 안에서 자기 자신을 바꾸지 않는 이유는 docs/architecture.md 참고.
+ */
+import fs from "node:fs";
+import path from "node:path";
+import crypto from "node:crypto";
+import readline from "node:readline";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+const ROOT = path.dirname(fileURLToPath(import.meta.url));
+const REPO = "bonjin-app/brick";
+const APP_FILES = ["server.js", "update.mjs", "package.json", "README.txt", "LICENSE", "api", "web", "node_modules"];
+const args = process.argv.slice(2);
+const flag = (n) => args.includes(n);
+const opt = (n) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : undefined; };
+const wanted = args.find((a) => /^v?\d+\.\d+\.\d+/.test(a));
+
+const current = readVersion(ROOT);
+const log = (m) => console.log(m);
+const die = (m) => { console.error("✖ " + m); process.exit(1); };
+
+function readVersion(dir) {
+  try { return String(JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf8")).version || "0.0.0"); } catch { return "0.0.0"; }
+}
+function cmp(a, b) {
+  const pa = a.replace(/^v/, "").split("-")[0].split(".").map(Number), pb = b.replace(/^v/, "").split("-")[0].split(".").map(Number);
+  for (let i = 0; i < 3; i++) { const d = (pa[i] || 0) - (pb[i] || 0); if (d) return d > 0 ? 1 : -1; }
+  return 0;
+}
+function running() {
+  const pidFile = path.join(ROOT, "data", "brick.pid");
+  if (!fs.existsSync(pidFile)) return false;
+  let pids = []; try { pids = JSON.parse(fs.readFileSync(pidFile, "utf8")); } catch { return false; }
+  return (Array.isArray(pids) ? pids : []).some((pid) => { try { process.kill(pid, 0); return true; } catch { return false; } });
+}
+async function ask(q) {
+  if (flag("--yes")) return true;
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const a = await new Promise((r) => rl.question(q + " [y/N] ", r)); rl.close();
+  return /^y(es)?$/i.test(String(a).trim());
+}
+async function gh(url) {
+  const res = await fetch(url, { headers: { accept: "application/vnd.github+json", "user-agent": `brick-updater/${current}` } });
+  if (!res.ok) die(`GitHub 응답 ${res.status} (${url})`);
+  return res.json();
+}
+// /releases/latest 는 프리릴리스를 제외한다(알파·베타만 있으면 404) — 목록에서 첫 릴리스를 고른다
+async function latestRelease() {
+  const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: { accept: "application/vnd.github+json", "user-agent": `brick-updater/${current}` } });
+  if (res.ok) return res.json();
+  if (res.status !== 404) die(`GitHub 응답 ${res.status}`);
+  const list = await gh(`https://api.github.com/repos/${REPO}/releases?per_page=10`);
+  const rel = (Array.isArray(list) ? list : []).find((r) => !r.draft);
+  if (!rel) die("공개된 릴리스가 없습니다.");
+  return rel;
+}
+async function download(url, to) {
+  const res = await fetch(url, { headers: { "user-agent": `brick-updater/${current}` } });
+  if (!res.ok) die(`내려받기 실패 ${res.status}: ${url}`);
+  fs.writeFileSync(to, Buffer.from(await res.arrayBuffer()));
+}
+function sha256(file) { return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex"); }
+function move(from, to) {
+  try { fs.renameSync(from, to); }
+  catch { fs.cpSync(from, to, { recursive: true }); fs.rmSync(from, { recursive: true, force: true }); }
+}
+
+async function main() {
+  if (flag("--rollback")) return rollback();
+  log(`현재 버전: v${current}`);
+  let tarball = opt("--from"), target = wanted?.replace(/^v/, ""), sums = null;
+  if (!tarball) {
+    const rel = target ? await gh(`https://api.github.com/repos/${REPO}/releases/tags/v${target}`) : await latestRelease();
+    target = String(rel.tag_name).replace(/^v/, "");
+    const c = cmp(target, current);
+    log(`최신 릴리스: v${target}${c > 0 ? " — 새 버전" : c === 0 ? " — 이미 최신" : " — 현재보다 낮음"}`);
+    if (flag("--check")) return;
+    if (c <= 0 && !flag("--force")) { log("바꿀 것이 없습니다. (강제로 다시 설치하려면 --force)"); return; }
+    const asset = (rel.assets || []).find((a) => /^brick-.*\.tar\.gz$/.test(a.name));
+    const sumsAsset = (rel.assets || []).find((a) => a.name === "SHA256SUMS.txt");
+    if (!asset || !sumsAsset) die("릴리스에 배포본(tar.gz)과 SHA256SUMS.txt 가 없습니다.");
+    if (!(await ask(`v${current} → v${target} 으로 업데이트할까요?`))) return;
+    const dl = path.join(ROOT, ".update"); fs.rmSync(dl, { recursive: true, force: true }); fs.mkdirSync(dl, { recursive: true });
+    tarball = path.join(dl, asset.name); sums = path.join(dl, "SHA256SUMS.txt");
+    log("내려받는 중…"); await download(asset.browser_download_url, tarball); await download(sumsAsset.browser_download_url, sums);
+    const expected = fs.readFileSync(sums, "utf8").split("\n").find((l) => l.trim().endsWith(asset.name))?.split(/\s+/)[0];
+    if (!expected) die("SHA256SUMS.txt 에 배포본 항목이 없습니다.");
+    if (sha256(tarball) !== expected) die("체크섬이 다릅니다 — 내려받은 파일이 손상되었거나 바뀌었습니다. 중단합니다.");
+    log("체크섬 확인 ✓");
+  } else {
+    if (!fs.existsSync(tarball)) die(`파일이 없습니다: ${tarball}`);
+    if (flag("--check")) { log(`파일에서 설치: ${tarball}`); return; }
+  }
+  if (running()) die("서버가 아직 실행 중입니다. 먼저 멈추세요 (pm2 stop brick / 호스팅 패널의 Stop).");
+
+  const extract = path.join(ROOT, ".update", "extract"); fs.rmSync(extract, { recursive: true, force: true }); fs.mkdirSync(extract, { recursive: true });
+  execFileSync("tar", ["xzf", path.resolve(tarball), "-C", extract], { stdio: "inherit" });
+  const src = fs.existsSync(path.join(extract, "brick", "server.js")) ? path.join(extract, "brick") : extract;
+  if (!fs.existsSync(path.join(src, "server.js")) || !fs.existsSync(path.join(src, "api"))) die("배포본 구조가 아닙니다 (server.js·api 없음).");
+  const next = readVersion(src);
+  if (cmp(next, current) <= 0 && !flag("--force")) die(`배포본 v${next} 은 현재 v${current} 보다 낮거나 같습니다. (--force 로 강제)`);
+  if (!tarball.includes(path.join(ROOT, ".update")) && !(await ask(`v${current} → v${next} 으로 업데이트할까요?`))) return;
+
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const backup = path.join(ROOT, "backup", `v${current}-${stamp}`); fs.mkdirSync(backup, { recursive: true });
+  for (const f of APP_FILES) { const p = path.join(ROOT, f); if (fs.existsSync(p)) move(p, path.join(backup, f)); }
+  for (const f of APP_FILES) { const p = path.join(src, f); if (fs.existsSync(p)) move(p, path.join(ROOT, f)); }
+  // 동봉 플러그인·테마: 같은 이름만 갱신 (운영자가 설치한 것은 그대로)
+  for (const kind of ["plugins", "themes"]) {
+    const from = path.join(src, kind); if (!fs.existsSync(from)) continue;
+    for (const name of fs.readdirSync(from)) {
+      const dest = path.join(ROOT, kind, name);
+      if (fs.existsSync(dest)) { fs.mkdirSync(path.join(backup, kind), { recursive: true }); move(dest, path.join(backup, kind, name)); }
+      move(path.join(from, name), dest);
+    }
+  }
+  fs.writeFileSync(path.join(ROOT, "backup", "LATEST"), path.basename(backup));
+  fs.rmSync(path.join(ROOT, ".update"), { recursive: true, force: true });
+  log(`✓ v${current} → v${next}. 백업: backup/${path.basename(backup)}`);
+  log("이제 서버를 다시 시작하세요 — DB 마이그레이션은 부팅 때 자동 적용됩니다. 문제가 있으면 `node update.mjs --rollback`.");
+}
+
+async function rollback() {
+  const latestFile = path.join(ROOT, "backup", "LATEST");
+  if (!fs.existsSync(latestFile)) die("되돌릴 백업이 없습니다.");
+  const backup = path.join(ROOT, "backup", fs.readFileSync(latestFile, "utf8").trim());
+  if (!fs.existsSync(backup)) die(`백업 디렉터리가 없습니다: ${backup}`);
+  if (running()) die("서버가 아직 실행 중입니다. 먼저 멈추세요.");
+  const prev = readVersion(backup);
+  if (!(await ask(`v${current} 을(를) 백업 v${prev} 으로 되돌릴까요? (DB 마이그레이션은 되돌리지 않습니다)`))) return;
+  for (const f of APP_FILES) { const cur = path.join(ROOT, f); if (fs.existsSync(cur)) fs.rmSync(cur, { recursive: true, force: true }); const b = path.join(backup, f); if (fs.existsSync(b)) move(b, cur); }
+  for (const kind of ["plugins", "themes"]) {
+    const from = path.join(backup, kind); if (!fs.existsSync(from)) continue;
+    for (const name of fs.readdirSync(from)) { const dest = path.join(ROOT, kind, name); fs.rmSync(dest, { recursive: true, force: true }); move(path.join(from, name), dest); }
+  }
+  fs.rmSync(backup, { recursive: true, force: true }); fs.rmSync(latestFile, { force: true });
+  log(`✓ v${prev} 으로 되돌렸습니다. 서버를 다시 시작하세요.`);
+}
+
+main().catch((e) => die(e?.message || String(e)));
+UPDATER
+
 cat > "$STAGE/package.json" <<PKG
 {
   "name": "brick-release",
@@ -252,11 +414,20 @@ Brick — 설치 안내
 
 포트 변경:  PORT=8080 node server.js
 
-업데이트:
+업데이트 (권장 — 도구 사용):
+  1. 서버를 멈춥니다 (pm2 stop brick / 호스팅 패널의 Stop).
+  2. node update.mjs            ← 최신 릴리스를 내려받아 검증(SHA256)하고 교체합니다.
+     node update.mjs --check    ← 새 버전이 있는지만 봅니다.
+     node update.mjs --from brick-X.Y.Z.tar.gz  ← 미리 내려받은 파일로 (외부 접속이 안 될 때)
+  3. 서버를 다시 시작합니다. 데이터베이스 마이그레이션은 자동 적용됩니다.
+  문제가 있으면:  node update.mjs --rollback   (직전 백업으로 되돌립니다)
+  data / uploads / 직접 설치한 플러그인·테마는 건드리지 않습니다. 이전 파일은 backup/ 에 남습니다.
+
+업데이트 (수동):
   1. data / uploads / plugins / themes 를 백업합니다.
-  2. 새 배포본의 api, web, server.js 를 덮어씁니다.
+  2. 새 배포본의 api, web, node_modules, server.js, update.mjs 를 덮어씁니다.
      (data, uploads, plugins, themes 는 그대로 두세요)
-  3. 재시작합니다. 데이터베이스 마이그레이션은 자동 적용됩니다.
+  3. 재시작합니다.
 
 문서: https://github.com/bonjin-app/brick
 TXT

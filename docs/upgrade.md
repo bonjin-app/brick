@@ -33,10 +33,41 @@ docker compose pull && docker compose up -d
 끝입니다. 부팅 과정에서 자동으로:
 
 1. 새 이미지의 코어 마이그레이션이 적용됩니다 (advisory lock으로 중복 실행 방지)
+
+이미지는 릴리스 태그마다 `ghcr.io/bonjin-app/brick:X.Y.Z` 와 `:latest` 로 발행됩니다.
+특정 버전에 고정하려면 `docker-compose.yml` 의 태그를 바꾸세요.
 2. 활성 플러그인이 복원됩니다
 3. 마이그레이션이 실패하면 **서버가 뜨지 않습니다** — 깨진 스키마로 서비스하는 것보다 안전합니다
 
-## 배포본 업로드 (FTP)
+## 새 버전 알림
+
+관리자 대시보드가 열릴 때 GitHub Releases 의 최신 태그를 확인해(6시간 캐시, 4초 타임아웃)
+새 버전이 있으면 카드와 배너로 알립니다. 교체는 하지 않습니다 — 아래 방법 중 하나로 운영자가
+합니다. 외부 접속을 원치 않으면 **설정 → 확장 → 새 버전 알림**을 끄세요(`system.update_check`).
+버전은 `/api/admin/version`(관리자만)으로도 볼 수 있습니다. 공개 헬스체크에는 버전을 싣지 않습니다.
+
+## 배포본 (FTP · Node 직접 실행): `update.mjs`
+
+배포본에는 업데이트 도구가 들어 있습니다. **서버를 멈춘 뒤** 실행합니다.
+
+```bash
+node update.mjs --check                   # 새 버전이 있는지만 본다
+node update.mjs                           # 최신 릴리스로 (내려받기 → SHA256 검증 → 교체)
+node update.mjs 0.3.0                     # 특정 버전으로
+node update.mjs --from brick-0.3.0.tar.gz # 미리 내려받은 파일로 (폐쇄망)
+node update.mjs --rollback                # 직전 백업으로 되돌린다
+```
+
+- 앱 파일(`server.js` `api/` `web/` `node_modules/` …)만 바꿉니다. **`data/` `uploads/` 와 운영자가 설치한
+  플러그인·테마는 건드리지 않습니다.** 동봉 플러그인·테마는 같은 이름만 갱신합니다.
+- 이전 파일은 `backup/v<이전버전>-<시각>/` 에 남고, `--rollback` 이 그것을 되돌립니다.
+  DB 마이그레이션은 되돌리지 않습니다 — 코어 마이그레이션은 앞으로만 갑니다. 큰 판올림 전에는
+  `node api/dist/backup.js dump` 로 DB 를 받아 두세요.
+- 서버가 실행 중이면(`data/brick.pid` 의 프로세스가 살아 있으면) 거부합니다. 파일을 바꾸는 동안
+  Node 가 옛 모듈을 들고 있으면 반쯤 바뀐 상태로 동작할 수 있기 때문입니다.
+- 체크섬이 다르면 중단합니다. 릴리스의 `SHA256SUMS.txt` 와 대조합니다.
+
+## 배포본 업로드 (FTP, 수동)
 
 ```
 1. data / uploads / plugins / themes 를 백업합니다 (설정·업로드·설치한 확장)
