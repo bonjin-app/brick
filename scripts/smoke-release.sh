@@ -247,6 +247,8 @@ contains "이미지 업로드" "$UP" '"url"'
 UPURL="$(echo "$UP" | python3 -c "import sys,json;print(json.load(sys.stdin)['url'])")"
 check "업로드 파일 서빙" "$(code "$BASE$UPURL")" "200"
 check "테마 자산 서빙" "$(code "$BASE/themes/default/assets/style.css")" "200"
+# 동봉 테마는 목록을 적지 않고 themes/ 전부를 복사한다 — 두 번째 테마가 빠지면 여기서 잡힌다
+check "두 번째 동봉 테마(editorial)도 배포본에" "$(code "$BASE/themes/editorial/assets/style.css")" "200"
 
 echo "── 공개 사이트 렌더"
 contains "테마가 문서 소유" "$(curl -s "$BASE/")" "doctype html"

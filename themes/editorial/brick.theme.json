@@ -29,7 +29,7 @@
     "shadow-sm": "0 1px 0 rgba(28, 26, 23, .06)",
     "shadow-md": "0 2px 0 rgba(28, 26, 23, .08)",
     "font-body": "'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Segoe UI', Roboto, sans-serif",
-    "font-display": "'Noto Serif KR', 'Apple SD Gothic Neo', 'Nanum Myeongjo', 'Batang', Georgia, 'Times New Roman', serif",
+    "font-display": "'Noto Serif KR', 'Nanum Myeongjo', 'Apple Myungjo', 'AppleMyungjo', Batang, 'Noto Serif CJK KR', Georgia, 'Times New Roman', serif",
     "font-mono": "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
     "radius": "2px",
     "radius-lg": "3px",

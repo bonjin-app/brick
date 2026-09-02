@@ -122,6 +122,8 @@ const KO = {
   "themes.installDone": "테마 설치 완료 — 적용 버튼으로 즉시 사용할 수 있습니다",
   "themes.installFailPrefix": "설치 실패: ",
   "themes.inUse": "✓ 사용 중",
+  "themes.paletteLight": "라이트 팔레트",
+  "themes.paletteDark": "다크 팔레트",
 
   "media.title": "미디어",
   "media.countN": "{n}개",
@@ -391,6 +393,8 @@ const EN: Record<keyof typeof KO, string> = {
   "themes.installDone": "Theme installed — press Apply to use it now",
   "themes.installFailPrefix": "Install failed: ",
   "themes.inUse": "✓ In use",
+  "themes.paletteLight": "Light palette",
+  "themes.paletteDark": "Dark palette",
 
   "media.title": "Media",
   "media.countN": "{n} files",
