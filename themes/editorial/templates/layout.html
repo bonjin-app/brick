@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="{{ locale }}">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ pageTitle }}</title>
+  {{#if seo.description}}<meta name="description" content="{{ seo.description }}" />{{/if}}
+  <meta property="og:title" content="{{ pageTitle }}" />
+  <meta property="og:site_name" content="{{ site.name }}" />
+  {{#if seo.description}}<meta property="og:description" content="{{ seo.description }}" />{{/if}}
+  <meta name="color-scheme" content="light dark" />
+  <link rel="icon" href="{{ themeAssets }}/favicon.svg?v={{ themeVersion }}" type="image/svg+xml" />
+  {{!-- 저장된 화면 모드를 CSS 보다 먼저 적용한다 (다크 사용자에게 흰 화면이 번쩍이지 않게) --}}
+  <script>
+    (function () {
+      try {
+        var v = localStorage.getItem("brick-theme");
+        if (v === "dark" || v === "light") document.documentElement.dataset.theme = v;
+      } catch (e) {}
+    })();
+  </script>
+  {{!--
+    본문은 Pretendard, 제목은 Noto Serif KR — 명조 제목이 이 테마의 인상이다.
+    CDN 이 막힌 환경에서는 font-display 토큰의 다음 후보(Apple SD Gothic Neo·바탕·Georgia)로
+    조용히 떨어진다.
+  --}}
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@500;600;700;900&display=swap" />
+  <style>{{{ themeTokens }}}</style>
+  <link rel="stylesheet" href="{{ themeAssets }}/style.css?v={{ themeVersion }}" />
+</head>
+<body>
+  {{!-- 아이콘 스프라이트 — 블록·플러그인은 심볼 이름만 말하고(icon: "cart") 모양은 테마가 정한다 --}}
+  <svg hidden aria-hidden="true" focusable="false" style="display:none">
+    <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+    <symbol id="i-cart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h8.5a2 2 0 0 0 2-1.5L21.5 8H6"/><circle cx="10" cy="20" r="1.4"/><circle cx="17.5" cy="20" r="1.4"/></symbol>
+    <symbol id="i-message" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H8l-4 4z"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+    <symbol id="i-heart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7-4.6-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.4-7 10-7 10z"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 21h4"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.8 5.8 6.2.9-4.5 4.4 1.1 6.3L12 17.4l-5.6 3 1.1-6.3L3 9.7l6.2-.9z"/></symbol>
+    <symbol id="i-truck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h11v10H3zM14 9h4l3 3v4h-7"/><circle cx="7" cy="18" r="1.6"/><circle cx="17" cy="18" r="1.6"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 5 6v6c0 4.5 3 7.5 7 9 4-1.5 7-4.5 7-9V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h12v9H9l-4 3.5V15H4z"/><path d="M20 10v9l-3-2.5"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/></symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="1"/><path d="m3 7 9 6 9-6"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l1.5 4-2.2 1.5a11 11 0 0 0 6.2 6.2L16 13.5l4 1.5v4a2 2 0 0 1-2 2A15 15 0 0 1 3 6a2 2 0 0 1 2-2z"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="1"/><circle cx="9" cy="10" r="1.6"/><path d="m21 16-5.5-5.5L7 19"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  </svg>
+
+  <a class="brick-skip" href="#brick-content">{{ t.header.skip }}</a>
+
+  {{!--
+    신문의 지면 구조를 따른다: 맨 위 가는 유틸 띠 → 가운데 제호(masthead) → 괘선 사이의 섹션 메뉴.
+    기본 테마의 한 줄 헤더와 같은 요소(검색·토글·헤더 액션·로그인·버거)를 다른 자리에 놓았을 뿐이라
+    스크립트와 코어 계약(id·class)은 그대로다.
+  --}}
+  <header class="brick-header">
+    <div class="brick-topbar">
+      <div class="brick-topbar-inner">
+        <div class="brick-util">
+          {{#if guest}}
+          <a href="/login">{{ t.header.login }}</a>
+          <a class="brick-util-cta" href="/register">{{ t.header.register }}</a>
+          {{/if}}
+          {{#if user}}
+          <a class="brick-util-name" href="/account">{{#if user.avatarUrl}}<img class="brick-avatar-hd" src="{{ user.avatarUrl }}" alt="" />{{/if}}{{ user.displayName }}</a>
+          {{#if user.isAdmin}}<a href="/admin">{{ t.header.admin }}</a>{{/if}}
+          <form class="brick-logout" method="post" action="/api/auth/logout">
+            <button type="submit">{{ t.header.logout }}</button>
+          </form>
+          {{/if}}
+        </div>
+        <div class="brick-header-right">
+          <nav class="brick-actions">
+            {{#each headerActions}}<a href="{{ url }}">{{#if icon}}<svg class="brick-ico" aria-hidden="true"><use href="#i-{{ icon }}"></use></svg>{{/if}}<span>{{ label }}</span></a>{{/each}}
+          </nav>
+          <form class="brick-header-search" method="get" action="/search" role="search">
+            <svg class="brick-search-icon" viewBox="0 0 20 20" aria-hidden="true">
+              <circle cx="9" cy="9" r="5.5" fill="none" stroke="currentColor" stroke-width="1.6" />
+              <path d="M13.2 13.2 17 17" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+            </svg>
+            <input type="search" name="q" placeholder="{{ t.search.placeholder }}" minlength="2" required
+                   aria-label="{{ t.search.placeholder }}" />
+          </form>
+          <button type="button" class="brick-theme-btn" id="brick-theme-btn" aria-label="{{ t.header.theme }}" title="{{ t.header.theme }}">
+            <svg class="i-dark" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M16 12.3A6.6 6.6 0 0 1 7.7 4a6.9 6.9 0 1 0 8.3 8.3Z" fill="currentColor" />
+            </svg>
+            <svg class="i-light" viewBox="0 0 20 20" aria-hidden="true">
+              <circle cx="10" cy="10" r="3.6" fill="currentColor" />
+              <path d="M10 1.6v2.2M10 16.2v2.2M1.6 10h2.2M16.2 10h2.2M4.1 4.1l1.6 1.6M14.3 14.3l1.6 1.6M15.9 4.1l-1.6 1.6M5.7 14.3l-1.6 1.6"
+                    stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="brick-masthead">
+      <a class="brick-logo" href="/">{{ site.name }}</a>
+      {{#if site.description}}<p class="brick-tagline">{{ site.description }}</p>{{/if}}
+    </div>
+
+    <div class="brick-navbar">
+      <div class="brick-navbar-inner">
+        <button type="button" class="brick-burger" id="brick-burger"
+                aria-expanded="false" aria-controls="brick-nav" aria-label="{{ t.header.menu }}">
+          <span></span><span></span><span></span>
+        </button>
+        <a class="brick-navbar-logo" href="/">{{ site.name }}</a>
+        <nav class="brick-nav" id="brick-nav" aria-label="{{ t.header.menu }}">
+          {{#each menu}}<a href="{{ url }}"{{#if current}} class="is-current" aria-current="page"{{/if}}>{{ label }}</a>{{/each}}
+        </nav>
+      </div>
+    </div>
+  </header>
+
+  <main class="brick-main" id="brick-content">
+    {{{ content }}}
+  </main>
+
+  <footer class="brick-footer">
+    <div class="brick-footer-inner">
+      <div class="brick-footer-cols">
+        <div class="brick-footer-col brick-footer-about">
+          <a class="brick-footer-logo" href="/">{{ site.name }}</a>
+          {{#if site.description}}<p>{{ site.description }}</p>{{/if}}
+        </div>
+        <nav class="brick-footer-col brick-footer-nav" aria-label="{{ t.header.menu }}">
+          {{#each menu}}<a href="{{ url }}">{{ label }}</a>{{/each}}
+        </nav>
+        {{#if site.business}}
+        <div class="brick-footer-col brick-footer-contact">
+          {{#if site.business.phone}}<a href="tel:{{ site.business.phone }}"><svg class="brick-ico" aria-hidden="true"><use href="#i-phone"></use></svg>{{ site.business.phone }}</a>{{/if}}
+          {{#if site.business.email}}<a href="mailto:{{ site.business.email }}"><svg class="brick-ico" aria-hidden="true"><use href="#i-mail"></use></svg>{{ site.business.email }}</a>{{/if}}
+          {{#if site.business.address}}<span><svg class="brick-ico" aria-hidden="true"><use href="#i-pin"></use></svg>{{ site.business.address }}</span>{{/if}}
+        </div>
+        {{/if}}
+        <a class="brick-totop" href="#brick-content">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3.2 3.4 7.8M8 3.2l4.6 4.6M8 3.6v9"
+            fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
+          {{ t.footer.toTop }}
+        </a>
+      </div>
+
+      {{#if site.business}}
+      {{!-- 사업자정보 — 전자상거래법 제13조상 표시 의무. 없는 항목은 내려오지 않는다 --}}
+      <div class="brick-business">
+        {{#if site.business.companyName}}<span>{{ t.footer.company }} <b>{{ site.business.companyName }}</b></span>{{/if}}
+        {{#if site.business.representative}}<span>{{ t.footer.representative }} {{ site.business.representative }}</span>{{/if}}
+        {{#if site.business.businessNo}}<span>{{ t.footer.businessNo }} {{ site.business.businessNo }}</span>{{/if}}
+        {{#if site.business.mailOrderNo}}<span>{{ t.footer.mailOrderNo }} {{ site.business.mailOrderNo }}</span>{{/if}}
+        {{#if site.business.address}}<span>{{ site.business.address }}</span>{{/if}}
+        {{#if site.business.phone}}<span>{{ t.footer.phone }} {{ site.business.phone }}</span>{{/if}}
+        {{#if site.business.email}}<span>{{ t.footer.email }} {{ site.business.email }}</span>{{/if}}
+        {{#if site.business.privacyOfficer}}<span>{{ t.footer.privacyOfficer }} {{ site.business.privacyOfficer }}</span>{{/if}}
+        {{#if site.business.hostingProvider}}<span>{{ t.footer.hosting }} {{ site.business.hostingProvider }}</span>{{/if}}
+        {{#if site.business.escrow}}<span>{{ site.business.escrow }}</span>{{/if}}
+      </div>
+      {{/if}}
+
+      <div class="brick-footer-credit">
+        <span>© {{ site.name }}</span>
+        <span>Powered by <a href="https://github.com/bonjin-app/brick">Brick</a></span>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      // 화면 모드 토글 — 지금 눈에 보이는 모드의 반대를 저장한다
+      var btn = document.getElementById("brick-theme-btn");
+      if (btn) {
+        btn.addEventListener("click", function () {
+          var root = document.documentElement;
+          var now = root.dataset.theme;
+          var effective = now || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+          var next = effective === "dark" ? "light" : "dark";
+          root.dataset.theme = next;
+          try { localStorage.setItem("brick-theme", next); } catch (e) {}
+        });
+      }
+
+      // 모바일 메뉴 — 드로어를 여는 건 CSS 가 하고, 상태만 여기서 바꾼다
+      var burger = document.getElementById("brick-burger");
+      var nav = document.getElementById("brick-nav");
+      if (burger && nav) {
+        var setOpen = function (open) {
+          burger.setAttribute("aria-expanded", open ? "true" : "false");
+          document.body.classList.toggle("brick-nav-open", open);
+        };
+        burger.addEventListener("click", function () {
+          setOpen(burger.getAttribute("aria-expanded") !== "true");
+        });
+        nav.addEventListener("click", function (e) {
+          if (e.target.closest("a")) setOpen(false);
+        });
+        document.addEventListener("keydown", function (e) {
+          if (e.key === "Escape") setOpen(false);
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

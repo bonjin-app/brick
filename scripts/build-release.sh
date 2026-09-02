@@ -69,7 +69,10 @@ echo "── 4/5 확장 · 런처"
 mkdir -p "$STAGE/plugins" "$STAGE/themes" "$STAGE/uploads" "$STAGE/data"
 # 목록을 여기 적지 않는다 — 빌드된 플러그인을 전부 동봉한다 (collect-plugins.sh)
 bash "$ROOT/scripts/collect-plugins.sh" "$STAGE/plugins"
-cp -R "$ROOT/themes/default" "$STAGE/themes/default"
+# 동봉 테마도 목록을 적지 않는다 — themes/ 아래 매니페스트가 있는 디렉터리 전부
+for THEME_DIR in "$ROOT"/themes/*/; do
+  [[ -f "$THEME_DIR/brick.theme.json" ]] && cp -R "$THEME_DIR" "$STAGE/themes/$(basename "$THEME_DIR")"
+done
 cp "$ROOT/LICENSE" "$STAGE/LICENSE"
 
 # 단일 진입점: 이것만 실행하면 API와 Web이 함께 뜬다

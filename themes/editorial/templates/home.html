@@ -1,0 +1,28 @@
+{{!--
+  홈 폴백 — slug "home" 페이지가 아직 없을 때만 보인다.
+  운영자가 홈 페이지를 만들면 이 화면은 그 페이지로 대체되므로, 다음 할 일만 알려준다.
+--}}
+<section class="brick-hero">
+  <span class="brick-eyebrow">{{ t.home.readyTitle }}</span>
+  <h1>{{ site.name }}</h1>
+  <p>{{ t.home.readyBody }}</p>
+  <div class="brick-hero-actions">
+    <a class="brick-btn brick-btn-primary brick-btn-lg" href="/admin">{{ t.home.readyCta }}</a>
+    <a class="brick-btn brick-btn-lg" href="https://bonjin-app.github.io/brick/">{{ t.home.readyDocs }}</a>
+  </div>
+</section>
+
+<div class="brick-grid brick-home-steps">
+  <div class="brick-card brick-card-soft">
+    <h3>{{ t.home.stepPages }}</h3>
+    <p>{{ t.home.stepPagesBody }}</p>
+  </div>
+  <div class="brick-card brick-card-soft">
+    <h3>{{ t.home.stepTheme }}</h3>
+    <p>{{ t.home.stepThemeBody }}</p>
+  </div>
+  <div class="brick-card brick-card-soft">
+    <h3>{{ t.home.stepPlugins }}</h3>
+    <p>{{ t.home.stepPluginsBody }}</p>
+  </div>
+</div>

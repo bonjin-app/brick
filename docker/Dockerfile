@@ -54,7 +54,7 @@ COPY --from=build /app/apps/web/public ./web/apps/web/public
 # 빌드 단계에서 collect-plugins.sh 가 모아둔 것을 그대로 가져온다
 # (게시판만 넣던 시절엔 Docker 설치본에 쇼핑몰·포인트·쪽지가 없었다).
 COPY --from=build /seed/plugins ./seed/plugins
-COPY --from=build /app/themes/default ./seed/themes/default
+COPY --from=build /app/themes ./seed/themes
 
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh && \

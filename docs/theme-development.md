@@ -218,4 +218,7 @@ zip -r my-theme.zip brick.theme.json templates assets
 
 관리자 → 테마 → 업로드 → 적용. 빌드 과정이 없으므로 **즉시** 반영됩니다.
 
-레퍼런스 구현: [themes/default](../themes/default)
+레퍼런스 구현: [themes/default](../themes/default) — 그리고 **같은 계약을 다른 인상으로**
+구현한 [themes/editorial](../themes/editorial) (종이색 배경 · 명조 제목 · 가운데 제호 · 괘선).
+두 테마를 번갈아 적용해 같은 페이지를 보면, 어떤 것이 테마의 몫이고 어떤 것이 블록의 몫인지
+드러납니다 — 새 테마를 만들 때 둘의 `style.css` 를 나란히 놓고 프리미티브 절만 바꿔 보세요.
