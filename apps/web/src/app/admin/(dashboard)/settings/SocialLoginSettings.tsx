@@ -65,8 +65,8 @@ export function SocialLoginSettings() {
   const mono = { fontFamily: "ui-monospace, monospace", fontSize: 12 };
 
   return (
-    <div style={{ background: "var(--color-bg)", borderRadius: 8, padding: 20, maxWidth: 720, marginTop: 24 }}>
-      <h2 style={{ marginTop: 0, fontSize: 18 }}>{t("social.title")}</h2>
+    <section className="brick-card" aria-labelledby="settings-social">
+      <h2 id="settings-social" className="brick-card-title">{t("social.title")}</h2>
       <p style={{ fontSize: 13, color: "var(--color-muted)", marginTop: 0 }}>
         {t("social.guide1")} {t("social.guide2")}
       </p>
@@ -156,6 +156,6 @@ export function SocialLoginSettings() {
         </div>
       ))}
       {message && <p style={{ color: "var(--color-success)", marginBottom: 0 }}>{message}</p>}
-    </div>
+    </section>
   );
 }

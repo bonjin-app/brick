@@ -144,7 +144,38 @@ const ADMIN_CSS = `
 .brick-admin input::placeholder, .brick-admin textarea::placeholder { color: var(--color-muted); }
 .brick-admin input[type="checkbox"], .brick-admin input[type="radio"] { accent-color: var(--color-primary); }
 .brick-admin :focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
-.brick-admin table { border-collapse: collapse; }
+.brick-admin table { border-collapse: collapse; width: 100%; }
+.brick-admin th { text-align: left; font-size: 12.5px; font-weight: 600; color: var(--color-muted); letter-spacing: .01em; }
+.brick-admin th, .brick-admin td { padding: 10px 12px; vertical-align: middle; }
+.brick-admin tbody tr:hover { background: var(--color-bg-soft); }
+.brick-admin h1 { font-size: 26px; letter-spacing: -0.01em; margin: 0 0 20px; }
+.brick-admin .btn-primary { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
+.brick-admin .btn-primary:hover { filter: brightness(.94); background: var(--color-primary); border-color: var(--color-primary); }
+.brick-admin .btn-link {
+  display: inline-block; padding: 8px 14px; border-radius: 8px; font-size: 14px; font-weight: 600;
+  border: 1px solid var(--color-line-strong); background: var(--color-bg); color: var(--color-text); text-decoration: none;
+}
+.brick-admin .btn-link:hover { border-color: var(--color-muted); background: var(--color-bg-soft); }
+.brick-admin .brick-card {
+  display: block; background: var(--color-bg); border: 1px solid var(--color-line); border-radius: 12px;
+  padding: 22px 24px; margin-top: 16px; color: inherit; text-decoration: none;
+}
+.brick-admin .brick-card-title { margin: 0 0 6px; font-size: 17px; font-weight: 700; }
+.brick-admin .brick-card-desc { margin: 0 0 14px; font-size: 13.5px; color: var(--color-muted); }
+.brick-admin .brick-field { display: block; margin-top: 16px; font-size: 14px; }
+.brick-admin .brick-field-label { display: block; font-weight: 600; }
+.brick-admin .brick-field-hint, .brick-admin .brick-check .brick-field-hint { display: block; margin-top: 5px; font-size: 12.5px; color: var(--color-muted); font-weight: 400; }
+.brick-admin .brick-check { display: flex; gap: 10px; align-items: flex-start; margin-top: 16px; font-size: 14px; font-weight: 600; }
+.brick-admin .brick-check input { margin-top: 3px; }
+.brick-admin .brick-stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
+.brick-admin .brick-stat { margin-top: 0; padding: 18px 20px; }
+.brick-admin a.brick-stat:hover { border-color: var(--color-line-strong); }
+.brick-admin .brick-activity { list-style: none; margin: 12px 0 0; padding: 0; }
+.brick-admin .brick-activity li { display: flex; gap: 12px; align-items: baseline; padding: 9px 0; border-top: 1px solid var(--color-line); font-size: 14px; }
+.brick-admin .brick-activity time { color: var(--color-muted); font-variant-numeric: tabular-nums; flex: none; }
+.brick-admin .brick-activity-actor { color: var(--color-text-soft); flex: none; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.brick-admin .brick-activity-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.brick-admin .brick-activity-action { color: var(--color-muted); font-size: 12px; flex: none; }
 .brick-admin a { color: var(--color-primary-text); }
 /* 사이드바는 어두운 채로 고정이므로 위 규칙을 적용하지 않는다 */
 .brick-admin-side a { color: inherit; }

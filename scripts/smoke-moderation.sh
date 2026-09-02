@@ -177,5 +177,15 @@ contains "고르면 된다" "$(curl -s -X POST "$BD/boards/free/posts" -H 'conte
 contains "글쓰기 폼의 분류가 required" "$(curl -s "$API/api/render/page?path=board/free/write" | python3 -c "import sys,json;print(json.load(sys.stdin).get('html',''))")" '<select name="category" required>'
 
 echo
+echo "── 설정 화면 (정적 검사)"
+# 서버가 편집을 허용하는 설정(EDITABLE_SETTINGS)마다 관리 화면에 입력칸이 있어야 한다.
+# M26 의 모더레이션 키 넷이 API 에만 있고 화면에 없던 것을 이 검사가 잡는다 —
+# "API 는 있는데 화면이 없는 설정"은 운영자에게 없는 기능이다.
+MISSING=""
+for KEY in $(grep -oE '^\s*"[a-z_]+\.[a-z_0-9]+":\s*"(string|boolean)"' "$ROOT/apps/api/src/modules/site/site.controller.ts" | grep -oE '"[a-z_]+\.[a-z_0-9]+"' | tr -d '"'); do
+  grep -q "\"$KEY\"" "$ROOT/apps/web/src/app/admin/(dashboard)/settings/page.tsx" || MISSING="$MISSING $KEY"
+done
+check "설정 화면이 편집 가능한 설정 키를 모두 담는다${MISSING:+ (누락:$MISSING)}" "$MISSING" ""
+
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 [[ "$FAIL" -eq 0 ]]
