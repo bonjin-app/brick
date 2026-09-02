@@ -66,14 +66,23 @@ jobs:
             3. `node server.js` 실행 (cPanel/Plesk는 Node.js 앱의 시작 파일로 지정)
             4. 브라우저로 접속해 데이터베이스 정보를 입력합니다
 
+            **Docker 이미지**: `ghcr.io/bonjin-app/brick:${{ steps.v.outputs.version }}` (`latest` 도 갱신)
+            **변경 사항**: [CHANGELOG.md](https://github.com/bonjin-app/brick/blob/main/CHANGELOG.md)
+            **업데이트**: 설치된 사이트에서 `node update.mjs` 또는 `docker compose pull && docker compose up -d` — [업그레이드 가이드](https://github.com/bonjin-app/brick/blob/main/docs/upgrade.md)
+
             요구사항: Node.js 20.11+, PostgreSQL 14+
             자세한 내용은 [설치 가이드](https://github.com/bonjin-app/brick/blob/main/docs/installation.md)를 참고하세요.
 
   # docker-compose.yml 이 가리키는 ghcr.io/bonjin-app/brick:latest 는 여기서 만들어진다.
   # (CI 의 docker 잡은 빌드만 검증하고 push 하지 않는다 — 태그가 붙은 릴리스만 이미지가 된다)
   image:
-    name: Docker 이미지 발행 (GHCR)
+    name: Docker 이미지 발행 (GHCR · Docker Hub)
     runs-on: ubuntu-latest
+    # Docker Hub 는 선택: 저장소 시크릿 DOCKERHUB_USERNAME / DOCKERHUB_TOKEN 이 있으면 같은 이미지를 미러한다.
+    # (시크릿은 job 의 if 에서 읽을 수 없어 env 로 옮겨 step 마다 검사한다)
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v7
       - name: 버전 결정
@@ -103,3 +112,22 @@ jobs:
             ghcr.io/bonjin-app/brick:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Docker Hub 로그인
+        if: ${{ env.DOCKERHUB_TOKEN != '' }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ env.DOCKERHUB_TOKEN }}
+      - name: Docker Hub 미러 (같은 빌드 캐시)
+        if: ${{ env.DOCKERHUB_TOKEN != '' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: true
+          build-args: |
+            BRICK_VERSION=${{ steps.v.outputs.version }}
+          tags: |
+            docker.io/${{ env.DOCKERHUB_USERNAME }}/brick:${{ steps.v.outputs.version }}
+            docker.io/${{ env.DOCKERHUB_USERNAME }}/brick:latest
+          cache-from: type=gha

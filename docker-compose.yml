@@ -7,7 +7,8 @@
 # Redis/MinIO는 의도적으로 없다 — Brick Core는 PostgreSQL만으로 동작한다 (ADR-3).
 services:
   brick:
-    image: ghcr.io/bonjin-app/brick:latest
+    # 특정 버전에 고정하려면 .env 에 BRICK_IMAGE_TAG=0.2.0
+    image: ghcr.io/bonjin-app/brick:${BRICK_IMAGE_TAG:-latest}
     # 소스에서 직접 빌드하려면 위 image를 지우고 아래 주석을 해제:
     # build:
     #   context: .
@@ -39,6 +40,13 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      # readyz 는 DB 연결까지 본다 — 마이그레이션이 끝나 트래픽을 받을 수 있을 때 healthy
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/readyz >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
     restart: unless-stopped
 
   db:

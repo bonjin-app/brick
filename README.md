@@ -27,8 +27,11 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-2721%20passing-2ea043.svg" alt="스모크 테스트 2721개" />
+  <img src="https://img.shields.io/badge/E2E-2773%20passing-2ea043.svg" alt="스모크 테스트 2773개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
+  <a href="https://github.com/bonjin-app/brick/pkgs/container/brick">
+    <img src="https://img.shields.io/badge/docker-ghcr.io%2Fbonjin--app%2Fbrick-2496ed.svg" alt="Docker image" />
+  </a>
 </p>
 
 ---

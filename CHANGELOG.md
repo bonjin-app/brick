@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-02
+
 ### 추가
 - 기본 테마 전면 재설계(라이트·다크 두 벌, 프리미티브 계약, 랜딩 블록 8종, 아이콘 스프라이트) — ADR-79~83
 - 두 번째 동봉 테마 **Editorial**(종이색·명조·가운데 제호) — ADR-90
@@ -32,5 +34,6 @@
 8종(게시판·쇼핑몰·토스결제·쪽지·포인트·설문·헬프데스크·사이트 도구), 그누보드 이전 도구,
 FTP 배포본과 Docker 이미지, E2E 스모크 2,500+ 항목.
 
-[Unreleased]: https://github.com/bonjin-app/brick/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/bonjin-app/brick/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/bonjin-app/brick/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/bonjin-app/brick/releases/tag/v0.1.0
