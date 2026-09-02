@@ -63,7 +63,7 @@
   --}}
   <header class="brick-header">
     <div class="brick-topbar">
-      <div class="brick-topbar-inner">
+      <div class="brick-topbar-inner mx-auto flex h-10 max-w-(--content-width) items-center justify-between gap-4 px-(--brick-pad-x)">
         <div class="brick-util">
           {{#if guest}}
           <a href="/login">{{ t.header.login }}</a>
@@ -77,7 +77,7 @@
           </form>
           {{/if}}
         </div>
-        <div class="brick-header-right">
+        <div class="brick-header-right flex min-w-0 items-center gap-1.5">
           <nav class="brick-actions">
             {{#each headerActions}}<a href="{{ url }}">{{#if icon}}<svg class="brick-ico" aria-hidden="true"><use href="#i-{{ icon }}"></use></svg>{{/if}}<span>{{ label }}</span></a>{{/each}}
           </nav>
@@ -103,13 +103,13 @@
       </div>
     </div>
 
-    <div class="brick-masthead">
+    <div class="brick-masthead px-(--brick-pad-x) pt-5 pb-4 text-center md:pt-10 md:pb-7">
       <a class="brick-logo" href="/">{{ site.name }}</a>
       {{#if site.description}}<p class="brick-tagline">{{ site.description }}</p>{{/if}}
     </div>
 
     <div class="brick-navbar">
-      <div class="brick-navbar-inner">
+      <div class="brick-navbar-inner mx-auto flex h-(--brick-navbar-h) max-w-(--content-width) items-center gap-3.5 px-(--brick-pad-x)">
         <button type="button" class="brick-burger" id="brick-burger"
                 aria-expanded="false" aria-controls="brick-nav" aria-label="{{ t.header.menu }}">
           <span></span><span></span><span></span>
@@ -122,14 +122,14 @@
     </div>
   </header>
 
-  <main class="brick-main" id="brick-content">
+  <main class="brick-main mx-auto w-full max-w-(--content-width) flex-auto px-(--brick-pad-x) pt-7 pb-16 md:pt-11 md:pb-22" id="brick-content">
     {{{ content }}}
   </main>
 
   <footer class="brick-footer">
-    <div class="brick-footer-inner">
-      <div class="brick-footer-cols">
-        <div class="brick-footer-col brick-footer-about">
+    <div class="brick-footer-inner mx-auto max-w-(--content-width) px-(--brick-pad-x) pt-10 pb-11">
+      <div class="brick-footer-cols mb-5 grid grid-cols-2 items-start gap-x-10 gap-y-7 border-b border-line pb-7 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
+        <div class="brick-footer-col brick-footer-about col-span-2 md:col-span-1">
           <a class="brick-footer-logo" href="/">{{ site.name }}</a>
           {{#if site.description}}<p>{{ site.description }}</p>{{/if}}
         </div>
@@ -143,7 +143,7 @@
           {{#if site.business.address}}<span><svg class="brick-ico" aria-hidden="true"><use href="#i-pin"></use></svg>{{ site.business.address }}</span>{{/if}}
         </div>
         {{/if}}
-        <a class="brick-totop" href="#brick-content">
+        <a class="brick-totop col-span-2 justify-self-start md:col-span-1 md:justify-self-auto" href="#brick-content">
           <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3.2 3.4 7.8M8 3.2l4.6 4.6M8 3.6v9"
             fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
           {{ t.footer.toTop }}

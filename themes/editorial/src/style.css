@@ -168,22 +168,9 @@ blockquote {
 .brick-header { background: var(--color-bg); }
 
 .brick-topbar { border-bottom: 1px solid var(--color-line); font-size: 13px; }
-.brick-topbar-inner {
-  max-width: var(--content-width);
-  margin: 0 auto;
-  padding: 0 var(--brick-pad-x);
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-.brick-header-right { display: flex; align-items: center; gap: 6px; min-width: 0; }
+/* .brick-topbar-inner / .brick-header-right 의 배치는 layout.html 의 유틸리티 */
 
-.brick-masthead {
-  text-align: center;
-  padding: clamp(22px, 4vw, 40px) var(--brick-pad-x) clamp(16px, 3vw, 28px);
-}
+/* .brick-masthead 여백·정렬은 유틸리티(pt-5 md:pt-10 …) */
 .brick-logo {
   display: inline-block;
   font-size: clamp(30px, 5vw, 52px);
@@ -214,15 +201,6 @@ blockquote {
   border-bottom: var(--brick-rule);
 }
 @supports not (backdrop-filter: blur(1px)) { .brick-navbar { background: var(--color-bg); } }
-.brick-navbar-inner {
-  max-width: var(--content-width);
-  margin: 0 auto;
-  padding: 0 var(--brick-pad-x);
-  height: var(--brick-navbar-h);
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
 /* 스티키 상태에서 제호가 스크롤로 사라진 뒤 사이트 이름을 대신 보여 준다 — 모바일에서만 */
 .brick-navbar-logo { display: none; font-size: 18px; color: var(--color-text); text-decoration: none; white-space: nowrap; }
 
@@ -350,13 +328,7 @@ blockquote {
 .brick-burger[aria-expanded="true"] span:nth-child(3) { transform: translateY(-5.5px) rotate(-45deg); }
 
 /* ── 본문 ─────────────────────────────────────────── */
-.brick-main {
-  width: 100%;
-  max-width: var(--content-width);
-  margin: 0 auto;
-  padding: 44px var(--brick-pad-x) 88px;
-  flex: 1 0 auto;
-}
+/* .brick-main 폭·여백은 유틸리티 */
 .brick-bleed { margin-left: calc(var(--brick-pad-x) * -1); margin-right: calc(var(--brick-pad-x) * -1); }
 
 .brick-main h1, .brick-page > h1 { font-size: clamp(30px, 4.4vw, 42px); line-height: 1.2; margin: 0 0 12px; }
@@ -727,29 +699,15 @@ a.brick-card:hover { border-color: var(--color-text); color: inherit; }
 /* ── 푸터 — 겹괘선 위 ──────────────────────────────── */
 .brick-footer { border-top: 1px solid var(--color-text); position: relative; color: var(--color-muted); font-size: 13.5px; }
 .brick-footer::before { content: ""; position: absolute; top: 3px; left: 0; right: 0; border-top: 1px solid var(--color-text); }
-.brick-footer-inner { max-width: var(--content-width); margin: 0 auto; padding: 40px var(--brick-pad-x) 44px; }
 .brick-footer a { color: inherit; text-decoration: none; }
 .brick-footer a:hover { color: var(--color-text); text-decoration: underline; }
-.brick-footer-cols {
-  display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) auto;
-  gap: 28px 40px;
-  align-items: start;
-  padding-bottom: 28px;
-  margin-bottom: 20px;
-  border-bottom: 1px solid var(--color-line);
-}
+/* .brick-footer-cols 격자는 유틸리티(grid-cols-2 → md:4열) */
 .brick-footer-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .brick-footer-logo { font-size: 22px; color: var(--color-text) !important; }
 .brick-footer-about p { margin: 0; font-size: 13.5px; line-height: 1.7; color: var(--color-muted); max-width: 34em; }
 .brick-footer-nav a, .brick-footer-contact a, .brick-footer-contact span { font-size: 13.5px; line-height: 1.6; }
 .brick-footer-nav a { text-transform: uppercase; letter-spacing: 0.05em; font-size: 12.5px; }
 .brick-footer-contact span { color: var(--color-muted); }
-@media (max-width: 860px) {
-  .brick-footer-cols { grid-template-columns: 1fr 1fr; }
-  .brick-footer-about { grid-column: 1 / -1; }
-  .brick-totop { grid-column: 1 / -1; justify-self: start; }
-}
 .brick-totop { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; letter-spacing: 0.05em; text-transform: uppercase; }
 .brick-totop svg { width: 13px; height: 13px; }
 .brick-business { display: flex; flex-wrap: wrap; gap: 2px 16px; margin-bottom: 14px; line-height: 1.9; font-size: 12.5px; }
@@ -762,15 +720,13 @@ a.brick-card:hover { border-color: var(--color-text); color: inherit; }
   .brick-header-search input:focus-visible { width: 160px; }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 767.98px) {
   :root { --brick-navbar-h: 50px; }
-  .brick-topbar-inner { height: 36px; gap: 8px; }
   .brick-util { gap: 10px; }
   .brick-util a:not(.brick-util-cta) { display: none; }
   .brick-util-name { display: inline-flex !important; max-width: 34vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .brick-util .brick-logout { display: none; }
   .brick-actions a:not(:first-child) { display: none; }
-  .brick-masthead { padding-top: 18px; padding-bottom: 14px; }
   .brick-burger { display: block; margin-left: -8px; }
   .brick-navbar-logo { display: inline-block; margin-left: auto; margin-right: auto; }
 
@@ -798,7 +754,6 @@ a.brick-card:hover { border-color: var(--color-text); color: inherit; }
   .brick-header-search input { width: 32px; padding-left: 26px; padding-right: 0; cursor: pointer; border-bottom-color: transparent; }
   .brick-header-search input:focus-visible { width: min(50vw, 220px); cursor: text; padding-right: 8px; border-bottom-color: var(--color-text); }
 
-  .brick-main { padding: 28px var(--brick-pad-x) 64px; }
   .brick-page > h1 { padding-bottom: 12px; margin-bottom: 22px; }
   .brick-main h2 { margin-top: 34px; }
   .brick-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }

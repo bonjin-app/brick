@@ -204,8 +204,8 @@ THEMES="$(curl -s -b "$CK" "$API/api/themes")"
 contains "테마 목록에 editorial" "$THEMES" '"name":"editorial"'
 check "editorial 적용" "$(code -b "$CK" -X POST "$API/api/themes/editorial/activate")" "201"
 ED_HOME="$(render "")"
-contains "제호(masthead) 레이아웃" "$ED_HOME" 'class="brick-masthead"'
-contains "섹션 메뉴 괘선 바" "$ED_HOME" 'class="brick-navbar"'
+contains "제호(masthead) 레이아웃" "$ED_HOME" 'class="brick-masthead'
+contains "섹션 메뉴 괘선 바" "$ED_HOME" 'class="brick-navbar'
 contains "명조 제목 토큰" "$ED_HOME" "--font-display:"
 contains "다크 팔레트도 두 벌" "$ED_HOME" "#17150f"
 contains "파비콘은 자기 것" "$ED_HOME" "/themes/editorial/assets/favicon.svg"
@@ -213,13 +213,13 @@ contains "코어 계약: 스킵 링크" "$ED_HOME" 'class="brick-skip"'
 contains "코어 계약: 헤더 액션 자리" "$ED_HOME" 'class="brick-actions"'
 contains "코어 계약: 현재 메뉴 표시" "$(render "about")" 'aria-current="page"'
 ED_BOARD="$(render "board/free")"
-contains "플러그인 화면(게시판)도 이 테마로" "$ED_BOARD" 'class="brick-masthead"'
+contains "플러그인 화면(게시판)도 이 테마로" "$ED_BOARD" 'class="brick-masthead'
 contains "코어 404 도 이 테마의 프리미티브(버튼)로 그린다" "$(render "no-such-page")" '<a class="brick-btn brick-btn-primary" href="/">홈으로</a>'
 ED_TOKENS="$(curl -s "$API/api/themes/tokens.css")"
 contains "웹 화면(로그인·관리)도 종이색 팔레트를 받는다" "$ED_TOKENS" "#fbf8f2"
 check "스타일시트 서빙" "$(code "$API/themes/editorial/assets/style.css")" "200"
 check "기본 테마로 복귀" "$(code -b "$CK" -X POST "$API/api/themes/default/activate")" "201"
-absent "복귀 후 제호 레이아웃이 남지 않는다 (렌더 캐시 키에 테마 스탬프)" "$(render "")" 'class="brick-masthead"'
+absent "복귀 후 제호 레이아웃이 남지 않는다 (렌더 캐시 키에 테마 스탬프)" "$(render "")" 'class="brick-masthead'
 
 # ════════════════════════════════════════════════════
 echo "── 랜딩 블록"
