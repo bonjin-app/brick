@@ -284,7 +284,7 @@ export const BOARD_SCRIPT = `
     card.className = 'brick-profile-card';
     card.setAttribute('role', 'dialog');
     card.innerHTML = '<div class="brick-profile-loading">불러오는 중…</div>';
-    btn.parentElement.insertAdjacentElement('afterend', card);
+    btn.parentElement.appendChild(card); // .brick-author 가 position:relative 라 이 안에 있어야 이름 옆에 뜬다
     cardEl = card;
     Promise.all([
       fetch('/api/members/' + id + '/card').then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }),
@@ -590,9 +590,9 @@ export const BOARD_CSS = `
 .brick-avatar-sm{width:22px;height:22px;font-size:11px}
 .brick-avatar-md{width:30px;height:30px;font-size:13px}
 .brick-avatar-lg{width:48px;height:48px;font-size:20px}
-.brick-author-name{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;font-weight:600}
-.brick-author-name:hover{color:var(--color-primary-text, #b63a2e);text-decoration:underline}
-span.brick-author-name{cursor:default;font-weight:500}
+.brick-main .brick-author .brick-author-name,.brick-author .brick-author-name{font:inherit;font-size:inherit;color:inherit;background:none;border:0;border-radius:0;padding:0;cursor:pointer;font-weight:600;text-decoration:none;line-height:inherit}
+.brick-main .brick-author .brick-author-name:hover,.brick-author .brick-author-name:hover{color:var(--color-primary-text, #b63a2e);text-decoration:underline;background:none;border:0}
+.brick-author span.brick-author-name{cursor:default;font-weight:500}
 .brick-profile-card{position:absolute;z-index:30;top:calc(100% + 8px);left:0;min-width:240px;padding:14px 16px 12px;border-radius:var(--radius-lg, 14px);
   background:var(--color-bg, #fff);border:1px solid var(--color-line, #e4e4ea);box-shadow:var(--shadow-md, 0 8px 28px rgba(0,0,0,.12));font-size:13.5px}
 .brick-profile-head{display:flex;align-items:center;gap:12px;margin-bottom:10px}
@@ -602,7 +602,8 @@ span.brick-author-name{cursor:default;font-weight:500}
 .brick-profile-stats div{display:flex;flex-direction:column;gap:2px}
 .brick-profile-stats dt{font-size:11.5px;color:var(--color-muted, #6c6c7a)}
 .brick-profile-stats dd{margin:0;font-weight:700;font-variant-numeric:tabular-nums}
-.brick-profile-close{position:absolute;top:6px;right:8px;border:0;background:none;font-size:18px;line-height:1;color:var(--color-muted, #6c6c7a);cursor:pointer;padding:4px}
+.brick-main .brick-profile-card .brick-profile-close,.brick-profile-card .brick-profile-close{position:absolute;top:6px;right:8px;border:0;background:none;font-size:18px;line-height:1;color:var(--color-muted, #6c6c7a);cursor:pointer;padding:4px;border-radius:6px;font-weight:400}
+.brick-main .brick-profile-card .brick-profile-close:hover{background:var(--color-bg-soft, #f6f6f9);color:var(--color-text, #17171c);border:0}
 .brick-profile-loading{color:var(--color-muted, #6c6c7a)}
 .brick-post-meta .brick-author{margin-right:2px}
 /* ── 목록 스킨: 갤러리 · 웹진 ─────────────────────── */
