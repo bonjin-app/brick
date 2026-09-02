@@ -44,7 +44,7 @@ ${detailScript(t, statusLabels())}${ORDERS_CSS}`;
 
       // ── 목록 (회원) / 주문번호 조회 (비회원) ──
       return `
-<div class="brick-orders" id="brick-order-list" data-base="${escapeHtml(base)}">
+<div class="brick-orders" id="brick-order-list" data-base="${escapeHtml(base)}" data-guest="${blockCtx?.user ? "0" : "1"}">
   <div id="brick-orders-body"><p class="brick-shop-empty">${escapeHtml(t("orders.loading"))}</p></div>
 </div>
 ${listScript(t, statusLabels())}${ORDERS_CSS}`;
@@ -102,6 +102,7 @@ const listScript = (t: (k: string) => string, labels: string) => `
     });
   }
 
+  if (root.dataset.guest === '1') { guestForm(); return; }
   fetch('/api/plugins/brick-shop/my/orders')
     .then(function(r){
       if (r.status === 401) { guestForm(); return null; }

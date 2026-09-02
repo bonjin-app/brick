@@ -104,10 +104,11 @@ ${items}
         title: { type: "string", title: "제목", default: "1:1 문의" },
       },
     },
-    render: async (props) => {
+    render: async (props, blockCtx) => {
       const s = await settings();
-      // 껍데기만. 내 문의는 캐시에 담길 수 없다.
-      return `<section class="brick-help" data-allow-guest="${s.allowGuest ? "1" : "0"}">
+      // 껍데기만. 내 문의는 캐시에 담길 수 없다. 비로그인 여부는 서버가 알려 준다 —
+      // 손님 브라우저가 401 을 받으러 갔다 오지 않게(콘솔 오류·한 번의 헛요청).
+      return `<section class="brick-help" data-allow-guest="${s.allowGuest ? "1" : "0"}" data-guest="${blockCtx?.user ? "0" : "1"}">
   <h2 class="brick-help-title">${escapeHtml(props.title ?? "1:1 문의")}</h2>
   <div class="brick-help-body"><p class="brick-faq-empty">불러오는 중…</p></div>
 </section>${FAQ_CSS}${HELP_CSS}${HELP_SCRIPT}`;
@@ -140,6 +141,7 @@ const HELP_CSS = `
 <style>
 .brick-help{margin:24px 0}
 .brick-help-title{font-size:22px;margin:0 0 16px}
+.brick-help-guest p{margin:0 0 14px}.brick-help-guest .brick-actions-row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
 .brick-help-toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px}
 .brick-help-toolbar button{padding:10px 18px;border:0;border-radius:8px;background:var(--color-primary,#d0402c);color:var(--color-on-primary, #ffffff);font-weight:700;cursor:pointer}
 .brick-help table{width:100%;border-collapse:collapse;font-size:14px}
@@ -218,15 +220,19 @@ const HELP_SCRIPT = `
     });
   }
 
+  function guestView(){
+    var next = encodeURIComponent(location.pathname + location.search);
+    body.innerHTML = '<div class="brick-empty brick-help-guest"><p>문의 내역을 보려면 로그인해주세요.' +
+      (allowGuest ? ' 로그인 없이도 문의를 남길 수 있습니다.' : '') + '</p>' +
+      '<div class="brick-actions-row"><a class="brick-btn brick-btn-primary" href="/login?next=' + next + '">로그인</a>' +
+      (allowGuest ? '<button type="button" class="brick-btn" data-new>문의하기</button>' : '') + '</div></div>';
+    bindNew();
+  }
+
   function showList(){
+    if (root.dataset.guest === '1') { guestView(); return; }
     json(API + '/my/tickets').then(function(res){
-      if (res.status === 401) {
-        body.innerHTML = '<p class="brick-faq-empty">문의 내역을 보려면 로그인해주세요.' +
-          (allowGuest ? ' 로그인 없이 문의하려면 아래 버튼을 눌러주세요.' : '') + '</p>' +
-          (allowGuest ? '<div class="brick-help-toolbar"><span></span><button data-new>문의하기</button></div>' : '');
-        bindNew();
-        return;
-      }
+      if (res.status === 401) { guestView(); return; }
       if (!res.ok) { body.innerHTML = '<p class="brick-faq-empty">문의 내역을 불러올 수 없습니다.</p>'; return; }
 
       var rows = (res.d.items || []).map(function(t){

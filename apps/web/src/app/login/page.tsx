@@ -27,7 +27,7 @@ export default function LoginPage() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(form),
     });
-    if (res.ok) window.location.href = "/";
+    if (res.ok) window.location.href = safeNext();
     else {
       setError((await res.json()).message ?? t("login.fail"));
       setBusy(false);
@@ -50,7 +50,7 @@ export default function LoginPage() {
         </button>
       </form>
       {error && <p style={{ color: "var(--color-danger)", fontSize: 14 }}>{error}</p>}
-      <SocialButtons next="/" />
+      <SocialButtons next={safeNext()} />
       <p style={{ textAlign: "center", marginTop: 18, fontSize: 14, color: "var(--color-muted)" }}>
         {t("login.noAccount")} <a href="/register" style={authLink}>{t("login.register")}</a>
         {" · "}
@@ -58,4 +58,14 @@ export default function LoginPage() {
       </p>
     </AuthShell>
   );
+}
+
+/**
+ * 로그인 뒤 돌아갈 곳 — 게시판·문의 화면이 "로그인" 버튼에 ?next= 로 자기 주소를 담아 보낸다.
+ * 같은 사이트의 경로만 받는다: "//evil.example" 같은 프로토콜 상대 주소는 오픈 리다이렉트가 된다.
+ */
+function safeNext(): string {
+  if (typeof window === "undefined") return "/";
+  const next = new URLSearchParams(window.location.search).get("next") ?? "";
+  return /^\/(?!\/)/.test(next) ? next : "/";
 }
