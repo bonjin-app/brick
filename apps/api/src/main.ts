@@ -74,6 +74,8 @@ async function bootstrap() {
     reply.header("x-content-type-options", "nosniff");
     reply.header("x-frame-options", "SAMEORIGIN");
     reply.header("referrer-policy", "strict-origin-when-cross-origin");
+    // 쓰지 않는 브라우저 기능은 문서 단위로 잠근다 — 삽입된 서드파티 스크립트가 카메라·위치를 요구해도 막힌다
+    reply.header("permissions-policy", "camera=(), microphone=(), geolocation=(), payment=(self)");
     reply.removeHeader("x-powered-by");
     done(null, payload);
   });
