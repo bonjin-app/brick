@@ -32,6 +32,10 @@ curl -O https://raw.githubusercontent.com/bonjin-app/brick/main/docker-compose.y
 
 # 3. 실행
 docker compose up -d
+
+이미지는 릴리스마다 `ghcr.io/bonjin-app/brick:X.Y.Z` 와 `:latest` 로 발행됩니다. 운영에서는 `.env` 에
+`BRICK_IMAGE_TAG=0.2.0` 처럼 버전을 고정해 두고, 업데이트할 때 값을 올리는 것을 권장합니다 —
+`latest` 를 따라가면 `docker compose pull` 시점에 어떤 버전이 올지 미리 알 수 없습니다.
 ```
 
 브라우저에서 `http://localhost:3000` 을 열면 설치 마법사가 나타납니다.

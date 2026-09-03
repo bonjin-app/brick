@@ -256,7 +256,7 @@ jobs:
             -d '{"siteName":"CI","adminEmail":"admin@ci.test","adminPassword":"cipass12345","starter":"community"}' >/dev/null
           echo "── 홈 200 · 테마 CSS · 관리자 버전"
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/)" = "200"
-          curl -fsS http://127.0.0.1:3000/themes/default/assets/style.css | head -c 40 >/dev/null
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/themes/default/assets/style.css)" = "200"
           curl -s -c ck.txt -X POST http://127.0.0.1:3000/api/auth/login -H 'content-type: application/json' \
             -d '{"email":"admin@ci.test","password":"cipass12345"}' >/dev/null
           curl -fsS -b ck.txt http://127.0.0.1:3000/api/admin/version | tee version.json
