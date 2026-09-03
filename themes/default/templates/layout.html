@@ -8,6 +8,8 @@
   <meta property="og:title" content="{{ pageTitle }}" />
   <meta property="og:site_name" content="{{ site.name }}" />
   {{#if seo.description}}<meta property="og:description" content="{{ seo.description }}" />{{/if}}
+  {{#if site.ogImage}}<meta property="og:image" content="{{ site.ogImage }}" />
+  <meta name="twitter:card" content="summary_large_image" />{{/if}}
   {{!--
     color-scheme: 브라우저가 스크롤바·기본 폼 위젯을 어느 쪽으로 그릴지 결정한다.
     이걸 빼면 다크 배경에 흰 스크롤바가 붙는다.

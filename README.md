@@ -27,7 +27,7 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-2773%20passing-2ea043.svg" alt="스모크 테스트 2773개" />
+  <img src="https://img.shields.io/badge/E2E-2780%20passing-2ea043.svg" alt="스모크 테스트 2780개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
   <a href="https://github.com/bonjin-app/brick/pkgs/container/brick">
     <img src="https://img.shields.io/badge/docker-ghcr.io%2Fbonjin--app%2Fbrick-2496ed.svg" alt="Docker image" />
@@ -365,11 +365,11 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 2,773개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 2,780개 항목):
 
 | 수트 | 항목 | 무엇을 못박는가 |
 |---|---:|---|
-| `smoke-test.sh` | 40 | 설치 · 인증 · 페이지 · 미디어 · 플러그인 로드 |
+| `smoke-test.sh` | 47 | 설치 · 인증 · 페이지 · 미디어 · 플러그인 로드 · **공유 이미지·immutable 캐시·압축** |
 | `smoke-member.sh` | 126 | 약관 강제 · 동의 이력 · 개인정보 파기 · 주문 보존 · 프로필 이미지·공개 카드·닉네임 변경 주기 · **관리자 메모·이메일 변경** |
 | `smoke-helpdesk.sh` | 109 | 문의 열거 방지 · 비회원 조회 · 사이트맵 유출 |
 | `smoke-migrate.sh` | 155 | 덤프 파싱 · 레벨 매핑 · **비밀번호 보존** · 영카트 상품·주문 · 멱등성 |

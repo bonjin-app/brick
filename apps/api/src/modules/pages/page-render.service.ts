@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
+import { loadEnv } from "../../config/env.js";
 // 이스케이프는 코어의 것을 쓴다 — null 안전하고, 구현이 갈라지면 안 된다
 import {
   CORE_CATALOGS, CORE_MESSAGE_KEYS, catalogToTree, escapeHtml, makeTranslator, normalizeLocale,
@@ -290,6 +291,8 @@ export class PageRenderService {
     business: Record<string, string> | null;
     /** 사이트 언어 (site.locale) — 테마 lang 속성과 t 가 이것을 따른다 */
     locale: Locale;
+    /** 공유 미리보기 이미지 — 상대 경로면 사이트 주소를 붙여 절대 URL 로 (og:image 는 절대 URL 이어야 한다) */
+    ogImage: string;
   }> {
     const rows = await this.db.select().from(siteSettings);
     const map = new Map(rows.map((r) => [r.key, r.value]));
@@ -299,6 +302,7 @@ export class PageRenderService {
       description: (map.get("site.description") as string) ?? "",
       business: toTemplateVars({ ...EMPTY_BUSINESS_INFO, ...stored }),
       locale: normalizeLocale(map.get("site.locale")),
+      ogImage: absoluteUrl(String(map.get("site.og_image") ?? "").trim()),
     };
   }
 
@@ -336,4 +340,10 @@ export function markCurrent<T extends { url: string }>(
   return items.map((item, i) => (i === bestIdx ? { ...item, current: true as const } : item));
 }
 
-
+/** og:image 는 절대 URL 이어야 한다 — /uploads/… 는 BRICK_SITE_URL 을 앞에 붙인다 */
+function absoluteUrl(value: string): string {
+  if (!value) return "";
+  if (/^https?:\/\//.test(value)) return value;
+  const base = loadEnv().siteUrl.replace(/\/+$/, "");
+  return `${base}${value.startsWith("/") ? "" : "/"}${value}`;
+}

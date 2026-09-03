@@ -2,6 +2,7 @@ import { NestFactory } from "@nestjs/core";
 import { FastifyAdapter, NestFastifyApplication } from "@nestjs/platform-fastify";
 import { Logger } from "@nestjs/common";
 import cookie from "@fastify/cookie";
+import compress from "@fastify/compress";
 import multipart from "@fastify/multipart";
 import { AppModule } from "./app.module.js";
 import { SetupAppModule } from "./setup.module.js";
@@ -59,6 +60,9 @@ async function bootstrap() {
     }),
   );
 
+  // 응답 압축 — 테마 CSS(30KB+)·서버 렌더 HTML 이 Next 프록시를 그대로 통과하므로 여기서 눌러야 한다.
+  // (Next 는 자기 페이지만 압축한다.) 이미지·zip 은 threshold 와 MIME 판정으로 건너뛴다.
+  await app.register(compress as never, { global: true, encodings: ["br", "gzip"], threshold: 1024 });
   await app.register(cookie as never, { secret: env.secret });
   await app.register(multipart as never, {
     limits: {

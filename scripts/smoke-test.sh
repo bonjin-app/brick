@@ -184,5 +184,17 @@ contains "테마 목록" "$(curl -s "$API/api/themes")" '"active"'
 contains "테마 CSS 서빙" "$(curl -sI "$API/themes/default/assets/style.css")" "text/css"
 
 echo
+echo "── 공개 품질: 공유 이미지 · 캐시 · 압축"
+check "공유 이미지는 http(s) 또는 / 로 시작해야 한다" \
+  "$(code -b "$COOKIES" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"site.og_image":"javascript:alert(1)"}')" "400"
+check "공유 이미지 저장" \
+  "$(code -b "$COOKIES" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"site.og_image":"/uploads/share.png"}')" "200"
+OG_HTML="$(curl -s "$API/api/render/page?path=&og=1" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("html",""))' 2>/dev/null)"
+contains "테마가 og:image 를 절대 URL 로 낸다" "$OG_HTML" 'property="og:image" content="http'
+contains "트위터 카드도 함께" "$OG_HTML" 'name="twitter:card"'
+check "스탬프 붙은 테마 자산은 1년 immutable" "$(curl -s -o /dev/null -w '%header{cache-control}' "$API/themes/default/assets/style.css?v=1")" "public, max-age=31536000, immutable"
+check "스탬프 없는 자산은 1시간" "$(curl -s -o /dev/null -w '%header{cache-control}' "$API/themes/default/assets/style.css")" "public, max-age=3600"
+check "텍스트 응답은 br 로 압축된다" "$(curl -s -o /dev/null -w '%header{content-encoding}' -H 'Accept-Encoding: br, gzip' "$API/themes/default/assets/style.css")" "br"
+
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 [[ $FAIL -eq 0 ]] || { echo; echo "── 서버 로그 ──"; tail -40 "$TMP/api.log"; exit 1; }

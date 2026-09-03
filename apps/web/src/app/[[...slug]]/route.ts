@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { compressedResponse } from "../../lib/proxy";
 
 const API = (process.env.BRICK_API_URL ?? "http://127.0.0.1:3001").replace(/\/+$/, "");
 
@@ -54,8 +55,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ slug?: stri
     });
   }
   const { html, status } = (await res.json()) as { html: string; status: number };
-  return new Response(html, {
-    status,
-    headers: { "content-type": "text/html; charset=utf-8" },
-  });
+  // 서버 렌더 HTML 은 80KB 안팎 — br/gzip 으로 눌러 내보낸다 (Next 는 Route Handler 응답을 압축하지 않는다)
+  const headers = new Headers({ "content-type": "text/html; charset=utf-8" });
+  return compressedResponse(req, Buffer.from(html, "utf8"), { status, headers });
 }

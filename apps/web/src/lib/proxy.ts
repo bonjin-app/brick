@@ -1,4 +1,43 @@
 import type { NextRequest } from "next/server";
+import { brotliCompress, gzip, constants as zlibConstants } from "node:zlib";
+import { promisify } from "node:util";
+
+const brotli = promisify(brotliCompress);
+const gzipAsync = promisify(gzip);
+
+/**
+ * 압축 — 텍스트 계열 응답만.
+ * fetch(undici) 는 업스트림의 br/gzip 을 투명하게 풀어 버리고, Next 는 Route Handler 가 내보내는
+ * 응답을 압축하지 않는다. 그 결과 서버 렌더 HTML(80KB)·테마 CSS(32KB)가 그대로 나갔다.
+ * 이미지·zip·PDF 는 이미 압축된 형식이라 건너뛴다(크기도 커 메모리에 모으지 않는다).
+ */
+const COMPRESSIBLE = /^(text\/|application\/(json|javascript|xml|xhtml\+xml|rss\+xml|atom\+xml|manifest\+json)|image\/svg\+xml)/i;
+const MIN_COMPRESS_BYTES = 1024;
+
+/**
+ * 요청의 Accept-Encoding 에 맞춰 본문을 br/gzip 으로 압축한 Response 를 만든다.
+ * 서버 렌더 HTML 라우트([[...slug]])와 API 프록시가 같은 규칙을 쓴다.
+ */
+export async function compressedResponse(
+  req: Request,
+  body: Buffer,
+  init: { status: number; statusText?: string; headers: Headers },
+): Promise<Response> {
+  const acceptEncoding = req.headers.get("accept-encoding") ?? "";
+  const encoding = /\bbr\b/.test(acceptEncoding) ? "br" : /\bgzip\b/.test(acceptEncoding) ? "gzip" : null;
+  const headers = init.headers;
+  headers.set("vary", "accept-encoding");
+  if (encoding && body.length >= MIN_COMPRESS_BYTES) {
+    const out = encoding === "br"
+      ? await brotli(body, { params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 5, [zlibConstants.BROTLI_PARAM_SIZE_HINT]: body.length } })
+      : await gzipAsync(body, { level: 6 });
+    headers.set("content-encoding", encoding);
+    headers.set("content-length", String(out.length));
+    return new Response(new Uint8Array(out), { status: init.status, statusText: init.statusText, headers });
+  }
+  headers.set("content-length", String(body.length));
+  return new Response(new Uint8Array(body), { status: init.status, statusText: init.statusText, headers });
+}
 
 /**
  * 내부 API로의 런타임 프록시.
@@ -72,6 +111,13 @@ export async function proxyToApi(req: NextRequest): Promise<Response> {
   // Set-Cookie는 여러 개일 수 있어 별도로 옮긴다 (세션 쿠키가 여기로 온다)
   for (const cookie of upstream.headers.getSetCookie?.() ?? []) {
     responseHeaders.append("set-cookie", cookie);
+  }
+
+  // 텍스트 응답은 모아서 압축한다 — 업로드 파일 등 나머지는 그대로 흘려보낸다
+  const contentType = upstream.headers.get("content-type") ?? "";
+  if (upstream.body && upstream.status === 200 && req.method === "GET" && COMPRESSIBLE.test(contentType)) {
+    const raw = Buffer.from(await upstream.arrayBuffer());
+    return compressedResponse(req, raw, { status: upstream.status, statusText: upstream.statusText, headers: responseHeaders });
   }
 
   return new Response(upstream.body, {

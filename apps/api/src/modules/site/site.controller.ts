@@ -28,6 +28,8 @@ interface MenuItem {
 const EDITABLE_SETTINGS: Record<string, "string" | "boolean"> = {
   "site.name": "string",
   "site.description": "string",
+  // 공유 미리보기 이미지(og:image). 절대 URL 또는 /uploads/… 경로. 비우면 메타를 내지 않는다.
+  "site.og_image": "string",
   "site.registration_open": "boolean",
   // 검색 노출 차단 — robots.txt 가 읽는다 (SeoService)
   "site.seo_noindex": "boolean",
@@ -168,6 +170,10 @@ export class SiteController {
         throw new BadRequestException(
           `지원하지 않는 언어입니다: ${String(value)} (지원: ${AVAILABLE_LOCALES.join(", ")})`,
         );
+      }
+
+      if (key === "site.og_image" && String(value).trim() !== "" && !/^(https?:\/\/|\/)/.test(String(value).trim())) {
+        throw new BadRequestException("공유 이미지는 https:// 로 시작하는 주소 또는 /uploads/… 경로여야 합니다.");
       }
 
       // 관리자 IP 제한 — 형식 오류와 **자기잠금**을 저장 시점에 막는다.

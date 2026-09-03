@@ -8,6 +8,8 @@
   <meta property="og:title" content="{{ pageTitle }}" />
   <meta property="og:site_name" content="{{ site.name }}" />
   {{#if seo.description}}<meta property="og:description" content="{{ seo.description }}" />{{/if}}
+  {{#if site.ogImage}}<meta property="og:image" content="{{ site.ogImage }}" />
+  <meta name="twitter:card" content="summary_large_image" />{{/if}}
   <meta name="color-scheme" content="light dark" />
   <link rel="icon" href="{{ themeAssets }}/favicon.svg?v={{ themeVersion }}" type="image/svg+xml" />
   {{!-- 저장된 화면 모드를 CSS 보다 먼저 적용한다 (다크 사용자에게 흰 화면이 번쩍이지 않게) --}}

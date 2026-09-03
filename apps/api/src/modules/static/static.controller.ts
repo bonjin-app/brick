@@ -24,8 +24,13 @@ export class StaticController {
 
   @Get("themes/:name/assets/*")
   async themeAsset(@Param("name") name: string, @Req() req: FastifyRequest, @Res() reply: FastifyReply) {
-    const rel = decodeURIComponent(req.url.split("?")[0]).replace(/^\/themes\//, "");
-    return this.serve(join(this.themesDir, rel), this.themesDir, reply, "public, max-age=3600");
+    const [pathPart, query = ""] = req.url.split("?");
+    const rel = decodeURIComponent(pathPart).replace(/^\/themes\//, "");
+    // 테마가 ?v=<스탬프> 로 부르는 자산은 내용이 바뀌면 주소도 바뀐다 — 1년 immutable 로 두어도 안전하다.
+    // 스탬프 없이 부르면(직접 링크) 1시간.
+    const versioned = /(^|&)v=/.test(query);
+    return this.serve(join(this.themesDir, rel), this.themesDir, reply,
+      versioned ? "public, max-age=31536000, immutable" : "public, max-age=3600");
   }
 
   @Get("uploads/*")

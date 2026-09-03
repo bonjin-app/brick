@@ -6,6 +6,16 @@
 
 ## [Unreleased]
 
+### 추가
+- 사이트 설정 **공유 미리보기 이미지**(`site.og_image`) → 테마가 `og:image`·`twitter:card` 를 낸다(절대 URL 로 변환)
+- CI 가 Docker 이미지를 실제로 실행해 PostgreSQL 과 함께 설치 마법사·첫 화면·버전 보고까지 검증
+- 이메일 인증 메일에 HTML 본문(버튼) — 비밀번호 재설정 메일과 같은 모양
+
+### 변경
+- Next 프록시가 텍스트 응답(서버 렌더 HTML·테마 CSS·JSON)을 br/gzip 으로 압축한다 — 홈 81KB → 약 16KB
+- `?v=` 스탬프가 붙은 테마 자산은 `max-age=31536000, immutable`
+- 보안 헤더에 Permissions-Policy 추가; 설치 문서에 이미지 태그 고정 권장
+
 ## [0.2.0] - 2026-09-02
 
 ### 추가
