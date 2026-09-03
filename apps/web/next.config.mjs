@@ -13,6 +13,21 @@ const nextConfig = {
   outputFileTracingRoot: path.join(__dirname, "../../"),
   poweredByHeader: false,
   reactStrictMode: true,
+  // Next 가 직접 그리는 화면(로그인·가입·마이페이지·관리·설치)에도 API 와 같은 보안 헤더를 붙인다.
+  // API 응답의 헤더는 프록시를 통과하지만, 이 화면들은 API 를 거치지 않는다.
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(self)" },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

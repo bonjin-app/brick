@@ -14,7 +14,8 @@
 ### 변경
 - Next 프록시가 텍스트 응답(서버 렌더 HTML·테마 CSS·JSON)을 br/gzip 으로 압축한다 — 홈 81KB → 약 16KB
 - `?v=` 스탬프가 붙은 테마 자산은 `max-age=31536000, immutable`
-- 보안 헤더에 Permissions-Policy 추가; 설치 문서에 이미지 태그 고정 권장
+- 보안 헤더에 Permissions-Policy 추가(API·Next 화면 모두); 설치 문서에 이미지 태그 고정 권장
+- API 가 없거나 렌더가 실패했을 때 text/plain 한 줄 대신 다시 시도 버튼이 있는 HTML 안내 화면(외부 자산 없음, noindex)
 
 ## [0.2.0] - 2026-09-02
 
