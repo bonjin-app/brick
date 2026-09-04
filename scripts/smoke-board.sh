@@ -462,6 +462,78 @@ const pg = require('$ROOT/apps/api/node_modules/pg');
 })();
 ")"
   [[ -n "$SAVED" && "$SAVED" -lt "$ORIG_BYTES" ]] && ok "첨부 이미지가 줄어든다 ($ORIG_BYTES → $SAVED)" || bad "첨부 이미지가 줄어든다 ($ORIG_BYTES → ${SAVED:-없음})"
+  TH="$(node -e "
+const pg = require('$ROOT/apps/api/node_modules/pg');
+(async () => {
+  const c = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await c.connect();
+  const { rows } = await c.query('SELECT thumb_url FROM board_posts WHERE id = \$1::uuid', ['$AP']);
+  console.log(rows[0] ? rows[0].thumb_url : '');
+  await c.end();
+})();
+")"
+  contains "목록 썸네일이 원본이 아닌 400px WebP 를 가리킨다" "$TH" "-thumb.webp"
+  check "썸네일이 서빙된다" "$(code "$API$TH")" "200"
+  # 갤러리 게시판에 같은 사진을 첨부해 목록 HTML 이 썸네일을 쓰는지 본다
+  printf '{"title":"갤러리 사진","content":"본문"}' > "$TMP/gp.json"
+  GAP="$(curl -s -b "$ADMIN" -X POST "$BD/boards/gal/posts" -H 'content-type: application/json' --data-binary "@$TMP/gp.json" | python3 -c "import sys,json;print(json.load(sys.stdin).get('id',''))" 2>/dev/null)"
+  curl -s -b "$ADMIN" -X POST "$BD/posts/$GAP/files" -F "files=@$TMP/attach.jpg;type=image/jpeg" -o /dev/null
+  GAL_HTML="$(render_html "board/gal")"
+  contains "갤러리 목록이 썸네일을 그린다" "$GAL_HTML" '-thumb.webp" alt="" loading="lazy"'
+  # 업그레이드 상황: thumb_key 를 비우고 thumb_url 을 원본으로 되돌린 뒤 백필이 고치는지
+  node -e "
+const pg = require('$ROOT/apps/api/node_modules/pg');
+(async () => {
+  const c = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await c.connect();
+  await c.query(\"UPDATE board_attachments SET thumb_key = NULL WHERE post_id = \$1::uuid\", ['$GAP']);
+  await c.query(\"UPDATE board_posts p SET thumb_url = '/uploads/' || a.storage_key FROM board_attachments a WHERE a.post_id = p.id AND p.id = \$1::uuid\", ['$GAP']);
+  await c.end();
+})();
+"
+  BFB="$(BRICK_UPLOADS_DIR="$TMP/uploads" node "$ROOT/apps/api/dist/backfill-thumbs.js" 2>&1)"
+  contains "백필이 게시판 첨부 썸네일도 만든다" "$BFB" "첨부 attach.jpg"
+  TH2="$(node -e "
+const pg = require('$ROOT/apps/api/node_modules/pg');
+(async () => {
+  const c = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await c.connect();
+  const { rows } = await c.query('SELECT thumb_url FROM board_posts WHERE id = \$1::uuid', ['$GAP']);
+  console.log(rows[0] ? rows[0].thumb_url : '');
+  await c.end();
+})();
+")"
+  contains "백필 뒤 옛 글의 목록 썸네일도 WebP 로 바뀐다" "$TH2" "-thumb.webp"
+  # 에디터가 넣는 data-thumb — 새니타이저를 통과하고 목록 썸네일이 그것을 쓴다. 위험한 스킴은 버린다
+  thumb_of() { node -e "
+const pg = require('$ROOT/apps/api/node_modules/pg');
+(async () => {
+  const c = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await c.connect();
+  const { rows } = await c.query('SELECT thumb_url, content FROM board_posts WHERE id = \$1::uuid', [process.argv[1]]);
+  console.log(rows[0] ? rows[0].thumb_url + '|' + rows[0].content : '');
+  await c.end();
+})();
+" "$1"; }
+  cat > "$TMP/it.json" <<'JSON'
+{"title":"인라인 썸네일","content":"<p>x</p><img src=\"/uploads/a.jpg\" data-thumb=\"/uploads/a-thumb.webp\" width=\"800\" height=\"600\" loading=\"lazy\" onerror=\"alert(1)\" />"}
+JSON
+  IT_RAW="$(curl -s -b "$ADMIN" -X POST "$BD/boards/gal/posts" -H 'content-type: application/json' --data-binary "@$TMP/it.json")"
+  IT_ID="$(echo "$IT_RAW" | jf "['id']")"
+  [[ -n "$IT_ID" ]] && ok "인라인 이미지 글 작성" || bad "인라인 이미지 글 작성 (${IT_RAW:0:200})"
+  IT=""; [[ -n "$IT_ID" ]] && IT="$(thumb_of "$IT_ID")"
+  contains "data-thumb·치수·lazy 는 새니타이저를 통과한다" "$IT" 'data-thumb="/uploads/a-thumb.webp" width="800" height="600" loading="lazy"'
+  absent "onerror 는 걷어낸다" "$IT" "onerror"
+  contains "인라인 이미지 글의 목록 썸네일은 data-thumb" "$IT" '/uploads/a-thumb.webp|'
+  cat > "$TMP/it2.json" <<'JSON'
+{"title":"나쁜 썸네일","content":"<img src=\"/uploads/b.jpg\" data-thumb=\"javascript:alert(1)\" />"}
+JSON
+  IT2_RAW="$(curl -s -b "$ADMIN" -X POST "$BD/boards/gal/posts" -H 'content-type: application/json' --data-binary "@$TMP/it2.json")"
+  IT2_ID="$(echo "$IT2_RAW" | jf "['id']")"
+  [[ -n "$IT2_ID" ]] && ok "나쁜 썸네일 글 작성" || bad "나쁜 썸네일 글 작성 (${IT2_RAW:0:200})"
+  IT2=""; [[ -n "$IT2_ID" ]] && IT2="$(thumb_of "$IT2_ID")"
+  absent "javascript: data-thumb 는 버린다" "$IT2" "data-thumb"
+  contains "그때 썸네일은 원본 src" "$IT2" '/uploads/b.jpg|'
 fi
 
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"

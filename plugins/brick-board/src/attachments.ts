@@ -28,6 +28,11 @@ export interface ImageOps {
     contentType: string,
     opts?: { maxWidth?: number; maxHeight?: number; quality?: number },
   ): Promise<{ buffer: Buffer; contentType: string; ext: string | null; width: number | null; height: number | null }>;
+  thumbnail(
+    buffer: Buffer,
+    contentType: string,
+    opts?: { width?: number; height?: number; quality?: number },
+  ): Promise<{ buffer: Buffer; contentType: string; ext: string | null; width: number | null; height: number | null } | null>;
 }
 
 export async function attachFiles(
@@ -90,13 +95,21 @@ export async function attachFiles(
         : null;
       const stored = await storage.put(item.key, body?.buffer ?? item.file.buffer, item.file.contentType);
       written.push(item.key);
+      // 목록용 썸네일 — 갤러리·웹진 스킨이 원본 대신 이것을 쓴다
+      let thumbKey: string | null = null;
+      const thumb = body ? await params.images!.thumbnail(item.file.buffer, item.file.contentType) : null;
+      if (thumb) {
+        thumbKey = item.key.replace(/\.[a-z0-9]+$/i, "") + "-thumb" + (thumb.ext ?? ".webp");
+        await storage.put(thumbKey, thumb.buffer, thumb.contentType);
+        written.push(thumbKey);
+      }
       await db.execute(sql`
         INSERT INTO board_attachments
-          (id, post_id, storage_key, file_name, content_type, size, sort_order)
+          (id, post_id, storage_key, file_name, content_type, size, sort_order, thumb_key)
         VALUES
           (${item.id}, ${postId}::uuid, ${item.key},
            ${(item.file.fileName ?? "untitled").slice(0, 500)},
-           ${item.file.contentType}, ${String(stored.size)}, ${item.sortOrder})
+           ${item.file.contentType}, ${String(stored.size)}, ${item.sortOrder}, ${thumbKey})
       `);
     }
   } catch (err) {
@@ -136,10 +149,11 @@ export async function deleteAttachments(
   postId: string,
 ): Promise<void> {
   const { rows } = await db.execute(sql`
-    SELECT storage_key FROM board_attachments WHERE post_id = ${postId}::uuid
+    SELECT storage_key, thumb_key FROM board_attachments WHERE post_id = ${postId}::uuid
   `);
   for (const row of rows) {
     await storage.delete(String(row.storage_key)).catch(() => undefined);
+    if (row.thumb_key) await storage.delete(String(row.thumb_key)).catch(() => undefined);
   }
   await db.execute(sql`DELETE FROM board_attachments WHERE post_id = ${postId}::uuid`);
 }

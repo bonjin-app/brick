@@ -82,6 +82,49 @@ async function main(): Promise<void> {
     }
   }
 
+  // ── 게시판 첨부 (플러그인 테이블 — 설치되어 있을 때만) ──────────────────────────
+  // 갤러리·웹진 목록의 thumb_url 이 첨부 원본을 가리키던 옛 글을 썸네일로 돌린다.
+  // 플러그인 코드를 import 하지 않고 SQL 로만 다룬다 — 이 도구는 플러그인이 없어도 돌아야 한다.
+  const hasBoard = await client.query(
+    "SELECT 1 FROM information_schema.columns WHERE table_name = 'board_attachments' AND column_name = 'thumb_key'",
+  );
+  if (hasBoard.rowCount) {
+    const atts = await client.query<{ id: string; post_id: string; storage_key: string; content_type: string; file_name: string }>(
+      "SELECT id, post_id, storage_key, content_type, file_name FROM board_attachments WHERE thumb_key IS NULL AND content_type LIKE 'image/%' ORDER BY post_id, sort_order",
+    );
+    console.log(`\n게시판 첨부 대상 ${atts.rowCount}건`);
+    for (const a of atts.rows) {
+      if (!images.canProcess(a.content_type)) {
+        skipped++;
+        continue;
+      }
+      try {
+        const buffer = await readAll(await storage.get(a.storage_key));
+        const thumb = await images.thumbnail(buffer, a.content_type);
+        if (!thumb) {
+          skipped++;
+          continue;
+        }
+        const thumbKey = a.storage_key.replace(/\.[a-z0-9]+$/i, "") + "-thumb" + (thumb.ext ?? ".webp");
+        if (!dry) {
+          await storage.put(thumbKey, thumb.buffer, thumb.contentType);
+          await client.query("UPDATE board_attachments SET thumb_key = $1 WHERE id = $2", [thumbKey, a.id]);
+          // 목록 썸네일이 이 첨부의 원본을 가리키고 있었다면 썸네일로 바꾼다
+          await client.query("UPDATE board_posts SET thumb_url = $1 WHERE id = $2 AND thumb_url = $3", [
+            storage.publicUrl(thumbKey),
+            a.post_id,
+            storage.publicUrl(a.storage_key),
+          ]);
+        }
+        done++;
+        console.log(`  ${dry ? "[예정]" : "✓"} 첨부 ${a.file_name} → ${thumbKey}`);
+      } catch (err) {
+        skipped++;
+        console.warn(`  ! 첨부 ${a.file_name} 건너뜀: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  }
+
   await client.end();
   console.log(`\n완료: ${done}건 ${dry ? "예정" : "생성"}, ${skipped}건 건너뜀`);
 }

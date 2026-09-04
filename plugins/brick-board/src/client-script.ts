@@ -143,7 +143,13 @@ export const BOARD_SCRIPT = `
             imagePicker.value = '';
             if (!r.ok) { msg(status, r.d.message || '이미지를 올리지 못했습니다.', true); return; }
             msg(status, '');
-            apply(function () { document.execCommand('insertImage', false, r.d.url); });
+            // 치수를 함께 넣어 글이 그려질 때 자리가 밀리지 않게(CLS) 하고, 목록용 썸네일 주소를
+            // data-thumb 로 남겨 갤러리 목록이 원본 대신 그것을 쓰게 한다 (서버 새니타이저가 허용하는 속성만)
+            var esc = function (v) { return String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); };
+            var tag = '<img src="' + esc(r.d.url) + '" alt=""' +
+              (r.d.width ? ' width="' + r.d.width + '" height="' + r.d.height + '"' : '') +
+              (r.d.thumbUrl ? ' data-thumb="' + esc(r.d.thumbUrl) + '"' : '') + ' loading="lazy" />';
+            apply(function () { document.execCommand('insertHTML', false, tag); });
             body.dispatchEvent(new Event('input'));
           });
       });
@@ -217,7 +223,8 @@ export const BOARD_SCRIPT = `
       var submitBtn = form.querySelector('button[type=submit]');
       var eb = writeRoot.querySelector('.brick-editor-body');
       var content = eb ? eb.innerHTML : '';
-      if (!eb || !eb.textContent.trim()) { msg(status, '내용을 입력해주세요.', true); return; }
+      // 사진만 넣은 글도 내용이 있는 글이다 — 서버(isBlankContent)와 같은 규칙
+      if (!eb || (!eb.textContent.trim() && !eb.querySelector('img'))) { msg(status, '내용을 입력해주세요.', true); return; }
 
       var fd = new FormData(form);
       var cap = captchaOf(form);

@@ -5,7 +5,7 @@ import { BoardError, asListStyle, effectiveReadRole, escapeHtml, hasRole, pgArra
 import { hashGuestPassword } from "./guest.js";
 import { assertCanModify, canReadSecret, checkWriteInterval, loadBoard, requireRole } from "./access.js";
 import { attachFiles, claimDownload, deleteAttachments, listAttachments } from "./attachments.js";
-import { createPost, listPosts, normalizeLinks, refreshThumb, type WritePostInput } from "./posts.js";
+import { createPost, isBlankContent, listPosts, normalizeLinks, refreshThumb, type WritePostInput } from "./posts.js";
 import { sanitizeHtml, toPlainText } from "./sanitize.js";
 import { BOARD_RESOURCE, GROUP_RESOURCE, POST_RESOURCE } from "./admin-resources.js";
 import { registerBoardBlocks } from "./blocks.js";
@@ -218,7 +218,7 @@ export default definePlugin(async (ctx) => {
     // 수정 경로에서도 새니타이즈를 빼먹으면 우회 통로가 된다 — 금지 단어도 같다
     const content = sanitizeHtml(String(body.content ?? "").trim());
     await assertClean(`${title} ${content}`);
-    if (!title || !content.replace(/<[^>]*>/g, "").trim()) {
+    if (!title || isBlankContent(content)) {
       throw new BoardError(400, "제목과 내용을 입력해주세요.");
     }
 

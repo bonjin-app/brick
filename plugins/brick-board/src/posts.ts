@@ -50,7 +50,7 @@ export async function createPost(
   if (!raw) throw new BoardError(400, "내용을 입력해주세요.");
   if (raw.length > 200_000) throw new BoardError(400, "내용이 너무 깁니다.");
   const content = sanitizeHtml(raw);
-  if (!content.replace(/<[^>]*>/g, "").trim()) {
+  if (isBlankContent(content)) {
     throw new BoardError(400, "내용을 입력해주세요.");
   }
 
@@ -143,12 +143,23 @@ export async function createPost(
 }
 
 /**
+ * 본문이 비었는가. 글자 없이 사진만 넣은 글은 **비어 있지 않다** — 갤러리 게시판의 기본
+ * 사용법이 "사진 한 장 올리기"인데 "내용을 입력해주세요"로 막으면 아무 글도 올릴 수 없다.
+ */
+export function isBlankContent(html: string): boolean {
+  return !/<img\b/i.test(html) && !html.replace(/<[^>]*>/g, "").trim();
+}
+
+/**
  * 본문의 첫 이미지 주소 — 갤러리/웹진 스킨의 썸네일 후보.
  * 목록을 그릴 때마다 본문을 파싱하지 않도록 저장 시점에 뽑아 둔다.
  * 새니타이즈를 거친 HTML 만 들어오므로 src 는 http(s)/상대 경로만 남아 있다.
  */
 export function extractThumb(html: string): string | null {
-  const m = /<img\b[^>]*\bsrc=["']([^"']+)["']/i.exec(String(html ?? ""));
+  const tag = /<img\b[^>]*>/i.exec(String(html ?? ""))?.[0];
+  if (!tag) return null;
+  // 에디터가 넣은 목록용 썸네일(data-thumb)이 있으면 그것을, 없으면 원본 src 를 쓴다
+  const m = /\bdata-thumb=["']([^"']+)["']/i.exec(tag) ?? /\bsrc=["']([^"']+)["']/i.exec(tag);
   if (!m) return null;
   const src = m[1].trim();
   if (!/^(https?:\/\/|\/)/i.test(src)) return null;
@@ -168,11 +179,12 @@ export async function refreshThumb(
   content?: string,
 ): Promise<void> {
   const { rows } = await db.execute(sql`
-    SELECT a.storage_key FROM board_attachments a
+    SELECT a.storage_key, a.thumb_key FROM board_attachments a
     WHERE a.post_id = ${postId}::uuid AND a.content_type LIKE 'image/%'
     ORDER BY a.sort_order, a.created_at LIMIT 1
   `);
-  let thumb: string | null = rows[0] ? storage.publicUrl(String(rows[0].storage_key)) : null;
+  // 썸네일이 있으면 그것을(400px WebP), 없으면(옛 파일·sharp 없음) 원본을 쓴다
+  let thumb: string | null = rows[0] ? storage.publicUrl(String(rows[0].thumb_key ?? rows[0].storage_key)) : null;
   if (!thumb) {
     const html = content ?? String(
       (await db.execute(sql`SELECT content FROM board_posts WHERE id = ${postId}::uuid`)).rows[0]?.content ?? "",
