@@ -263,3 +263,45 @@ jobs:
         run: |
           docker compose ps || true
           docker compose logs --tail 120 || true
+
+  docker-arm:
+    name: Docker 이미지 (arm64)
+    # Apple Silicon · AWS Graviton · Oracle Ampere · 라즈베리파이 사용자를 위한 arm64 이미지.
+    # 네이티브 ARM 러너로 빌드한다 — QEMU 에뮬레이션은 argon2 같은 네이티브 모듈 컴파일에서
+    # 몇 배로 느려지고 실패 원인도 흐려진다. (릴리스는 두 아키텍처를 각자 러너에서 만들어 합친다)
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v3
+      - name: 이미지 빌드 (arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: false
+          load: true
+          tags: brick:arm64-ci
+          build-args: |
+            BRICK_VERSION=0.0.0-ci-arm64
+          cache-from: type=gha,scope=arm64
+          cache-to: type=gha,mode=max,scope=arm64
+      - name: 실행 확인 (네이티브 모듈이 arm64 에서 로드되는가)
+        run: |
+          set -euo pipefail
+          docker run --rm -d --name pg -e POSTGRES_USER=brick -e POSTGRES_PASSWORD=brick -e POSTGRES_DB=brick -p 5432:5432 postgres:17-alpine
+          for i in $(seq 1 30); do docker exec pg pg_isready -U brick -d brick >/dev/null 2>&1 && break; sleep 2; done
+          docker run -d --name brick -p 3000:3000 \
+            -e DATABASE_URL=postgresql://brick:brick@172.17.0.1:5432/brick \
+            -e BRICK_SECRET=ci-secret-value-that-is-long-enough-0123456789 \
+            -e BRICK_CAPTCHA=off brick:arm64-ci
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:3000/readyz >/dev/null 2>&1 && break; sleep 2; done
+          curl -fsS http://127.0.0.1:3000/readyz
+          # argon2(네이티브)는 회원 가입 경로에서 처음 호출된다 — 설치가 그것을 지난다
+          curl -fsS -X POST http://127.0.0.1:3000/api/install -H 'content-type: application/json' \
+            -d '{"siteName":"ARM","adminEmail":"admin@arm.test","adminPassword":"armpass12345","starter":"blank"}' >/dev/null
+          curl -s -c ck.txt -X POST http://127.0.0.1:3000/api/auth/login -H 'content-type: application/json' \
+            -d '{"email":"admin@arm.test","password":"armpass12345"}' | grep -q '"role":"admin"'
+          echo "✅ arm64 이미지가 설치·argon2 해시·로그인까지 동작"
+      - name: 진단 (실패 시)
+        if: failure()
+        run: docker logs brick 2>&1 | tail -60 || true
