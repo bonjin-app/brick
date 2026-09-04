@@ -102,6 +102,13 @@ const env = {
   ...process.env,
   BRICK_VERSION: process.env.BRICK_VERSION || VERSION,
   PORT: String(PORT),
+  /*
+   * Next standalone 은 `process.env.HOSTNAME || "0.0.0.0"` 를 **바인딩 주소**로 쓴다.
+   * 리눅스 로그인 셸과 컨테이너에는 HOSTNAME 이 설정되어 있어, 그대로 두면 서버가 그 이름이
+   * 가리키는 주소에만 리스닝한다 — 127.0.0.1 로 오는 요청(프록시·헬스체크)이 닿지 않는다.
+   * 특정 인터페이스에만 열려면 BRICK_WEB_HOST 로 지정한다.
+   */
+  HOSTNAME: process.env.BRICK_WEB_HOST || "0.0.0.0",
   BRICK_API_PORT: String(API_PORT),
   BRICK_API_URL: process.env.BRICK_API_URL || `http://127.0.0.1:${API_PORT}`,
   BRICK_CONFIG_PATH: process.env.BRICK_CONFIG_PATH || path.join(ROOT, "data", "brick.config.json"),

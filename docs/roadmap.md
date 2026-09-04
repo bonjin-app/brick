@@ -483,3 +483,15 @@ v0.2.0 을 공개한 뒤 "사용자가 처음 만나는 것"을 다시 훑었다
 - [x] 설치 마법사 375/1280 점검 — 그대로 통과
 - [x] 마지막 안전망: API 불통·렌더 실패 시 HTML 안내 화면(다시 시도), Next 화면에도 보안 헤더
 - [ ] 다음: 이미지 업로드 시 og 용 1200×630 자동 변형, 사이트맵에 lastmod·이미지
+
+### M31 후속 — CI 가 컨테이너를 띄우자마자 잡은 것
+
+`docker compose up --wait` 를 CI 에 넣은 첫 실행에서 `brick-brick-1 is unhealthy` 가 났다. 원인은
+Next standalone 의 `HOSTNAME` 바인딩: Docker 가 채우는 컨테이너 호스트명에만 리스닝해
+컨테이너 안 `127.0.0.1:3000` 이 죽어 있었다. **배포된 v0.1.0·v0.2.0 이미지의 HEALTHCHECK 는
+처음부터 늘 실패하고 있었다** — 포트 매핑으로 외부 접근은 되니 아무도 몰랐다.
+
+- [x] 런처(배포본)·entrypoint(Docker)가 `HOSTNAME=0.0.0.0` 강제, `BRICK_WEB_HOST` 로 오버라이드
+- [x] smoke-release 에 회귀 검사: `HOSTNAME` 을 일부러 설정하고 띄워도 127.0.0.1 로 응답
+- [x] fastify 5.12.1 (trustProxy X-Forwarded-* 스푸핑 · 스키마 검증 우회) — overrides 로 고정
+- 교훈: "이미지가 빌드된다"와 "컨테이너가 동작한다"는 다른 검사다. 후자를 넣은 날 3개월 묵은 버그가 나왔다.

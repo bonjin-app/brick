@@ -20,3 +20,6 @@ overrides:
   sharp: ">=0.35.4"
   # drizzle-kit 이 끌고 오는 개발 전용 번들러
   esbuild: ">=0.28.2"
+  # @nestjs/platform-fastify 11.2.3 이 fastify 5.11.3 을 고정한다 — trustProxy hop-count 아래에서
+  # X-Forwarded-* 스푸핑(GHSA)과 스키마 검증 우회 두 건. Brick 은 BRICK_TRUST_PROXY 를 쓰므로 해당된다.
+  fastify: ">=5.12.1"

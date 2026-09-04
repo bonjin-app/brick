@@ -8,8 +8,17 @@
 
 ### 추가
 - 사이트 설정 **공유 미리보기 이미지**(`site.og_image`) → 테마가 `og:image`·`twitter:card` 를 낸다(절대 URL 로 변환)
-- CI 가 Docker 이미지를 실제로 실행해 PostgreSQL 과 함께 설치 마법사·첫 화면·버전 보고까지 검증
+- CI 가 **docker compose 로** 이미지를 띄워 설치 마법사·첫 화면·버전 보고까지 검증(문서의 설치 경로 그대로) — 위 헬스체크 버그를 이것이 잡았다
 - 이메일 인증 메일에 HTML 본문(버튼) — 비밀번호 재설정 메일과 같은 모양
+
+### 수정
+- **Docker 이미지의 헬스체크가 늘 실패하던 것** — Next standalone 은 `HOSTNAME` 환경변수를 바인딩 주소로
+  쓰는데 Docker 가 그것을 컨테이너 호스트명으로 채운다. 그래서 컨테이너 안의 `127.0.0.1:3000` 이 응답하지
+  않아 `HEALTHCHECK` 와 compose 의 healthcheck 가 영원히 unhealthy 였다(v0.1.0·v0.2.0 이미지 해당).
+  런처와 entrypoint 가 `0.0.0.0` 을 강제한다 — 특정 인터페이스만 열려면 `BRICK_WEB_HOST`.
+  리눅스 로그인 셸(HOSTNAME 이 설정됨)에서 FTP 배포본을 띄울 때도 같은 문제였다.
+- fastify 5.12.1 로 고정 — trustProxy hop-count 하의 X-Forwarded-* 스푸핑과 스키마 검증 우회(2건).
+  `@nestjs/platform-fastify` 가 5.11.3 을 고정하므로 overrides 로 올린다
 
 ### 변경
 - Next 프록시가 텍스트 응답(서버 렌더 HTML·테마 CSS·JSON)을 br/gzip 으로 압축한다 — 홈 81KB → 약 16KB

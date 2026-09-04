@@ -51,7 +51,11 @@ done
 echo "[brick] api ready"
 
 echo "[brick] starting web (public :${PORT})..."
-cd /app/web && node apps/web/server.js &
+# Next standalone 은 `process.env.HOSTNAME || "0.0.0.0"` 를 **바인딩 주소**로 쓴다.
+# Docker 는 HOSTNAME 을 컨테이너 호스트명(예: 3f2a…)으로 자동 설정하므로, 그대로 두면 그 이름이
+# 가리키는 주소에만 리스닝한다 — 컨테이너 안의 127.0.0.1:3000 이 응답하지 않아 HEALTHCHECK 와
+# compose 의 healthcheck 가 영원히 실패한다(실제로 그랬다). 모든 인터페이스에 바인딩한다.
+cd /app/web && HOSTNAME="${BRICK_WEB_HOST:-0.0.0.0}" node apps/web/server.js &
 WEB_PID=$!
 
 wait -n

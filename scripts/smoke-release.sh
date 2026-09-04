@@ -278,6 +278,17 @@ contains "롤백" "$RB_OUT" "되돌렸습니다"
 start_app 6 ready
 check "롤백 후 부팅·readyz 200" "$(code "$BASE/readyz")" "200"
 
+echo "── HOSTNAME 이 설정된 환경 (컨테이너·리눅스 로그인 셸)"
+# Next standalone 은 `process.env.HOSTNAME || "0.0.0.0"` 를 바인딩 주소로 쓴다. 그대로 두면 그 이름이
+# 가리키는 주소에만 리스닝해 127.0.0.1 로 오는 요청(프록시·헬스체크)이 닿지 않는다 — Docker 이미지의
+# HEALTHCHECK 가 늘 실패하고 있었다. 런처가 0.0.0.0 을 강제하는지 여기서 못박는다.
+stop_app
+export HOSTNAME="brick-smoke-fakehost"
+start_app 7 ready
+check "HOSTNAME 이 있어도 readyz 200" "$(code "$BASE/readyz")" "200"
+contains "홈도 127.0.0.1 로 응답" "$(curl -s "$BASE/")" "doctype html"
+unset HOSTNAME
+
 echo
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 [[ $FAIL -eq 0 ]] || { echo; echo "── 로그 ──"; tail -40 "$WORK/run-2.log"; exit 1; }
