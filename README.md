@@ -30,7 +30,7 @@
   <img src="https://img.shields.io/badge/E2E-2782%20passing-2ea043.svg" alt="스모크 테스트 2782개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
   <a href="https://github.com/bonjin-app/brick/pkgs/container/brick">
-    <img src="https://img.shields.io/badge/docker-ghcr.io%2Fbonjin--app%2Fbrick-2496ed.svg" alt="Docker image" />
+    <img src="https://img.shields.io/badge/docker-amd64%20%C2%B7%20arm64-2496ed.svg" alt="Docker image (amd64 · arm64)" />
   </a>
 </p>
 

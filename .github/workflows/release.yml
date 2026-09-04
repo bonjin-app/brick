@@ -66,7 +66,7 @@ jobs:
             3. `node server.js` 실행 (cPanel/Plesk는 Node.js 앱의 시작 파일로 지정)
             4. 브라우저로 접속해 데이터베이스 정보를 입력합니다
 
-            **Docker 이미지**: `ghcr.io/bonjin-app/brick:${{ steps.v.outputs.version }}` (`latest` 도 갱신)
+            **Docker 이미지**: `ghcr.io/bonjin-app/brick:${{ steps.v.outputs.version }}` (`latest` 도 갱신) — linux/amd64 · linux/arm64
             **변경 사항**: [CHANGELOG.md](https://github.com/bonjin-app/brick/blob/main/CHANGELOG.md)
             **업데이트**: 설치된 사이트에서 `node update.mjs` 또는 `docker compose pull && docker compose up -d` — [업그레이드 가이드](https://github.com/bonjin-app/brick/blob/main/docs/upgrade.md)
 
@@ -75,14 +75,21 @@ jobs:
 
   # docker-compose.yml 이 가리키는 ghcr.io/bonjin-app/brick:latest 는 여기서 만들어진다.
   # (CI 의 docker 잡은 빌드만 검증하고 push 하지 않는다 — 태그가 붙은 릴리스만 이미지가 된다)
+  # 두 아키텍처를 각자 네이티브 러너에서 만들고(QEMU 없이) 하나의 매니페스트로 합친다.
+  # amd64 만 발행하던 동안 Apple Silicon·Graviton·Ampere·라즈베리파이 사용자는 사실상 제외돼 있었다.
   image:
-    name: Docker 이미지 발행 (GHCR · Docker Hub)
-    runs-on: ubuntu-latest
-    # Docker Hub 는 선택: 저장소 시크릿 DOCKERHUB_USERNAME / DOCKERHUB_TOKEN 이 있으면 같은 이미지를 미러한다.
-    # (시크릿은 job 의 if 에서 읽을 수 없어 env 로 옮겨 step 마다 검사한다)
-    env:
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+    name: 이미지 빌드 (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    outputs:
+      version: ${{ steps.v.outputs.version }}
     steps:
       - uses: actions/checkout@v7
       - name: 버전 결정
@@ -99,17 +106,15 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: 빌드 · 푸시
+      - name: 빌드 · 다이제스트로 푸시
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
           file: docker/Dockerfile
-          push: true
+          platforms: linux/${{ matrix.arch }}
           build-args: |
             BRICK_VERSION=${{ steps.v.outputs.version }}
-          tags: |
-            ghcr.io/bonjin-app/brick:${{ steps.v.outputs.version }}
-            ghcr.io/bonjin-app/brick:latest
           labels: |
             org.opencontainers.image.title=Brick
             org.opencontainers.image.description=파일만 올리면 돌아가는 설치형 오픈소스 CMS — Next.js + NestJS + PostgreSQL
@@ -118,24 +123,68 @@ jobs:
             org.opencontainers.image.url=https://bonjin-app.github.io/brick/
             org.opencontainers.image.documentation=https://github.com/bonjin-app/brick/blob/main/docs/installation.md
             org.opencontainers.image.licenses=MIT
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # 태그 없이 다이제스트로만 올린다 — 아래 merge 잡이 두 다이제스트를 하나의 태그로 묶는다
+          outputs: type=image,name=ghcr.io/bonjin-app/brick,push-by-digest=true,name-canonical=true,push=true
+          # 공급망 증명: 이미지 안의 패키지 목록(SBOM)과 빌드 출처(provenance).
+          # 사용자가 `docker buildx imagetools inspect` 로 "무엇이 들어 있고 어디서 왔는지" 확인할 수 있다.
+          sbom: true
+          provenance: mode=max
+          cache-from: type=gha,scope=${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
+      - name: 다이제스트 저장
+        run: |
+          mkdir -p /tmp/digests
+          echo "${{ steps.build.outputs.digest }}" > "/tmp/digests/${{ matrix.arch }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.arch }}
+          path: /tmp/digests/*
+          retention-days: 1
+
+  manifest:
+    name: 멀티아키 매니페스트 발행 (GHCR · Docker Hub)
+    needs: image
+    runs-on: ubuntu-latest
+    # Docker Hub 는 선택: 시크릿 DOCKERHUB_USERNAME / DOCKERHUB_TOKEN 이 있으면 같은 다이제스트를 미러한다.
+    # (시크릿은 job 의 if 에서 읽을 수 없어 env 로 옮겨 step 마다 검사한다)
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      VERSION: ${{ needs.image.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: digest-*
+          merge-multiple: true
+          path: /tmp/digests
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: GHCR 매니페스트 (X.Y.Z · latest)
+        run: |
+          set -euo pipefail
+          REFS=""
+          for f in /tmp/digests/*; do REFS="$REFS ghcr.io/bonjin-app/brick@$(cat "$f")"; done
+          echo "합칠 다이제스트:$REFS"
+          docker buildx imagetools create \
+            -t "ghcr.io/bonjin-app/brick:${VERSION}" \
+            -t "ghcr.io/bonjin-app/brick:latest" $REFS
+          docker buildx imagetools inspect "ghcr.io/bonjin-app/brick:${VERSION}"
       - name: Docker Hub 로그인
         if: ${{ env.DOCKERHUB_TOKEN != '' }}
         uses: docker/login-action@v3
         with:
           username: ${{ env.DOCKERHUB_USERNAME }}
           password: ${{ env.DOCKERHUB_TOKEN }}
-      - name: Docker Hub 미러 (같은 빌드 캐시)
+      - name: Docker Hub 미러
         if: ${{ env.DOCKERHUB_TOKEN != '' }}
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: docker/Dockerfile
-          push: true
-          build-args: |
-            BRICK_VERSION=${{ steps.v.outputs.version }}
-          tags: |
-            docker.io/${{ env.DOCKERHUB_USERNAME }}/brick:${{ steps.v.outputs.version }}
-            docker.io/${{ env.DOCKERHUB_USERNAME }}/brick:latest
-          cache-from: type=gha
+        run: |
+          set -euo pipefail
+          REFS=""
+          for f in /tmp/digests/*; do REFS="$REFS ghcr.io/bonjin-app/brick@$(cat "$f")"; done
+          docker buildx imagetools create \
+            -t "docker.io/${DOCKERHUB_USERNAME}/brick:${VERSION}" \
+            -t "docker.io/${DOCKERHUB_USERNAME}/brick:latest" $REFS

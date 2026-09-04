@@ -7,6 +7,9 @@
 ## [Unreleased]
 
 ### 추가
+- **Docker 이미지가 linux/arm64 도 담는다** — Apple Silicon·AWS Graviton·Oracle Ampere·라즈베리파이에서
+  에뮬레이션 없이 동작. 두 아키텍처를 각자 네이티브 러너에서 빌드해 하나의 매니페스트로 합친다
+- 이미지에 SBOM(패키지 목록)·provenance(빌드 출처) 첨부 — `docker buildx imagetools inspect` 로 확인
 - 사이트 설정 **공유 미리보기 이미지**(`site.og_image`) → 테마가 `og:image`·`twitter:card` 를 낸다(절대 URL 로 변환)
 - CI 가 **docker compose 로** 이미지를 띄워 설치 마법사·첫 화면·버전 보고까지 검증(문서의 설치 경로 그대로) — 위 헬스체크 버그를 이것이 잡았다
 - 이메일 인증 메일에 HTML 본문(버튼) — 비밀번호 재설정 메일과 같은 모양
