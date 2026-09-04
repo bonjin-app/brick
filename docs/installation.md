@@ -38,7 +38,7 @@ docker compose up -d
 Oracle Ampere·라즈베리파이에서도 에뮬레이션 없이 그대로 돌아갑니다. 이미지에는 SBOM(패키지 목록)과
 빌드 출처(provenance)가 붙어 있어 `docker buildx imagetools inspect ghcr.io/bonjin-app/brick:X.Y.Z`
 로 내용을 확인할 수 있습니다. 운영에서는 `.env` 에
-`BRICK_IMAGE_TAG=0.2.0` 처럼 버전을 고정해 두고, 업데이트할 때 값을 올리는 것을 권장합니다 —
+`BRICK_IMAGE_TAG=0.2.2` 처럼 버전을 고정해 두고, 업데이트할 때 값을 올리는 것을 권장합니다 —
 `latest` 를 따라가면 `docker compose pull` 시점에 어떤 버전이 올지 미리 알 수 없습니다.
 ```
 
