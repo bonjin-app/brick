@@ -232,6 +232,10 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: 이미지 크기 (회귀가 눈에 보이게)
+        run: |
+          docker image inspect ghcr.io/bonjin-app/brick:ci --format '전체 {{.Size}} bytes' | awk '{printf "이미지 크기: %.0f MB\n", $2/1048576}'
+          docker history --no-trunc --format '{{.Size}}\t{{.CreatedBy}}' ghcr.io/bonjin-app/brick:ci | sort -hr | head -8
       - name: docker compose up (문서의 설치 경로)
         run: |
           set -euo pipefail

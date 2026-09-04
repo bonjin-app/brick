@@ -42,28 +42,29 @@ ENV NODE_ENV=production \
     PORT=3000
 
 # pg_dump/pg_restore (백업 CLI), curl (healthcheck), tini (PID 1 시그널 처리)
-RUN apk add --no-cache postgresql17-client curl tini
+RUN apk add --no-cache postgresql17-client curl tini \
+    && addgroup -g 1001 brick && adduser -D -u 1001 -G brick brick \
+    && mkdir -p /app/plugins /app/themes /app/uploads \
+    && chown brick:brick /app /app/plugins /app/themes /app/uploads
 
 # API: 자기완결적 번들
-COPY --from=build /deploy/api ./api
-COPY --from=build /app/packages/database/migrations ./api/migrations
+COPY --chown=brick:brick --from=build /deploy/api ./api
+COPY --chown=brick:brick --from=build /app/packages/database/migrations ./api/migrations
 
 # Web: Next.js standalone (모노레포 레이아웃 유지)
-COPY --from=build /app/apps/web/.next/standalone ./web
-COPY --from=build /app/apps/web/.next/static ./web/apps/web/.next/static
-COPY --from=build /app/apps/web/public ./web/apps/web/public
+COPY --chown=brick:brick --from=build /app/apps/web/.next/standalone ./web
+COPY --chown=brick:brick --from=build /app/apps/web/.next/static ./web/apps/web/.next/static
+COPY --chown=brick:brick --from=build /app/apps/web/public ./web/apps/web/public
 
 # 기본 동봉 확장 — 볼륨이 비어 있을 때 시딩된다.
 # 빌드 단계에서 collect-plugins.sh 가 모아둔 것을 그대로 가져온다
 # (게시판만 넣던 시절엔 Docker 설치본에 쇼핑몰·포인트·쪽지가 없었다).
-COPY --from=build /seed/plugins ./seed/plugins
-COPY --from=build /app/themes ./seed/themes
+COPY --chown=brick:brick --from=build /seed/plugins ./seed/plugins
+COPY --chown=brick:brick --from=build /app/themes ./seed/themes
 
-COPY docker/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh && \
-    mkdir -p /app/plugins /app/themes /app/uploads && \
-    addgroup -g 1001 brick && adduser -D -u 1001 -G brick brick && \
-    chown -R brick:brick /app
+COPY --chown=brick:brick --chmod=755 docker/entrypoint.sh /entrypoint.sh
+# 여기서 `chown -R /app` 을 하지 않는다 — RUN 에서 소유자를 바꾸면 방금 COPY 한 파일 전부가 새 레이어에
+# **그대로 복제**된다(이미지의 1/3 이 그 중복이었다). 소유자는 각 COPY 의 --chown 으로 처음부터 맞춘다.
 
 # root로 실행하지 않는다
 USER brick

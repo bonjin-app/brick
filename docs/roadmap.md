@@ -519,3 +519,10 @@ Next standalone 의 `HOSTNAME` 바인딩: Docker 가 채우는 컨테이너 호�
   JPEG(WebP 를 못 읽는 크롤러가 있다, 투명은 흰색)로 저장하고 설정에 즉시 반영. 이전 파생 파일은 지운다.
   smoke-test 64 (+6)
 - [x] `/uploads/*` 1년 immutable(키가 UUID — 덮어쓰지 않는다) + 정적 파일 ETag·Last-Modified·304. smoke-test 68 (+4)
+
+### M32 후속 — 이미지 크기
+
+v0.2.2 이미지의 레이어를 보니 가장 큰 것(54.6MB)이 `RUN chown -R brick:brick /app` 이었다 — 방금 COPY 한
+파일 전부가 소유자만 바뀐 채 새 레이어에 복제된 것. `COPY --chown` 으로 바꾸어 없앤다. 남는 큰 덩어리는
+node 런타임(51MB)·Next standalone(31MB)·API(23MB, sharp 18MB 포함).
+- [x] `COPY --chown` · `chown -R` 제거 · CI 가 이미지 크기·상위 레이어를 로그에 남긴다
