@@ -25,6 +25,8 @@ export interface ThumbnailOptions {
   width?: number;
   height?: number;
   quality?: number;
+  /** 기본 webp. og:image 처럼 WebP 를 못 읽는 소비자(카카오톡·페이스북 크롤러)가 있으면 jpeg */
+  format?: "webp" | "jpeg";
 }
 
 /** 손대지 않는 형식 — 애니메이션(GIF)과 벡터(SVG)는 변환하면 잃는 것이 더 크다 */
@@ -118,12 +120,22 @@ export class ImageService {
     const width = opts.width ?? 400;
     const height = opts.height ?? width;
     try {
-      const out = await sharp(buffer, { failOn: "none" })
+      const base = sharp(buffer, { failOn: "none" })
         .rotate()
-        .resize({ width, height, fit: "cover", position: "attention", withoutEnlargement: true })
-        .webp({ quality: opts.quality ?? 78 })
-        .toBuffer({ resolveWithObject: true });
-      return { buffer: out.data, contentType: "image/webp", ext: ".webp", width: out.info.width, height: out.info.height };
+        // 공유 이미지는 소비자가 정확한 크기를 기대하므로 작은 원본이면 키운다(정사각 썸네일은 키우지 않는다)
+        .resize({ width, height, fit: "cover", position: "attention", withoutEnlargement: opts.format !== "jpeg" });
+      const out =
+        opts.format === "jpeg"
+          ? await base.flatten({ background: "#ffffff" }).jpeg({ quality: opts.quality ?? 85, mozjpeg: true }).toBuffer({ resolveWithObject: true })
+          : await base.webp({ quality: opts.quality ?? 78 }).toBuffer({ resolveWithObject: true });
+      const isJpeg = opts.format === "jpeg";
+      return {
+        buffer: out.data,
+        contentType: isJpeg ? "image/jpeg" : "image/webp",
+        ext: isJpeg ? ".jpg" : ".webp",
+        width: out.info.width,
+        height: out.info.height,
+      };
     } catch (err) {
       this.log.warn(`썸네일 생성 실패: ${err instanceof Error ? err.message : String(err)}`);
       return null;

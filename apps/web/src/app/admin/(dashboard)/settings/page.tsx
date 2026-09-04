@@ -25,6 +25,22 @@ export default function AdminSettingsPage() {
   const bool = (k: string, fallback: boolean) => (settings[k] === undefined ? fallback : settings[k] === true);
   const set = (k: string, v: unknown) => setSettings((s) => ({ ...s, [k]: v }));
 
+  const [ogMsg, setOgMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  /** 아무 사진을 올리면 서버가 1200×630 으로 잘라 저장하고 주소를 채운다 (저장 버튼 없이 즉시 반영) */
+  async function uploadOgImage(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const fd = new FormData();
+    fd.append("file", file);
+    setOgMsg(null);
+    const res = await fetch("/api/settings/og-image", { method: "POST", body: fd });
+    const body = await res.json().catch(() => ({}));
+    e.target.value = "";
+    if (!res.ok) { setOgMsg({ ok: false, text: `${t("common.failPrefix")}${body.message ?? res.status}` }); return; }
+    set("site.og_image", body.url);
+    setOgMsg({ ok: true, text: t("settings.ogImageDone", { w: body.width, h: body.height }) });
+  }
+
   async function save(card: string, keys: string[]) {
     const body: Settings = {};
     for (const k of keys) body[k] = settings[k] ?? (BOOLEAN_KEYS.has(k) ? false : "");
@@ -85,6 +101,15 @@ export default function AdminSettingsPage() {
         </Field>
         <Field label={t("settings.ogImage")} hint={t("settings.ogImageHint")}>
           <input style={input} placeholder="https://… 또는 /uploads/…" value={str("site.og_image")} onChange={(e) => set("site.og_image", e.target.value)} />
+          <span style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8, flexWrap: "wrap" }}>
+            <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={uploadOgImage} aria-label={t("settings.ogImageUpload")} />
+            <span style={{ fontSize: 12.5, color: "var(--color-muted)" }}>{t("settings.ogImageUploadHint")}</span>
+            {ogMsg ? <span style={{ fontSize: 12.5, color: ogMsg.ok ? "var(--color-success)" : "var(--color-danger)" }}>{ogMsg.text}</span> : null}
+          </span>
+          {str("site.og_image") ? (
+            <img src={str("site.og_image")} alt="" width={240} height={126}
+                 style={{ display: "block", marginTop: 8, width: 240, height: 126, objectFit: "cover", borderRadius: 6, border: "1px solid var(--color-line)" }} />
+          ) : null}
         </Field>
         <Field label={t("settings.locale")} hint={t("settings.localeHint")}>
           <select style={{ display: "block", marginTop: 6 }} value={str("site.locale", "ko")} onChange={(e) => set("site.locale", e.target.value)}>

@@ -515,4 +515,6 @@ Next standalone 의 `HOSTNAME` 바인딩: Docker 가 채우는 컨테이너 호�
 - [x] 갤러리·웹진 목록 썸네일이 첨부 **원본**을 가리키던 것 — 첨부마다 400px WebP(`thumb_key`), 인라인은
   에디터가 `data-thumb`·치수·lazy 를 남기고 새니타이저가 URL 검사 후 통과. 백필이 게시판 첨부와 옛 글의
   `thumb_url` 까지 고친다. 사진만 있는 글이 "내용을 입력해주세요"로 막히던 것도 함께. smoke-board 160 (+12)
-- [ ] 다음: og:image 자동 1200×630 변형(StorageProvider.get 으로 원본을 읽어 변형 — 계약은 이미 있다)
+- [x] og:image 1200×630 자동 변형 — 설정 화면에서 사진을 올리면 `POST /api/settings/og-image` 가 cover 크롭
+  JPEG(WebP 를 못 읽는 크롤러가 있다, 투명은 흰색)로 저장하고 설정에 즉시 반영. 이전 파생 파일은 지운다.
+  smoke-test 64 (+6)

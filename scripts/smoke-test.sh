@@ -240,6 +240,17 @@ check "공유 이미지는 http(s) 또는 / 로 시작해야 한다" \
   "$(code -b "$COOKIES" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"site.og_image":"javascript:alert(1)"}')" "400"
 check "공유 이미지 저장" \
   "$(code -b "$COOKIES" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"site.og_image":"/uploads/share.png"}')" "200"
+if [[ -f "$TMP/photo.jpg" ]]; then
+  OGU="$(curl -s -b "$COOKIES" -X POST "$API/api/settings/og-image" -F "file=@$TMP/photo.jpg;type=image/jpeg")"
+  check "올린 사진을 1200×630 으로 자른다" "$(echo "$OGU" | jq_get "['width']")x$(echo "$OGU" | jq_get "['height']")" "1200x630"
+  OG_URL="$(echo "$OGU" | jq_get "['url']")"
+  contains "JPEG 로 site/og-… 에 저장" "$OG_URL" "/uploads/site/og-"
+  contains "설정에 즉시 반영" "$(curl -s -b "$COOKIES" "$API/api/settings")" "\"site.og_image\":\"$OG_URL\""
+  contains "저장 파일은 image/jpeg" "$(curl -s -o /dev/null -w '%header{content-type}' "$API$OG_URL")" "image/jpeg"
+  OGU2="$(curl -s -b "$COOKIES" -X POST "$API/api/settings/og-image" -F "file=@$TMP/photo.jpg;type=image/jpeg")"
+  check "다시 올리면 이전 파일은 지운다" "$(code "$API$OG_URL")" "404"
+  check "og 업로드는 이미지만" "$(printf 'x' > "$TMP/x.txt"; code -b "$COOKIES" -X POST "$API/api/settings/og-image" -F "file=@$TMP/x.txt;type=text/plain")" "400"
+fi
 OG_HTML="$(curl -s "$API/api/render/page?path=&og=1" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("html",""))' 2>/dev/null)"
 contains "테마가 og:image 를 절대 URL 로 낸다" "$OG_HTML" 'property="og:image" content="http'
 contains "트위터 카드도 함께" "$OG_HTML" 'name="twitter:card"'

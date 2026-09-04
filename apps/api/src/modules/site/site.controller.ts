@@ -1,5 +1,15 @@
 import {
-  BadRequestException, Body, Controller, Get, Inject, Param, Put, Query, Req, UseGuards,
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Inject,
+  Param,
+  Post,
+  Put,
+  Query,
+  Req,
+  UseGuards,
 } from "@nestjs/common";
 import type { FastifyRequest } from "fastify";
 import { and, eq, inArray, sql } from "drizzle-orm";
@@ -12,7 +22,9 @@ import { AdminGuard } from "../auth/auth.guard.js";
 import { ipAllowed, parseAllowlist } from "../auth/ip-allowlist.js";
 import { ModerationService } from "../moderation/moderation.service.js";
 import { AuditService } from "../audit/audit.service.js";
-import { CACHE, DB, HOOKS } from "../../runtime.module.js";
+import { CACHE, DB, HOOKS, STORAGE } from "../../runtime.module.js";
+import type { StorageProvider } from "@brick/core";
+import { ImageService } from "../images/image.service.js";
 import {
   EMPTY_BUSINESS_INFO, FIELD_LABEL, isCommerceReady, validateBusinessInfo,
   type BusinessInfo,
@@ -67,6 +79,8 @@ export class SiteController {
     @Inject(HOOKS) private readonly hooks: HookBus,
     private readonly audit: AuditService,
     private readonly moderation: ModerationService,
+    @Inject(STORAGE) private readonly storage: StorageProvider,
+    private readonly images: ImageService,
   ) {}
 
   /** 사이트 언어 — **공개**. 로그인·가입 화면이 첫 페인트에 쓴다 */
@@ -218,6 +232,51 @@ export class SiteController {
       summary: Object.keys(body ?? {}).join(", "),
     });
     return { ok: true };
+  }
+
+  /**
+   * 공유 미리보기 이미지 업로드 — 아무 사진을 올리면 **정확히 1200×630** 으로 잘라 저장하고
+   * site.og_image 에 그 주소를 넣는다.
+   *
+   * 왜 미디어에 올려 주소를 붙이게 하지 않는가: og:image 는 1.91:1 이 아니면 카카오톡·페이스북이
+   * 제멋대로 자른다(얼굴이 잘리고 글자가 밀린다). 운영자가 비율을 맞춰 편집해 오길 기대하는 대신
+   * 서버가 맞춘다. WebP 를 못 읽는 크롤러가 있으니 JPEG 로, 투명 배경은 흰색으로.
+   */
+  @Post("settings/og-image")
+  @UseGuards(AdminGuard)
+  async uploadOgImage(@Req() req: FastifyRequest) {
+    const file = await req.file();
+    if (!file) throw new BadRequestException("이미지 파일이 없습니다.");
+    if (!/^image\/(png|jpeg|webp|gif)$/.test(file.mimetype)) {
+      throw new BadRequestException("공유 이미지는 png·jpg·webp·gif 만 올릴 수 있습니다.");
+    }
+    const raw = await file.toBuffer();
+    if (!raw.length) throw new BadRequestException("빈 파일입니다.");
+    if (raw.length > 10 * 1024 * 1024) throw new BadRequestException("공유 이미지는 10MB 이하만 올릴 수 있습니다.");
+    if (!(await this.images.isAvailable())) {
+      throw new BadRequestException("이 서버에서는 이미지 변환을 쓸 수 없습니다 — 1200×630 으로 만든 이미지를 미디어에 올리고 주소를 붙여 넣으세요.");
+    }
+    const cover = await this.images.thumbnail(raw, file.mimetype === "image/gif" ? "image/png" : file.mimetype, {
+      width: 1200, height: 630, format: "jpeg", quality: 85,
+    });
+    if (!cover) throw new BadRequestException("이미지를 읽을 수 없습니다.");
+
+    const key = `site/og-${uuidv7()}.jpg`;
+    const stored = await this.storage.put(key, cover.buffer, "image/jpeg");
+
+    // 이전에 이 통로로 만든 파일은 지운다 — 바꿀 때마다 쌓이면 안 된다. 직접 붙여 넣은 주소는 건드리지 않는다
+    const [prev] = await this.db.select().from(siteSettings).where(eq(siteSettings.key, "site.og_image")).limit(1);
+    const prevUrl = String(prev?.value ?? "");
+    const prevKey = prevUrl.startsWith(this.storage.publicUrl("site/og-")) ? prevUrl.slice(this.storage.publicUrl("").length) : null;
+
+    await this.db
+      .insert(siteSettings)
+      .values({ key: "site.og_image", value: stored.url as never })
+      .onConflictDoUpdate({ target: siteSettings.key, set: { value: stored.url as never, updatedAt: new Date() } });
+    if (prevKey && prevKey !== key) await this.storage.delete(prevKey).catch(() => undefined);
+    await this.cache.invalidateTag("pages");
+    await this.audit.fromRequest(req as never, { action: "settings.update", targetType: "settings", summary: "site.og_image (upload)" });
+    return { ok: true, url: stored.url, width: cover.width, height: cover.height, size: stored.size };
   }
 
   // ── 메뉴 ──────────────────────────────────────────
