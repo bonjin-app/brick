@@ -383,8 +383,9 @@ const LATEST_MULTI_CSS = `
 @media(max-width:1024px){.brick-latest-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:640px){.brick-latest-grid{grid-template-columns:1fr}}
 .brick-latest-card{border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius-lg, 16px);padding:18px 20px;background:var(--color-bg, #fff)}
-.brick-latest-card h3{margin:0 0 12px;font-size:16px;display:flex;align-items:baseline;justify-content:space-between;gap:8px}
-.brick-latest-card h3 a{text-decoration:none;color:inherit}
+.brick-latest-card h3{margin:0 0 6px;font-size:16px;display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px}
+/* 제목·더보기는 손가락으로 누르는 링크다 — 글자 높이(26px)가 아니라 44px 을 터치 영역으로 준다 */
+.brick-latest-card h3 a{text-decoration:none;color:inherit;display:inline-flex;align-items:center;min-height:44px;padding:0 6px;margin:0 -6px}
 .brick-latest-card .brick-more{font-size:12px;color:var(--color-muted, #6c6c7a);font-weight:400}
 .brick-latest-card .brick-latest-posts{margin:0}
 </style>`;

@@ -310,7 +310,8 @@ blockquote {
 
 /* 로그인/회원가입/로그아웃 */
 .brick-util { display: flex; align-items: center; gap: 14px; white-space: nowrap; }
-.brick-util a { color: var(--color-text-soft); text-decoration: none; transition: color var(--brick-t); }
+/* 유틸 띠는 40px — 링크의 터치 영역을 띠 높이만큼 준다 */
+.brick-util a { color: var(--color-text-soft); text-decoration: none; transition: color var(--brick-t); display: inline-flex; align-items: center; min-height: 40px; padding: 0 4px; margin: 0 -4px; }
 .brick-util a:hover { color: var(--color-text); }
 .brick-util .brick-util-cta { color: var(--color-text); font-weight: 600; text-decoration: underline; text-underline-offset: 0.2em; }
 .brick-util-name { font-weight: 600; color: var(--color-text) !important; display: inline-flex; align-items: center; gap: 7px; }

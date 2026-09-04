@@ -480,7 +480,7 @@ export const BOARD_CSS = `
 .brick-board{margin:20px 0}
 .brick-board-head{display:flex;align-items:baseline;gap:10px;padding-bottom:6px}
 .brick-board-head h1,.brick-board-head h2{margin:0;font-size:23px;letter-spacing:-0.6px;font-weight:800}
-.brick-board-head h2 a{color:inherit;text-decoration:none}
+.brick-board-head h2 a{color:inherit;text-decoration:none;display:inline-flex;align-items:center;min-height:44px}
 .brick-board-head h2 a:hover{color:var(--color-primary-text, #b63a2e)}
 .brick-board-total{color:var(--color-muted, #6c6c7a);font-size:13px}
 .brick-board-desc{color:var(--color-text-soft, #45454f);font-size:14px;margin:10px 0}

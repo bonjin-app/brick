@@ -343,7 +343,8 @@ blockquote {
 
 /* 로그인/회원가입/로그아웃 — 헤더 우측 유틸 */
 .brick-util { display: flex; align-items: center; gap: 12px; white-space: nowrap; }
-.brick-util a { color: var(--color-muted); text-decoration: none; font-size: 13.5px; transition: color var(--brick-t); }
+/* 헤더의 링크는 손가락으로 누른다 — 글자 높이(22px)가 아니라 44px 을 터치 영역으로 준다 (헤더는 56px) */
+.brick-util a { color: var(--color-muted); text-decoration: none; font-size: 13.5px; transition: color var(--brick-t); display: inline-flex; align-items: center; min-height: 44px; padding: 0 4px; margin: 0 -4px; }
 .brick-util a:hover { color: var(--color-text); }
 .brick-util .brick-util-cta {
   color: var(--color-on-primary);
