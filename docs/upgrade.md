@@ -95,6 +95,27 @@ pnpm build
 # 프로세스 재시작 — 마이그레이션은 부팅 시 자동 적용됩니다
 ```
 
+## 이미 올라온 이미지의 썸네일 채우기 (0.2.x → 그 다음 버전)
+
+이미지 최적화(축소·EXIF 제거·썸네일)는 **업로드 시점**에 동작합니다. 그 전부터 운영해 온 사이트에는
+썸네일이 없는 파일이 남아 목록이 원본을 내려보냅니다. 한 번만 돌리면 빠진 것을 채웁니다.
+
+```bash
+# Docker
+docker compose exec brick node /app/api/dist/backfill-thumbs.js --dry   # 무엇을 할지 먼저 본다
+docker compose exec brick node /app/api/dist/backfill-thumbs.js
+
+# 배포본 (FTP·직접 실행)
+node api/dist/backfill-thumbs.js --dry
+node api/dist/backfill-thumbs.js
+```
+
+- **원본은 건드리지 않습니다.** 다시 압축하면 화질이 한 번 더 깎이고, 운영자가 올린 그대로여야 하는
+  파일(정밀한 로고·인쇄용)이 있을 수 있습니다. 새로 만드는 것은 목록용 썸네일과 DB 의 치수뿐입니다.
+- 여러 번 돌려도 같은 결과입니다(이미 썸네일이 있는 항목은 건너뜁니다). 파일을 못 읽는 항목은
+  그것만 건너뛰고 계속합니다.
+- `sharp` 를 쓸 수 없는 환경에서는 안내를 남기고 종료합니다 — 그 서버에서는 원본이 계속 쓰입니다.
+
 ## 자동 마이그레이션 원리
 
 | 항목 | 동작 |

@@ -28,6 +28,7 @@ check() { # check <설명> <실제> <기대>
 contains() { # contains <설명> <문자열> <부분문자열>
   if [[ "$2" == *"$3"* ]]; then ok "$1"; else bad "$1 (\"$3\" 없음: ${2:0:120})"; fi
 }
+absent()   { [[ "$2" != *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 가 있음)"; }
 code() { curl -s -o /dev/null -w "%{http_code}" "$@"; }
 jq_get() { python3 -c "import sys,json;d=json.load(sys.stdin);print(d$1)" 2>/dev/null || echo ""; }
 
@@ -211,6 +212,28 @@ if [[ -f "$TMP/photo.jpg" ]]; then
   check "EXIF(GPS 등)를 지운다" "$EXIF" "없음"
   contains "목록 응답에 치수와 썸네일" "$(curl -s -b "$COOKIES" "$API/api/media")" '"thumbUrl":'
 fi
+
+echo "── 썸네일 백필 도구 (업그레이드한 사이트의 옛 파일)"
+# 업로드는 됐지만 썸네일이 없는 상태(이 기능 이전에 운영한 사이트)를 만들어 도구가 채우는지 본다
+if [[ -f "$TMP/photo.jpg" ]]; then
+  node -e "
+const pg = require('$ROOT/apps/api/node_modules/pg');
+(async () => {
+  const c = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await c.connect();
+  await c.query('UPDATE media_files SET thumb_key = NULL, width = NULL, height = NULL');
+  await c.end();
+})();
+"
+  BF="$(BRICK_UPLOADS_DIR="$TMP/uploads" node "$ROOT/apps/api/dist/backfill-thumbs.js" 2>&1)"
+  # 스모크가 올린 이미지 수는 절에 따라 달라진다 — 0건이 아니라는 것만 본다
+  absent "백필이 빠진 썸네일을 만든다" "$BF" "0건 생성"
+  contains "백필이 대상을 찾는다" "$BF" "건 생성"
+  BF2="$(BRICK_UPLOADS_DIR="$TMP/uploads" node "$ROOT/apps/api/dist/backfill-thumbs.js" 2>&1)"
+  contains "다시 돌려도 새로 만들지 않는다 (멱등)" "$BF2" "0건 생성"
+  contains "백필 뒤 목록에 썸네일" "$(curl -s -b "$COOKIES" "$API/api/media")" '"thumbUrl":"/uploads/'
+fi
+
 
 echo "── 공개 품질: 공유 이미지 · 캐시 · 압축"
 check "공유 이미지는 http(s) 또는 / 로 시작해야 한다" \

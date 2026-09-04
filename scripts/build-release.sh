@@ -428,6 +428,7 @@ Brick — 설치 안내
      node update.mjs --from brick-X.Y.Z.tar.gz  ← 미리 내려받은 파일로 (외부 접속이 안 될 때)
   3. 서버를 다시 시작합니다. 데이터베이스 마이그레이션은 자동 적용됩니다.
   문제가 있으면:  node update.mjs --rollback   (직전 백업으로 되돌립니다)
+  이미지 썸네일 채우기(한 번만):  node api/dist/backfill-thumbs.js   (--dry 로 먼저 확인)
   data / uploads / 직접 설치한 플러그인·테마는 건드리지 않습니다. 이전 파일은 backup/ 에 남습니다.
 
 업데이트 (수동):
