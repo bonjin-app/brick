@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-09-04
+
 ### 변경
 - 업로드 파일(`/uploads/*`)은 키가 UUID 라 덮어쓰이지 않으므로 `max-age=31536000, immutable`(전에는 하루).
   정적 파일 전부에 ETag·Last-Modified 를 내고 조건부 요청(If-None-Match·If-Modified-Since)에 304 로 답한다
@@ -75,7 +77,8 @@
 8종(게시판·쇼핑몰·토스결제·쪽지·포인트·설문·헬프데스크·사이트 도구), 그누보드 이전 도구,
 FTP 배포본과 Docker 이미지, E2E 스모크 2,500+ 항목.
 
-[Unreleased]: https://github.com/bonjin-app/brick/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/bonjin-app/brick/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/bonjin-app/brick/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/bonjin-app/brick/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/bonjin-app/brick/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/bonjin-app/brick/releases/tag/v0.1.0
