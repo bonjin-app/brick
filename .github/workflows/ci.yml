@@ -209,21 +209,11 @@ jobs:
           retention-days: 14
 
   docker:
-    name: Docker 이미지 빌드 · 실행
+    name: Docker 이미지 빌드 · docker compose 설치
     runs-on: ubuntu-latest
     # 빌드만 하면 "이미지는 만들어졌는데 컨테이너가 안 뜨는" 회귀를 못 본다(네이티브 의존성·빠진 파일·
-    # 마이그레이션 경로). 실제 PostgreSQL 과 함께 띄워 설치 마법사까지 통과시킨다 — 사용자의 첫 5분.
-    services:
-      db:
-        image: postgres:17-alpine
-        env:
-          POSTGRES_USER: brick
-          POSTGRES_PASSWORD: brick
-          POSTGRES_DB: brick
-        options: >-
-          --health-cmd "pg_isready -U brick -d brick"
-          --health-interval 5s --health-timeout 3s --health-retries 10
-        ports: ["5432:5432"]
+    # 마이그레이션 경로). **문서에 적힌 설치 경로 그대로** docker-compose.yml 로 띄워 설치 마법사까지
+    # 통과시킨다 — 사용자의 첫 5분이 실제로 동작하는지 보는 유일한 방법이다.
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v3
@@ -234,34 +224,42 @@ jobs:
           file: docker/Dockerfile
           push: false
           load: true
-          tags: brick:ci
+          # compose 의 image 가 ghcr.io/bonjin-app/brick:${BRICK_IMAGE_TAG} 이므로 :ci 로 태그해 두면
+          # compose 가 레지스트리를 거치지 않고 이 이미지를 쓴다 (pull_policy 기본값 missing).
+          tags: ghcr.io/bonjin-app/brick:ci
           build-args: |
             BRICK_VERSION=0.0.0-ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - name: 컨테이너 실행 → 설치 마법사 → 첫 화면
+
+      - name: docker compose up (문서의 설치 경로)
         run: |
           set -euo pipefail
-          docker run -d --name brick --network host \
-            -e DATABASE_URL=postgresql://brick:brick@127.0.0.1:5432/brick \
-            -e BRICK_SECRET=ci-secret-value-that-is-long-enough-0123456789 \
-            -e BRICK_CAPTCHA=off brick:ci
-          for i in $(seq 1 60); do
-            curl -fsS http://127.0.0.1:3000/readyz >/dev/null 2>&1 && break
-            sleep 2
-          done
+          {
+            echo "BRICK_SECRET=ci-secret-value-that-is-long-enough-0123456789"
+            echo "BRICK_IMAGE_TAG=ci"
+          } > .env
+          # --wait 는 compose 의 healthcheck(brick: /readyz, db: pg_isready)가 healthy 가 될 때까지 기다린다
+          docker compose up -d --wait --wait-timeout 240
+
+      - name: 설치 마법사 → 첫 화면 → 버전 보고
+        run: |
+          set -euo pipefail
           curl -fsS http://127.0.0.1:3000/readyz
           echo; echo "── 설치"
           curl -fsS -X POST http://127.0.0.1:3000/api/install -H 'content-type: application/json' \
             -d '{"siteName":"CI","adminEmail":"admin@ci.test","adminPassword":"cipass12345","starter":"community"}' >/dev/null
-          echo "── 홈 200 · 테마 CSS · 관리자 버전"
+          echo "── 홈 200 · 테마 CSS 200 · 관리자 버전"
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/)" = "200"
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/themes/default/assets/style.css)" = "200"
           curl -s -c ck.txt -X POST http://127.0.0.1:3000/api/auth/login -H 'content-type: application/json' \
             -d '{"email":"admin@ci.test","password":"cipass12345"}' >/dev/null
           curl -fsS -b ck.txt http://127.0.0.1:3000/api/admin/version | tee version.json
           grep -q '"version":"0.0.0-ci"' version.json
-          echo; echo "✅ 컨테이너가 설치·렌더·버전 보고까지 동작"
-      - name: 컨테이너 로그 (실패 시 진단용)
-        if: always()
-        run: docker logs brick 2>&1 | tail -80
+          echo; echo "✅ compose 설치본이 설치·렌더·버전 보고까지 동작"
+
+      - name: 진단 (실패 시 컨테이너 상태·로그)
+        if: failure()
+        run: |
+          docker compose ps || true
+          docker compose logs --tail 120 || true
