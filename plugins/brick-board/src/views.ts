@@ -190,9 +190,11 @@ export async function renderList(
    * 스킨 — 같은 데이터를 세 가지 모양으로. 그누보드의 게시판 스킨(basic/gallery/webzine)에
    * 해당한다. 갤러리는 사진, 웹진은 글 소개가 주인공이므로 썸네일·발췌를 함께 그린다.
    */
+  // 서버가 만든 썸네일은 항상 400×400 — 치수를 적어 두면 목록이 그려질 때 칸이 밀리지 않는다(CLS).
+  // 옛 글의 원본 URL 이나 외부 이미지는 크기를 모르므로 적지 않는다.
   const thumb = (p: Record<string, unknown>) =>
     p.thumb_url
-      ? `<img src="${escapeHtml(String(p.thumb_url))}" alt="" loading="lazy" />`
+      ? `<img src="${escapeHtml(String(p.thumb_url))}" alt="" loading="lazy" decoding="async"${/-thumb\.webp$/.test(String(p.thumb_url)) ? ' width="400" height="400"' : ""} />`
       : `<span class="brick-thumb-empty">${escapeHtml(t("list.noThumb"))}</span>`;
   const flags = (p: Record<string, unknown>) =>
     `${p.is_secret ? `<span class="brick-lock" title="${escapeHtml(t("list.secretTitle"))}">&#128274;</span>` : ""}` +

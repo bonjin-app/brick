@@ -480,6 +480,7 @@ const pg = require('$ROOT/apps/api/node_modules/pg');
   curl -s -b "$ADMIN" -X POST "$BD/posts/$GAP/files" -F "files=@$TMP/attach.jpg;type=image/jpeg" -o /dev/null
   GAL_HTML="$(render_html "board/gal")"
   contains "갤러리 목록이 썸네일을 그린다" "$GAL_HTML" '-thumb.webp" alt="" loading="lazy"'
+  contains "서버 썸네일에는 치수를 적는다 (CLS)" "$GAL_HTML" '-thumb.webp" alt="" loading="lazy" decoding="async" width="400" height="400"'
   # 업그레이드 상황: thumb_key 를 비우고 thumb_url 을 원본으로 되돌린 뒤 백필이 고치는지
   node -e "
 const pg = require('$ROOT/apps/api/node_modules/pg');
