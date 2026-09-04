@@ -6,6 +6,10 @@
 
 ## [Unreleased]
 
+### 변경
+- 업로드 파일(`/uploads/*`)은 키가 UUID 라 덮어쓰이지 않으므로 `max-age=31536000, immutable`(전에는 하루).
+  정적 파일 전부에 ETag·Last-Modified 를 내고 조건부 요청(If-None-Match·If-Modified-Since)에 304 로 답한다
+
 ### 추가
 - **업로드 이미지 최적화** — 원본을 2400px 이내로 줄이고 EXIF(촬영 위치 포함)를 지우며 목록용 정사각
   WebP 썸네일을 만든다. 미디어 목록에 치수·썸네일, 프로필 이미지는 256px WebP.

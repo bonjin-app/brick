@@ -518,3 +518,4 @@ Next standalone 의 `HOSTNAME` 바인딩: Docker 가 채우는 컨테이너 호�
 - [x] og:image 1200×630 자동 변형 — 설정 화면에서 사진을 올리면 `POST /api/settings/og-image` 가 cover 크롭
   JPEG(WebP 를 못 읽는 크롤러가 있다, 투명은 흰색)로 저장하고 설정에 즉시 반영. 이전 파생 파일은 지운다.
   smoke-test 64 (+6)
+- [x] `/uploads/*` 1년 immutable(키가 UUID — 덮어쓰지 않는다) + 정적 파일 ETag·Last-Modified·304. smoke-test 68 (+4)

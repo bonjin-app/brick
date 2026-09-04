@@ -211,6 +211,12 @@ if [[ -f "$TMP/photo.jpg" ]]; then
   EXIF="$(node -e 'require("'"$ROOT"'/apps/api/node_modules/sharp")(process.argv[1]).metadata().then(m=>console.log(m.exif?"있음":"없음"))' "$TMP/saved.jpg" 2>/dev/null)"
   check "EXIF(GPS 등)를 지운다" "$EXIF" "없음"
   contains "목록 응답에 치수와 썸네일" "$(curl -s -b "$COOKIES" "$API/api/media")" '"thumbUrl":'
+  # 키가 UUID 라 덮어쓰이지 않는다 — 1년 immutable, 조건부 요청은 304
+  check "업로드 파일은 1년 immutable" "$(curl -s -o /dev/null -w '%header{cache-control}' "$API$MEDIA_URL")" "public, max-age=31536000, immutable"
+  ET="$(curl -s -o /dev/null -w '%header{etag}' "$API$MEDIA_URL")"
+  [[ -n "$ET" ]] && ok "ETag 를 낸다 ($ET)" || bad "ETag 를 낸다"
+  check "If-None-Match 가 맞으면 304" "$(code -H "if-none-match: $ET" "$API$MEDIA_URL")" "304"
+  check "테마 자산도 조건부 요청 304" "$(code -H "if-none-match: $(curl -s -o /dev/null -w '%header{etag}' "$API/themes/default/assets/style.css")" "$API/themes/default/assets/style.css")" "304"
 fi
 
 echo "── 썸네일 백필 도구 (업그레이드한 사이트의 옛 파일)"
