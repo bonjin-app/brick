@@ -7,6 +7,8 @@
 ## [Unreleased]
 
 ### 변경
+- Next standalone 에서 sharp(libvips 두 벌 36MB)·typescript·esbuild·webpack 을 추적 제외 — web 은 next/image 를
+  쓰지 않으므로 sharp 가 필요 없다. standalone 85MB → 41MB, 배포본·이미지 양쪽이 그만큼 줄어든다
 - Docker 이미지가 약 1/3 작아진다 — `chown -R /app` 레이어가 복사한 파일 전부를 중복 저장하고 있었다(54.6MB).
   각 `COPY --chown` 으로 처음부터 소유자를 맞춘다. CI 가 이미지 크기와 큰 레이어를 로그에 남긴다
 - 갤러리·웹진 목록의 서버 썸네일(400×400)에 `width/height`·`decoding="async"` 를 적어 목록이 그려질 때 칸이 밀리지 않게(CLS)

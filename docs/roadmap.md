@@ -526,3 +526,7 @@ v0.2.2 이미지의 레이어를 보니 가장 큰 것(54.6MB)이 `RUN chown -R 
 파일 전부가 소유자만 바뀐 채 새 레이어에 복제된 것. `COPY --chown` 으로 바꾸어 없앤다. 남는 큰 덩어리는
 node 런타임(51MB)·Next standalone(31MB)·API(23MB, sharp 18MB 포함).
 - [x] `COPY --chown` · `chown -R` 제거 · CI 가 이미지 크기·상위 레이어를 로그에 남긴다
+- [x] Next standalone 에 sharp(libvips glibc·musl 두 벌)·typescript·esbuild·webpack 이 추적으로 딸려 들어가고 있었다
+  (web 은 next/image 를 안 쓴다) — `outputFileTracingExcludes`·`images.unoptimized`. standalone 85 → 41MB
+- [ ] API 의 libvips 두 벌(glibc·musl 각 18MB): FTP 배포본은 glibc 만, Docker(Alpine)는 musl 만 있으면 된다 —
+  pnpm `supportedArchitectures.libc` 를 빌드 대상별로 주면 18MB 더 줄어든다
