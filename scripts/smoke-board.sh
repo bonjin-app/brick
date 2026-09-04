@@ -436,5 +436,33 @@ contains "글 삭제" "$(curl -s -b "$ADMIN" -X DELETE "$BD/posts/$PF")" '"ok":t
 check "삭제된 글은 404" "$(code "$BD/posts/$PF")" "404"
 
 echo
+echo "── 이미지 첨부도 줄여서 저장한다 (첨부는 본문 아래에 그대로 보인다)"
+node -e '
+const sharp = require("'"$ROOT"'/apps/api/node_modules/sharp");
+const w=3000,h=2000, buf=Buffer.alloc(w*h*3);
+for (let y=0;y<h;y++) for (let x=0;x<w;x++){const i=(y*w+x)*3;buf[i]=(x*255/w)|0;buf[i+1]=90;buf[i+2]=(y*255/h)|0;}
+sharp(buf,{raw:{width:w,height:h,channels:3}}).withExif({IFD0:{Make:"Brick"}}).jpeg({quality:95}).toFile(process.argv[1]);
+' "$TMP/attach.jpg" 2>/dev/null || echo "(sharp 없음 — 건너뜁니다)"
+if [[ -f "$TMP/attach.jpg" ]]; then
+  ORIG_BYTES=$(wc -c < "$TMP/attach.jpg")
+  # 글은 JSON 으로 만들고 첨부는 별도 멀티파트 호출이다 (POST /posts/:id/files)
+  printf '{"title":"사진 첨부","content":"첨부 시험"}' > "$TMP/ap.json"
+  AP="$(curl -s -b "$ADMIN" -X POST "$BD/boards/free/posts" -H 'content-type: application/json' \
+    --data-binary "@$TMP/ap.json" | python3 -c "import sys,json;print(json.load(sys.stdin).get('id',''))" 2>/dev/null)"
+  [[ -n "$AP" ]] && ok "이미지 첨부용 글 작성" || bad "이미지 첨부용 글 작성"
+  contains "이미지 첨부 업로드" "$(curl -s -b "$ADMIN" -X POST "$BD/posts/$AP/files" -F "files=@$TMP/attach.jpg;type=image/jpeg")" '"saved":1'
+  SAVED="$(node -e "
+const pg = require('$ROOT/apps/api/node_modules/pg');
+(async () => {
+  const c = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await c.connect();
+  const { rows } = await c.query('SELECT size FROM board_attachments WHERE post_id = \$1::uuid LIMIT 1', ['$AP']);
+  console.log(rows[0] ? rows[0].size : '');
+  await c.end();
+})();
+")"
+  [[ -n "$SAVED" && "$SAVED" -lt "$ORIG_BYTES" ]] && ok "첨부 이미지가 줄어든다 ($ORIG_BYTES → $SAVED)" || bad "첨부 이미지가 줄어든다 ($ORIG_BYTES → ${SAVED:-없음})"
+fi
+
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 [[ $FAIL -eq 0 ]] || { echo; echo "── 서버 로그 ──"; tail -40 "$TMP/api.log"; exit 1; }

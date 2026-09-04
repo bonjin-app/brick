@@ -275,6 +275,7 @@ export default definePlugin(async (ctx) => {
     if (!files.length) throw new BoardError(400, "첨부할 파일이 없습니다.");
 
     const saved = await attachFiles(db, ctx.storage, {
+      images: ctx.images,
       postId: String(post.id),
       board,
       files,

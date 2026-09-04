@@ -20,10 +20,20 @@ export interface UploadInput {
  *  - 저장 키는 서버가 만든다. 원본 파일명을 경로에 쓰지 않는다 (traversal·충돌 방지)
  *  - 원본 파일명은 표시용으로만 DB에 둔다
  */
+/** 코어의 이미지 처리 계약 중 첨부에 필요한 부분만 (ctx.images) */
+export interface ImageOps {
+  canProcess(contentType: string): boolean;
+  optimize(
+    buffer: Buffer,
+    contentType: string,
+    opts?: { maxWidth?: number; maxHeight?: number; quality?: number },
+  ): Promise<{ buffer: Buffer; contentType: string; ext: string | null; width: number | null; height: number | null }>;
+}
+
 export async function attachFiles(
   db: Db,
   storage: StorageProvider,
-  params: { postId: string; board: BoardRow; files: UploadInput[]; existingCount?: number },
+  params: { postId: string; board: BoardRow; files: UploadInput[]; existingCount?: number; images?: ImageOps },
 ): Promise<number> {
   const { postId, board, files } = params;
   if (!files.length) return 0;
@@ -71,7 +81,14 @@ export async function attachFiles(
   const written: string[] = [];
   try {
     for (const item of planned) {
-      const stored = await storage.put(item.key, item.file.buffer, item.file.contentType);
+      /*
+       * 이미지 첨부는 저장 전에 줄이고 EXIF 를 지운다 — 첨부는 본문 아래에 그대로 보이므로
+       * 휴대폰 사진이면 글 하나가 수 MB 이고 촬영 위치까지 남는다. 문서(hwp·pdf)는 손대지 않는다.
+       */
+      const body = params.images?.canProcess(item.file.contentType)
+        ? await params.images.optimize(item.file.buffer, item.file.contentType, { maxWidth: 2000, maxHeight: 2000 })
+        : null;
+      const stored = await storage.put(item.key, body?.buffer ?? item.file.buffer, item.file.contentType);
       written.push(item.key);
       await db.execute(sql`
         INSERT INTO board_attachments
