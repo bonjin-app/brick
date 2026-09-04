@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-04
+
 ### 추가
 - **Docker 이미지가 linux/arm64 도 담는다** — Apple Silicon·AWS Graviton·Oracle Ampere·라즈베리파이에서
   에뮬레이션 없이 동작. 두 아키텍처를 각자 네이티브 러너에서 빌드해 하나의 매니페스트로 합친다
@@ -57,6 +59,7 @@
 8종(게시판·쇼핑몰·토스결제·쪽지·포인트·설문·헬프데스크·사이트 도구), 그누보드 이전 도구,
 FTP 배포본과 Docker 이미지, E2E 스모크 2,500+ 항목.
 
-[Unreleased]: https://github.com/bonjin-app/brick/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/bonjin-app/brick/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/bonjin-app/brick/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/bonjin-app/brick/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/bonjin-app/brick/releases/tag/v0.1.0
