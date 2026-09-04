@@ -27,7 +27,7 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-2782%20passing-2ea043.svg" alt="스모크 테스트 2782개" />
+  <img src="https://img.shields.io/badge/E2E-2789%20passing-2ea043.svg" alt="스모크 테스트 2789개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
   <a href="https://github.com/bonjin-app/brick/pkgs/container/brick">
     <img src="https://img.shields.io/badge/docker-amd64%20%C2%B7%20arm64-2496ed.svg" alt="Docker image (amd64 · arm64)" />
@@ -199,7 +199,9 @@ DB 마이그레이션은 컨테이너가 부팅할 때 스스로 적용합니다
 - **코어 블록** — 제목 · 문단 · HTML · 이미지 · 다단 레이아웃 · 여백 ·
   **랜딩 재료**(사진 히어로 · 이미지+글 분할 · 숫자 강조 · 고객 후기 · 이미지 갤러리 ·
   특징 카드 · 행동 유도 배너 · FAQ 아코디언 · 알림 · 구분선)
-- **미디어 라이브러리** — 업로드(확장자 화이트리스트) / 목록 / 삭제
+- **미디어 라이브러리** — 업로드(확장자 화이트리스트) / 목록 / 삭제.
+  **이미지는 자동으로 최적화**됩니다: 2400px 이내로 축소, EXIF(촬영 위치) 제거, 목록용 WebP 썸네일.
+  프로필 이미지는 256px. 플러그인도 같은 처리를 쓸 수 있습니다(`ctx.images`)
 - **메뉴 편집** — 헤더 내비게이션, 테마에 자동 반영
 - **검색** — 페이지 전문 검색 (발췌문 포함)
 - **플러그인 시스템** — ZIP 업로드 → 활성화 → **재시작 없이** 라우트·블록 동작
@@ -365,11 +367,11 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 2,782개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 2,789개 항목):
 
 | 수트 | 항목 | 무엇을 못박는가 |
 |---|---:|---|
-| `smoke-test.sh` | 47 | 설치 · 인증 · 페이지 · 미디어 · 플러그인 로드 · **공유 이미지·immutable 캐시·압축** |
+| `smoke-test.sh` | 54 | 설치 · 인증 · 페이지 · 미디어 · 플러그인 로드 · **공유 이미지·immutable 캐시·압축** · **이미지 최적화·EXIF 제거** |
 | `smoke-member.sh` | 126 | 약관 강제 · 동의 이력 · 개인정보 파기 · 주문 보존 · 프로필 이미지·공개 카드·닉네임 변경 주기 · **관리자 메모·이메일 변경** |
 | `smoke-helpdesk.sh` | 109 | 문의 열거 방지 · 비회원 조회 · 사이트맵 유출 |
 | `smoke-migrate.sh` | 155 | 덤프 파싱 · 레벨 매핑 · **비밀번호 보존** · 영카트 상품·주문 · 멱등성 |

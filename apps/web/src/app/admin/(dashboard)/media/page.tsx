@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAdminT } from "../../../../lib/i18n-admin";
 
 interface MediaRow {
-  id: string; url: string; fileName: string; contentType: string; size: string; createdAt: string;
+  id: string; url: string; thumbUrl?: string; fileName: string; contentType: string; size: string; createdAt: string;
+  width?: number | null; height?: number | null;
 }
 
 export default function AdminMediaPage() {
@@ -25,7 +26,12 @@ export default function AdminMediaPage() {
     const fd = new FormData();
     fd.append("file", file);
     const res = await fetch("/api/media/upload", { method: "POST", body: fd });
-    setMessage(res.ok ? t("media.done") : `${t("common.failPrefix")}${(await res.json()).message}`);
+    const body = await res.json().catch(() => ({}));
+    // 이미지를 줄였다면 얼마나 줄었는지 보여준다 — 운영자가 최적화가 켜져 있는지 알 수 있다
+    const saved = res.ok && body.originalSize && body.size && body.originalSize > body.size * 1.05
+      ? ` (${humanSize(body.originalSize)} → ${humanSize(body.size)}${body.width ? `, ${body.width}×${body.height}` : ""})`
+      : "";
+    setMessage(res.ok ? `${t("media.done")}${saved}` : `${t("common.failPrefix")}${body.message ?? res.status}`);
     if (fileRef.current) fileRef.current.value = "";
     reload();
   }
@@ -37,11 +43,6 @@ export default function AdminMediaPage() {
   }
 
   const isImage = (t: string) => t.startsWith("image/");
-  const humanSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-  };
   return (
     <div>
       <h1>{t("media.title")} <span style={{ color: "var(--color-muted)", fontSize: 16 }}>{t("media.countN", { n: data.total })}</span></h1>
@@ -59,7 +60,8 @@ export default function AdminMediaPage() {
           <div key={f.id} style={{ background: "var(--color-bg)", borderRadius: 8, padding: 12, fontSize: 13 }}>
             <div style={{ height: 100, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--color-bg-soft)", borderRadius: 4, overflow: "hidden" }}>
               {isImage(f.contentType)
-                ? <img src={f.url} alt={f.fileName} style={{ maxWidth: "100%", maxHeight: 100 }} />
+                ? <img src={f.thumbUrl ?? f.url} alt={f.fileName} loading="lazy" decoding="async"
+                       width={160} height={100} style={{ maxWidth: "100%", maxHeight: 100, objectFit: "contain" }} />
                 : <span style={{ fontSize: 32 }}>📄</span>}
             </div>
             <div style={{ marginTop: 8, wordBreak: "break-all" }}>{f.fileName}</div>
@@ -74,4 +76,11 @@ export default function AdminMediaPage() {
       </div>
     </div>
   );
+}
+
+/** 사람이 읽는 크기 — 컴포넌트 밖에 두어 업로드 핸들러에서도 쓴다 */
+function humanSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }

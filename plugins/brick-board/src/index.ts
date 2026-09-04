@@ -311,9 +311,24 @@ export default definePlugin(async (ctx) => {
     }
     if (file.buffer.length > 8 * 1024 * 1024) throw new BoardError(400, "이미지는 8MB 이하만 넣을 수 있습니다.");
     const now = new Date();
-    const key = `board/inline/${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}/${uuidv7()}${ext}`;
-    await ctx.storage.put(key, file.buffer, file.contentType);
-    return { url: ctx.storage.publicUrl(key) };
+    const id = uuidv7();
+    const dir = `board/inline/${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}`;
+    /*
+     * 본문에 끼우는 이미지는 화면 폭(최대 1080px)보다 클 필요가 없다. 휴대폰 사진을 그대로
+     * 저장하면 글 하나가 수 MB 가 되고 EXIF 의 촬영 위치까지 남는다 — 코어의 이미지 처리를 거친다.
+     * 썸네일은 목록(갤러리·웹진 스킨)이 쓴다.
+     */
+    const optimized = await ctx.images.optimize(file.buffer, file.contentType, { maxWidth: 1600, maxHeight: 1600 });
+    const key = `${dir}/${id}${optimized.ext ?? ext}`;
+    await ctx.storage.put(key, optimized.buffer, optimized.contentType);
+    const thumb = await ctx.images.thumbnail(file.buffer, file.contentType);
+    let thumbUrl: string | null = null;
+    if (thumb) {
+      const tk = `${dir}/${id}-thumb${thumb.ext ?? ".webp"}`;
+      await ctx.storage.put(tk, thumb.buffer, thumb.contentType);
+      thumbUrl = ctx.storage.publicUrl(tk);
+    }
+    return { url: ctx.storage.publicUrl(key), thumbUrl, width: optimized.width, height: optimized.height };
   });
 
   /** 다운로드 — 권한 검사 후 스토리지 URL로 안내 */

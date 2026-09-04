@@ -29,6 +29,7 @@ contains() { # contains <설명> <문자열> <부분문자열>
   if [[ "$2" == *"$3"* ]]; then ok "$1"; else bad "$1 (\"$3\" 없음: ${2:0:120})"; fi
 }
 code() { curl -s -o /dev/null -w "%{http_code}" "$@"; }
+jq_get() { python3 -c "import sys,json;d=json.load(sys.stdin);print(d$1)" 2>/dev/null || echo ""; }
 
 echo "▶ Brick 스모크 테스트"
 
@@ -184,6 +185,33 @@ contains "테마 목록" "$(curl -s "$API/api/themes")" '"active"'
 contains "테마 CSS 서빙" "$(curl -sI "$API/themes/default/assets/style.css")" "text/css"
 
 echo
+echo "── 업로드 이미지 최적화 (큰 사진을 그대로 저장하지 않는다)"
+# 휴대폰 사진 크기의 JPEG 를 만든다 (EXIF 포함) — sharp 는 API 에 들어 있으므로 그것으로 만든다
+node -e '
+const sharp = require("'"$ROOT"'/apps/api/node_modules/sharp");
+const w=3600,h=2400, buf=Buffer.alloc(w*h*3);
+for (let y=0;y<h;y++) for (let x=0;x<w;x++){const i=(y*w+x)*3;buf[i]=(x*255/w)|0;buf[i+1]=(y*255/h)|0;buf[i+2]=120;}
+sharp(buf,{raw:{width:w,height:h,channels:3}}).withExif({IFD0:{Make:"Brick"},GPS:{GPSLatitudeRef:"N"}}).jpeg({quality:95}).toFile(process.argv[1]);
+' "$TMP/photo.jpg" 2>/dev/null || echo "(sharp 없음 — 이 절은 건너뜁니다)"
+if [[ -f "$TMP/photo.jpg" ]]; then
+  UP_JSON="$(curl -s -b "$COOKIES" -X POST "$API/api/media/upload" -F "file=@$TMP/photo.jpg;type=image/jpeg")"
+  W="$(echo "$UP_JSON" | jq_get "['width']")"
+  ORIG="$(echo "$UP_JSON" | jq_get "['originalSize']")"
+  NEW="$(echo "$UP_JSON" | jq_get "['size']")"
+  check "3600px 원본이 2400px 로 줄어든다" "$W" "2400"
+  [[ -n "$ORIG" && -n "$NEW" && "$NEW" -lt "$ORIG" ]] && ok "저장 용량이 줄어든다 ($ORIG → $NEW)" || bad "저장 용량이 줄어든다 ($ORIG → $NEW)"
+  contains "목록용 썸네일이 생긴다" "$UP_JSON" '"thumbUrl":"/uploads/'
+  THUMB="$(echo "$UP_JSON" | jq_get "['thumbUrl']")"
+  check "썸네일이 서빙된다" "$(code "$API$THUMB")" "200"
+  contains "썸네일은 WebP" "$(curl -s -o /dev/null -w '%header{content-type}' "$API$THUMB")" "image/webp"
+  MEDIA_URL="$(echo "$UP_JSON" | jq_get "['url']")"
+  # EXIF(촬영 위치)가 남으면 글쓴이의 집 주소가 공개된다
+  curl -s "$API$MEDIA_URL" -o "$TMP/saved.jpg"
+  EXIF="$(node -e 'require("'"$ROOT"'/apps/api/node_modules/sharp")(process.argv[1]).metadata().then(m=>console.log(m.exif?"있음":"없음"))' "$TMP/saved.jpg" 2>/dev/null)"
+  check "EXIF(GPS 등)를 지운다" "$EXIF" "없음"
+  contains "목록 응답에 치수와 썸네일" "$(curl -s -b "$COOKIES" "$API/api/media")" '"thumbUrl":'
+fi
+
 echo "── 공개 품질: 공유 이미지 · 캐시 · 압축"
 check "공유 이미지는 http(s) 또는 / 로 시작해야 한다" \
   "$(code -b "$COOKIES" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"site.og_image":"javascript:alert(1)"}')" "400"

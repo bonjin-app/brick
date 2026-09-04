@@ -478,3 +478,30 @@ ZIP 과 `my-plugin.update.json` 을 서버에 올리면 끝입니다. 사용자�
 매니페스트의 서명입니다. 회사 내부 레지스트리를 쓰려면 같은 형식의 JSON 을
 아무 곳(https)에나 올리고 관리자 설정의 `extensions.registry_url` 을
 바꾸면 됩니다.
+
+## 이미지를 받는다면 `ctx.images` 를 거치세요
+
+손님이 올리는 사진은 4000px·4MB 입니다. 그대로 저장하면 목록 한 화면이 수십 MB 가 되고,
+EXIF 의 촬영 위치(GPS)까지 공개됩니다. 코어가 자기 미디어에 쓰는 것과 같은 처리를 플러그인도
+쓸 수 있습니다.
+
+```ts
+ctx.registerRoute("POST", "/photos", async (req) => {
+  const [file] = await req.files();
+  if (!ctx.images.canProcess(file.contentType)) throw new Error("이미지만");
+
+  // 원본을 줄이고 EXIF 를 지운다. ext 가 null 이면 형식이 그대로다
+  const opt = await ctx.images.optimize(file.buffer, file.contentType, { maxWidth: 1600 });
+  const key = `photos/${id}${opt.ext ?? extOf(file.fileName)}`;
+  await ctx.storage.put(key, opt.buffer, opt.contentType);
+
+  // 목록을 그린다면 썸네일도 함께 (정사각 WebP)
+  const thumb = await ctx.images.thumbnail(file.buffer, file.contentType);
+  if (thumb) await ctx.storage.put(`photos/${id}-thumb${thumb.ext}`, thumb.buffer, thumb.contentType);
+
+  return { url: ctx.storage.publicUrl(key), width: opt.width, height: opt.height };
+});
+```
+
+처리 수단(sharp)이 없는 환경에서는 **원본을 그대로 돌려줍니다** — 업로드가 막히지 않습니다.
+GIF·SVG 는 애니메이션·벡터를 잃지 않도록 건드리지 않으므로 `canProcess()` 가 false 입니다.

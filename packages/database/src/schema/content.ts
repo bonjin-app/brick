@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, jsonb, timestamp, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { users } from "./users.js";
 
@@ -48,6 +48,11 @@ export const mediaFiles = pgTable(
     fileName: varchar("file_name", { length: 500 }).notNull(),
     contentType: varchar("content_type", { length: 200 }).notNull(),
     size: varchar("size", { length: 20 }).notNull(),
+    /** 이미지 치수 — 업로드 시 읽어 둔다. 이미지가 아니거나 처리 못 했으면 NULL */
+    width: integer("width"),
+    height: integer("height"),
+    /** 목록용 정사각 WebP 썸네일의 저장 키. NULL 이면 화면이 원본을 쓴다 */
+    thumbKey: text("thumb_key"),
     uploaderId: uuid("uploader_id").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

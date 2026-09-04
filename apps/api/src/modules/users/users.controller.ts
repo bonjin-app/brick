@@ -22,6 +22,7 @@ import { extname } from "node:path";
 import { isUniqueViolation } from "@brick/core";
 import { AgreementsService } from "../members/agreements.service.js";
 import { EmailVerifyService } from "../members/email-verify.service.js";
+import { ImageService } from "../images/image.service.js";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ROLES = ["admin", "manager", "member"] as const;
@@ -40,6 +41,7 @@ export class UsersController {
     private readonly emailVerify: EmailVerifyService,
     @Inject(STORAGE) private readonly storage: StorageProvider,
     private readonly moderation: ModerationService,
+    private readonly images: ImageService,
   ) {}
 
   /** 닉네임(표시 이름) 변경 주기(일). 설정이 없거나 이상하면 0 = 제한 없음 */
@@ -263,8 +265,16 @@ export class UsersController {
     if (buffer.length > 4 * 1024 * 1024) throw new BadRequestException("프로필 이미지는 4MB 이하만 올릴 수 있습니다.");
 
     const [cur] = await this.db.select({ avatarUrl: users.avatarUrl }).from(users).where(eq(users.id, req.user.id)).limit(1);
-    const key = `avatars/${req.user.id}/${uuidv7()}${ext}`;
-    await this.storage.put(key, buffer, file.mimetype);
+    /*
+     * 프로필 이미지는 화면에서 26~56px 로 보인다 — 4MB 원본을 그대로 두면 헤더가 매 요청마다
+     * 그것을 내려받는다. 256px 정사각 WebP 로 줄이고 EXIF(촬영 위치)를 지운다.
+     * sharp 가 없는 환경에서는 원본이 저장된다(기능만 빠지고 업로드는 된다).
+     */
+    const square = await this.images.thumbnail(buffer, file.mimetype, { width: 256, quality: 82 });
+    const body = square?.buffer ?? buffer;
+    const bodyType = square?.contentType ?? file.mimetype;
+    const key = `avatars/${req.user.id}/${uuidv7()}${square?.ext ?? ext}`;
+    await this.storage.put(key, body, bodyType);
     const url = this.storage.publicUrl(key);
     await this.db.update(users).set({ avatarUrl: url, updatedAt: new Date() }).where(eq(users.id, req.user.id));
     await this.deleteAvatarObject(cur?.avatarUrl ?? null);

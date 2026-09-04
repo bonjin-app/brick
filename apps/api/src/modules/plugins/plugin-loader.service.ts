@@ -13,6 +13,7 @@ import type { PluginContext, PluginInstance, BlockDefinition, PluginRouteHandler
 import { AVAILABLE_LOCALES, DEFAULT_LOCALE, makeTranslator, normalizeLocale } from "@brick/core";
 import { DB, HOOKS, CACHE, QUEUE, STORAGE, MAIL, CAPTCHA, ENV } from "../../runtime.module.js";
 import type { BrickEnv } from "../../config/env.js";
+import { ImageService } from "../images/image.service.js";
 
 /**
  * PluginLoader — Brick 런타임 아키텍처의 심장.
@@ -119,6 +120,7 @@ export class PluginLoaderService implements OnModuleInit {
     @Inject(CAPTCHA) private readonly captcha: CaptchaProvider,
     @Inject(ENV) private readonly env: BrickEnv,
     private readonly moderation: ModerationService,
+    private readonly imageService: ImageService,
   ) {}
 
   /**
@@ -467,6 +469,11 @@ export class PluginLoaderService implements OnModuleInit {
         log: (m: string) => this.logger.log(`[${pluginName}] ${m}`),
         warn: (m: string) => this.logger.warn(`[${pluginName}] ${m}`),
         error: (m: string) => this.logger.error(`[${pluginName}] ${m}`),
+      },
+      images: {
+        canProcess: (contentType: string) => this.imageService.canProcess(contentType),
+        optimize: (buffer, contentType, opts) => this.imageService.optimize(buffer, contentType, opts),
+        thumbnail: (buffer, contentType, opts) => this.imageService.thumbnail(buffer, contentType, opts),
       },
       moderation: {
         findBannedWord: (text: string) => this.moderation.findBannedWord(text),

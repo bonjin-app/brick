@@ -64,6 +64,33 @@ export interface PluginContext {
    * 돌려주므로 "사용할 수 없는 단어가 있습니다: ○○"처럼 알려줄 수 있다 — 무엇이
    * 문제인지 모르는 400 은 고칠 수 없는 오류다.
    */
+  /**
+   * 업로드 이미지 처리 — 원본 축소와 썸네일. 코어가 자기 미디어에 쓰는 것과 같은 구현이다.
+   *
+   * 손님이 올리는 사진은 4000px·4MB 다. 플러그인이 그것을 그대로 저장하면 목록 한 화면이
+   * 수십 MB 가 되고, EXIF 의 촬영 위치까지 공개된다. 이미지를 받는 플러그인은 저장 전에
+   * `optimize()` 를 거치고, 목록을 그린다면 `thumbnail()` 도 함께 저장하기를 권한다.
+   *
+   * 처리 수단(sharp)이 없는 환경에서는 **원본을 그대로 돌려준다** — 업로드가 막히지 않는다.
+   * `optimize()` 의 `ext` 가 null 이면 형식이 그대로이므로 원본 확장자를 쓰면 된다.
+   */
+  readonly images: {
+    /** 이 형식을 처리할 수 있는가 (GIF·SVG 는 원본 유지) */
+    canProcess(contentType: string): boolean;
+    /** 큰 이미지를 줄이고 EXIF 를 지운다. 처리하지 못하면 입력을 그대로 돌려준다 */
+    optimize(
+      buffer: Buffer,
+      contentType: string,
+      opts?: { maxWidth?: number; maxHeight?: number; quality?: number },
+    ): Promise<{ buffer: Buffer; contentType: string; ext: string | null; width: number | null; height: number | null }>;
+    /** 목록용 정사각 WebP 썸네일. 처리하지 못하면 null */
+    thumbnail(
+      buffer: Buffer,
+      contentType: string,
+      opts?: { width?: number; height?: number; quality?: number },
+    ): Promise<{ buffer: Buffer; contentType: string; ext: string | null; width: number | null; height: number | null } | null>;
+  };
+
   readonly moderation: {
     findBannedWord(text: string): Promise<string | null>;
   };
