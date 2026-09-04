@@ -528,5 +528,7 @@ node 런타임(51MB)·Next standalone(31MB)·API(23MB, sharp 18MB 포함).
 - [x] `COPY --chown` · `chown -R` 제거 · CI 가 이미지 크기·상위 레이어를 로그에 남긴다
 - [x] Next standalone 에 sharp(libvips glibc·musl 두 벌)·typescript·esbuild·webpack 이 추적으로 딸려 들어가고 있었다
   (web 은 next/image 를 안 쓴다) — `outputFileTracingExcludes`·`images.unoptimized`. standalone 85 → 41MB
-- [ ] API 의 libvips 두 벌(glibc·musl 각 18MB): FTP 배포본은 glibc 만, Docker(Alpine)는 musl 만 있으면 된다 —
-  pnpm `supportedArchitectures.libc` 를 빌드 대상별로 주면 18MB 더 줄어든다
+- [x] Docker 이미지에서 libvips glibc 변형 제거(Alpine 은 musl) — CI 컨테이너 검사가 실제 업로드로 썸네일 생성을 확인한다.
+  실측: chown 중복 제거 + web 추적 제외로 CI 이미지 341MB → 275MB(비압축), 여기서 18MB 더.
+  FTP 배포본은 두 벌을 유지한다 — 어떤 리눅스에 올릴지 모르고, 없는 쪽에서는 원본 저장으로 조용히 떨어지므로
+  18MB 를 아끼자고 한쪽을 빼는 것은 이득보다 위험이 크다

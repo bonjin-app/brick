@@ -21,7 +21,12 @@ RUN pnpm build
 
 # pnpm 워크스페이스의 node_modules는 스토어를 가리키는 심볼릭 링크라 그대로 복사할 수 없다.
 # pnpm deploy가 자기완결적인 번들을 만들어준다.
-RUN pnpm deploy --filter=@brick/api --prod /deploy/api
+RUN pnpm deploy --filter=@brick/api --prod /deploy/api \
+    # sharp 의 libvips 는 glibc·musl 두 벌(각 18MB)이 설치된다. 이 이미지는 Alpine(musl)이므로
+    # glibc 변형은 절대 로드되지 않는다 — 지운다. (sharp 는 있는 변형만 골라 쓰고, CI 컨테이너
+    # 검사가 실제 이미지 업로드로 musl 변형이 동작하는지 확인한다.)
+    && rm -rf /deploy/api/node_modules/.pnpm/@img+sharp-libvips-linux-*@* \
+              /deploy/api/node_modules/.pnpm/@img+sharp-linux-*@*
 
 # 동봉할 플러그인을 모은다 (런타임에 필요한 매니페스트 · dist · migrations 만)
 RUN bash scripts/collect-plugins.sh /seed/plugins

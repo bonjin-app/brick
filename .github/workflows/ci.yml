@@ -260,6 +260,11 @@ jobs:
             -d '{"email":"admin@ci.test","password":"cipass12345"}' >/dev/null
           curl -fsS -b ck.txt http://127.0.0.1:3000/api/admin/version | tee version.json
           grep -q '"version":"0.0.0-ci"' version.json
+          echo "── 이미지 업로드 → 컨테이너 안의 sharp(musl)가 실제로 동작하는가"
+          # 1x1 PNG 를 400px 로 키울 일은 없으니 크기 검사 대신 썸네일이 만들어지는지 본다
+          printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\x9cc\xf8\xcf\xc0\x00\x00\x03\x01\x01\x00\x18\xdd\x8d\xb0\x00\x00\x00\x00IEND\xaeB`\x82' > px.png
+          curl -fsS -b ck.txt -X POST http://127.0.0.1:3000/api/media/upload -F "file=@px.png;type=image/png" | tee upload.json
+          grep -q '"thumbUrl":"/uploads/[^"]*-thumb.webp"' upload.json || { echo "✖ 썸네일이 만들어지지 않았다 — 컨테이너에서 sharp 가 로드되지 않는다"; docker compose logs --tail 40 | grep -i sharp; exit 1; }
           echo; echo "✅ compose 설치본이 설치·렌더·버전 보고까지 동작"
 
       - name: 진단 (실패 시 컨테이너 상태·로그)
