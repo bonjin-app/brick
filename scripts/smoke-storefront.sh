@@ -344,6 +344,25 @@ AMT2="$(psql_q "SELECT zone_fee, total FROM shop_orders WHERE order_no='$NOS'")"
 check "서울 주문은 지역비 0 (23000)" "$AMT2" "0|23000"
 
 echo
+echo "── 상품 뱃지 NEW · BEST · 할인율 (진열대의 관례)"
+# 샘플 상품으로 세 경우를 만든다: 많이 팔린 것(BEST) · 오래된 것(NEW 아님) · 품절(뱃지 없음)
+psql_q "UPDATE shop_products SET sold_count = 33 WHERE slug = 'sample-tote'" >/dev/null
+psql_q "UPDATE shop_products SET created_at = now() - interval '60 days' WHERE slug = 'sample-mug'" >/dev/null
+BADGE_HTML="$(sf_render "shop")"
+contains "새 상품에 NEW" "$BADGE_HTML" 'brick-tag brick-tag-new">NEW'
+contains "많이 팔린 상품에 BEST" "$BADGE_HTML" 'brick-tag brick-tag-best">BEST'
+contains "정가가 있으면 할인율" "$BADGE_HTML" 'brick-tag brick-tag-sale">'
+card_of() { python3 -c "
+import sys, re
+h = sys.stdin.read()
+m = re.search(r'<a class=\"brick-product-card[^\"]*\" href=\"/shop/' + sys.argv[1] + r'\".*?</a>\s*$', h, re.S | re.M) \
+    or re.search(r'<a class=\"brick-product-card[^\"]*\" href=\"/shop/' + sys.argv[1] + r'\"(?:.|\n){0,1200}', h)
+print(m.group(0) if m else '')
+" "$1"; }
+absent "60일 전 상품에는 NEW 를 붙이지 않는다" "$(echo "$BADGE_HTML" | card_of "sample-mug")" "brick-tag-new"
+contains "품절 상품은 품절 표시가 먼저" "$(echo "$BADGE_HTML" | card_of "sample-candle")" "brick-badge-soldout"
+absent "품절 상품에는 뱃지를 겹치지 않는다" "$(echo "$BADGE_HTML" | card_of "sample-candle")" "brick-tags"
+
 echo "── 쇼핑몰 스타터의 샘플 상품 (빈 진열대로 시작하지 않는다)"
 # 이 수트는 설치 때 shop 스타터를 고른다 (위 install 호출) — 그것이 넣은 것을 본다
 SAMPLES="$(node -e "

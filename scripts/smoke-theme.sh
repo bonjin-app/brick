@@ -239,6 +239,8 @@ absent "템플릿 변수가 새지 않는다" "$SF_HOME" "{{ site."
 contains "코어 404 도 이 테마의 프리미티브로" "$(render "no-such-page")" '<a class="brick-btn brick-btn-primary" href="/">홈으로</a>'
 check "스타일시트 서빙" "$(code "$API/themes/storefront/assets/style.css")" "200"
 contains "CSP 에 이 테마가 선언한 출처" "$(curl -s -D - -o /dev/null "$API/api/render/page?path=" | tr -d '\r')" "https://cdn.jsdelivr.net"
+contains "퀵메뉴(오른쪽 고정)에 플러그인 링크와 맨 위로" "$SF_HOME" 'class="brick-quick" aria-label='
+contains "퀵메뉴의 맨 위로" "$SF_HOME" 'class="brick-quick-top"'
 check "기본 테마로 복귀" "$(code -b "$CK" -X POST "$API/api/themes/default/activate")" "201"
 absent "복귀 후 카테고리 띠가 남지 않는다" "$(render "")" 'class="brick-catbar'
 
@@ -295,6 +297,7 @@ contains "코어 계약: 스킵 링크" "$BQ_HOME" 'class="brick-skip"'
 contains "코어 계약: 헤더 액션 자리" "$BQ_HOME" 'class="brick-actions"'
 absent "템플릿 조건문이 새지 않는다" "$BQ_HOME" "{{/if}}"
 contains "CSP 에 이 테마가 선언한 웹폰트 두 곳" "$(curl -s -D - -o /dev/null "$API/api/render/page?path=" | tr -d '\r')" "https://fonts.gstatic.com"
+contains "이 테마도 퀵메뉴를 둔다 (쇼핑몰 테마의 관례)" "$BQ_HOME" 'class="brick-quick"'
 check "스타일시트 서빙" "$(code "$API/themes/boutique/assets/style.css")" "200"
 check "기본 테마로 복귀" "$(code -b "$CK" -X POST "$API/api/themes/default/activate")" "201"
 

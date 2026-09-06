@@ -144,6 +144,8 @@ page.html 슬롯은 추가로 `title`(페이지 제목), `{{{ blocksHtml }}}`(�
 | `.brick-image-gallery`, `.brick-image-grid` (`--cols`) | 이미지 갤러리 |
 | `.brick-footer-cols`, `.brick-footer-col`, `.brick-footer-about/-nav/-contact` | 3열 푸터 |
 | `.brick-actions` | 플러그인이 등록한 헤더 링크(장바구니·쪽지함) |
+| `.brick-quick`, `.brick-quick-top` | 퀵메뉴 — 헤더 링크를 오른쪽에 한 번 더 두는 쇼핑몰 관례. 테마가 둘지 말지 정합니다 |
+| `.brick-tags`, `.brick-tag`(`-new`, `-best`, `-sale`) | 상품 뱃지 — 상점 블록이 붙이고 모양은 테마가 덮어쓸 수 있습니다 |
 
 게시판 블록은 목록 스킨(`brick-list-basic/-gallery/-webzine`)·이전/다음(`brick-post-nav`)·
 공유 막대(`brick-share`)의 CSS 를 **자기 것으로 들고 있습니다**(토큰만 씁니다) — 테마가

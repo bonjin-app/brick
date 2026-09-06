@@ -49,7 +49,7 @@ export function registerStorefrontBlocks(
 
       const { rows } = await db.execute(sql`
         SELECT p.slug, p.name, p.price, p.list_price, p.image_url, p.status, p.stock,
-               p.review_count, p.rating_sum
+               p.review_count, p.rating_sum, p.created_at, p.sold_count
         FROM shop_products p
         LEFT JOIN shop_categories c ON c.id = p.category_id
         WHERE p.status IN ('selling', 'soldout') AND (${category} = '' OR c.slug = ${category})
@@ -61,17 +61,46 @@ export function registerStorefrontBlocks(
         return `<div class="brick-shop-empty">${escapeHtml(t("list.empty"))}</div>`;
       }
 
+      /*
+       * NEW·BEST 뱃지 — 쇼핑몰 진열대의 관례다.
+       *
+       * NEW 는 최근 14일에 등록된 상품. BEST 는 이 목록에서 가장 많이 팔린 상품 상위 3개인데,
+       * **한 개라도 팔린 것만** 붙인다 — 아무도 안 산 상품에 BEST 가 붙으면 손님이 표시를
+       * 믿지 않게 된다(그러면 뱃지가 전부 무의미해진다). 기준을 설정으로 열지 않은 이유는
+       * 옵션이 늘면 아무도 안 만지고, 이 값이 한국 쇼핑몰의 통념에 가깝기 때문이다.
+       */
+      const NEW_DAYS = 14;
+      const newerThan = Date.now() - NEW_DAYS * 24 * 60 * 60 * 1000;
+      const bestSellers = new Set(
+        rows
+          .filter((p) => Number(p.sold_count) > 0)
+          .sort((a, b) => Number(b.sold_count) - Number(a.sold_count))
+          .slice(0, 3)
+          .map((p) => String(p.slug)),
+      );
+
       const cards = rows.map((p) => {
         const soldout = p.status === "soldout" || (p.stock !== null && Number(p.stock) <= 0);
         const discount =
           p.list_price && Number(p.list_price) > Number(p.price)
             ? Math.round((1 - Number(p.price) / Number(p.list_price)) * 100)
             : 0;
+        const isNew = p.created_at ? new Date(String(p.created_at)).getTime() > newerThan : false;
+        const isBest = bestSellers.has(String(p.slug));
+        // 품절이면 뱃지를 겹치지 않는다 — 품절이 먼저 읽혀야 한다
+        const badges = soldout
+          ? ""
+          : [
+              isBest ? `<span class="brick-tag brick-tag-best">${escapeHtml(t("card.best"))}</span>` : "",
+              isNew ? `<span class="brick-tag brick-tag-new">${escapeHtml(t("card.new"))}</span>` : "",
+              discount ? `<span class="brick-tag brick-tag-sale">${discount}%</span>` : "",
+            ].filter(Boolean).join("");
         return `
   <a class="brick-product-card${soldout ? " is-soldout" : ""}" href="/shop/${encodeURIComponent(String(p.slug))}">
     <div class="brick-product-thumb">
       ${p.image_url ? `<img src="${escapeHtml(p.image_url)}" alt="${escapeHtml(p.name)}" loading="lazy" />` : `<span class="brick-noimg">${escapeHtml(t("common.noImage"))}</span>`}
       ${soldout ? `<span class="brick-badge-soldout">${escapeHtml(t("common.soldout"))}</span>` : ""}
+      ${badges ? `<div class="brick-tags">${badges}</div>` : ""}
     </div>
     <div class="brick-product-name">${escapeHtml(p.name)}</div>
     ${Number(p.review_count) > 0 ? `<div class="brick-card-rating"><span class="brick-stars">${"★".repeat(Math.round(Number(p.rating_sum) / Number(p.review_count)))}</span> <span>(${Number(p.review_count)})</span></div>` : ""}
@@ -593,6 +622,11 @@ const STOREFRONT_CSS = `
     radial-gradient(circle at 9px 9px, currentColor 2.5px, transparent 3px),
     linear-gradient(135deg, transparent 55%, currentColor 55%, currentColor 72%, transparent 72%);
 }
+.brick-tags{position:absolute;top:8px;left:8px;display:flex;flex-wrap:wrap;gap:4px;z-index:1}
+.brick-tag{display:inline-flex;align-items:center;height:20px;padding:0 7px;font-size:11px;font-weight:700;letter-spacing:.02em;border-radius:var(--radius, 3px);color:#fff;background:#111318}
+.brick-tag-new{background:#1f7a4d}
+.brick-tag-best{background:#8a3ab0}
+.brick-tag-sale{background:#c8322f}
 .brick-badge-soldout{position:absolute;top:8px;left:8px;padding:4px 10px;border-radius:999px;background:rgba(20,20,28,.82);color:#fff;font-size:12px;font-weight:700;line-height:1.4}
 .brick-product-card.is-soldout .brick-product-thumb img{opacity:.55}
 .brick-product-card.is-soldout .brick-product-name{color:var(--color-muted, #6c6c7a)}

@@ -135,6 +135,19 @@
     {{{ content }}}
   </main>
 
+
+  {{!--
+    퀵메뉴 — 쇼핑몰의 관례. 헤더의 장바구니·위시리스트를 손이 닿는 오른쪽에 한 번 더 두고
+    맨 위로 버튼을 붙인다. 플러그인이 등록한 링크를 그대로 반복하므로 테마는 쇼핑몰을 몰라도 된다.
+    좁은 화면에서는 맨 위로만 남긴다(카페24 모바일과 같다) — 작은 화면을 아이콘으로 덮지 않는다.
+  --}}
+  <aside class="brick-quick" aria-label="{{ t.header.quick }}">
+    {{#each headerActions}}<a href="{{ url }}">{{#if icon}}<svg class="brick-ico" aria-hidden="true"><use href="#i-{{ icon }}"></use></svg>{{/if}}<span>{{ label }}</span></a>{{/each}}
+    <a class="brick-quick-top" href="#brick-content">
+      <svg class="brick-ico" aria-hidden="true"><use href="#i-arrow"></use></svg><span>{{ t.footer.toTop }}</span>
+    </a>
+  </aside>
+
   <footer class="brick-footer">
     <div class="brick-footer-inner mx-auto max-w-(--content-width) px-(--brick-pad-x) pt-10 pb-12">
       {{!--

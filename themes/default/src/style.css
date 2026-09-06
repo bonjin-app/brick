@@ -1017,9 +1017,10 @@ a.brick-card:hover {
 .brick-slide-next { right: 8px; }
 .brick-slide-prev:hover, .brick-slide-next:hover { background: rgba(8, 8, 12, .62); }
 .brick-slide-prev svg, .brick-slide-next svg { width: 22px; height: 22px; }
-.brick-slide-dots { position: absolute; left: 0; right: 0; bottom: 10px; display: flex; justify-content: center; gap: 7px; }
+.brick-slide-dots { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: center; gap: 0; }
 .brick-slide-dots button {
-  width: 24px; height: 24px; padding: 0; border: 0; background: none; cursor: pointer;
+  /* 점은 8px 로 보이지만 누르는 영역은 44px 이다 — 손가락으로 정확히 짚을 수 없다 */
+  width: 44px; height: 44px; padding: 0; border: 0; background: none; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
 }
 .brick-slide-dots button::before {
