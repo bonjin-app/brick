@@ -90,6 +90,11 @@ interface SeedContext {
   /** 플러그인 활성화 — loader.activate 를 주입받는다 (순환 의존을 피한다) */
   activatePlugin: (name: string) => Promise<void>;
   log: (message: string) => void;
+  /**
+   * 샘플 이미지를 미디어에 넣는다 — 실제 업로드와 같은 경로를 쓰므로 미디어 화면에도
+   * 보이고 운영자가 지울 수 있다. 이미지 처리(sharp)를 못 쓰면 null 을 돌려준다.
+   */
+  addSampleImage?: (name: string, svg: string) => Promise<string | null>;
 }
 
 /**
@@ -146,6 +151,18 @@ export async function applyStarter(code: string, ctx: SeedContext): Promise<{ ap
       applied.push(`페이지 ${p.title}`);
     } catch (err) {
       ctx.log(`스타터: 페이지 ${p.slug} 생성 실패 — ${String(err)}`);
+    }
+  }
+
+  // ── 3.5 샘플 상품 ──
+  // 쇼핑몰을 골랐는데 진열대가 비어 있으면 "무엇이 잘못됐나" 부터 의심하게 된다.
+  // 카페24·그누보드가 샘플 상품을 넣는 이유다 — 이름에 (샘플) 을 달아 지우기 쉽게 한다.
+  if (starter.code === "shop") {
+    try {
+      const seeded = await seedShopSamples(ctx);
+      if (seeded) applied.push(`샘플 상품 ${seeded}개`);
+    } catch (err) {
+      ctx.log(`스타터: 샘플 상품 생성 실패 — ${String(err)}`);
     }
   }
 
@@ -479,4 +496,56 @@ function starterMenu(code: string): Array<{ label: string; url: string }> {
     default:
       return [];
   }
+}
+
+/**
+ * 쇼핑몰 샘플 상품.
+ *
+ * 세 개만 넣는다 — 격자가 어떻게 보이는지, 할인 표시(정가·판매가)와 품절이 어떻게
+ * 그려지는지 한 화면에서 보이는 최소한이다. 이름에 "(샘플)" 을 달아 운영자가 지울
+ * 것을 찾기 쉽게 하고, 설명에 무엇을 하면 되는지 적는다.
+ *
+ * 사진은 테마 자산을 가리키지 않는다(테마를 바꾸면 깨진다) — **미디어에 실제로 넣는다.**
+ * 그러면 미디어 화면에도 보이고, 지우는 방법이 다른 사진과 같다.
+ */
+async function seedShopSamples(ctx: SeedContext): Promise<number> {
+  const { rows: existing } = await ctx.db.execute(sql`SELECT 1 FROM shop_products LIMIT 1`);
+  if (existing.length) return 0; // 이미 상품이 있으면 건드리지 않는다
+
+  const samples = [
+    { slug: "sample-mug", name: "머그컵 (샘플)", price: 12000, listPrice: 15000, stock: 40,
+      summary: "손에 감기는 두께의 무광 머그.", from: "#e8e2d8", to: "#c9bfae" },
+    { slug: "sample-tote", name: "캔버스 토트백 (샘플)", price: 28000, listPrice: null, stock: 12,
+      summary: "무게를 견디는 12온스 캔버스.", from: "#dfe4ea", to: "#b8c1cc" },
+    { slug: "sample-candle", name: "향초 (샘플)", price: 19000, listPrice: 24000, stock: 0,
+      summary: "삼나무와 마른 풀 향. 40시간.", from: "#efe3df", to: "#d3b8ae" },
+  ];
+
+  // 상품 설명은 HTML 이다 — 마크다운을 쓰면 별표가 그대로 보인다(실제로 그랬다)
+  const body =
+    "<p>이 상품은 <strong>스타터가 넣은 샘플</strong>입니다. 관리자 → 상품에서 수정하거나 지우세요.</p>" +
+    "<p>사진도 미디어에 함께 들어가 있습니다 — 실제 상품 사진을 올리면 그대로 바뀝니다.</p>";
+
+  let count = 0;
+  for (const [i, p] of samples.entries()) {
+    // 사진 자리를 비워 두면 격자가 회색 네모로 보인다 — 상품마다 다른 색의 카드를 만들어 둔다
+    const svg =
+      `<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 1000 1000">` +
+      `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">` +
+      `<stop offset="0" stop-color="${p.from}"/><stop offset="1" stop-color="${p.to}"/></linearGradient></defs>` +
+      `<rect width="1000" height="1000" fill="url(#g)"/></svg>`;
+    const imageUrl = (await ctx.addSampleImage?.(`${p.slug}.jpg`, svg)) ?? null;
+
+    await ctx.db.execute(sql`
+      INSERT INTO shop_products
+        (id, slug, name, summary, description, image_url, price, list_price, stock, status, sort_order)
+      VALUES
+        (${uuidv7()}, ${p.slug}, ${p.name}, ${p.summary}, ${body}, ${imageUrl},
+         ${p.price}, ${p.listPrice}, ${p.stock},
+         ${p.stock === 0 ? "soldout" : "selling"}, ${i})
+      ON CONFLICT (slug) DO NOTHING
+    `);
+    count++;
+  }
+  return count;
 }

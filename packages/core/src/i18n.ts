@@ -114,6 +114,7 @@ const CORE_KO: MessageCatalog = {
   "search.replaced": "\"{from}\" 대신 \"{to}\" 로 검색했습니다.",
   "search.prev": "이전",
   "search.next": "다음",
+  "footer.cs": "고객센터",
   "footer.toTop": "맨 위로",
   // 홈 페이지가 아직 없을 때 테마가 그리는 폴백 화면 (설치 직후)
   "home.readyTitle": "설치가 끝났습니다",
@@ -160,6 +161,7 @@ const CORE_EN: MessageCatalog = {
   "search.replaced": "Searched for \"{to}\" instead of \"{from}\".",
   "search.prev": "Prev",
   "search.next": "Next",
+  "footer.cs": "Customer service",
   "footer.toTop": "Back to top",
   "home.readyTitle": "Installation complete",
   "home.readyBody": "This screen only appears while there is no home page yet. Create a page in the admin and it takes this place.",

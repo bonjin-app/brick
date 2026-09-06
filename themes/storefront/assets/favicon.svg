@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Brick">
+  <rect width="32" height="32" rx="7" fill="#cf4437"/>
+  <g fill="#fff">
+    <rect x="6" y="8" width="9" height="6" rx="1.6"/>
+    <rect x="17" y="8" width="9" height="6" rx="1.6"/>
+    <rect x="6" y="18" width="20" height="6" rx="1.6"/>
+  </g>
+</svg>

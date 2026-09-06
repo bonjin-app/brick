@@ -221,6 +221,28 @@ check "스타일시트 서빙" "$(code "$API/themes/editorial/assets/style.css")
 check "기본 테마로 복귀" "$(code -b "$CK" -X POST "$API/api/themes/default/activate")" "201"
 absent "복귀 후 제호 레이아웃이 남지 않는다 (렌더 캐시 키에 테마 스탬프)" "$(render "")" 'class="brick-masthead'
 
+echo "── 세 번째 동봉 테마(storefront): 쇼핑몰 3단 헤더"
+contains "테마 목록에 storefront" "$THEMES" '"name":"storefront"'
+check "storefront 적용" "$(code -b "$CK" -X POST "$API/api/themes/storefront/activate")" "201"
+SF_HOME="$(render "")"
+contains "유틸 띠" "$SF_HOME" 'class="brick-topbar'
+contains "로고·검색 줄" "$SF_HOME" 'class="brick-masthead'
+contains "카테고리 띠" "$SF_HOME" 'class="brick-catbar'
+contains "카테고리 메뉴" "$SF_HOME" 'class="brick-nav brick-nav-cat'
+contains "고객센터 푸터" "$SF_HOME" 'class="brick-footer-col brick-footer-cs'
+contains "파비콘은 자기 것" "$SF_HOME" "/themes/storefront/assets/favicon.svg"
+contains "코어 계약: 스킵 링크" "$SF_HOME" 'class="brick-skip"'
+contains "코어 계약: 헤더 액션 자리(장바구니)" "$SF_HOME" 'class="brick-actions"'
+contains "코어 계약: 현재 메뉴 표시" "$(render "about")" 'aria-current="page"'
+absent "템플릿 조건문이 새지 않는다" "$SF_HOME" "{{/if}}"
+absent "템플릿 변수가 새지 않는다" "$SF_HOME" "{{ site."
+contains "코어 404 도 이 테마의 프리미티브로" "$(render "no-such-page")" '<a class="brick-btn brick-btn-primary" href="/">홈으로</a>'
+check "스타일시트 서빙" "$(code "$API/themes/storefront/assets/style.css")" "200"
+contains "CSP 에 이 테마가 선언한 출처" "$(curl -s -D - -o /dev/null "$API/api/render/page?path=" | tr -d '\r')" "https://cdn.jsdelivr.net"
+check "기본 테마로 복귀" "$(code -b "$CK" -X POST "$API/api/themes/default/activate")" "201"
+absent "복귀 후 카테고리 띠가 남지 않는다" "$(render "")" 'class="brick-catbar'
+
+
 # ════════════════════════════════════════════════════
 echo "── 랜딩 블록"
 PAGE_JSON="$TMP/landing.json"

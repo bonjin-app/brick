@@ -70,7 +70,7 @@ done
 CONSENT='"agreements":{"terms":true,"privacy":true},'
 if [[ "$(curl -s "$API/api/install/status")" == *not_installed* ]]; then
   curl -s -X POST "$API/api/install" -H 'content-type: application/json' \
-    -d '{"siteName":"스토어","adminEmail":"admin@st.test","adminPassword":"adminpass123"}' >/dev/null
+    -d '{"siteName":"스토어","adminEmail":"admin@st.test","adminPassword":"adminpass123","starter":"shop"}' >/dev/null
 fi
 curl -s -c "$CK" -X POST "$API/api/auth/login" -H 'content-type: application/json' \
   -d '{"email":"admin@st.test","password":"adminpass123"}' >/dev/null
@@ -344,5 +344,25 @@ AMT2="$(psql_q "SELECT zone_fee, total FROM shop_orders WHERE order_no='$NOS'")"
 check "서울 주문은 지역비 0 (23000)" "$AMT2" "0|23000"
 
 echo
+echo "── 쇼핑몰 스타터의 샘플 상품 (빈 진열대로 시작하지 않는다)"
+# 이 수트는 설치 때 shop 스타터를 고른다 (위 install 호출) — 그것이 넣은 것을 본다
+SAMPLES="$(node -e "
+const pg = require('$ROOT/apps/api/node_modules/pg');
+(async () => {
+  const c = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await c.connect();
+  const { rows } = await c.query(\"SELECT name, price, list_price, stock, status, image_url FROM shop_products WHERE slug LIKE 'sample-%' ORDER BY sort_order\");
+  console.log(JSON.stringify(rows));
+  await c.end();
+})();
+" 2>/dev/null)"
+[[ -n "$SAMPLES" && "$SAMPLES" != "[]" ]] && ok "shop 스타터가 샘플 상품을 넣는다" || bad "shop 스타터가 샘플 상품을 넣는다 (${SAMPLES:-없음})"
+if [[ "$SAMPLES" != "[]" && -n "$SAMPLES" ]]; then
+  contains "이름에 (샘플) 이 붙는다 — 지울 것을 찾기 쉽게" "$SAMPLES" "(샘플)"
+  contains "할인 표시를 보여 주는 상품" "$SAMPLES" '"list_price":15000'
+  contains "품절 상태를 보여 주는 상품" "$SAMPLES" '"status":"soldout"'
+  contains "사진이 미디어에 함께 들어간다" "$SAMPLES" '"image_url":"/uploads/'
+fi
+
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 [[ $FAIL -eq 0 ]] || { echo; echo "── 서버 로그 ──"; tail -50 "$TMP/api.log"; exit 1; }

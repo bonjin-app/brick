@@ -3,8 +3,10 @@ import { eq } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import argon2 from "argon2";
 import type { BrickDb } from "@brick/database";
-import { siteSettings, users } from "@brick/database";
-import { DB } from "../../runtime.module.js";
+import { mediaFiles, siteSettings, users } from "@brick/database";
+import { DB, STORAGE } from "../../runtime.module.js";
+import type { StorageProvider } from "@brick/core";
+import { ImageService } from "../images/image.service.js";
 import { PluginLoaderService } from "../plugins/plugin-loader.service.js";
 import { STARTERS, applyStarter, findStarter } from "./starters.js";
 
@@ -31,6 +33,8 @@ export class InstallController {
   constructor(
     @Inject(DB) private readonly db: BrickDb,
     private readonly loader: PluginLoaderService,
+    @Inject(STORAGE) private readonly storage: StorageProvider,
+    private readonly images: ImageService,
   ) {}
 
   @Get("status")
@@ -91,8 +95,54 @@ export class InstallController {
       siteName: dto.siteName,
       activatePlugin: (name) => this.loader.activate(name),
       log: (m) => this.logger.warn(m),
+      addSampleImage: (name, svg) => this.addSampleImage(name, svg),
     });
 
     return { ok: true, starter: starterCode, applied };
+  }
+
+  /**
+   * 샘플 이미지를 미디어에 넣는다 — 실제 업로드와 같은 경로(스토리지 + media_files)를 쓴다.
+   * SVG 를 받아 PNG 로 굽는다: SVG 는 업로드 금지 형식이고(스크립트를 담을 수 있다),
+   * 굽고 나면 썸네일까지 같은 파이프라인을 탄다. sharp 가 없으면 null — 사진 없는 상품이 된다.
+   */
+  private async addSampleImage(fileName: string, svg: string): Promise<string | null> {
+    try {
+      if (!(await this.images.isAvailable())) return null;
+      const source = Buffer.from(svg, "utf8");
+      /*
+       * SVG 를 1000×1000 JPEG 으로 굽는다. optimize() 를 쓰지 않는 이유: 그것은 "결과가
+       * 원본보다 크면 원본을 쓴다"는 정책이라 400바이트 SVG 를 그대로 돌려준다(맞는 정책이다,
+       * 용도가 다르다). 굽는 일은 thumbnail(format: "jpeg") 이 한다 — 작은 원본도 키운다.
+       */
+      const baked = await this.images.thumbnail(source, "image/png", { width: 1000, height: 1000, format: "jpeg", quality: 88 });
+      if (!baked) return null;
+      const id = uuidv7();
+      const now = new Date();
+      const dir = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}`;
+      const key = `${dir}/${id}.jpg`;
+      const stored = await this.storage.put(key, baked.buffer, "image/jpeg");
+      const thumb = await this.images.thumbnail(baked.buffer, "image/jpeg");
+      let thumbKey: string | null = null;
+      if (thumb) {
+        thumbKey = `${dir}/${id}-thumb${thumb.ext ?? ".webp"}`;
+        await this.storage.put(thumbKey, thumb.buffer, thumb.contentType);
+      }
+      await this.db.insert(mediaFiles).values({
+        id,
+        storageKey: key,
+        fileName,
+        contentType: "image/jpeg",
+        size: String(stored.size),
+        width: baked.width,
+        height: baked.height,
+        thumbKey,
+        uploaderId: null,
+      });
+      return stored.url;
+    } catch (err) {
+      this.logger.warn(`샘플 이미지 생성 실패 (${fileName}) — 사진 없이 진행합니다: ${String(err)}`);
+      return null;
+    }
   }
 }
