@@ -1,7 +1,4 @@
-import {
-  BadRequestException, Body, ConflictException, Controller, Delete, Get, Inject,
-  NotFoundException, Param, Post, Put, Query, Req, UseGuards,
-} from "@nestjs/common";
+import { BadRequestException, Body, ConflictException, Controller, Delete, Get, Inject, NotFoundException, Param, Post, Put, Query, Req, UseGuards } from "@nestjs/common";
 import type { FastifyRequest } from "fastify";
 import { desc, eq } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
@@ -41,6 +38,26 @@ export class PagesController {
    * 쿼리와 세션을 함께 넘긴다: 블록이 검색·페이지네이션·수정버튼을 처리해야 하고,
    * 렌더 캐시는 비로그인 요청에만 적용된다(사용자별 내용 유출 방지).
    */
+  /**
+   * 테마 미리보기 — 관리자만. 활성 테마를 바꾸지 않고 **내 사이트 내용**으로 그려 본다.
+   * 워드프레스의 라이브 프리뷰와 같은 목적이다: 팔레트 견본만으로는 레이아웃을 알 수 없다.
+   * 적용은 여전히 activate 뿐이고, 이 응답은 캐시되지 않는다(활성 테마 캐시를 오염시키지 않는다).
+   */
+  @Get("admin/render/preview")
+  @UseGuards(AdminGuard)
+  async renderPreview(@Query() query: Record<string, string>, @Req() req: FastifyRequest) {
+    const { path, theme, ...rest } = query ?? {};
+    if (!theme || !/^[a-z0-9][a-z0-9-]{0,49}$/.test(theme)) {
+      throw new BadRequestException("미리보기할 테마 이름이 올바르지 않습니다.");
+    }
+    const user = await this.auth.resolveFromRequest(req);
+    return this.renderer.renderPath(path ?? "", {
+      query: rest,
+      user: user ? { id: user.id, role: user.role, displayName: user.displayName, avatarUrl: user.avatarUrl ?? null } : null,
+      previewTheme: theme,
+    });
+  }
+
   @Get("render/page")
   async renderPublic(@Query() query: Record<string, string>, @Req() req: FastifyRequest) {
     const { path, ...rest } = query ?? {};

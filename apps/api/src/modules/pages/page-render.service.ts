@@ -61,7 +61,7 @@ export class PageRenderService {
 
   async renderPath(
     rawPath: string,
-    opts: { query?: Record<string, string>; user?: RequestUser | null } = {},
+    opts: { query?: Record<string, string>; user?: RequestUser | null; previewTheme?: string | null } = {},
   ): Promise<RenderedPage> {
     const path = rawPath.replace(/^\/+|\/+$/g, "") || "home";
     const query = opts.query ?? {};
@@ -75,7 +75,9 @@ export class PageRenderService {
      *    다른 사용자에게 새어 나간다.
      *  - 쿼리스트링을 키에 포함한다. 검색·페이지네이션 결과가 섞이면 안 된다.
      */
-    const cacheable = !user;
+    // 미리보기는 캐시하지 않는다 — 활성 테마의 캐시를 오염시키지 않고, 관리자 1회성 요청이다
+    const preview = opts.previewTheme ?? null;
+    const cacheable = !user && !preview;
     const queryKey = Object.keys(query).length
       ? `?${new URLSearchParams(Object.entries(query).sort()).toString()}`
       : "";
@@ -92,7 +94,7 @@ export class PageRenderService {
       if (cached) return cached;
     }
 
-    const result = await this.compute(path, query, user);
+    const result = await this.compute(path, query, user, preview);
     // 페이지 slug 기준으로 태그를 달아야 무효화가 정확하다 (하위 경로 포함)
     if (cacheable) {
       await this.cache.setWithTags(cacheKey, result, ["pages", `page:${result.slug ?? path}`], 300);
@@ -109,6 +111,8 @@ export class PageRenderService {
     path: string,
     query: Record<string, string>,
     user: RequestUser | null,
+    /** 관리자 미리보기 테마 — 없으면 활성 테마로 그린다 */
+    preview: string | null = null,
   ): Promise<RenderedPage> {
     const [site, rawNav] = await Promise.all([this.siteInfo(), this.menu("header")]);
     const nav = markCurrent(rawNav, path);
@@ -124,6 +128,8 @@ export class PageRenderService {
       onMissing: (key, locale) => this.logger.warn(`번역 없음: ${key} (${locale})`),
     });
     const themeCommon = {
+      // 미리보기 테마 (없으면 활성 테마) — ThemesService.render 가 읽는다
+      ...(preview ? { __theme: preview } : {}),
       locale: site.locale,
       t: catalogToTree(t, CORE_MESSAGE_KEYS),
       /**

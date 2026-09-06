@@ -242,6 +242,18 @@ contains "CSP 에 이 테마가 선언한 출처" "$(curl -s -D - -o /dev/null "
 check "기본 테마로 복귀" "$(code -b "$CK" -X POST "$API/api/themes/default/activate")" "201"
 absent "복귀 후 카테고리 띠가 남지 않는다" "$(render "")" 'class="brick-catbar'
 
+echo "── 테마 미리보기 (적용하지 않고 내 사이트로 본다)"
+ACTIVE_BEFORE="$(curl -s -b "$CK" "$API/api/themes" | python3 -c "import sys,json;print(json.load(sys.stdin).get('active',''))")"
+PV="$(curl -s -b "$CK" "$API/api/admin/render/preview?path=&theme=boutique" | python3 -c "import sys,json;print(json.load(sys.stdin).get('html',''))" 2>/dev/null)"
+contains "미리보기가 그 테마로 그린다" "$PV" "Noto Serif KR"
+contains "내 사이트 내용이 들어간다 (빈 껍데기가 아니다)" "$PV" "brick-nav"
+ACTIVE_AFTER="$(curl -s -b "$CK" "$API/api/themes" | python3 -c "import sys,json;print(json.load(sys.stdin).get('active',''))")"
+check "미리보기는 활성 테마를 바꾸지 않는다" "$ACTIVE_AFTER" "$ACTIVE_BEFORE"
+absent "활성 테마 화면에 미리보기 테마가 새지 않는다 (캐시 오염)" "$(render "")" "Noto Serif KR"
+check "비로그인은 미리보기를 볼 수 없다" "$(code "$API/api/admin/render/preview?path=&theme=boutique")" "401"
+check "테마 이름에 경로를 넣을 수 없다" "$(code -b "$CK" "$API/api/admin/render/preview?path=&theme=../../etc")" "400"
+check "없는 테마는 500 이 아니라 오류로" "$(code -b "$CK" "$API/api/admin/render/preview?path=&theme=nope")" "500"
+
 echo "── 네 번째 동봉 테마(boutique): 같은 쇼핑몰, 반대편 인상"
 contains "테마 목록에 boutique" "$THEMES" '"name":"boutique"'
 check "boutique 적용" "$(code -b "$CK" -X POST "$API/api/themes/boutique/activate")" "201"

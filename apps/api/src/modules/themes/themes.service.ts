@@ -39,9 +39,14 @@ export class ThemesService {
     return this.readManifest(await this.activeThemeName());
   }
 
-  /** 슬롯(layout/home/page/...)을 렌더해 완성된 HTML 반환 */
+  /**
+   * 슬롯(layout/home/page/...)을 렌더해 완성된 HTML 반환.
+   * `scope.__theme` 이 있으면 그 테마로 그린다 — 관리자 미리보기가 활성 테마를 건드리지 않고
+   * "내 사이트가 이 테마로 어떻게 보이는지" 보기 위한 통로다(적용은 여전히 activate 뿐이다).
+   */
   async render(slot: string, scope: Record<string, unknown>): Promise<string> {
-    const name = await this.activeThemeName();
+    const override = typeof scope.__theme === "string" ? scope.__theme : null;
+    const name = override ?? (await this.activeThemeName());
     const manifest = await this.readManifest(name);
     const tplPath = manifest.templates[slot] ?? manifest.templates.page;
     if (!tplPath) throw new Error(`theme "${name}": no template for slot "${slot}"`);

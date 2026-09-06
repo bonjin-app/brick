@@ -222,7 +222,11 @@ contains "상품 링크" "$MENU" '"url":"/shop"'
 contains "이용 안내 링크" "$MENU" '"url":"/guide"'
 check "쇼핑몰 메뉴도 전부 렌더된다" "$(verify_menu_links "$MENU")" "끊어진 링크: 없음"
 SHOP_PAGE="$(curl -s "$API/api/render/page?path=shop")"
-contains "/shop 이 뜬다 (상품이 없으면 빈 안내)" "$SHOP_PAGE" "등록된 상품이 없습니다"
+# 스타터가 샘플 상품을 넣으므로 진열대가 비어 있지 않아야 한다 — 빈 안내가 보이면 시딩이 깨진 것이다
+contains "/shop 이 샘플 상품을 그린다" "$SHOP_PAGE" "brick-product-card"
+contains "샘플임을 알 수 있다" "$SHOP_PAGE" "(샘플)"
+contains "할인 표시(정가)도 함께 보인다" "$SHOP_PAGE" "15,000"
+absent "빈 진열대 안내는 없다" "$SHOP_PAGE" "등록된 상품이 없습니다"
 CART_R="$(curl -s "$API/api/render/page?path=shop/cart")"
 contains "/shop/cart 가 장바구니를 그린다" "$CART_R" "brick-cart"
 # 주문하기는 상점 페이지 기준 경로다 — '/checkout' 하드코딩은 404 였다

@@ -145,6 +145,11 @@ const KO = {
   "themes.installDone": "테마 설치 완료 — 적용 버튼으로 즉시 사용할 수 있습니다",
   "themes.installFailPrefix": "설치 실패: ",
   "themes.inUse": "✓ 사용 중",
+  "common.close": "닫기",
+  "themes.preview": "미리보기",
+  "themes.previewLoading": "그리는 중…",
+  "themes.previewOf": "{name} 미리보기",
+  "themes.previewFull": "전체 폭",
   "themes.paletteLight": "라이트 팔레트",
   "themes.paletteDark": "다크 팔레트",
 
@@ -442,6 +447,11 @@ const EN: Record<keyof typeof KO, string> = {
   "themes.installDone": "Theme installed — press Apply to use it now",
   "themes.installFailPrefix": "Install failed: ",
   "themes.inUse": "✓ In use",
+  "common.close": "Close",
+  "themes.preview": "Preview",
+  "themes.previewLoading": "Rendering…",
+  "themes.previewOf": "{name} preview",
+  "themes.previewFull": "Full width",
   "themes.paletteLight": "Light palette",
   "themes.paletteDark": "Dark palette",
 
