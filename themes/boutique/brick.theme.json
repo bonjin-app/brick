@@ -1,0 +1,66 @@
+{
+  "name": "boutique",
+  "version": "1.0.0",
+  "displayName": "Boutique",
+  "description": "사진이 큰 편집샵 테마 — 가운데 로고, 여백을 크게 둔 2~3열 진열, 세리프 제목. 상품 수가 적고 한 장 한 장이 좋은 가게에 맞습니다.",
+  "author": "Brick",
+  "brickVersion": "^0.2.0",
+  "templates": {
+    "layout": "templates/layout.html",
+    "home": "templates/home.html",
+    "page": "templates/page.html"
+  },
+  "assets": "assets",
+  "csp": {
+    "style-src": [
+      "https://cdn.jsdelivr.net",
+      "https://fonts.googleapis.com"
+    ],
+    "font-src": [
+      "https://cdn.jsdelivr.net",
+      "https://fonts.gstatic.com"
+    ]
+  },
+  "tokens": {
+    "color-primary": "#1d1a17",
+    "color-primary-hover": "#000000",
+    "color-primary-soft": "#f0ebe4",
+    "color-primary-text": "#1d1a17",
+    "color-on-primary": "#fdfcfa",
+    "color-bg": "#fdfcfa",
+    "color-bg-soft": "#f7f4ef",
+    "color-bg-sunken": "#efeae2",
+    "color-text": "#1d1a17",
+    "color-text-soft": "#514b44",
+    "color-muted": "#8f887f",
+    "color-line": "#e5dfd6",
+    "color-line-strong": "#cdc5b9",
+    "color-danger": "#b0392f",
+    "color-success": "#2f6b4a",
+    "color-warning": "#8a6112",
+    "shadow-sm": "0 1px 2px rgba(29, 26, 23, .04)",
+    "shadow-md": "0 10px 30px rgba(29, 26, 23, .07)",
+    "font-body": "'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif",
+    "font-display": "'Noto Serif KR', 'Nanum Myeongjo', 'Apple Myungjo', Batang, Georgia, 'Times New Roman', serif",
+    "font-mono": "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
+    "radius": "0px",
+    "radius-lg": "0px",
+    "content-width": "1180px",
+    "dark-color-primary": "#f4f0e9",
+    "dark-color-primary-hover": "#ffffff",
+    "dark-color-primary-soft": "#2a2622",
+    "dark-color-primary-text": "#eee9e1",
+    "dark-color-on-primary": "#191614",
+    "dark-color-bg": "#191614",
+    "dark-color-bg-soft": "#201c19",
+    "dark-color-bg-sunken": "#131110",
+    "dark-color-text": "#efeae2",
+    "dark-color-text-soft": "#c0b9af",
+    "dark-color-muted": "#8d857b",
+    "dark-color-line": "#2c2723",
+    "dark-color-line-strong": "#403a34",
+    "dark-color-danger": "#e9756a",
+    "dark-color-success": "#5cb98b",
+    "dark-color-warning": "#d7a445"
+  }
+}

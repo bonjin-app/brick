@@ -242,6 +242,24 @@ contains "CSP 에 이 테마가 선언한 출처" "$(curl -s -D - -o /dev/null "
 check "기본 테마로 복귀" "$(code -b "$CK" -X POST "$API/api/themes/default/activate")" "201"
 absent "복귀 후 카테고리 띠가 남지 않는다" "$(render "")" 'class="brick-catbar'
 
+echo "── 네 번째 동봉 테마(boutique): 같은 쇼핑몰, 반대편 인상"
+contains "테마 목록에 boutique" "$THEMES" '"name":"boutique"'
+check "boutique 적용" "$(code -b "$CK" -X POST "$API/api/themes/boutique/activate")" "201"
+BQ_HOME="$(render "")"
+contains "가운데 로고 줄" "$BQ_HOME" 'class="brick-masthead'
+contains "가운데 메뉴" "$BQ_HOME" 'md:justify-center'
+contains "명조 제목 토큰" "$BQ_HOME" "Noto Serif KR"
+contains "크림 팔레트" "$BQ_HOME" "#fdfcfa"
+contains "모서리 없는 네모" "$BQ_HOME" "--radius: 0px"
+contains "파비콘은 자기 것" "$BQ_HOME" "/themes/boutique/assets/favicon.svg"
+contains "코어 계약: 스킵 링크" "$BQ_HOME" 'class="brick-skip"'
+contains "코어 계약: 헤더 액션 자리" "$BQ_HOME" 'class="brick-actions"'
+absent "템플릿 조건문이 새지 않는다" "$BQ_HOME" "{{/if}}"
+contains "CSP 에 이 테마가 선언한 웹폰트 두 곳" "$(curl -s -D - -o /dev/null "$API/api/render/page?path=" | tr -d '\r')" "https://fonts.gstatic.com"
+check "스타일시트 서빙" "$(code "$API/themes/boutique/assets/style.css")" "200"
+check "기본 테마로 복귀" "$(code -b "$CK" -X POST "$API/api/themes/default/activate")" "201"
+
+
 
 # ════════════════════════════════════════════════════
 echo "── 랜딩 블록"
