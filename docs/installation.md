@@ -133,6 +133,10 @@ DB 정보는 `data/brick.config.json` 에 저장되며, 세션 시크릿은 **�
 
 ---
 
+스타터는 자기에게 맞는 **동봉 테마**도 함께 켭니다 — 쇼핑몰은 Storefront(카페24식 3단 헤더),
+회사 홈페이지는 Corporate(붙는 헤더·전화 버튼), 커뮤니티는 기본 테마. 설치 후 관리자 → 테마에서
+다섯 벌(기본·Editorial·Storefront·Boutique·Corporate)을 **미리보기로 비교**하고 언제든 바꿀 수 있습니다.
+
 ## 방법 3 — 소스에서 실행 (개발)
 
 ```bash
