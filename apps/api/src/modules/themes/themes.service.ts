@@ -34,6 +34,11 @@ export class ThemesService {
     return (row?.value as string) ?? "default";
   }
 
+  /** 활성 테마의 매니페스트 (CSP 선언 등 테마 메타를 읽는 쪽이 쓴다) */
+  async activeManifest(): Promise<ThemeManifest> {
+    return this.readManifest(await this.activeThemeName());
+  }
+
   /** 슬롯(layout/home/page/...)을 렌더해 완성된 HTML 반환 */
   async render(slot: string, scope: Record<string, unknown>): Promise<string> {
     const name = await this.activeThemeName();

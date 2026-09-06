@@ -214,5 +214,28 @@ absent   "비밀번호/토큰이 로그에 없음" "$AUDIT" "newpass1234"
 contains "동작 필터" "$(curl -s -b "$CK" "$API/api/audit?action=plugin.activate")" "plugin.activate"
 
 echo
+echo "── 콘텐츠 보안 정책 (CSP) — 저장형 XSS 의 두 번째 방어선"
+CSP="$(curl -s -D - -o /dev/null "$API/api/render/page?path=" | grep -i '^content-security-policy:' | tr -d '\r')"
+contains "공개 화면에 CSP 가 붙는다" "$CSP" "default-src 'self'"
+contains "외부 스크립트를 막는다" "$CSP" "script-src 'self' 'unsafe-inline';"
+contains "플러그인·객체 삽입 차단" "$CSP" "object-src 'none'"
+contains "base 태그 하이재킹 차단" "$CSP" "base-uri 'self'"
+contains "폼 액션 탈취 차단" "$CSP" "form-action 'self'"
+contains "클릭재킹 차단" "$CSP" "frame-ancestors 'self'"
+# 테마가 선언한 출처만 열린다 (기본 테마는 웹폰트 CDN)
+contains "테마 선언이 정책에 들어간다" "$CSP" "https://cdn.jsdelivr.net"
+absent "선언하지 않은 곳은 열리지 않는다" "$CSP" "https://fonts.gstatic.com"
+# 정적 자산에도 붙는다 — 테마 SVG 를 직접 열었을 때가 사각지대다
+contains "정적 자산에도 붙는다" "$(curl -s -o /dev/null -w '%header{content-security-policy}' "$API/themes/default/assets/style.css")" "object-src 'none'"
+
+echo "── CSP 모드 (운영자가 관찰만 하거나 끌 수 있다)"
+check "report-only 로 전환" "$(code -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"security.csp":"report-only"}')" "200"
+RO="$(curl -s -D - -o /dev/null "$API/api/render/page?path=" | tr -d '\r')"
+contains "관찰 전용 헤더로 나간다" "$RO" "content-security-policy-report-only:"
+absent "그때 강제 헤더는 없다" "$(echo "$RO" | grep -i '^content-security-policy:')" "default-src"
+check "끄면 헤더가 없다" "$(curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"security.csp":"off"}' -o /dev/null; curl -s -o /dev/null -w '%header{content-security-policy}%header{content-security-policy-report-only}' "$API/api/render/page?path=")" ""
+check "오타는 거부한다" "$(code -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"security.csp":"yes"}')" "400"
+curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"security.csp":"on"}' -o /dev/null
+
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 [[ $FAIL -eq 0 ]] || { echo; echo "── 서버 로그 ──"; tail -40 "$TMP/api.log"; exit 1; }

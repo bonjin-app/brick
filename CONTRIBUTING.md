@@ -15,7 +15,14 @@ pnpm build
 pnpm dev                    # web(:3000) + api(:3001)
 ```
 
-DB가 없다면 Docker로:
+DB가 없다면 **Docker 없이** 바로 띄울 수 있습니다 (진짜 PostgreSQL 바이너리를 내려받아 실행합니다):
+
+```bash
+pnpm db:dev                 # :55432 · 데이터는 .dev-db/ 에 남습니다
+pnpm db:dev --reset         # 데이터를 지우고 새로
+```
+
+또는 Docker로:
 
 ```bash
 docker run -d --name brick-pg -e POSTGRES_USER=brick -e POSTGRES_PASSWORD=brick \

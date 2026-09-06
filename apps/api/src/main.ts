@@ -8,6 +8,7 @@ import { AppModule } from "./app.module.js";
 import { SetupAppModule } from "./setup.module.js";
 import { loadEnv } from "./config/env.js";
 import { runMigrations } from "./config/migrator.js";
+import { CspService } from "./modules/security/csp.service.js";
 
 /**
  * Brick API (내부 프로세스).
@@ -74,6 +75,17 @@ async function bootstrap() {
   });
 
   // 보안 헤더 — 내부 서버지만 Next rewrite로 그대로 전달되므로 여기서 설정한다
+  /*
+   * 보안 헤더. CSP 는 테마·플러그인이 선언한 출처를 합쳐야 하므로 서비스에서 받아 온다
+   * (60초 캐시라 요청마다 DB 를 보지 않는다). 실패하면 나머지 헤더는 그대로 나간다 —
+   * 헤더 하나 때문에 응답이 죽으면 안 된다.
+   */
+  const csp = app.get(CspService, { strict: false });
+  app.getHttpAdapter().getInstance().addHook("onSend", async (_req, reply, payload) => {
+    const header = await csp?.header().catch(() => null);
+    if (header) reply.header(header.name, header.value);
+    return payload;
+  });
   app.getHttpAdapter().getInstance().addHook("onSend", (_req, reply, payload, done) => {
     reply.header("x-content-type-options", "nosniff");
     reply.header("x-frame-options", "SAMEORIGIN");

@@ -25,6 +25,7 @@ import { AuditService } from "../audit/audit.service.js";
 import { CACHE, DB, HOOKS, STORAGE } from "../../runtime.module.js";
 import type { StorageProvider } from "@brick/core";
 import { ImageService } from "../images/image.service.js";
+import { CspService } from "../security/csp.service.js";
 import {
   EMPTY_BUSINESS_INFO, FIELD_LABEL, isCommerceReady, validateBusinessInfo,
   type BusinessInfo,
@@ -63,6 +64,8 @@ const EDITABLE_SETTINGS: Record<string, "string" | "boolean"> = {
   "moderation.banned_words": "string",         // 글·댓글·쪽지·이름에 못 쓰는 단어
   "moderation.denied_names": "string",         // 닉네임 금지 목록 (기본: admin·관리자·운영자 등은 항상)
   "moderation.denied_email_domains": "string", // 가입 금지 이메일 도메인
+  // 콘텐츠 보안 정책 — on | report-only | off (CspService)
+  "security.csp": "string",
   "security.blocked_ips": "string",            // 접속 차단 IP (IPv4·CIDR·IPv6). 저장 시 자기잠금을 막는다
   // 새 버전 알림 — 관리자가 대시보드를 열 때 GitHub Releases 를 확인한다(6시간 캐시). 폐쇄망은 끈다.
   "system.update_check": "boolean",
@@ -81,6 +84,7 @@ export class SiteController {
     private readonly moderation: ModerationService,
     @Inject(STORAGE) private readonly storage: StorageProvider,
     private readonly images: ImageService,
+    private readonly csp: CspService,
   ) {}
 
   /** 사이트 언어 — **공개**. 로그인·가입 화면이 첫 페인트에 쓴다 */
@@ -186,6 +190,11 @@ export class SiteController {
         );
       }
 
+      // CSP 는 세 가지 값만 받는다 — 오타로 정책이 조용히 꺼지는 일이 없게
+      if (key === "security.csp" && !["on", "report-only", "off"].includes(String(value))) {
+        throw new BadRequestException("콘텐츠 보안 정책은 on · report-only · off 중 하나여야 합니다.");
+      }
+
       if (key === "site.og_image" && String(value).trim() !== "" && !/^(https?:\/\/|\/)/.test(String(value).trim())) {
         throw new BadRequestException("공유 이미지는 https:// 로 시작하는 주소 또는 /uploads/… 경로여야 합니다.");
       }
@@ -224,6 +233,7 @@ export class SiteController {
         .onConflictDoUpdate({ target: siteSettings.key, set: { value: value as never, updatedAt: new Date() } });
     }
     this.moderation.invalidate(); // 금지 단어·차단 IP 는 다음 요청부터 바로
+    this.csp.invalidate(); // 정책을 켜고 끈 것이 다음 응답부터 보이게
     await this.cache.invalidateTag("pages"); // 사이트명 등이 모든 페이지에 렌더된다
     // 언어 등 설정 캐시를 가진 쪽(플러그인 로더)이 즉시 새로 읽게 알린다
     await this.hooks.doAction("site.settings_changed", { keys: Object.keys(body ?? {}) });

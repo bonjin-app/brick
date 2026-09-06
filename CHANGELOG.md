@@ -6,6 +6,16 @@
 
 ## [Unreleased]
 
+### 추가
+- **콘텐츠 보안 정책(CSP)** — 저장형 XSS 의 두 번째 방어선. 외부 스크립트를 전면 차단하고
+  `object-src 'none'`·`base-uri 'self'`·`form-action 'self'`·`frame-ancestors 'self'` 를 건다.
+  테마·플러그인은 매니페스트 `csp` 로 자기가 쓰는 출처(웹폰트 CDN 등)를 **선언**해야 열린다 —
+  선언하지 않은 확장은 바깥과 통신하지 못한다. 설정 → 보안에서 켜기·관찰만·끄기 선택
+- 개발용 PostgreSQL — `pnpm db:dev` (Docker 없이 진짜 PostgreSQL 로 개발·스모크)
+
+### 수정
+- 오류 안내 화면의 "다시 시도" 가 `javascript:` URL 이라 CSP 아래에서 동작하지 않던 것
+
 ### 변경
 - Next standalone 에서 sharp(libvips 두 벌 36MB)·typescript·esbuild·webpack 을 추적 제외 — web 은 next/image 를
   쓰지 않으므로 sharp 가 필요 없다. standalone 85MB → 41MB, 배포본·이미지 양쪽이 그만큼 줄어든다

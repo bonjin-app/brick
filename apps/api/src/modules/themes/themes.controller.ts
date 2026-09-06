@@ -12,6 +12,7 @@ import { ExtensionInstallerService } from "../extensions/extension-installer.ser
 import { AuditService } from "../audit/audit.service.js";
 import type { CacheProvider } from "@brick/core";
 import { CACHE, DB } from "../../runtime.module.js";
+import { CspService } from "../security/csp.service.js";
 
 @Controller("api/themes")
 export class ThemesController {
@@ -21,6 +22,7 @@ export class ThemesController {
     @Inject(DB) private readonly db: BrickDb,
     @Inject(CACHE) private readonly cache: CacheProvider,
     private readonly audit: AuditService,
+    private readonly csp: CspService,
   ) {}
 
   /**
@@ -75,6 +77,7 @@ export class ThemesController {
     await this.audit.fromRequest(req as never, {
       action: "theme.activate", targetType: "theme", targetId: name, summary: `테마 적용: ${name}`,
     });
+    this.csp.invalidate(); // 새 테마가 선언한 출처가 다음 응답부터 반영되게
     return { ok: true, active: name };
   }
 

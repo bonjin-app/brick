@@ -278,6 +278,16 @@ contains "롤백" "$RB_OUT" "되돌렸습니다"
 start_app 6 ready
 check "롤백 후 부팅·readyz 200" "$(code "$BASE/readyz")" "200"
 
+echo "── 공개 화면의 보안 헤더 (배포본을 실제로 띄운 상태)"
+# 공개 화면은 API 의 JSON 을 받아 web 이 HTML 을 새로 만든다 — 그 과정에서 API 가 붙인 헤더가
+# 버려지기 쉽다(실제로 한 번 그랬다). 헤더를 아는 쪽은 테마 선언을 읽는 API 하나여야 한다.
+HDRS="$(curl -s -D - -o /dev/null "$BASE/" | tr -d '\r')"
+contains "공개 화면에 CSP" "$HDRS" "content-security-policy: default-src 'self'"
+contains "외부 스크립트 차단" "$HDRS" "script-src 'self' 'unsafe-inline'"
+contains "테마가 선언한 출처가 살아 있다" "$HDRS" "https://cdn.jsdelivr.net"
+contains "nosniff" "$HDRS" "x-content-type-options: nosniff"
+contains "클릭재킹 차단" "$HDRS" "x-frame-options: SAMEORIGIN"
+
 echo "── HOSTNAME 이 설정된 환경 (컨테이너·리눅스 로그인 셸)"
 # Next standalone 은 `process.env.HOSTNAME || "0.0.0.0"` 를 바인딩 주소로 쓴다. 그대로 두면 그 이름이
 # 가리키는 주소에만 리스닝해 127.0.0.1 로 오는 요청(프록시·헬스체크)이 닿지 않는다 — Docker 이미지의

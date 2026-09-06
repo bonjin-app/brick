@@ -21,3 +21,6 @@ coverage/
 # 로컬 도구 설정 (개발자별)
 .claude/
 .playwright-mcp/
+
+# 개발용 PostgreSQL 데이터 (pnpm db:dev)
+.dev-db/

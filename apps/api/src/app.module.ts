@@ -6,6 +6,7 @@ import { CaptchaModule } from "./modules/captcha/captcha.module.js";
 import { ExtensionsModule } from "./modules/extensions/extensions.module.js";
 import { HealthModule } from "./modules/health/health.module.js";
 import { ImagesModule } from "./modules/images/images.module.js";
+import { SecurityModule } from "./modules/security/security.module.js";
 import { InstallModule } from "./modules/install/install.module.js";
 import { MaintenanceModule } from "./modules/maintenance/maintenance.module.js";
 import { MailingModule } from "./modules/mailing/mailing.module.js";
@@ -34,6 +35,7 @@ import { UsersModule } from "./modules/users/users.module.js";
     ExtensionsModule,
     HealthModule,
     ImagesModule,
+    SecurityModule,
     SystemModule,
     MaintenanceModule,
     InstallModule,

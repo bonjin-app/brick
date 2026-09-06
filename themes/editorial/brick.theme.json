@@ -34,7 +34,6 @@
     "radius": "2px",
     "radius-lg": "3px",
     "content-width": "1160px",
-
     "dark-color-primary": "#f2ede3",
     "dark-color-primary-hover": "#ffffff",
     "dark-color-primary-soft": "#2a2620",
@@ -53,5 +52,15 @@
     "dark-color-warning": "#e5b95e",
     "dark-shadow-sm": "0 1px 0 rgba(0, 0, 0, .4)",
     "dark-shadow-md": "0 2px 0 rgba(0, 0, 0, .5)"
+  },
+  "csp": {
+    "style-src": [
+      "https://cdn.jsdelivr.net",
+      "https://fonts.googleapis.com"
+    ],
+    "font-src": [
+      "https://cdn.jsdelivr.net",
+      "https://fonts.gstatic.com"
+    ]
   }
 }

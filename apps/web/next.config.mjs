@@ -32,17 +32,45 @@ const nextConfig = {
   // Next 가 직접 그리는 화면(로그인·가입·마이페이지·관리·설치)에도 API 와 같은 보안 헤더를 붙인다.
   // API 응답의 헤더는 프록시를 통과하지만, 이 화면들은 API 를 거치지 않는다.
   async headers() {
-    return [
+    /*
+     * Next 가 **직접 그리는 화면**에만 붙인다. 공개 화면(테마 렌더·업로드·테마 자산)은 API 를
+     * 프록시한 것이고, 그 응답의 헤더는 API 가 이미 붙였다 — 여기서 같은 이름을 덧붙이면
+     * Next 것이 이겨서 **테마·플러그인이 선언한 CSP 출처가 사라진다**(웹폰트 CDN 이 막혔다).
+     * 정책을 아는 쪽은 테마 매니페스트를 읽는 API 하나여야 한다.
+     */
+    const headers = [
+      { key: "X-Content-Type-Options", value: "nosniff" },
+      { key: "X-Frame-Options", value: "SAMEORIGIN" },
+      { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+      { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(self)" },
       {
-        source: "/:path*",
-        headers: [
-          { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "X-Frame-Options", value: "SAMEORIGIN" },
-          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(self)" },
-        ],
+        // 이 화면들은 테마를 쓰지 않으므로 정책이 고정이다. Next 는 hydration 스크립트를
+        // 인라인으로 넣으므로 'unsafe-inline' 이 필요하다 — 중요한 것은 외부 스크립트 차단이다.
+        key: "Content-Security-Policy",
+        value: [
+          "default-src 'self'",
+          "script-src 'self' 'unsafe-inline'",
+          "style-src 'self' 'unsafe-inline'",
+          // 미디어 목록·공유 이미지 미리보기가 업로드된 이미지를 그린다
+          "img-src 'self' data: blob: https:",
+          "font-src 'self' data:",
+          "connect-src 'self'",
+          "object-src 'none'",
+          "base-uri 'self'",
+          "form-action 'self'",
+          "frame-ancestors 'self'",
+        ].join("; "),
       },
     ];
+    return [
+      "/admin/:path*",
+      "/account",
+      "/install",
+      "/login",
+      "/register",
+      "/forgot-password",
+      "/reset-password",
+    ].map((source) => ({ source, headers }));
   },
 };
 

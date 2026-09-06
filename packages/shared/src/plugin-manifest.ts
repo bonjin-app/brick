@@ -35,6 +35,16 @@ export interface PluginManifest {
    */
   updates?: string;
   publisherKey?: string;
+  /**
+   * 이 플러그인이 필요로 하는 **외부 출처**. 코어의 CSP 는 자기 도메인만 허용하므로,
+   * 결제 위젯 스크립트나 지도 타일처럼 바깥에서 가져오는 것이 있으면 여기에 적어야 한다.
+   *
+   *   "csp": { "frame-src": ["https://pay.example.com"], "connect-src": ["https://api.example.com"] }
+   *
+   * 선언하지 않은 출처는 브라우저가 막는다 — 설치한 확장이 몰래 바깥과 통신하지 못한다는 뜻이다.
+   * `script-src` 는 받지 않는다(외부 스크립트는 저장형 XSS 와 구분할 수 없다).
+   */
+  csp?: Partial<Record<"style-src" | "font-src" | "img-src" | "media-src" | "frame-src" | "connect-src", string[]>>;
 }
 
 export type PluginStatus = "installed" | "active" | "inactive" | "error";

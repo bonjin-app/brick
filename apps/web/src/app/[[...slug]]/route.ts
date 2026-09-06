@@ -51,6 +51,15 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ slug?: stri
   const { html, status } = (await res.json()) as { html: string; status: number };
   // 서버 렌더 HTML 은 80KB 안팎 — br/gzip 으로 눌러 내보낸다 (Next 는 Route Handler 응답을 압축하지 않는다)
   const headers = new Headers({ "content-type": "text/html; charset=utf-8" });
+  /*
+   * 이 라우트는 API 의 JSON 을 받아 HTML 을 **새로** 만든다 — 그래서 API 가 붙인 응답 헤더가
+   * 그냥 버려진다. 공개 화면의 보안 헤더를 여기서 옮겨 준다. 특히 CSP 는 테마·플러그인이
+   * 선언한 출처를 합친 것이라 API 만이 알고 있다(next.config 의 고정 정책으로 대신할 수 없다).
+   */
+  for (const name of SECURITY_HEADERS) {
+    const value = res.headers.get(name);
+    if (value) headers.set(name, value);
+  }
   return compressedResponse(req, Buffer.from(html, "utf8"), { status, headers });
 }
 
@@ -58,6 +67,16 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ slug?: stri
  * 테마를 못 그릴 때의 마지막 안전망 — API 가 없거나 렌더가 실패한 상황이라 테마도 토큰도 없다.
  * 외부 자산 없이 인라인 스타일만으로, 손님이 읽을 수 있는 화면을 낸다(text/plain 한 줄은 고장난 사이트로 보인다).
  */
+/** API 응답에서 그대로 옮길 헤더 — 정책을 아는 쪽은 API 하나여야 한다 */
+const SECURITY_HEADERS = [
+  "content-security-policy",
+  "content-security-policy-report-only",
+  "x-content-type-options",
+  "x-frame-options",
+  "referrer-policy",
+  "permissions-policy",
+];
+
 function errorPage(status: number, title: string, detail: string): Response {
   const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex"><title>${title}</title>
@@ -65,9 +84,21 @@ function errorPage(status: number, title: string, detail: string): Response {
 main{max-width:460px;padding:40px 28px;text-align:center}h1{font-size:22px;margin:0 0 10px;letter-spacing:-.5px}p{margin:0 0 22px;color:#45454f;line-height:1.6}
 a{display:inline-block;padding:11px 20px;border-radius:10px;background:#17171c;color:#fff;text-decoration:none;font-weight:600}small{display:block;margin-top:26px;color:#9797a6;font-size:12px}
 @media (prefers-color-scheme:dark){body{background:#101116;color:#ececf1}p{color:#c3c3cd}a{background:#ececf1;color:#17171c}}</style></head>
-<body><main><h1>${title}</h1><p>${detail}</p><a href="javascript:location.reload()">다시 시도</a><small>${status} · Something went wrong. Please try again shortly.</small></main></body></html>`;
+<body><main><h1>${title}</h1><p>${detail}</p><a href="">다시 시도</a><small>${status} · Something went wrong. Please try again shortly.</small></main></body></html>`;
   return new Response(html, {
     status,
-    headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "retry-after": "10" },
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store",
+      "retry-after": "10",
+      /*
+       * API 가 죽은 상황이라 정책을 물어볼 곳이 없다 — 이 화면은 외부 자산이 하나도 없는
+       * 자기완결 HTML 이므로 가장 좁은 정책을 직접 건다. 스크립트는 아예 실행되지 않는다.
+       */
+      "content-security-policy":
+        "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
+      "x-content-type-options": "nosniff",
+      "referrer-policy": "strict-origin-when-cross-origin",
+    },
   });
 }

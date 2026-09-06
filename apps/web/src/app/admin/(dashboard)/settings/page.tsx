@@ -142,7 +142,14 @@ export default function AdminSettingsPage() {
       </Card>
 
       <Card id="security" title={t("settings.security")} desc={t("settings.securityDesc")}
-        keys={["security.require_2fa_for_staff", "security.admin_ip_allowlist", "security.blocked_ips"]}>
+        keys={["security.csp", "security.require_2fa_for_staff", "security.admin_ip_allowlist", "security.blocked_ips"]}>
+        <Field label={t("settings.csp")} hint={t("settings.cspHint")}>
+          <select style={input} value={str("security.csp", "on")} onChange={(e) => set("security.csp", e.target.value)}>
+            <option value="on">{t("settings.cspOn")}</option>
+            <option value="report-only">{t("settings.cspReport")}</option>
+            <option value="off">{t("settings.cspOff")}</option>
+          </select>
+        </Field>
         <Check k="security.require_2fa_for_staff" label={t("settings.require2fa")} hint={t("settings.require2faHint")} />
         <Field label={t("settings.adminIps")} hint={t("settings.adminIpsHint")}>
           <textarea style={list} value={str("security.admin_ip_allowlist")} onChange={(e) => set("security.admin_ip_allowlist", e.target.value)} />

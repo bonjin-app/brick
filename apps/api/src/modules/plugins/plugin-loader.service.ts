@@ -14,6 +14,7 @@ import { AVAILABLE_LOCALES, DEFAULT_LOCALE, makeTranslator, normalizeLocale } fr
 import { DB, HOOKS, CACHE, QUEUE, STORAGE, MAIL, CAPTCHA, ENV } from "../../runtime.module.js";
 import type { BrickEnv } from "../../config/env.js";
 import { ImageService } from "../images/image.service.js";
+import { CspService } from "../security/csp.service.js";
 
 /**
  * PluginLoader — Brick 런타임 아키텍처의 심장.
@@ -121,6 +122,7 @@ export class PluginLoaderService implements OnModuleInit {
     @Inject(ENV) private readonly env: BrickEnv,
     private readonly moderation: ModerationService,
     private readonly imageService: ImageService,
+    private readonly csp: CspService,
   ) {}
 
   /**
@@ -217,6 +219,8 @@ export class PluginLoaderService implements OnModuleInit {
         set: { version: manifest.version, manifest: stored as never, isActive: true, activatedAt: new Date() },
       });
     await this.hooks.doAction("plugin.activated", { name, version: manifest.version });
+    // 이 플러그인이 필요로 하는 외부 출처를 정책에 더한다 (선언하지 않았으면 아무것도 열리지 않는다)
+    this.csp.declare(name, manifest.csp);
     await this.cache.invalidateTag("pages"); // 블록 구성이 바뀌었으므로 렌더 캐시 무효화
     this.logger.log(`plugin "${name}@${manifest.version}" activated`);
   }
@@ -274,6 +278,8 @@ export class PluginLoaderService implements OnModuleInit {
     for (let i = this.headerActions.length - 1; i >= 0; i--) {
       if (this.headerActions[i].plugin === name) this.headerActions.splice(i, 1);
     }
+    // 꺼진 플러그인 때문에 정책이 계속 넓게 열려 있으면 안 된다
+    this.csp.declare(name, undefined);
     this.logger.log(`plugin "${name}" deactivated`);
   }
 
