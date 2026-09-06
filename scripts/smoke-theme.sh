@@ -242,6 +242,33 @@ contains "CSP 에 이 테마가 선언한 출처" "$(curl -s -D - -o /dev/null "
 check "기본 테마로 복귀" "$(code -b "$CK" -X POST "$API/api/themes/default/activate")" "201"
 absent "복귀 후 카테고리 띠가 남지 않는다" "$(render "")" 'class="brick-catbar'
 
+echo "── 동봉 테마 네 벌의 흐린 글자 대비 (WCAG AA 4.5:1)"
+# 흐린 회색(--color-muted)은 눈으로 보면 괜찮은데 측정하면 못 넘긴다 — 새로 만든 두 테마가 3.2·3.42 였다.
+# 토큰 값은 매니페스트에 있으므로 브라우저 없이 계산할 수 있다(라이트·다크 두 벌 모두).
+CONTRAST="$(python3 - "$ROOT" <<'PYEOF'
+import json, sys, pathlib
+root = pathlib.Path(sys.argv[1])
+def lum(h):
+    h = h.lstrip('#'); r, g, b = [int(h[i:i+2], 16) / 255 for i in (0, 2, 4)]
+    f = lambda c: c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b)
+def ratio(a, b):
+    la, lb = lum(a), lum(b); hi, lo = max(la, lb), min(la, lb)
+    return (hi + 0.05) / (lo + 0.05)
+bad = []
+for d in sorted((root / "themes").iterdir()):
+    m = d / "brick.theme.json"
+    if not m.is_file(): continue
+    t = json.loads(m.read_text(encoding="utf-8")).get("tokens", {})
+    for label, fg, bg in (("light", "color-muted", "color-bg"), ("dark", "dark-color-muted", "dark-color-bg")):
+        if t.get(fg) and t.get(bg):
+            r = ratio(t[fg], t[bg])
+            if r < 4.5: bad.append(f"{d.name}/{label}={r:.2f}")
+print(" ".join(bad) if bad else "OK")
+PYEOF
+)"
+check "네 테마의 흐린 글자가 AA 를 넘는다" "$CONTRAST" "OK"
+
 echo "── 테마 미리보기 (적용하지 않고 내 사이트로 본다)"
 ACTIVE_BEFORE="$(curl -s -b "$CK" "$API/api/themes" | python3 -c "import sys,json;print(json.load(sys.stdin).get('active',''))")"
 PV="$(curl -s -b "$CK" "$API/api/admin/render/preview?path=&theme=boutique" | python3 -c "import sys,json;print(json.load(sys.stdin).get('html',''))" 2>/dev/null)"

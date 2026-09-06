@@ -26,6 +26,7 @@
 ### 수정
 - 오류 안내 화면의 "다시 시도" 가 `javascript:` URL 이라 CSP 아래에서 동작하지 않던 것
 - 상품 설명이 HTML 인데 샘플이 마크다운(`**`)을 써서 별표가 그대로 보이던 것
+- 새 테마 두 벌의 흐린 글자(`color-muted`)가 WCAG AA(4.5:1)에 못 미치던 것 — 3.2·3.42 → 4.75·4.84
 
 ### 변경
 - Next standalone 에서 sharp(libvips 두 벌 36MB)·typescript·esbuild·webpack 을 추적 제외 — web 은 next/image 를
