@@ -139,7 +139,20 @@ export async function applyStarter(code: string, ctx: SeedContext): Promise<{ ap
     }
   }
 
-  // ── 3. 페이지 ──
+  // ── 3. 샘플 상품 ──
+  // 페이지보다 먼저다 — 홈 배너가 샘플 사진의 URL 을 쓴다(SAMPLE_IMG).
+  // 쇼핑몰을 골랐는데 진열대가 비어 있으면 "무엇이 잘못됐나" 부터 의심하게 된다.
+  // 카페24·그누보드가 샘플 상품을 넣는 이유다 — 이름에 (샘플) 을 달아 지우기 쉽게 한다.
+  if (starter.code === "shop") {
+    try {
+      const seeded = await seedShopSamples(ctx);
+      if (seeded) applied.push(`샘플 상품 ${seeded}개`);
+    } catch (err) {
+      ctx.log(`스타터: 샘플 상품 생성 실패 — ${String(err)}`);
+    }
+  }
+
+  // ── 4. 페이지 ──
   for (const p of starterPages(starter.code, ctx.siteName)) {
     try {
       await ctx.db.execute(sql`
@@ -154,19 +167,7 @@ export async function applyStarter(code: string, ctx: SeedContext): Promise<{ ap
     }
   }
 
-  // ── 3.5 샘플 상품 ──
-  // 쇼핑몰을 골랐는데 진열대가 비어 있으면 "무엇이 잘못됐나" 부터 의심하게 된다.
-  // 카페24·그누보드가 샘플 상품을 넣는 이유다 — 이름에 (샘플) 을 달아 지우기 쉽게 한다.
-  if (starter.code === "shop") {
-    try {
-      const seeded = await seedShopSamples(ctx);
-      if (seeded) applied.push(`샘플 상품 ${seeded}개`);
-    } catch (err) {
-      ctx.log(`스타터: 샘플 상품 생성 실패 — ${String(err)}`);
-    }
-  }
-
-  // ── 4. 메뉴 ──
+  // ── 5. 메뉴 ──
   // 마지막에 만든다 — 위에서 만든 것들을 가리키므로.
   const menu = starterMenu(starter.code);
   if (menu.length) {
@@ -226,6 +227,14 @@ function starterBoards(code: string): Array<{
       return [];
   }
 }
+
+/**
+ * 샘플 상품 사진의 URL — 시딩(seedShopSamples)이 채우고 홈 배너가 읽는다.
+ *
+ * 페이지 생성이 시딩보다 먼저라면 비어 있고, 그때 배너 블록은 아무것도 그리지 않는다
+ * (빈 배너가 보이는 것보다 낫다). 그래서 applyStarter 에서 상품 시딩을 페이지보다 앞에 둔다.
+ */
+const SAMPLE_IMG: { mug: string; tote: string; candle: string } = { mug: "", tote: "", candle: "" };
 
 function starterPages(code: string, siteName: string): Array<{
   slug: string; title: string; blocks: Node[]; plainText: string;
@@ -336,17 +345,28 @@ function starterPages(code: string, siteName: string): Array<{
             // "준비 중입니다"는 첫 상품을 등록하는 순간 거짓말이 된다 — 상품
             // 목록 블록이 빈 상태 안내를 스스로 그리므로, 여기는 상품 유무와
             // 무관하게 참인 소개 문구를 둔다 (바꾸라는 힌트 포함).
-            hero({
-              eyebrow: "새로 문을 열었습니다",
-              title: siteName,
-              text: `${siteName}에 오신 것을 환영합니다. 이 문구를 가게 한 줄 소개로 바꿔주세요 — 첫 상품은 관리자 → 상품 에서 등록합니다.`,
-              ctaLabel: "상품 보기",
-              ctaUrl: "/shop",
-              altLabel: "이용 안내",
-              altUrl: "/guide",
-            }),
+            /*
+             * 쇼핑몰 홈의 첫 화면은 배너다 — 카페24·메이크샵이 그렇고, 계절마다 밀 것이 바뀌기
+             * 때문이다. 샘플 상품의 사진을 그대로 써서 **설치 직후에도 빈 배너가 아니게** 한다
+             * (사진은 seedShopSamples 가 미디어에 넣는다. 없으면 이 블록은 아무것도 안 그린다).
+             */
+            {
+              block: "core/banner-slider",
+              props: {
+                items: [
+                  `${SAMPLE_IMG.mug} | ${siteName} | 이 배너를 계절 상품이나 이벤트로 바꿔주세요 | /shop`,
+                  `${SAMPLE_IMG.tote} | 새로 들어온 물건 | 관리자 → 페이지 에서 배너를 고칩니다 | /shop`,
+                ].join("\n"),
+                height: 420,
+                interval: 5,
+                full: true,
+              },
+            },
             { block: "brick-shop/product-list",
               props: { limit: 8, columns: 4, sort: "recent", title: "새로 나온 상품" } },
+            // 신상품과 베스트를 나란히 두는 것이 쇼핑몰 홈의 기본 구성이다
+            { block: "brick-shop/product-list",
+              props: { limit: 4, columns: 4, sort: "popular", title: "인기 상품" } },
             features("", [
               "빠른 배송 | 오후 2시 이전 주문은 당일 출발합니다. | | truck",
               "안전한 결제 | 카드·계좌이체·간편결제를 지원합니다. | | shield",
@@ -535,6 +555,12 @@ async function seedShopSamples(ctx: SeedContext): Promise<number> {
       `<stop offset="0" stop-color="${p.from}"/><stop offset="1" stop-color="${p.to}"/></linearGradient></defs>` +
       `<rect width="1000" height="1000" fill="url(#g)"/></svg>`;
     const imageUrl = (await ctx.addSampleImage?.(`${p.slug}.jpg`, svg)) ?? null;
+    // 홈 배너가 이 사진을 쓴다 (아래 페이지 생성 단계에서 읽는다)
+    if (imageUrl) {
+      if (p.slug === "sample-mug") SAMPLE_IMG.mug = imageUrl;
+      if (p.slug === "sample-tote") SAMPLE_IMG.tote = imageUrl;
+      if (p.slug === "sample-candle") SAMPLE_IMG.candle = imageUrl;
+    }
 
     await ctx.db.execute(sql`
       INSERT INTO shop_products

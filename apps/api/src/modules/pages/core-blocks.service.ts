@@ -377,6 +377,77 @@ ${eyebrow ? `    <span class="brick-eyebrow">${esc(eyebrow)}</span>
       },
     });
 
+    /**
+     * 배너 슬라이드 — 쇼핑몰 홈의 첫 화면.
+     *
+     * 카페24·메이크샵 홈이 회전 배너로 시작하는 이유는 "지금 밀고 있는 것"이 계절마다 바뀌기
+     * 때문이다. 정적 히어로(core/hero)로는 그것을 담을 수 없어 운영자가 홈을 매번 고쳐야 한다.
+     *
+     * 스크립트를 인라인으로 둔다(CSP 는 인라인을 허용한다 — ADR-96). 자동 회전은 사용자가
+     * 마우스를 올리거나 키보드로 조작하면 멈추고, `prefers-reduced-motion` 을 존중한다 —
+     * 멈출 수 없는 자동 회전은 접근성 위반이고, 읽는 중에 화면이 바뀌면 화가 난다.
+     */
+    b.set("core/banner-slider", {
+      name: "core/banner-slider",
+      displayName: "배너 슬라이드",
+      propsSchema: {
+        type: "object",
+        properties: {
+          items: {
+            type: "string",
+            title: "한 줄에 하나: 이미지 URL | 제목(선택) | 설명(선택) | 링크(선택)",
+            format: "multiline",
+          },
+          height: { type: "number", title: "높이 px (기본 420, 0 이면 이미지 비율)", default: 420 },
+          interval: { type: "number", title: "자동 넘김 초 (0 이면 자동 넘김 없음)", default: 5 },
+          full: { type: "boolean", title: "화면 폭 꽉 채우기", default: false },
+        },
+      },
+      render: async (props, ctx) => {
+        const items = rows(props.items, 4)
+          .map(([url, title, text, link]) => ({ url: safeUrl(url), title, text, link: safeUrl(link) }))
+          .filter((it) => it.url);
+        if (!items.length) return "";
+        const height = Math.max(0, Math.min(900, Number(props.height ?? 420) || 0));
+        const interval = Math.max(0, Math.min(30, Number(props.interval ?? 5) || 0));
+        // 첫 배너의 제목을 화면 제목으로 쓴다 — 히어로와 같은 규칙(테마가 h1 을 생략한다)
+        if (items[0].title) ctx.setSeo?.({ title: items[0].title, description: items[0].text || undefined, ownHeading: true });
+
+        const slides = items
+          .map((it, i) => {
+            const caption =
+              it.title || it.text
+                ? `<div class="brick-slide-caption">${it.title ? `<strong>${esc(it.title)}</strong>` : ""}${it.text ? `<span>${esc(it.text)}</span>` : ""}</div>`
+                : "";
+            // 첫 장은 즉시, 나머지는 lazy — 첫 화면이 늦게 뜨면 안 된다
+            const img = `<img src="${esc(it.url)}" alt="${esc(it.title)}"${i === 0 ? '' : ' loading="lazy"'} decoding="async" />`;
+            const inner = img + caption;
+            return `<li class="brick-slide${i === 0 ? " is-on" : ""}" role="group" aria-roledescription="slide" aria-label="${i + 1} / ${items.length}"${i === 0 ? "" : ' aria-hidden="true"'}>${
+              it.link ? `<a href="${esc(it.link)}">${inner}</a>` : inner
+            }</li>`;
+          })
+          .join("");
+
+        const dots = items
+          .map((_, i) => `<button type="button" class="${i === 0 ? "is-on" : ""}" data-go="${i}" aria-label="${i + 1}"></button>`)
+          .join("");
+        const nav =
+          items.length > 1
+            ? `<button type="button" class="brick-slide-prev" aria-label="이전" data-dir="-1"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>` +
+              `<button type="button" class="brick-slide-next" aria-label="다음" data-dir="1"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>` +
+              `<div class="brick-slide-dots">${dots}</div>`
+            : "";
+
+        const style = [height ? `--slider-h:${height}px` : "", ].filter(Boolean).join(";");
+        return (
+          `<section class="brick-slider${props.full ? " is-full" : ""}${height ? "" : " is-auto"}"${style ? ` style="${style}"` : ""}` +
+          ` data-interval="${interval}" aria-roledescription="carousel" aria-label="배너">` +
+          `<ul class="brick-slides">${slides}</ul>${nav}</section>` +
+          (items.length > 1 ? SLIDER_SCRIPT : "")
+        );
+      },
+    });
+
     b.set("core/divider", {
       name: "core/divider",
       displayName: "구분선",
@@ -500,3 +571,77 @@ ${eyebrow ? `    <span class="brick-eyebrow">${esc(eyebrow)}</span>
     });
   }
 }
+
+/**
+ * 배너 슬라이드 동작. 블록마다 한 번씩 나오지만 `data-brick-slider-init` 로 한 번만 붙는다
+ * (한 페이지에 슬라이드가 둘 있어도 스크립트는 한 벌만 일한다).
+ *
+ * 접근성: 자동 회전은 마우스·포커스·터치에서 멈추고, prefers-reduced-motion 이면 시작하지
+ * 않는다. 좌우 화살표 키로 넘길 수 있고, 보이지 않는 슬라이드는 aria-hidden 이다.
+ */
+const SLIDER_SCRIPT = `<script>
+(function () {
+  if (window.__brickSlider) { window.__brickSlider(); return; }
+  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function setup(root) {
+    if (root.dataset.brickSliderInit) return;
+    root.dataset.brickSliderInit = "1";
+    var slides = [].slice.call(root.querySelectorAll(".brick-slide"));
+    var dots = [].slice.call(root.querySelectorAll(".brick-slide-dots button"));
+    if (slides.length < 2) return;
+    var at = 0, timer = null, held = false;   // held: 손님이 보고 있는 중(마우스·초점·손가락)
+    var interval = Number(root.dataset.interval || 0) * 1000;
+
+    function show(next) {
+      at = (next + slides.length) % slides.length;
+      slides.forEach(function (s, i) {
+        var on = i === at;
+        s.classList.toggle("is-on", on);
+        if (on) s.removeAttribute("aria-hidden"); else s.setAttribute("aria-hidden", "true");
+      });
+      dots.forEach(function (d, i) { d.classList.toggle("is-on", i === at); });
+    }
+    function stop() { if (timer) { clearInterval(timer); timer = null; } }
+    function start() {
+      stop();
+      // 마우스가 올라와 있는 동안에는 다시 돌지 않는다 — 버튼을 누르면 start() 가 불리는데,
+      // 그때 포인터는 이미 배너 위이므로 mouseenter 가 다시 오지 않아 회전이 살아나 버렸다.
+      if (held || !interval || reduce) return;
+      timer = setInterval(function () { show(at + 1); }, interval);
+    }
+    function hold() { held = true; stop(); }
+    function release() { held = false; start(); }
+
+    root.addEventListener("click", function (e) {
+      var dir = e.target.closest("[data-dir]");
+      if (dir) { show(at + Number(dir.dataset.dir)); start(); return; }
+      var go = e.target.closest("[data-go]");
+      if (go) { show(Number(go.dataset.go)); start(); }
+    });
+    // 읽는 중에 바뀌지 않게 — 마우스를 올리거나 안쪽에 초점이 있으면 멈춘다
+    root.addEventListener("mouseenter", hold);
+    root.addEventListener("mouseleave", release);
+    root.addEventListener("focusin", hold);
+    root.addEventListener("focusout", release);
+    root.addEventListener("keydown", function (e) {
+      if (e.key === "ArrowLeft") { show(at - 1); start(); }
+      if (e.key === "ArrowRight") { show(at + 1); start(); }
+    });
+    // 손가락으로 넘기기 — 쇼핑몰 손님의 절반 이상이 휴대폰이다
+    var x0 = null;
+    root.addEventListener("touchstart", function (e) { x0 = e.touches[0].clientX; stop(); }, { passive: true });
+    // 손가락을 뗀 뒤에는 다시 돌아도 된다 (아래 touchend 에서 start)
+    root.addEventListener("touchend", function (e) {
+      if (x0 === null) return;
+      var dx = e.changedTouches[0].clientX - x0;
+      if (Math.abs(dx) > 40) show(at + (dx < 0 ? 1 : -1));
+      x0 = null; start();
+    });
+    start();
+  }
+  window.__brickSlider = function () {
+    [].slice.call(document.querySelectorAll(".brick-slider")).forEach(setup);
+  };
+  window.__brickSlider();
+})();
+</script>`;

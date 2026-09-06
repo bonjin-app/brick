@@ -301,6 +301,52 @@ check "기본 테마로 복귀" "$(code -b "$CK" -X POST "$API/api/themes/defaul
 
 
 # ════════════════════════════════════════════════════
+echo "── 배너 슬라이드 (core/banner-slider) — 쇼핑몰 홈의 첫 화면"
+cat > "$TMP/slider.json" <<'JSON'
+{
+  "slug": "slidertest",
+  "title": "배너시험",
+  "status": "published",
+  "blocks": [
+    { "block": "core/banner-slider", "props": {
+      "items": "/uploads/a.jpg | 첫 배너 | 설명 하나 | /shop\n/uploads/b.jpg | 둘째 배너 | | https://example.test\n javascript:alert(1) | 나쁜 배너 | | ",
+      "height": 400, "interval": 5, "full": true
+    } }
+  ]
+}
+JSON
+SL_ID="$(curl -s -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' --data-binary "@$TMP/slider.json" | python3 -c "import sys,json;print(json.load(sys.stdin).get('id',''))" 2>/dev/null)"
+[[ -n "$SL_ID" ]] && ok "배너 페이지 작성" || bad "배너 페이지 작성"
+SL="$(render "slidertest")"
+contains "슬라이드 컨테이너" "$SL" 'class="brick-slider is-full"'
+contains "높이 옵션이 변수로" "$SL" "--slider-h:400px"
+contains "자동 넘김 초를 데이터로" "$SL" 'data-interval="5"'
+contains "첫 장은 즉시 로드" "$SL" '<img src="/uploads/a.jpg"'
+contains "나머지는 lazy" "$SL" '<img src="/uploads/b.jpg" alt="둘째 배너" loading="lazy"'
+contains "캡션(제목·설명)" "$SL" 'class="brick-slide-caption"><strong>첫 배너</strong><span>설명 하나</span>'
+contains "링크가 걸린다" "$SL" '<a href="/shop">'
+absent "javascript: 배너는 버린다" "$SL" "javascript:"
+contains "좌우 버튼" "$SL" 'class="brick-slide-prev"'
+contains "인디케이터" "$SL" 'class="brick-slide-dots"'
+contains "회전 스크립트" "$SL" "__brickSlider"
+contains "보조기기용 역할" "$SL" 'aria-roledescription="carousel"'
+contains "보이지 않는 장은 숨긴다" "$SL" 'aria-hidden="true"'
+# 장이 하나면 스크립트도 버튼도 필요 없다
+printf '{"slug":"onebanner","title":"한장","status":"published","blocks":[{"block":"core/banner-slider","props":{"items":"/uploads/a.jpg | 하나"}}]}' > "$TMP/one.json"
+curl -s -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' --data-binary "@$TMP/one.json" -o /dev/null
+ONE="$(render "onebanner")"
+contains "한 장도 그린다" "$ONE" 'class="brick-slide is-on"'
+absent "한 장이면 스크립트를 넣지 않는다" "$ONE" "__brickSlider"
+absent "한 장이면 화살표도 없다" "$ONE" "brick-slide-prev"
+# 항목이 없으면 빈 배너를 그리지 않는다
+printf '{"slug":"nobanner","title":"없음","status":"published","blocks":[{"block":"core/banner-slider","props":{"items":""}}]}' > "$TMP/no.json"
+curl -s -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' --data-binary "@$TMP/no.json" -o /dev/null
+absent "항목이 없으면 아무것도 그리지 않는다" "$(render "nobanner")" "brick-slider"
+# 네 테마 모두 슬라이드 CSS 를 갖는다 (계약)
+for TH in default editorial storefront boutique; do
+  contains "$TH 테마에 슬라이드 스타일" "$(cat "$ROOT/themes/$TH/assets/style.css")" ".brick-slider"
+done
+
 echo "── 랜딩 블록"
 PAGE_JSON="$TMP/landing.json"
 cat > "$PAGE_JSON" <<'JSON'

@@ -91,6 +91,8 @@ html {
 
 body {
   margin: 0;
+  /* 화면 폭 배너(100vw)가 스크롤바 폭만큼 넘치는 것을 막는다 */
+  overflow-x: hidden;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
@@ -848,6 +850,76 @@ a.brick-card:hover { border-color: var(--color-text); color: inherit; }
   .brick-main h2 { margin-top: 34px; }
   .brick-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 }
+
+
+/* ── 배너 슬라이드 (core/banner-slider) ────────────── */
+.brick-slider { position: relative; margin: 0 0 var(--brick-gap); overflow: hidden; background: var(--color-bg-sunken); }
+.brick-slider.is-full {
+  /*
+   * 화면 폭 꽉 채우기. main 은 max-width 컨테이너이므로 좌우 여백만 상쇄하면 컨테이너 폭에서
+   * 멈춘다 — 100vw 로 잡고 컨테이너 중심에서 화면 중심으로 끌어당긴다(세로 스크롤바 폭은
+   * 100vw 에 포함되므로 가로 넘침을 막기 위해 body 쪽에서 overflow-x 를 잠근다).
+   */
+  width: 100vw;
+  max-width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+}
+.brick-slides { list-style: none; margin: 0; padding: 0; position: relative; height: var(--slider-h, 420px); }
+.brick-slider.is-auto .brick-slides { height: auto; }
+.brick-slide { position: absolute; inset: 0; opacity: 0; visibility: hidden; transition: opacity .5s ease, visibility .5s ease; }
+.brick-slider.is-auto .brick-slide { position: relative; display: none; }
+.brick-slider.is-auto .brick-slide.is-on { display: block; }
+.brick-slide.is-on { opacity: 1; visibility: visible; }
+.brick-slide > a { display: block; height: 100%; }
+.brick-slide img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.brick-slider.is-auto .brick-slide img { height: auto; }
+.brick-slide-caption {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 28px var(--brick-pad-x);
+  /* 사진 위 글자 — 아래쪽만 어둡게 깔아 대비를 확보한다(사진은 예측할 수 없다) */
+  background: linear-gradient(to top, rgba(8, 8, 12, .72), rgba(8, 8, 12, .38) 55%, transparent);
+  color: #fff;
+}
+.brick-slide-caption strong { font-size: clamp(20px, 3.2vw, 32px); line-height: 1.25; letter-spacing: -0.5px; }
+.brick-slide-caption span { font-size: 14.5px; color: rgba(255, 255, 255, .92); }
+.brick-slide-prev, .brick-slide-next {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 44px; height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; background: rgba(8, 8, 12, .38); border: 0; cursor: pointer;
+  transition: background var(--brick-t);
+}
+.brick-slide-prev { left: 8px; }
+.brick-slide-next { right: 8px; }
+.brick-slide-prev:hover, .brick-slide-next:hover { background: rgba(8, 8, 12, .62); }
+.brick-slide-prev svg, .brick-slide-next svg { width: 22px; height: 22px; }
+.brick-slide-dots { position: absolute; left: 0; right: 0; bottom: 10px; display: flex; justify-content: center; gap: 7px; }
+.brick-slide-dots button {
+  width: 24px; height: 24px; padding: 0; border: 0; background: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.brick-slide-dots button::before {
+  content: ""; width: 8px; height: 8px; border-radius: 50%;
+  background: rgba(255, 255, 255, .55); box-shadow: 0 0 0 1px rgba(8, 8, 12, .25);
+  transition: background var(--brick-t), width var(--brick-t);
+}
+.brick-slide-dots button.is-on::before { background: #fff; width: 20px; border-radius: 4px; }
+
+@media (max-width: 767.98px) {
+  .brick-slides { height: var(--slider-h-sm, 260px); }
+  .brick-slide-caption { padding: 18px var(--brick-pad-x); }
+  .brick-slide-prev, .brick-slide-next { width: 40px; height: 40px; }
+}
+
+/* 편집샵 — 사진만 보이게. 화살표는 흰 선, 캡션 그라디언트는 옅게 */
+.brick-slider { background: var(--color-bg-soft); }
+.brick-slide-caption { background: linear-gradient(to top, rgba(8,8,12,.5), transparent 70%); padding-bottom: 34px; }
+.brick-slide-caption strong { font-family: var(--font-display); font-weight: 600; }
+.brick-slide-prev, .brick-slide-next { background: none; }
+.brick-slide-prev:hover, .brick-slide-next:hover { background: rgba(8,8,12,.28); }
 
 @media print {
   .brick-header, .brick-footer-nav, .brick-totop, .brick-skip, .brick-theme-btn, .brick-burger { display: none !important; }

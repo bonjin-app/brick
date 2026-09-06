@@ -134,6 +134,7 @@ page.html 슬롯은 추가로 `title`(페이지 제목), `{{{ blocksHtml }}}`(�
 | `.brick-empty` | 빈 목록 안내 |
 | `.brick-pager` (`.is-current`, `.is-disabled`) | 페이지네이션 |
 | `.brick-hero`, `.brick-eyebrow`, `.brick-hero-actions` | 히어로 |
+| `.brick-slider`(`.is-full`, `.is-auto`), `.brick-slides`, `.brick-slide`(`.is-on`), `.brick-slide-caption`, `.brick-slide-prev/-next`, `.brick-slide-dots` | 배너 슬라이드 — 동작(회전·스와이프)은 코어 블록이 인라인 스크립트로 넣고, 모양은 테마가 정합니다 |
 | `.brick-features`, `.brick-cta`, `.brick-faq-item` | 랜딩 섹션 |
 | `.brick-nav a.is-current` | 현재 위치인 메뉴 항목 (코어가 `aria-current="page"` 와 함께 붙여 줍니다) |
 | `.brick-hero.has-image` (`--hero-image`) | 사진 위 히어로 — 어둡게 깔고 흰 글자 |
