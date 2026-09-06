@@ -137,6 +137,7 @@ check "아직 미설치 상태" "$(curl -s "$API/api/install/status" | jq_get "[
 
 echo "══ 커뮤니티 스타터 ══"
 R="$(fresh_install community "달빛마을")"
+check "커뮤니티 스타터는 기본 테마" "$(curl -s "$API/api/themes" | python3 -c "import sys,json;print(json.load(sys.stdin).get('active',''))")" "default"
 contains "설치 성공" "$R" '"ok":true'
 contains "적용 내역을 알려준다" "$R" "게시판 자유게시판"
 # 홈 페이지 제목은 사이트명이다 — 테마가 페이지 제목을 h1 으로 그리므로
@@ -222,6 +223,8 @@ contains "상품 링크" "$MENU" '"url":"/shop"'
 contains "이용 안내 링크" "$MENU" '"url":"/guide"'
 check "쇼핑몰 메뉴도 전부 렌더된다" "$(verify_menu_links "$MENU")" "끊어진 링크: 없음"
 SHOP_PAGE="$(curl -s "$API/api/render/page?path=shop")"
+# 쇼핑몰을 골랐으면 쇼핑몰 테마가 켜져 있어야 한다 — 테마를 만들어 두고 고르지 않으면 의미가 없다
+check "쇼핑몰 스타터가 storefront 테마를 켠다" "$(curl -s "$API/api/themes" | python3 -c "import sys,json;print(json.load(sys.stdin).get('active',''))")" "storefront"
 # 스타터가 샘플 상품을 넣으므로 진열대가 비어 있지 않아야 한다 — 빈 안내가 보이면 시딩이 깨진 것이다
 contains "/shop 이 샘플 상품을 그린다" "$SHOP_PAGE" "brick-product-card"
 contains "샘플임을 알 수 있다" "$SHOP_PAGE" "(샘플)"
@@ -258,6 +261,7 @@ contains "/shop/first 상세도 그려진다 (storefront 라우팅)" \
 echo "══ 회사 홈페이지 스타터 ══"
 R="$(fresh_install company "본진테크")"
 contains "설치 성공" "$R" '"ok":true'
+check "회사 스타터가 corporate 테마를 켠다" "$(curl -s "$API/api/themes" | python3 -c "import sys,json;print(json.load(sys.stdin).get('active',''))")" "corporate"
 contains "헬프데스크 활성화" "$R" "플러그인 brick-helpdesk"
 check "페이지 5개 (홈·소개·서비스·문의·게시판)" "$(psql_q "SELECT count(*) FROM pages")" "5"
 SUPPORT="$(curl -s "$API/api/render/page?path=support")"

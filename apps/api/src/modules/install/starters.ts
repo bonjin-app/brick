@@ -35,6 +35,14 @@ export interface StarterDefinition {
   plugins: string[];
   /** 만들어지는 것 안내 (설치 화면이 보여준다) */
   creates: string[];
+  /**
+   * 이 스타터에 맞는 동봉 테마. 없으면 기본 테마(default).
+   *
+   * 테마를 만들어 두고 스타터가 고르지 않으면 아무 의미가 없다 — 쇼핑몰을 골랐는데 커뮤니티
+   * 레이아웃이 나오면 "테마를 바꿔야 한다"는 것 자체를 모른다. 운영자는 나중에 관리자 →
+   * 테마에서 얼마든지 바꿀 수 있다(미리보기로 비교하고).
+   */
+  theme?: string;
 }
 
 /**
@@ -57,6 +65,7 @@ export const STARTERS: StarterDefinition[] = [
     description: "상품 목록·장바구니·공지사항을 갖춘 판매 사이트",
     plugins: ["brick-board", "brick-shop"],
     creates: ["홈 (상품 목록 + 공지)", "소개 페이지", "공지사항 게시판", "쇼핑몰 메뉴"],
+    theme: "storefront",
   },
   {
     code: "company",
@@ -64,6 +73,7 @@ export const STARTERS: StarterDefinition[] = [
     description: "회사 소개·서비스 안내·공지·1:1 문의를 갖춘 안내 사이트",
     plugins: ["brick-board", "brick-helpdesk"],
     creates: ["홈", "회사 소개 · 서비스 페이지", "공지사항 게시판", "1:1 문의", "헤더 메뉴"],
+    theme: "corporate",
   },
   {
     code: "blank",
@@ -167,7 +177,32 @@ export async function applyStarter(code: string, ctx: SeedContext): Promise<{ ap
     }
   }
 
-  // ── 5. 메뉴 ──
+  // ── 5. 테마 ──
+  // 스타터에 맞는 동봉 테마를 켠다. 운영자가 이미 골라 둔 것이 있으면 건드리지 않는다
+  // (설치 직후에는 없지만, 이 함수가 두 번 불려도 안전해야 한다).
+  if (starter.theme) {
+    try {
+      /*
+       * 설치가 이미 theme.active = "default" 를 넣어 둔다(스타터는 그 뒤에 돈다).
+       * 그래서 "값이 없을 때만"이 아니라 **아직 기본값일 때** 바꾼다 — 운영자가 고른 흔적이
+       * 있으면(다른 테마) 건드리지 않는다.
+       */
+      const { rows: cur } = await ctx.db.execute(sql`SELECT value FROM site_settings WHERE key = 'theme.active' LIMIT 1`);
+      const current = cur.length ? String(cur[0].value ?? "") : "";
+      if (!current || current === "default") {
+        await ctx.db.execute(sql`
+          INSERT INTO site_settings (key, value, updated_at)
+          VALUES ('theme.active', ${JSON.stringify(starter.theme)}::jsonb, now())
+          ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(starter.theme)}::jsonb, updated_at = now()
+        `);
+        applied.push(`테마 ${starter.theme}`);
+      }
+    } catch (err) {
+      ctx.log(`스타터: 테마 ${starter.theme} 적용 실패 — ${String(err)}`);
+    }
+  }
+
+  // ── 6. 메뉴 ──
   // 마지막에 만든다 — 위에서 만든 것들을 가리키므로.
   const menu = starterMenu(starter.code);
   if (menu.length) {
