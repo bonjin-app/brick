@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="{{ locale }}">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ pageTitle }}</title>
+  {{#if seo.description}}<meta name="description" content="{{ seo.description }}" />{{/if}}
+  <meta property="og:title" content="{{ pageTitle }}" />
+  <meta property="og:site_name" content="{{ site.name }}" />
+  {{#if seo.description}}<meta property="og:description" content="{{ seo.description }}" />{{/if}}
+  {{#if site.ogImage}}<meta property="og:image" content="{{ site.ogImage }}" />
+  <meta name="twitter:card" content="summary_large_image" />{{/if}}
+  <meta name="color-scheme" content="light dark" />
+  <link rel="icon" href="{{ themeAssets }}/favicon.svg?v={{ themeVersion }}" type="image/svg+xml" />
+  {{!-- 저장된 화면 모드를 CSS 보다 먼저 적용한다 (다크 사용자에게 흰 화면이 번쩍이지 않게) --}}
+  <script>
+    (function () {
+      try {
+        var v = localStorage.getItem("brick-theme");
+        if (v === "dark" || v === "light") document.documentElement.dataset.theme = v;
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+  <style>{{{ themeTokens }}}</style>
+  <link rel="stylesheet" href="{{ themeAssets }}/style.css?v={{ themeVersion }}" />
+</head>
+<body>
+  <svg hidden aria-hidden="true" focusable="false" style="display:none">
+    <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+    <symbol id="i-cart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h8.5a2 2 0 0 0 2-1.5L21.5 8H6"/><circle cx="10" cy="20" r="1.4"/><circle cx="17.5" cy="20" r="1.4"/></symbol>
+    <symbol id="i-message" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H8l-4 4z"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+    <symbol id="i-heart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7-4.6-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.4-7 10-7 10z"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 21h4"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.8 5.8 6.2.9-4.5 4.4 1.1 6.3L12 17.4l-5.6 3 1.1-6.3L3 9.7l6.2-.9z"/></symbol>
+    <symbol id="i-truck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h11v10H3zM14 9h4l3 3v4h-7"/><circle cx="7" cy="18" r="1.6"/><circle cx="17" cy="18" r="1.6"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 5 6v6c0 4.5 3 7.5 7 9 4-1.5 7-4.5 7-9V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h12v9H9l-4 3.5V15H4z"/><path d="M20 10v9l-3-2.5"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/></symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l1.5 4-2.2 1.5a11 11 0 0 0 6.2 6.2L16 13.5l4 1.5v4a2 2 0 0 1-2 2A15 15 0 0 1 3 6a2 2 0 0 1 2-2z"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m21 16-5.5-5.5L7 19"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-thumb-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11v9H4v-9zM7 11l4-7c1.3 0 2.3 1 2.3 2.3V10h5.2a2 2 0 0 1 2 2.3l-1 6a2 2 0 0 1-2 1.7H7"/></symbol>
+    <symbol id="i-thumb-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 13V4h3v9zM17 13l-4 7c-1.3 0-2.3-1-2.3-2.3V14H5.5a2 2 0 0 1-2-2.3l1-6a2 2 0 0 1 2-1.7H17"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1.5 1.5"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1.5-1.5"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+    <symbol id="i-clip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 12-8.5 8.5a5 5 0 0 1-7-7L14 5a3.3 3.3 0 0 1 4.7 4.7L10.5 18a1.7 1.7 0 0 1-2.4-2.4L16 7.7"/></symbol>
+  </svg>
+
+  <a class="brick-skip" href="#brick-content">{{ t.header.skip }}</a>
+
+  {{!--
+    쇼핑몰의 머리는 세 켜다 — 한국 쇼핑몰(카페24·메이크샵)에서 손님이 눈으로 익힌 순서:
+      1) 가는 유틸 띠: 로그인·회원가입·주문조회·고객센터
+      2) 로고 줄: 로고 + 검색 + 장바구니 같은 플러그인 링크
+      3) 카테고리 띠: 상품 분류 (좁은 화면에서는 서랍으로)
+    코어 계약(id·class·스크립트)은 기본 테마와 같다 — 자리만 다르다.
+  --}}
+  {{!--
+    기업 홈페이지의 머리 — 한 줄이고 스크롤해도 위에 붙어 있다.
+    손님이 찾는 것은 "무엇을 하는 회사인지"와 "어떻게 연락하는지"라서, 오른쪽 끝에 문의 버튼을 둔다.
+    코어 계약(id·class·스크립트)은 다른 테마와 같다.
+  --}}
+  <header class="brick-header">
+    <div class="brick-header-inner mx-auto flex h-(--brick-header-h) max-w-(--content-width) items-center gap-3 px-(--brick-pad-x) md:gap-7">
+      <a class="brick-logo" href="/">{{ site.name }}</a>
+
+      <button type="button" class="brick-burger" id="brick-burger"
+              aria-expanded="false" aria-controls="brick-nav" aria-label="{{ t.header.menu }}">
+        <span></span><span></span><span></span>
+      </button>
+
+      <nav class="brick-nav md:flex md:min-w-0 md:flex-1 md:items-center md:gap-1" id="brick-nav" aria-label="{{ t.header.menu }}">
+        {{#each menu}}<a href="{{ url }}"{{#if current}} class="is-current" aria-current="page"{{/if}}>{{ label }}</a>{{/each}}
+      </nav>
+
+      <div class="brick-header-right ml-auto flex items-center gap-2 md:gap-3">
+        <form class="brick-header-search" method="get" action="/search" role="search">
+          <svg class="brick-search-icon" viewBox="0 0 20 20" aria-hidden="true">
+            <circle cx="9" cy="9" r="5.5" fill="none" stroke="currentColor" stroke-width="1.8" />
+            <path d="M13.2 13.2 17 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+          </svg>
+          <input type="search" name="q" placeholder="{{ t.search.placeholder }}" minlength="2" required
+                 aria-label="{{ t.search.placeholder }}" />
+        </form>
+
+        <button type="button" class="brick-theme-btn" id="brick-theme-btn" aria-label="{{ t.header.theme }}" title="{{ t.header.theme }}">
+          <svg class="i-dark" viewBox="0 0 20 20" aria-hidden="true">
+            <path d="M16 12.3A6.6 6.6 0 0 1 7.7 4a6.9 6.9 0 1 0 8.3 8.3Z" fill="currentColor" />
+          </svg>
+          <svg class="i-light" viewBox="0 0 20 20" aria-hidden="true">
+            <circle cx="10" cy="10" r="3.6" fill="currentColor" />
+            <path d="M10 1.6v2.2M10 16.2v2.2M1.6 10h2.2M16.2 10h2.2M4.1 4.1l1.6 1.6M14.3 14.3l1.6 1.6M15.9 4.1l-1.6 1.6M5.7 14.3l-1.6 1.6"
+                  stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+          </svg>
+        </button>
+
+        <nav class="brick-actions">
+          {{#each headerActions}}<a href="{{ url }}">{{#if icon}}<svg class="brick-ico" aria-hidden="true"><use href="#i-{{ icon }}"></use></svg>{{/if}}<span>{{ label }}</span></a>{{/each}}
+        </nav>
+
+        <div class="brick-util">
+          {{#if guest}}
+          <a href="/login">{{ t.header.login }}</a>
+          {{/if}}
+          {{#if user}}
+          <a class="brick-util-name" href="/account">{{#if user.avatarUrl}}<img class="brick-avatar-hd" src="{{ user.avatarUrl }}" alt="" />{{/if}}{{ user.displayName }}</a>
+          {{#if user.isAdmin}}<a href="/admin">{{ t.header.admin }}</a>{{/if}}
+          {{!-- 로그아웃은 상태를 바꾸므로 링크(GET)가 아니라 폼(POST)이다 --}}
+          <form class="brick-logout" method="post" action="/api/auth/logout">
+            <button type="submit">{{ t.header.logout }}</button>
+          </form>
+          {{/if}}
+        </div>
+
+        {{!-- 문의는 기업 홈페이지에서 가장 중요한 행동이다 — 전화가 있으면 그것을, 없으면 이메일 --}}
+        {{#if site.business.phone}}<a class="brick-head-cta" href="tel:{{ site.business.phone }}"><svg class="brick-ico" aria-hidden="true"><use href="#i-phone"></use></svg><span>{{ site.business.phone }}</span></a>{{/if}}
+      </div>
+    </div>
+  </header>
+
+  <main class="brick-main mx-auto w-full max-w-(--content-width) flex-auto px-(--brick-pad-x) pt-6 pb-16 md:pt-8 md:pb-24" id="brick-content">
+    {{{ content }}}
+  </main>
+
+
+  {{!-- 맨 위로 — 긴 소개 페이지에서 필요하다. 쇼핑몰의 퀵메뉴와 달리 이것만 둔다 --}}
+  <aside class="brick-quick" aria-label="{{ t.footer.toTop }}">
+    <a class="brick-quick-top" href="#brick-content">
+      <svg class="brick-ico" aria-hidden="true"><use href="#i-arrow"></use></svg><span>{{ t.footer.toTop }}</span>
+    </a>
+  </aside>
+
+  <footer class="brick-footer">
+    <div class="brick-footer-inner mx-auto max-w-(--content-width) px-(--brick-pad-x) pt-10 pb-12">
+      {{!--
+        쇼핑몰 푸터의 주인공은 고객센터다 — 전화번호와 운영 시간을 가장 크게 둔다.
+        사업자 정보는 전자상거래법상 표시 의무 항목이라 값이 있을 때만 그린다(코어가 채운다).
+      --}}
+      <div class="brick-footer-cols mb-7 grid grid-cols-2 items-start gap-x-10 gap-y-8 border-b border-line pb-8 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
+        <div class="brick-footer-col brick-footer-cs col-span-2 md:col-span-1">
+          {{#if site.business.phone}}<span class="brick-cs-label">{{ t.footer.cs }}</span>{{/if}}
+          {{#if site.business.phone}}<a class="brick-cs-tel" href="tel:{{ site.business.phone }}">{{ site.business.phone }}</a>{{/if}}
+          {{#if site.business.email}}<a class="brick-cs-mail" href="mailto:{{ site.business.email }}"><svg class="brick-ico" aria-hidden="true"><use href="#i-mail"></use></svg>{{ site.business.email }}</a>{{/if}}
+        </div>
+
+
+        <div class="brick-footer-col brick-footer-about">
+          <a class="brick-footer-logo" href="/">{{ site.name }}</a>
+          {{#if site.description}}<p>{{ site.description }}</p>{{/if}}
+        </div>
+
+        <nav class="brick-footer-col brick-footer-nav" aria-label="{{ t.header.menu }}">
+          {{#each menu}}<a href="{{ url }}">{{ label }}</a>{{/each}}
+        </nav>
+        <a class="brick-totop col-span-2 justify-self-start md:col-span-1 md:justify-self-auto" href="#brick-content">
+          <svg class="brick-ico" aria-hidden="true"><use href="#i-arrow"></use></svg>{{ t.footer.toTop }}
+        </a>
+      </div>
+
+      {{!--
+        사업자 정보 — 전자상거래법상 표시 의무 항목이라 값이 있을 때만 그린다(코어가 채운다).
+        라벨만 번역되고 값은 운영자가 넣은 그대로 나간다.
+      --}}
+      {{#if site.business}}
+      <div class="brick-business">
+        {{#if site.business.companyName}}<span>{{ t.footer.company }} <b>{{ site.business.companyName }}</b></span>{{/if}}
+        {{#if site.business.representative}}<span>{{ t.footer.representative }} {{ site.business.representative }}</span>{{/if}}
+        {{#if site.business.businessNo}}<span>{{ t.footer.businessNo }} {{ site.business.businessNo }}</span>{{/if}}
+        {{#if site.business.mailOrderNo}}<span>{{ t.footer.mailOrderNo }} {{ site.business.mailOrderNo }}</span>{{/if}}
+        {{#if site.business.address}}<span>{{ site.business.address }}</span>{{/if}}
+        {{#if site.business.phone}}<span>{{ t.footer.phone }} {{ site.business.phone }}</span>{{/if}}
+        {{#if site.business.email}}<span>{{ t.footer.email }} {{ site.business.email }}</span>{{/if}}
+        {{#if site.business.privacyOfficer}}<span>{{ t.footer.privacyOfficer }} {{ site.business.privacyOfficer }}</span>{{/if}}
+        {{#if site.business.hostingProvider}}<span>{{ t.footer.hosting }} {{ site.business.hostingProvider }}</span>{{/if}}
+        {{!-- 전자상거래법 제24조: 결제대금예치·소비자피해보상보험 가입 사실 표시 --}}
+        {{#if site.business.escrow}}<span>{{ site.business.escrow }}</span>{{/if}}
+      </div>
+      {{/if}}
+
+      <div class="brick-footer-credit">
+        Powered by <a href="https://github.com/bonjin-app/brick">Brick</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      // 화면 모드 토글 — 지금 눈에 보이는 모드의 반대를 저장한다.
+      // (data-theme 이 없으면 OS 설정이 보이는 모드다)
+      var btn = document.getElementById("brick-theme-btn");
+      if (btn) {
+        btn.addEventListener("click", function () {
+          var root = document.documentElement;
+          var now = root.dataset.theme;
+          var effective = now || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+          var next = effective === "dark" ? "light" : "dark";
+          root.dataset.theme = next;
+          try { localStorage.setItem("brick-theme", next); } catch (e) {}
+        });
+      }
+
+      // 모바일 메뉴 — 드로어를 여는 건 CSS 가 하고, 상태만 여기서 바꾼다
+      var burger = document.getElementById("brick-burger");
+      var nav = document.getElementById("brick-nav");
+      if (burger && nav) {
+        var setOpen = function (open) {
+          burger.setAttribute("aria-expanded", open ? "true" : "false");
+          document.body.classList.toggle("brick-nav-open", open);
+        };
+        burger.addEventListener("click", function () {
+          setOpen(burger.getAttribute("aria-expanded") !== "true");
+        });
+        // 링크를 누르면 닫는다(같은 페이지 앵커면 이동이 없어 열린 채 남는다)
+        nav.addEventListener("click", function (e) {
+          if (e.target.closest("a")) setOpen(false);
+        });
+        document.addEventListener("keydown", function (e) {
+          if (e.key === "Escape") setOpen(false);
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

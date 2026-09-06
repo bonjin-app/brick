@@ -244,9 +244,10 @@ contains "퀵메뉴의 맨 위로" "$SF_HOME" 'class="brick-quick-top"'
 check "기본 테마로 복귀" "$(code -b "$CK" -X POST "$API/api/themes/default/activate")" "201"
 absent "복귀 후 카테고리 띠가 남지 않는다" "$(render "")" 'class="brick-catbar'
 
-echo "── 동봉 테마 네 벌의 흐린 글자 대비 (WCAG AA 4.5:1)"
-# 흐린 회색(--color-muted)은 눈으로 보면 괜찮은데 측정하면 못 넘긴다 — 새로 만든 두 테마가 3.2·3.42 였다.
-# 토큰 값은 매니페스트에 있으므로 브라우저 없이 계산할 수 있다(라이트·다크 두 벌 모두).
+echo "── 동봉 테마의 흐린 글자 대비 (WCAG AA 4.5:1, 세 배경 × 라이트·다크)"
+# 흐린 회색(--color-muted)은 눈으로 보면 괜찮은데 측정하면 못 넘긴다.
+# **흰 배경만 보면 놓친다** — 푸터·카드는 bg-soft·bg-sunken 위에 있고 거기서 4.2~4.4 로 떨어졌다
+# (다섯 테마 전부 그랬다). 토큰 값은 매니페스트에 있으므로 브라우저 없이 모든 조합을 계산한다.
 CONTRAST="$(python3 - "$ROOT" <<'PYEOF'
 import json, sys, pathlib
 root = pathlib.Path(sys.argv[1])
@@ -262,14 +263,32 @@ for d in sorted((root / "themes").iterdir()):
     m = d / "brick.theme.json"
     if not m.is_file(): continue
     t = json.loads(m.read_text(encoding="utf-8")).get("tokens", {})
-    for label, fg, bg in (("light", "color-muted", "color-bg"), ("dark", "dark-color-muted", "dark-color-bg")):
-        if t.get(fg) and t.get(bg):
-            r = ratio(t[fg], t[bg])
-            if r < 4.5: bad.append(f"{d.name}/{label}={r:.2f}")
+    for prefix in ("", "dark-"):
+        fg = t.get(prefix + "color-muted")
+        if not fg: continue
+        for bgk in ("color-bg", "color-bg-soft", "color-bg-sunken"):
+            bg = t.get(prefix + bgk)
+            if not bg: continue
+            r = ratio(fg, bg)
+            if r < 4.5: bad.append(f"{d.name}/{prefix or 'light-'}{bgk}={r:.2f}")
 print(" ".join(bad) if bad else "OK")
 PYEOF
 )"
-check "네 테마의 흐린 글자가 AA 를 넘는다" "$CONTRAST" "OK"
+check "흐린 글자가 어떤 배경에서도 AA 를 넘는다" "$CONTRAST" "OK"
+
+echo "── 다섯 번째 동봉 테마(corporate): 기업 홈페이지"
+contains "테마 목록에 corporate" "$THEMES" '"name":"corporate"'
+check "corporate 적용" "$(code -b "$CK" -X POST "$API/api/themes/corporate/activate")" "201"
+CO_HOME="$(render "")"
+contains "한 줄 헤더" "$CO_HOME" 'class="brick-header-inner'
+contains "파란 계열 팔레트" "$CO_HOME" "#1552b5"
+contains "각진 카드 토큰" "$CO_HOME" "--radius: 4px"
+contains "맨 위로만 있는 퀵메뉴" "$CO_HOME" 'class="brick-quick"'
+contains "파비콘은 자기 것" "$CO_HOME" "/themes/corporate/assets/favicon.svg"
+contains "코어 계약: 스킵 링크" "$CO_HOME" 'class="brick-skip"'
+absent "템플릿 조건문이 새지 않는다" "$CO_HOME" "{{/if}}"
+check "스타일시트 서빙" "$(code "$API/themes/corporate/assets/style.css")" "200"
+check "기본 테마로 복귀" "$(code -b "$CK" -X POST "$API/api/themes/default/activate")" "201"
 
 echo "── 테마 미리보기 (적용하지 않고 내 사이트로 본다)"
 ACTIVE_BEFORE="$(curl -s -b "$CK" "$API/api/themes" | python3 -c "import sys,json;print(json.load(sys.stdin).get('active',''))")"

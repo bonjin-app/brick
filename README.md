@@ -27,7 +27,7 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-2918%20passing-2ea043.svg" alt="스모크 테스트 2918개" />
+  <img src="https://img.shields.io/badge/E2E-2929%20passing-2ea043.svg" alt="스모크 테스트 2929개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
   <a href="https://github.com/bonjin-app/brick/pkgs/container/brick">
     <img src="https://img.shields.io/badge/docker-amd64%20%C2%B7%20arm64-2496ed.svg" alt="Docker image (amd64 · arm64)" />
@@ -367,7 +367,7 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 2,918개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 2,929개 항목):
 
 | 수트 | 항목 | 무엇을 못박는가 |
 |---|---:|---|
@@ -402,7 +402,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `smoke-create-plugin.sh` | 45 | 템플릿 생성→빌드→ZIP 설치→계약 전부 실사용 · escapeHtml · 실제 탈퇴로 파기 검증 |
 | `smoke-openapi.sh` | 24 | 실제 라우트에서 생성 · 플러그인 켜고 끄면 문서도 변함 · 자체 완결 문서 페이지 |
 | `smoke-registry.sh` | 23 | 서명 통과해야 설치 · 키·주소 고정(TOFU) · 레지스트리 키 바꿔치기 방어 |
-| `smoke-theme.sh` | 181 | 라이트·다크 두 벌 · 토큰 CSS 주입 차단 · 테마 고치면 캐시 갱신 · 랜딩 블록 · **글 상세의 문서 제목** · **두 번째 테마(editorial) 같은 계약** · **Storefront** · **Boutique** · **미리보기** · **배너 슬라이드** · 퀵메뉴 |
+| `smoke-theme.sh` | 192 | 라이트·다크 두 벌 · 토큰 CSS 주입 차단 · 테마 고치면 캐시 갱신 · 랜딩 블록 · **글 상세의 문서 제목** · **두 번째 테마(editorial) 같은 계약** · **Storefront** · **Boutique** · **미리보기** · **배너 슬라이드** · 퀵메뉴 · **Corporate** |
 | `smoke-moderation.sh` | 31 | 금지 단어(우회 포함)·사칭 이름·금지 도메인·차단 IP(자기잠금)·분류 필수 |
 | `smoke-i18n.sh` | 52 | 언어가 실제 렌더를 바꿈 · 즉시 반영 · ko 폴백+로그 · 값은 번역 안 함 · 관리 선언 라벨 · 템플릿 잔해 금지 |
 
