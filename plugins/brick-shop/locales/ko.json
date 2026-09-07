@@ -184,5 +184,10 @@
   "wish.loginHint": "로그인하면 다른 기기에서도 보입니다.",
   "cart.title": "장바구니",
   "card.new": "NEW",
-  "card.best": "BEST"
+  "card.best": "BEST",
+  "sort.label": "정렬",
+  "sort.recent": "신상품순",
+  "sort.popular": "인기순",
+  "sort.price_asc": "낮은 가격순",
+  "sort.price_desc": "높은 가격순"
 }

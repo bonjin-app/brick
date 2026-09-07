@@ -35,17 +35,48 @@ export function registerStorefrontBlocks(
         columns: { type: "number", title: "열 수", default: 4 },
         sort: { type: "string", title: "정렬 (recent | popular | price_asc | price_desc)", default: "recent" },
         title: { type: "string", title: "제목 (비우면 표시 안 함)" },
+        sortable: { type: "boolean", title: "손님이 정렬을 바꿀 수 있게 (상품 목록 화면용)", default: false },
       },
     },
-    render: async (props) => {
+    render: async (props, blockCtx) => {
       const limit = Math.min(48, Math.max(1, Number(props.limit ?? 8)));
       const columns = Math.min(6, Math.max(1, Number(props.columns ?? 4)));
       const category = String(props.category ?? "");
+
+      /*
+       * 정렬 — 운영자가 블록에 고정하거나(홈의 "인기 상품" 섹션), 손님이 고르게 할 수 있다.
+       * `sortable` 이 켜져 있으면 **쿼리스트링이 이긴다**: 홈의 진열 섹션은 운영자가 정한 순서를
+       * 지켜야 하고(그 자리에서 정렬을 바꿀 이유가 없다), 상품 목록 화면은 손님이 고르는 것이 맞다.
+       */
+      const SORTS = ["recent", "popular", "price_asc", "price_desc"] as const;
+      const asked = String(blockCtx?.query?.sort ?? "");
+      const sortable = props.sortable === true;
+      const sort = sortable && (SORTS as readonly string[]).includes(asked) ? asked : String(props.sort ?? "recent");
       const order =
-        props.sort === "popular" ? sql`p.sold_count DESC, p.created_at DESC`
-        : props.sort === "price_asc" ? sql`p.price ASC`
-        : props.sort === "price_desc" ? sql`p.price DESC`
+        sort === "popular" ? sql`p.sold_count DESC, p.created_at DESC`
+        : sort === "price_asc" ? sql`p.price ASC`
+        : sort === "price_desc" ? sql`p.price DESC`
         : sql`p.sort_order, p.created_at DESC`;
+
+      /*
+       * 정렬 막대 — 링크로 만든다(select + JS 가 아니라).
+       *
+       * 링크는 검색엔진이 따라가고, 손님이 새 탭으로 열 수 있고, 뒤로 가기가 자연스럽고,
+       * 스크립트 없이 동작한다. 쇼핑몰에서 "낮은 가격순"은 공유되는 주소다.
+       * 다른 쿼리(분류·페이지)는 유지해야 하므로 현재 쿼리를 복사해 sort 만 바꾼다.
+       */
+      const sortBar = sortable
+        ? `<div class="brick-sort" role="group" aria-label="${escapeHtml(t("sort.label"))}">${SORTS.map((key) => {
+            const params = new URLSearchParams(
+              Object.entries(blockCtx?.query ?? {}).filter(([k]) => k !== "sort" && k !== "page"),
+            );
+            params.set("sort", key);
+            const on = key === sort;
+            return `<a href="${escapeHtml(`${shopBaseOf(blockCtx)}?${params.toString()}`)}"${
+              on ? ' class="is-on" aria-current="true"' : ""
+            }>${escapeHtml(t(`sort.${key}`))}</a>`;
+          }).join("")}</div>`
+        : "";
 
       const { rows } = await db.execute(sql`
         SELECT p.slug, p.name, p.price, p.list_price, p.image_url, p.status, p.stock,
@@ -58,7 +89,8 @@ export function registerStorefrontBlocks(
       `);
 
       if (!rows.length) {
-        return `<div class="brick-shop-empty">${escapeHtml(t("list.empty"))}</div>`;
+        // 정렬을 바꿨다가 빈 결과가 나오면 되돌릴 수단이 화면에 있어야 한다 — 막대를 함께 낸다
+        return `${props.title ? `<h2 class="brick-shop-heading">${escapeHtml(props.title)}</h2>` : ""}${sortBar}<div class="brick-shop-empty">${escapeHtml(t("list.empty"))}</div>${STOREFRONT_CSS}`;
       }
 
       /*
@@ -113,7 +145,9 @@ export function registerStorefrontBlocks(
       }).join("");
 
       const heading = props.title ? `<h2 class="brick-shop-heading">${escapeHtml(props.title)}</h2>` : "";
-      return `${heading}<div class="brick-product-grid" style="--brick-cols:${columns}">${cards}\n</div>${STOREFRONT_CSS}`;
+
+
+      return `${heading}${sortBar}<div class="brick-product-grid" style="--brick-cols:${columns}">${cards}\n</div>${STOREFRONT_CSS}`;
     },
   };
   ctx.registerBlock(productListBlock);
@@ -311,8 +345,9 @@ ${buyScript(`${shopBaseOf(blockCtx)}/cart`)}${GALLERY_SCRIPT}${restockScript()}$
         // 목록 — 분류 내비 + 상품 그리드. ?category= 로 좁힌다.
         const category = String(blockCtx.query?.category ?? "");
         const nav = await categoryListBlock.render({}, blockCtx);
+        // 목록 화면에서는 손님이 정렬을 고를 수 있다(홈의 진열 섹션과 달리)
         const list = await productListBlock.render(
-          { limit: props.limit ?? 24, columns: props.columns ?? 4, category },
+          { limit: props.limit ?? 24, columns: props.columns ?? 4, category, sortable: true },
           blockCtx,
         );
         return `${nav}\n${list}`;
@@ -622,6 +657,10 @@ const STOREFRONT_CSS = `
     radial-gradient(circle at 9px 9px, currentColor 2.5px, transparent 3px),
     linear-gradient(135deg, transparent 55%, currentColor 55%, currentColor 72%, transparent 72%);
 }
+.brick-sort{display:flex;flex-wrap:wrap;gap:2px;margin:14px 0 4px;align-items:center}
+.brick-sort a{display:inline-flex;align-items:center;min-height:36px;padding:0 12px;font-size:13.5px;color:var(--color-muted, #6c6c7a);text-decoration:none;border-radius:var(--radius, 3px);transition:color .16s ease,background .16s ease}
+.brick-sort a:hover{color:var(--color-text, #17171c);background:var(--color-bg-soft, #f6f6f9)}
+.brick-sort a.is-on{color:var(--color-text, #17171c);font-weight:700;background:var(--color-bg-soft, #f6f6f9)}
 .brick-tags{position:absolute;top:8px;left:8px;display:flex;flex-wrap:wrap;gap:4px;z-index:1}
 .brick-tag{display:inline-flex;align-items:center;height:20px;padding:0 7px;font-size:11px;font-weight:700;letter-spacing:.02em;border-radius:var(--radius, 3px);color:#fff;background:#111318}
 .brick-tag-new{background:#1f7a4d}

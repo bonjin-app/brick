@@ -424,5 +424,10 @@
   "cart.title": "Cart",
   "장바구니": "Cart",
   "card.new": "NEW",
-  "card.best": "BEST"
+  "card.best": "BEST",
+  "sort.label": "Sort",
+  "sort.recent": "Newest",
+  "sort.popular": "Best selling",
+  "sort.price_asc": "Price: low to high",
+  "sort.price_desc": "Price: high to low"
 }

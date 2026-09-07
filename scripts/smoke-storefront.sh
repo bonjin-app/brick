@@ -34,6 +34,10 @@ absent()   { [[ "$2" != *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 가 있음)"; }
 code()     { curl -s -o /dev/null -w "%{http_code}" "$@"; }
 jq_get()   { python3 -c "import sys,json;d=json.load(sys.stdin);print(d$1)" 2>/dev/null || echo ""; }
 
+# DB 를 직접 바꾼 뒤에는 렌더 캐시를 비워야 한다 — 상품 목록은 비로그인 렌더라 캐시에 들어가고,
+# psql 로 고친 값은 무효화 훅을 거치지 않는다(옛 HTML 을 검사해 엉뚱한 결과가 나왔다).
+bust_cache() { curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{}' -o /dev/null; sleep 0.3; }
+
 psql_q() {
   node -e '
     const { Client } = require("'"$ROOT"'/apps/api/node_modules/pg");
@@ -344,19 +348,47 @@ AMT2="$(psql_q "SELECT zone_fee, total FROM shop_orders WHERE order_no='$NOS'")"
 check "서울 주문은 지역비 0 (23000)" "$AMT2" "0|23000"
 
 echo
+echo "── 상품 정렬 (손님이 고른다 · 링크라 주소가 공유된다)"
+psql_q "UPDATE shop_products SET sold_count = 40 WHERE slug = 'sample-tote'" >/dev/null
+bust_cache
+SORT_DEFAULT="$(sf_render "shop")"
+contains "목록 화면에 정렬 막대" "$SORT_DEFAULT" 'class="brick-sort"'
+contains "기본은 신상품순" "$SORT_DEFAULT" 'class="is-on" aria-current="true">신상품순'
+contains "네 가지 정렬" "$SORT_DEFAULT" 'sort=price_desc'
+names_of() { /usr/bin/python3 -c "
+import sys, re
+print(','.join(re.findall(r'brick-product-name\">([^<]+)', sys.stdin.read())))
+"; }
+ORDER_ASC="$(sf_render "shop&sort=price_asc" | names_of)"
+ORDER_DESC="$(sf_render "shop&sort=price_desc" | names_of)"
+[[ -n "$ORDER_ASC" && "$ORDER_ASC" != "$ORDER_DESC" ]] && ok "가격 오름/내림 순서가 다르다" || bad "가격 오름/내림 순서가 다르다 ($ORDER_ASC vs $ORDER_DESC)"
+contains "인기순은 많이 팔린 것이 먼저" "$(sf_render "shop&sort=popular" | names_of)" "캔버스 토트백 (샘플),"
+contains "고른 정렬이 표시된다" "$(sf_render "shop&sort=price_asc")" 'class="is-on" aria-current="true">낮은 가격순'
+# 모르는 값은 기본으로 — 주소를 손으로 고쳐도 깨지지 않는다
+contains "모르는 정렬 값은 기본으로" "$(sf_render "shop&sort=../etc")" 'class="is-on" aria-current="true">신상품순'
+# 홈의 진열 섹션은 운영자가 정한 순서를 지킨다 (sortable 이 꺼져 있다)
+absent "홈의 진열 섹션에는 정렬 막대가 없다" "$(sf_render "&sort=price_desc")" 'class="brick-sort"'
+# 다른 쿼리는 유지하고 page 는 버린다 (정렬을 바꾸면 1페이지가 맞다)
+SORT_LINKS="$(sf_render "shop&category=none&page=3")"
+contains "정렬 링크가 분류를 유지한다" "$SORT_LINKS" 'href="/shop?category=none&amp;sort=recent"'
+absent "정렬 링크에 page 는 남기지 않는다" "$SORT_LINKS" 'page=3&amp;sort'
+contains "빈 결과에도 막대가 남는다 (되돌릴 수단)" "$SORT_LINKS" 'class="brick-sort"'
+
 echo "── 상품 뱃지 NEW · BEST · 할인율 (진열대의 관례)"
 # 샘플 상품으로 세 경우를 만든다: 많이 팔린 것(BEST) · 오래된 것(NEW 아님) · 품절(뱃지 없음)
 psql_q "UPDATE shop_products SET sold_count = 33 WHERE slug = 'sample-tote'" >/dev/null
 psql_q "UPDATE shop_products SET created_at = now() - interval '60 days' WHERE slug = 'sample-mug'" >/dev/null
+bust_cache
 BADGE_HTML="$(sf_render "shop")"
 contains "새 상품에 NEW" "$BADGE_HTML" 'brick-tag brick-tag-new">NEW'
 contains "많이 팔린 상품에 BEST" "$BADGE_HTML" 'brick-tag brick-tag-best">BEST'
 contains "정가가 있으면 할인율" "$BADGE_HTML" 'brick-tag brick-tag-sale">'
-card_of() { python3 -c "
+# 카드 하나만 정확히 자른다 — 상품 카드에는 중첩 <a> 가 없으므로 href 부터 첫 </a> 까지다.
+# (넉넉히 자르면 옆 카드의 뱃지까지 삼켜, 정렬이 바뀔 때 엉뚱하게 통과·실패한다 — 실제로 그랬다)
+card_of() { /usr/bin/python3 -c "
 import sys, re
 h = sys.stdin.read()
-m = re.search(r'<a class=\"brick-product-card[^\"]*\" href=\"/shop/' + sys.argv[1] + r'\".*?</a>\s*$', h, re.S | re.M) \
-    or re.search(r'<a class=\"brick-product-card[^\"]*\" href=\"/shop/' + sys.argv[1] + r'\"(?:.|\n){0,1200}', h)
+m = re.search(r'<a class=\"brick-product-card[^\"]*\" href=\"/shop/' + re.escape(sys.argv[1]) + r'\"(?:.|\n)*?</a>', h)
 print(m.group(0) if m else '')
 " "$1"; }
 absent "60일 전 상품에는 NEW 를 붙이지 않는다" "$(echo "$BADGE_HTML" | card_of "sample-mug")" "brick-tag-new"
