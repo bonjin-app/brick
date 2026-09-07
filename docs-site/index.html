@@ -191,9 +191,10 @@ node server.js
     </div>
 
     <div class="stats">
-      <div><strong>2,721</strong><span>E2E 검증 항목 · 전부 통과</span></div>
+      <div><strong>2,963</strong><span>E2E 검증 항목 · 전부 통과</span></div>
       <div><strong>8</strong><span>동봉 플러그인</span></div>
-      <div><strong>77</strong><span>기록된 설계 결정(ADR)</span></div>
+      <div><strong>5</strong><span>동봉 테마</span></div>
+      <div><strong>96</strong><span>기록된 설계 결정(ADR)</span></div>
       <div><strong>MIT</strong><span>라이선스</span></div>
     </div>
   </div>
@@ -338,8 +339,18 @@ node server.js
       </div>
       <div class="card">
         <span class="ico">🎨</span>
-        <h3>테마는 빌드가 없다</h3>
-        <p>테마는 런타임 템플릿(HTML)입니다. React를 몰라도 만들 수 있고, 업로드하면 <strong>즉시</strong> 반영됩니다.</p>
+        <h3>테마 다섯 벌이 함께 옵니다</h3>
+        <p>커뮤니티·신문·쇼핑몰(카페24식)·편집샵·기업 홈페이지. 같은 게시판·상품 화면이 <strong>다섯 인상</strong>으로 그려집니다. 적용 전에 <strong>내 사이트 내용으로 미리보기</strong>(폭 전환까지)를 볼 수 있고, 테마는 빌드 없는 런타임 템플릿(HTML)이라 React 를 몰라도 만들 수 있습니다.</p>
+      </div>
+      <div class="card">
+        <span class="ico">🛍️</span>
+        <h3>쇼핑몰이 처음부터 쇼핑몰답게</h3>
+        <p>설치 때 쇼핑몰을 고르면 <strong>카페24식 3단 헤더</strong> 테마가 켜지고, 배너 슬라이드·상품 격자·인기 상품 진열이 있는 홈이 만들어집니다. NEW·BEST·할인율 뱃지, 퀵메뉴, 2단 카테고리 메뉴, 사이트 전체 띠배너까지 — <strong>샘플 상품까지 들어 있어</strong> 첫 화면이 비어 있지 않습니다.</p>
+      </div>
+      <div class="card">
+        <span class="ico">🖼️</span>
+        <h3>올린 사진을 알아서 손질합니다</h3>
+        <p>휴대폰 사진(4000px·4MB)을 그대로 두지 않습니다. 2400px 이내로 줄이고 목록용 썸네일을 만들며, <strong>EXIF 의 촬영 위치를 지웁니다</strong> — 손님이 올린 사진에 집 주소가 붙어 공개되지 않게. 이미 쌓인 사진도 도구 한 번으로 채웁니다.</p>
       </div>
       <div class="card">
         <span class="ico">⚡</span>
@@ -354,7 +365,7 @@ node server.js
       <div class="card">
         <span class="ico">🧪</span>
         <h3>실제 서버로 검증</h3>
-        <p><strong>E2E 스모크 2,721개</strong>가 실제 PostgreSQL과 실제 서버 프로세스를 띄워 돕니다. 재고 동시성·금액 위조·저장형 XSS·로그인 CSRF처럼 <strong>틀리면 돈이나 계정을 잃는</strong> 경로를 항목으로 못박아 두었습니다.</p>
+        <p><strong>E2E 스모크 2,963개</strong>가 실제 PostgreSQL과 실제 서버 프로세스를 띄워 돕니다. 재고 동시성·금액 위조·저장형 XSS·로그인 CSRF처럼 <strong>틀리면 돈이나 계정을 잃는</strong> 경로를 항목으로 못박아 두었습니다.</p>
       </div>
       <div class="card">
         <span class="ico">📐</span>
@@ -382,7 +393,9 @@ node server.js
           <tr><td>설치</td><td>FTP 업로드</td><td>FTP 업로드</td><td class="brick">Docker 한 줄 · 또는 FTP 업로드</td></tr>
           <tr><td>업데이트</td><td>파일 수동 교체</td><td>관리자 클릭</td><td class="brick">파일 교체 + 자동 마이그레이션</td></tr>
           <tr><td>플러그인</td><td>제한적</td><td>ZIP 업로드</td><td class="brick">ZIP 업로드</td></tr>
-          <tr><td>테마</td><td>스킨(PHP)</td><td>테마(PHP)</td><td class="brick">런타임 템플릿(빌드 없음)</td></tr>
+          <tr><td>테마</td><td>스킨(PHP)</td><td>테마(PHP)</td><td class="brick">런타임 템플릿(빌드 없음) · 동봉 5벌 · 적용 전 미리보기</td></tr>
+          <tr><td>업로드 이미지</td><td>썸네일(GD)</td><td>썸네일</td><td class="brick">축소 · 썸네일 · <strong>EXIF 위치 제거</strong> · 기존 파일 백필</td></tr>
+          <tr><td>저장형 XSS 방어</td><td>새니타이저</td><td>새니타이저</td><td class="brick">새니타이저 + <strong>CSP</strong>(외부 스크립트 차단, 확장이 출처를 선언)</td></tr>
           <tr><td>페이지 빌더</td><td>없음</td><td>Gutenberg</td><td class="brick">코어 기본 제공</td></tr>
           <tr><td>게시판</td><td>핵심 기능</td><td>플러그인</td><td class="brick">첨부 · 권한 · 답변형 · 비밀글</td></tr>
           <tr><td>쇼핑몰</td><td>별도 설치</td><td>WooCommerce</td><td class="brick">플러그인 기본 동봉</td></tr>
@@ -471,7 +484,7 @@ node server.js
     </p>
     <div class="grid">
       <div class="card"><h3>✅ 동작</h3><p>설치 마법사(사이트 유형 스타터) · 회원(약관 동의 · 이메일 인증 · 탈퇴 · 휴면 · <strong>2단계 인증</strong> · 세션 관리 · 위험 작업 재인증 · 관리자 IP 제한) · 소셜 로그인 · 페이지 빌더 · 미디어 · 메뉴(연결 대상 선택) · <strong>통합검색 · 검색 분석</strong> · 게시판 · 쪽지 · 포인트 · 1:1 문의 · FAQ · 설문조사 · 방문자 집계 · 팝업/배너 · 단체메일 · <strong>쇼핑몰</strong>(후기 · 옵션 · 취소/반품/교환 · 위시리스트 · 지역별 배송비 · 관련 상품 · 재입고 알림 · <strong>기획전 · 회원 등급 · 쿠폰함 · 정기결제</strong>) · 결제(토스페이먼츠) · 개인결제 · 판매 리포트 · <strong>현금영수증 · 세금계산서 · 부가세 자료</strong> · 데이터 이전(이미지 주소 자동 변환) · <strong>원클릭 업데이트(Ed25519 서명) · 플러그인 레지스트리 · OpenAPI 문서 · 개발 템플릿</strong> · sitemap.xml · 감사 로그 · 자동 마이그레이션 · 백업 CLI</p></div>
-      <div class="card"><h3>🚧 1.0 까지</h3><p>완성형 정의 네 문장의 코드 요건은 전부 충족됐습니다. 최신 릴리스는 <a href="https://github.com/bonjin-app/brick/releases/latest">v0.2.2</a> — 배포본과 Docker 이미지(<code class="inline">ghcr.io/bonjin-app/brick</code>, amd64·arm64)가 태그마다 함께 나옵니다. npm 공개는 플러그인 SDK 에만 해당하며 보류 중(ADR-92) — <a href="https://github.com/bonjin-app/brick/blob/main/docs/roadmap.md">완성형 정의와 로드맵</a></p></div>
+      <div class="card"><h3>🚧 1.0 까지</h3><p>완성형 정의 네 문장의 코드 요건은 전부 충족됐습니다. 최신 릴리스는 <a href="https://github.com/bonjin-app/brick/releases/latest">v0.3.0</a> — 배포본과 Docker 이미지(<code class="inline">ghcr.io/bonjin-app/brick</code>, amd64·arm64)가 태그마다 함께 나옵니다. npm 공개는 플러그인 SDK 에만 해당하며 보류 중(ADR-92) — <a href="https://github.com/bonjin-app/brick/blob/main/docs/roadmap.md">완성형 정의와 로드맵</a></p></div>
       <div class="card"><h3>🤝 함께</h3><p>설치가 안 되는 것이 가장 중요한 버그입니다.
         <a href="https://github.com/bonjin-app/brick/issues/new?template=bug_report.yml">버그 신고</a> ·
         <a href="https://github.com/bonjin-app/brick/issues/new?template=feature_request.yml">기능 제안</a> ·
