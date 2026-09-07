@@ -272,6 +272,53 @@ curl -s -b "$CK" -X PUT "$SHOP/admin/orders/$BOID" -H 'content-type: application
 contains "결제 확인 후 자격 획득" \
   "$(curl -s -b "$BCK" "$SHOP/products/$OPID/reviews/eligibility")" '"canWrite":true'
 
+echo "── 사진 후기 (카페24 후기의 핵심)"
+# 사진을 만든다 — sharp 는 API 에 들어 있으므로 그것으로
+node -e '
+const sharp = require("'"$ROOT"'/apps/api/node_modules/sharp");
+const w=1800,h=1200, buf=Buffer.alloc(w*h*3);
+for (let y=0;y<h;y++) for (let x=0;x<w;x++){const i=(y*w+x)*3;buf[i]=(x*255/w)|0;buf[i+1]=140;buf[i+2]=(y*255/h)|0;}
+sharp(buf,{raw:{width:w,height:h,channels:3}}).withExif({IFD0:{Make:"Brick"},GPS:{GPSLatitudeRef:"N"}}).jpeg({quality:95}).toFile(process.argv[1]);
+' "$TMP/review.jpg" 2>/dev/null || echo "(sharp 없음 — 이 절은 건너뜁니다)"
+if [[ -f "$TMP/review.jpg" ]]; then
+  # 비구매자는 업로드조차 못 한다 — 그러지 않으면 아무 회원이나 스토리지에 파일을 쌓는다
+  NCK="$TMP/nonbuyer.txt"
+  curl -s -X POST "$API/api/register" -H 'content-type: application/json' \
+    -d '{"email":"nonbuyer@shop.test","password":"nonbuyer123","agreements":{"terms":true,"privacy":true,"third_party":true},"displayName":"비구매자"}' >/dev/null
+  curl -s -c "$NCK" -X POST "$API/api/auth/login" -H 'content-type: application/json' \
+    -d '{"email":"nonbuyer@shop.test","password":"nonbuyer123"}' >/dev/null
+  check "비구매자는 사진을 올릴 수 없다" \
+    "$(code -b "$NCK" -X POST "$SHOP/products/$OPID/reviews/images" -F "files=@$TMP/review.jpg;type=image/jpeg")" "403"
+  check "비로그인도 막는다" \
+    "$(code -X POST "$SHOP/products/$OPID/reviews/images" -F "files=@$TMP/review.jpg;type=image/jpeg")" "401"
+  # 구매자는 올릴 수 있다
+  UP="$(curl -s -b "$BCK" -X POST "$SHOP/products/$OPID/reviews/images" -F "files=@$TMP/review.jpg;type=image/jpeg")"
+  contains "구매자는 사진을 올린다" "$UP" '"urls":["/uploads/shop/reviews/'
+  RURL="$(echo "$UP" | jq_get "['urls'][0]")"
+  check "올린 사진이 서빙된다" "$(code "$API$RURL")" "200"
+  # 코어 이미지 파이프라인을 거친다 — 1600px 로 줄고 EXIF(촬영 위치)가 지워진다
+  curl -s "$API$RURL" -o "$TMP/review-saved.jpg"
+  META="$(node -e '
+const sharp = require("'"$ROOT"'/apps/api/node_modules/sharp");
+sharp(process.argv[1]).metadata().then(m => console.log(m.width + " " + (m.exif ? "exif" : "clean")));
+' "$TMP/review-saved.jpg" 2>/dev/null)"
+  check "1600px 로 줄인다" "${META%% *}" "1600"
+  check "EXIF(촬영 위치)를 지운다" "${META##* }" "clean"
+  # 이미지가 아닌 파일과 장수 제한
+  check "이미지가 아니면 거부" "$(printf 'x' > "$TMP/r.txt"; code -b "$BCK" -X POST "$SHOP/products/$OPID/reviews/images" -F "files=@$TMP/r.txt;type=text/plain")" "400"
+  check "네 장 이상은 거부" "$(code -b "$BCK" -X POST "$SHOP/products/$OPID/reviews/images" \
+    -F "files=@$TMP/review.jpg;type=image/jpeg" -F "files=@$TMP/review.jpg;type=image/jpeg" \
+    -F "files=@$TMP/review.jpg;type=image/jpeg" -F "files=@$TMP/review.jpg;type=image/jpeg")" "400"
+  # 후기에 붙여 저장하면 목록에 사진이 나온다
+  printf '{"rating":5,"content":"사진과 함께 남기는 후기입니다.","images":["%s"]}' "$RURL" > "$TMP/rphoto.json"
+  RPOST="$(curl -s -b "$BCK" -X POST "$SHOP/products/$OPID/reviews" -H 'content-type: application/json' --data-binary "@$TMP/rphoto.json")"
+  contains "사진 후기 등록" "$RPOST" '"id"'
+  contains "목록 응답에 사진이 담긴다" "$(curl -s "$SHOP/products/$OPID/reviews")" "$RURL"
+  # 같은 사람은 한 번만 쓴다(기존 규칙) — 아래 검사들이 이 후기를 쓰지 않게 지운다
+  RID="$(curl -s -b "$BCK" "$SHOP/products/$OPID/reviews/eligibility" | jq_get "['reviewId']")"
+  [[ -n "$RID" ]] && curl -s -b "$BCK" -X DELETE "$SHOP/reviews/$RID" -o /dev/null
+fi
+
 check "짧은 후기 차단" \
   "$(code -b "$BCK" -X POST "$SHOP/products/$OPID/reviews" -H 'content-type: application/json' \
       -d '{"rating":5,"content":"굿"}')" "400"

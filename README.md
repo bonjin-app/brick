@@ -27,7 +27,7 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-2974%20passing-2ea043.svg" alt="스모크 테스트 2974개" />
+  <img src="https://img.shields.io/badge/E2E-2986%20passing-2ea043.svg" alt="스모크 테스트 2986개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
   <a href="https://github.com/bonjin-app/brick/pkgs/container/brick">
     <img src="https://img.shields.io/badge/docker-amd64%20%C2%B7%20arm64-2496ed.svg" alt="Docker image (amd64 · arm64)" />
@@ -394,7 +394,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `smoke-board.sh` | 161 | 권한 4단계 · 답변형 · 비밀글 · 첨부 원자성 · XSS · **목록 스킨·썸네일·이전/다음·일괄 작업·그룹 권한·링크** · **첨부 이미지 축소** · **갤러리 썸네일·data-thumb·사진만 글** |
 | `smoke-point.sh` | 55 | FIFO 소모 · 멱등 적립 · 만료 · 동시성 |
 | `smoke-memo.sh` | 76 | 프라이버시 · 차단 · 포인트 차감 트랜잭션 · 슬래시 없는 루트 경로 |
-| `smoke-shop.sh` | 108 | 재고 동시성 · 금액 위조 · 구매 검증 후기 · 비밀 문의 |
+| `smoke-shop.sh` | 118 | 재고 동시성 · 금액 위조 · 구매 검증 후기 · 비밀 문의 · **사진 후기** |
 | `smoke-site.sh` | 73 | 방문자 집계(IP 해시) · 팝업 노출 규칙 |
 | `smoke-social.sh` | 76 | state 쿠키 결속 · 코드 1회성 · 계정 탈취 경로 |
 | `smoke-security.sh` | 64 | 캡차 · 레이트리밋 · 결제 위조 · 권한 우회 · **CSP** |

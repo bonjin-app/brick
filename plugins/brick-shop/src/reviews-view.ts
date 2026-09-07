@@ -89,6 +89,13 @@ const REVIEW_CSS = `
 .brick-write-box h3{margin:0 0 14px;font-size:16px}
 .brick-write-box textarea{width:100%;min-height:96px;padding:11px;border:1px solid var(--color-line, #e4e4ea);border-radius:8px;box-sizing:border-box;font:inherit}
 .brick-write-box input[type=text]{width:100%;padding:11px;border:1px solid var(--color-line, #e4e4ea);border-radius:8px;box-sizing:border-box;font:inherit;margin-bottom:10px}
+.brick-photo-pick{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0 2px}
+.brick-photo-add{display:inline-flex;align-items:center;min-height:38px;padding:0 14px;font-size:13.5px;font-weight:600;color:var(--color-text-soft, #45454f);background:var(--color-bg-soft, #f6f6f9);border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 8px);cursor:pointer}
+.brick-photo-add:hover{color:var(--color-text, #17171c)}
+.brick-photo-preview{display:flex;gap:6px;flex-wrap:wrap}
+.brick-photo-item{position:relative;display:inline-block;width:56px;height:56px}
+.brick-photo-item img{width:100%;height:100%;object-fit:cover;border-radius:var(--radius, 6px);border:1px solid var(--color-line, #e4e4ea)}
+.brick-photo-item button{position:absolute;top:-6px;right:-6px;width:22px;height:22px;padding:0;border:0;border-radius:50%;background:var(--color-text, #17171c);color:#fff;font-size:11px;line-height:1;cursor:pointer}
 .brick-rating-pick{display:flex;gap:4px;margin-bottom:12px;font-size:28px;line-height:1;cursor:pointer;color:var(--color-line, #e4e4ea)}
 .brick-rating-pick b{cursor:pointer;font-weight:400}
 .brick-rating-pick b.is-on{color:var(--color-warning, #96610a)}
@@ -98,7 +105,8 @@ const REVIEW_CSS = `
 .brick-write-note{padding:16px;background:var(--color-bg-soft, #f6f6f9);border-radius:10px;font-size:14px;color:var(--color-muted, #6c6c7a);margin-bottom:24px}
 .brick-secret-label{display:flex;gap:6px;align-items:center;font-size:14px;color:var(--color-text-soft, #45454f);margin-top:10px}
 .brick-row-actions{margin-top:10px;display:flex;gap:8px}
-.brick-row-actions button{padding:5px 12px;font-size:13px;border:1px solid var(--color-line, #e4e4ea);border-radius:6px;background:var(--color-bg, #ffffff);cursor:pointer}
+/* 내 후기·문의를 지우는 버튼 — 손가락으로 누른다. 글자 크기는 그대로 두고 영역만 44px */
+.brick-row-actions button{min-height:44px;padding:0 14px;font-size:13px;border:1px solid var(--color-line, #e4e4ea);border-radius:6px;background:var(--color-bg, #ffffff);cursor:pointer}
 .brick-pd-more{display:block;width:100%;padding:13px;margin-top:16px;border:1px solid var(--color-line, #e4e4ea);border-radius:8px;background:var(--color-bg, #ffffff);cursor:pointer}
 .brick-gallery{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
 .brick-gallery button{padding:0;border:2px solid transparent;border-radius:8px;overflow:hidden;background:none;cursor:pointer;line-height:0}
@@ -254,6 +262,13 @@ const reviewScript = () => `
     return '<div class="brick-write-box"><h3>' + ${JSON.stringify(t("reviews.writeTitle"))} + '</h3>' +
       '<div class="brick-rating-pick" data-rating>' + picks + '</div>' +
       '<textarea data-content placeholder="' + ${JSON.stringify(t("reviews.placeholder"))}.replace(/"/g, '&quot;') + '"></textarea>' +
+      // 사진 후기 — 다른 손님이 살지 말지를 정하는 정보다. 최대 3장.
+      '<div class="brick-photo-pick">' +
+        '<label class="brick-photo-add">' + ${JSON.stringify(t("reviews.photos"))} +
+          '<input type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden data-photos />' +
+        '</label>' +
+        '<div class="brick-photo-preview" data-preview></div>' +
+      '</div>' +
       '<div class="brick-write-actions"><button data-submit>' + ${JSON.stringify(t("common.submit"))} + '</button>' +
       '<span class="brick-write-msg" data-msg></span></div></div>';
   }
@@ -270,12 +285,51 @@ const reviewScript = () => `
     });
     paint();
 
+    /*
+     * 사진은 **고르는 즉시 올린다.** 제출할 때 한꺼번에 올리면 손님은 버튼을 누르고 한참 기다리다
+     * 실패 이유(용량·형식)를 그때 처음 본다. 먼저 올려 두면 실패가 그 사진에서 즉시 드러나고,
+     * 제출은 URL 목록만 보내므로 빠르다.
+     */
+    var photos = [];
+    var picker = get(box, '[data-photos]');
+    var preview = get(box, '[data-preview]');
+    function paintPhotos(){
+      preview.innerHTML = photos.map(function(u, i){
+        return '<span class="brick-photo-item"><img src="' + esc(u) + '" alt="" />' +
+          '<button type="button" data-drop="' + i + '" aria-label="' + ${JSON.stringify(t("reviews.photoRemove"))} + '">✕</button></span>';
+      }).join('');
+    }
+    preview.addEventListener('click', function(e){
+      var b = e.target.closest('[data-drop]');
+      if (!b) return;
+      photos.splice(Number(b.dataset.drop), 1);
+      paintPhotos();
+    });
+    if (picker) picker.addEventListener('change', function(){
+      var files = Array.prototype.slice.call(picker.files || []);
+      picker.value = '';
+      if (!files.length) return;
+      var msg = get(box, '[data-msg]');
+      if (photos.length + files.length > 3) { msg.textContent = ${JSON.stringify(t("reviews.tooManyImages"))}; return; }
+      msg.textContent = ${JSON.stringify(t("reviews.uploading"))};
+      var fd = new FormData();
+      files.forEach(function(f){ fd.append('files', f); });
+      fetch(API + '/products/' + pid + '/reviews/images', { method: 'POST', body: fd })
+        .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(d){ return { ok: r.ok, d: d }; }); })
+        .then(function(res){
+          if (!res.ok) { msg.textContent = res.d.message || ${JSON.stringify(t("common.submitFail"))}; return; }
+          msg.textContent = '';
+          photos = photos.concat(res.d.urls || []).slice(0, 3);
+          paintPhotos();
+        });
+    });
+
     get(box, '[data-submit]').addEventListener('click', function(){
       var msg = get(box, '[data-msg]');
       msg.textContent = '';
       json(API + '/products/' + pid + '/reviews', {
         method: 'POST', headers: {'content-type':'application/json'},
-        body: JSON.stringify({ rating: state.myRating, content: get(box, '[data-content]').value })
+        body: JSON.stringify({ rating: state.myRating, content: get(box, '[data-content]').value, images: photos })
       }).then(function(res){
         if (!res.ok) { msg.textContent = res.d.message || ${JSON.stringify(t("common.submitFail"))}; return; }
         loadReviews(1); loadForm();

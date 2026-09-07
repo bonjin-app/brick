@@ -189,5 +189,12 @@
   "sort.recent": "신상품순",
   "sort.popular": "인기순",
   "sort.price_asc": "낮은 가격순",
-  "sort.price_desc": "높은 가격순"
+  "sort.price_desc": "높은 가격순",
+  "reviews.photos": "사진 (최대 3장)",
+  "reviews.noImage": "이미지 파일이 없습니다.",
+  "reviews.tooManyImages": "사진은 3장까지 올릴 수 있습니다.",
+  "reviews.imageOnly": "이미지 파일만 올릴 수 있습니다 (png·jpg·gif·webp).",
+  "reviews.imageTooBig": "사진은 8MB 이하만 올릴 수 있습니다.",
+  "reviews.uploading": "사진 올리는 중…",
+  "reviews.photoRemove": "사진 빼기"
 }

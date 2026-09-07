@@ -1,6 +1,7 @@
 import { definePlugin, isUniqueViolation, isValidBusinessNo, maskEmail, rawResponse, searchExcerpt } from "@brick/plugin-sdk";
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
+import { t } from "./i18n.js";
 import { DEFAULT_SETTINGS, ShopError, STATUS_LABEL, escapeHtml, won,
          type Db, type OrderStatus, type ShopSettings } from "./types.js";
 import { quote } from "./pricing.js";
@@ -1563,6 +1564,46 @@ export default definePlugin(async (ctx) => {
     `);
     if (rows.length) return { canWrite: false, reason: "already_written", reviewId: rows[0].id };
     return { canWrite: true, reason: null };
+  });
+
+  /**
+   * 후기 사진 업로드 — 후기를 쓸 자격이 있는 사람만(구매자, 아직 안 쓴 사람).
+   *
+   * 후기의 사진은 다른 손님이 살지 말지를 정하는 정보다 — 카페24에서 "사진 후기"가 따로 분류되는
+   * 이유다. API 는 처음부터 images 배열을 받았지만 **올릴 화면이 없었다.**
+   *
+   * 코어의 이미지 처리를 거친다(1600px·EXIF 제거·썸네일): 손님이 휴대폰으로 찍어 올리므로
+   * 원본은 4MB 이고 촬영 위치가 들어 있다. 자격 검사를 업로드 시점에 하는 이유는, 그러지 않으면
+   * 아무 회원이나 스토리지에 파일을 쌓을 수 있기 때문이다.
+   */
+  ctx.registerRoute("POST", "/products/:id/reviews/images", async (req) => {
+    const user = requireLogin(req);
+    const orderNo = await findPurchase(db, { productId: req.params.id, userId: user.id });
+    if (!orderNo) throw new ShopError(403, t("reviews.noteBuyers"));
+
+    const files = await req.files();
+    if (!files.length) throw new ShopError(400, t("reviews.noImage"));
+    if (files.length > 3) throw new ShopError(400, t("reviews.tooManyImages"));
+
+    const urls: string[] = [];
+    for (const file of files) {
+      const ext = (file.fileName.match(/\.[a-z0-9]+$/i)?.[0] ?? "").toLowerCase();
+      if (![".png", ".jpg", ".jpeg", ".gif", ".webp"].includes(ext) || !/^image\//.test(file.contentType)) {
+        throw new ShopError(400, t("reviews.imageOnly"));
+      }
+      if (file.buffer.length > 8 * 1024 * 1024) throw new ShopError(400, t("reviews.imageTooBig"));
+      const now = new Date();
+      const id = uuidv7();
+      const dir = `shop/reviews/${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}`;
+      const optimized = await ctx.images.optimize(file.buffer, file.contentType, { maxWidth: 1600, maxHeight: 1600 });
+      const key = `${dir}/${id}${optimized.ext ?? ext}`;
+      await ctx.storage.put(key, optimized.buffer, optimized.contentType);
+      // 목록에서 여러 장이 나란히 보이므로 썸네일도 만든다
+      const thumb = await ctx.images.thumbnail(file.buffer, file.contentType, { width: 320 });
+      if (thumb) await ctx.storage.put(`${dir}/${id}-thumb${thumb.ext ?? ".webp"}`, thumb.buffer, thumb.contentType);
+      urls.push(ctx.storage.publicUrl(key));
+    }
+    return { urls };
   });
 
   ctx.registerRoute("POST", "/products/:id/reviews", async (req) => {

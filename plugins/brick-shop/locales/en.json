@@ -429,5 +429,12 @@
   "sort.recent": "Newest",
   "sort.popular": "Best selling",
   "sort.price_asc": "Price: low to high",
-  "sort.price_desc": "Price: high to low"
+  "sort.price_desc": "Price: high to low",
+  "reviews.photos": "Photos (up to 3)",
+  "reviews.noImage": "No image file.",
+  "reviews.tooManyImages": "Up to 3 photos.",
+  "reviews.imageOnly": "Images only (png, jpg, gif, webp).",
+  "reviews.imageTooBig": "Each photo must be 8MB or less.",
+  "reviews.uploading": "Uploading…",
+  "reviews.photoRemove": "Remove photo"
 }
