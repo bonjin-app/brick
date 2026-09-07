@@ -13,11 +13,15 @@
  * 이제 `연결 대상 선택`을 누르면 페이지·게시판·쇼핑몰 화면이 목록으로 나오고,
  * 고르면 이름과 주소가 함께 채워진다. 직접 입력도 남겨 뒀다 — 외부 링크와
  * 앵커는 목록에 있을 수 없다.
+ *
+ * **하위 항목(2단)**: 코어는 메뉴를 3단까지 저장하고 테마는 드롭다운으로 그리는데
+ * 이 화면에 하위를 만들 방법이 없었다 — 상품 분류가 열 개를 넘는 쇼핑몰은 한 줄 메뉴로
+ * 담을 수 없다. 항목마다 "하위 추가"를 두고, 하위는 한 단만 받는다(3단은 손님이 못 찾는다).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAdminT } from "../../../../lib/i18n-admin";
 
-interface MenuItem { label: string; url: string }
+interface MenuItem { label: string; url: string; children?: MenuItem[] }
 interface LinkTarget { path: string; label: string; hint?: string | null }
 interface TargetGroup { code: string; label: string; items: LinkTarget[] }
 
@@ -34,6 +38,8 @@ export default function AdminMenusPage() {
   const [message, setMessage] = useState("");
   /** 어느 항목의 선택기를 열었나 (null 이면 닫힘) */
   const [pickerFor, setPickerFor] = useState<number | null>(null);
+  /** 하위 항목 선택기 — "부모:자식" 인덱스 (null 이면 닫힘) */
+  const [childPickerFor, setChildPickerFor] = useState<string | null>(null);
 
   const reload = useCallback(() => {
     fetch("/api/menus/header").then((r) => r.json()).then((d) => setItems(d.items ?? []));
@@ -42,6 +48,33 @@ export default function AdminMenusPage() {
 
   function update(i: number, patch: Partial<MenuItem>) {
     setItems(items.map((it, j) => (j === i ? { ...it, ...patch } : it)));
+  }
+  /** 하위 항목 수정 — 부모 인덱스와 자식 인덱스로 짚는다 */
+  function updateChild(i: number, ci: number, patch: Partial<MenuItem>) {
+    setItems(items.map((it, j) =>
+      j === i ? { ...it, children: (it.children ?? []).map((c, k) => (k === ci ? { ...c, ...patch } : c)) } : it,
+    ));
+  }
+  function addChild(i: number) {
+    setItems(items.map((it, j) => (j === i ? { ...it, children: [...(it.children ?? []), { label: "", url: "" }] } : it)));
+  }
+  function removeChild(i: number, ci: number) {
+    setItems(items.map((it, j) => {
+      if (j !== i) return it;
+      const rest = (it.children ?? []).filter((_, k) => k !== ci);
+      // 마지막 하위를 지우면 children 자체를 없앤다 — 빈 배열이 남으면 테마가 빈 드롭다운을 그린다
+      return rest.length ? { ...it, children: rest } : { label: it.label, url: it.url };
+    }));
+  }
+  function moveChild(i: number, ci: number, dir: -1 | 1) {
+    setItems(items.map((it, j) => {
+      if (j !== i) return it;
+      const next = [...(it.children ?? [])];
+      const k = ci + dir;
+      if (k < 0 || k >= next.length) return it;
+      [next[ci], next[k]] = [next[k], next[ci]];
+      return { ...it, children: next };
+    }));
   }
   function move(i: number, dir: -1 | 1) {
     const next = [...items];
@@ -61,6 +94,11 @@ export default function AdminMenusPage() {
     const current = items[i];
     update(i, { url: target.path, label: current.label.trim() || target.label });
     setPickerFor(null);
+  }
+  function pickChild(i: number, ci: number, target: LinkTarget) {
+    const current = items[i].children?.[ci];
+    updateChild(i, ci, { url: target.path, label: current?.label.trim() || target.label });
+    setChildPickerFor(null);
   }
 
   async function save() {
@@ -103,6 +141,35 @@ export default function AdminMenusPage() {
                 onClick={() => { setItems(items.filter((_, j) => j !== i)); setPickerFor(null); }}>✕</button>
             </div>
             {pickerFor === i && <TargetPicker onPick={(t) => pick(i, t)} onClose={() => setPickerFor(null)} />}
+
+            {/* 하위 항목 — 왼쪽 선으로 계층을 보여 준다 */}
+            <div style={{ marginLeft: 22, paddingLeft: 12, borderLeft: "2px solid var(--color-line)", marginTop: 6 }}>
+              {(it.children ?? []).map((ch, ci) => (
+                <div key={ci} style={{ marginBottom: 6 }}>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input style={{ ...input, flex: 1, minWidth: 120 }} placeholder={t("menus.labelPh")} value={ch.label}
+                      onChange={(e) => updateChild(i, ci, { label: e.target.value })} />
+                    <input style={{ ...input, flex: 2, minWidth: 180, fontFamily: "ui-monospace, Menlo, monospace", fontSize: 13 }}
+                      placeholder="/shop/tops" value={ch.url}
+                      onChange={(e) => updateChild(i, ci, { url: e.target.value })} />
+                    <button style={btn} onClick={() => setChildPickerFor(childPickerFor === `${i}:${ci}` ? null : `${i}:${ci}`)}>
+                      {t("menus.pick")}
+                    </button>
+                    <button style={btn} onClick={() => moveChild(i, ci, -1)} title={t("common.up")}>↑</button>
+                    <button style={btn} onClick={() => moveChild(i, ci, 1)} title={t("common.down")}>↓</button>
+                    <button style={{ ...btn, color: "var(--color-danger)" }} title={t("common.delete")}
+                      onClick={() => { removeChild(i, ci); setChildPickerFor(null); }}>✕</button>
+                  </div>
+                  {childPickerFor === `${i}:${ci}` && (
+                    <TargetPicker onPick={(tg) => pickChild(i, ci, tg)} onClose={() => setChildPickerFor(null)} />
+                  )}
+                </div>
+              ))}
+              <button style={{ ...btn, borderStyle: "dashed", padding: "6px 12px", fontSize: 13 }}
+                onClick={() => { addChild(i); setChildPickerFor(`${i}:${(it.children ?? []).length}`); }}>
+                {t("menus.addChild")}
+              </button>
+            </div>
           </div>
         ))}
 

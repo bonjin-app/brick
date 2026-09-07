@@ -323,6 +323,44 @@ check "기본 테마로 복귀" "$(code -b "$CK" -X POST "$API/api/themes/defaul
 
 
 # ════════════════════════════════════════════════════
+echo "── 2단 메뉴 (드롭다운) — 코어는 3단까지 저장하고 테마는 2단을 그린다"
+cat > "$TMP/menu2.json" <<'JSON'
+{"items":[
+  {"label":"상품","url":"/shop","children":[
+    {"label":"전체","url":"/shop"},
+    {"label":"소개서","url":"/about"}
+  ]},
+  {"label":"공지","url":"/board/notice"}
+]}
+JSON
+check "하위 항목이 있는 메뉴 저장" "$(code -b "$CK" -X PUT "$API/api/menus/header" -H 'content-type: application/json' --data-binary "@$TMP/menu2.json")" "200"
+NAV="$(render "")"
+contains "상위 항목을 감싸는 자리" "$NAV" 'class="brick-nav-item"'
+contains "하위 목록" "$NAV" 'class="brick-sub"'
+contains "하위 링크가 들어간다" "$NAV" '<a href="/about"'
+# 현재 위치는 **하나만** 켜진다 — 상위와 하위가 함께 켜지면 강조가 무의미하다
+NAV_SHOP="$(render "shop")"
+CUR_COUNT="$(echo "$NAV_SHOP" | grep -c 'aria-current="page"' || true)"
+check "현재 위치 표시는 하나뿐" "$CUR_COUNT" "1"
+NAV_ABOUT="$(render "about")"
+contains "하위가 더 구체적이면 하위가 켜진다" "$NAV_ABOUT" '<a href="/about" class="is-current" aria-current="page">소개서</a>'
+absent "그때 상위는 켜지지 않는다" "$NAV_ABOUT" '<a href="/shop" class="is-current"'
+# 템플릿 엔진의 each 는 항목 스코프에 없는 키를 부모에서 찾는다 — 자식마다 current 를 명시해야 한다
+# grep 은 매치가 없으면 exit 1 이다 — set -e 아래에서 스크립트를 멈추므로 || true 로 받는다
+SUB_SEG="$(echo "$NAV_SHOP" | grep -o 'class="brick-sub".*' || true)"
+CUR_IN_SUB="$(echo "${SUB_SEG%%</span></span>*}" | grep -c 'is-current' || true)"
+CUR_IN_SUB="${CUR_IN_SUB:-0}"
+check "상위가 켜져도 하위가 전부 켜지지 않는다 (스코프 상속)" "$CUR_IN_SUB" "0"
+# 다섯 테마 모두 드롭다운 CSS 를 갖는다 (계약)
+for TH in default editorial storefront boutique corporate; do
+  contains "$TH 테마에 드롭다운 스타일" "$(cat "$ROOT/themes/$TH/assets/style.css")" ".brick-sub"
+done
+# 3단은 저장은 되지만(코어 계약) 테마는 2단만 그린다
+printf '{"items":[{"label":"A","url":"/about","children":[{"label":"B","url":"/about","children":[{"label":"C","url":"/about"}]}]}]}' > "$TMP/menu3.json"
+check "3단 메뉴도 저장된다" "$(code -b "$CK" -X PUT "$API/api/menus/header" -H 'content-type: application/json' --data-binary "@$TMP/menu3.json")" "200"
+printf '{"items":[{"label":"소개","url":"/about"},{"label":"공지","url":"/board/notice"}]}' > "$TMP/menu1.json"
+curl -s -b "$CK" -X PUT "$API/api/menus/header" -H 'content-type: application/json' --data-binary "@$TMP/menu1.json" -o /dev/null
+
 echo "── 배너 슬라이드 (core/banner-slider) — 쇼핑몰 홈의 첫 화면"
 cat > "$TMP/slider.json" <<'JSON'
 {

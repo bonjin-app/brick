@@ -86,7 +86,7 @@
       </button>
 
       <nav class="brick-nav md:flex md:min-w-0 md:flex-1 md:items-center md:gap-0.5" id="brick-nav" aria-label="{{ t.header.menu }}">
-        {{#each menu}}<a href="{{ url }}"{{#if current}} class="is-current" aria-current="page"{{/if}}>{{ label }}</a>{{/each}}
+        {{#each menu}}<span class="brick-nav-item"><a href="{{ url }}"{{#if current}} class="is-current" aria-current="page"{{/if}}>{{ label }}</a>{{#if hasChildren}}<span class="brick-sub">{{#each children}}<a href="{{ url }}"{{#if current}} class="is-current" aria-current="page"{{/if}}>{{ label }}</a>{{/each}}</span>{{/if}}</span>{{/each}}
       </nav>
 
       <div class="brick-header-right ml-auto flex items-center gap-2 md:gap-3">

@@ -137,6 +137,7 @@ page.html 슬롯은 추가로 `title`(페이지 제목), `{{{ blocksHtml }}}`(�
 | `.brick-slider`(`.is-full`, `.is-auto`), `.brick-slides`, `.brick-slide`(`.is-on`), `.brick-slide-caption`, `.brick-slide-prev/-next`, `.brick-slide-dots` | 배너 슬라이드 — 동작(회전·스와이프)은 코어 블록이 인라인 스크립트로 넣고, 모양은 테마가 정합니다 |
 | `.brick-features`, `.brick-cta`, `.brick-faq-item` | 랜딩 섹션 |
 | `.brick-nav a.is-current` | 현재 위치인 메뉴 항목 (코어가 `aria-current="page"` 와 함께 붙여 줍니다) |
+| `.brick-nav-item`, `.brick-sub` | 2단 메뉴 — 상위 항목을 감싸고 하위 목록을 답니다. `{{#if hasChildren}}` 로 분기하고 `{{#each children}}` 로 그립니다 |
 | `.brick-hero.has-image` (`--hero-image`) | 사진 위 히어로 — 어둡게 깔고 흰 글자 |
 | `.brick-media-text` (`.is-reverse`, `.no-media`), `.brick-media`, `.brick-media-body` | 이미지 + 글 분할 |
 | `.brick-stats`, `.brick-stat` | 숫자 강조 띠 |
@@ -271,6 +272,15 @@ await brickContrastAudit(["/", "/board/free", "/shop", "/shop/cart"])
 **CSS 순서가 곧 정책입니다.** 미디어 쿼리는 특이성을 올리지 않으므로, 기본 규칙을 미디어 쿼리보다
 **앞에** 두어야 좁은 화면 규칙이 이깁니다 — Boutique 를 만들며 이것을 거꾸로 두어 375px 에서 3열이
 그대로 남았습니다(가로 넘침까지).
+
+## `each` 안에서 없는 키는 부모 값을 봅니다
+
+템플릿 엔진의 `each` 는 항목 스코프를 `{...부모scope, ...item}` 으로 만듭니다. 그래서 **항목에 없는
+키는 부모의 값이 그대로 보입니다.** 2단 메뉴에서 이것에 걸렸습니다 — 상위 항목이 `current: true` 일 때
+하위 항목에 `current` 키가 없어서 드롭다운의 **모든** 항목에 "현재 위치"가 붙었습니다.
+
+블록·코어가 반복용 데이터를 만들 때는 조건에 쓰는 키를 **항목마다 명시**하세요(`current: false` 포함).
+템플릿 쪽에서는 막을 방법이 없습니다.
 
 ## 외부 출처는 매니페스트에 선언합니다
 

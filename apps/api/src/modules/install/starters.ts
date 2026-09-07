@@ -524,7 +524,13 @@ function starterPages(code: string, siteName: string): Array<{
   }
 }
 
-function starterMenu(code: string): Array<{ label: string; url: string }> {
+interface MenuEntry {
+  label: string;
+  url: string;
+  children?: Array<{ label: string; url: string }>;
+}
+
+function starterMenu(code: string): MenuEntry[] {
   switch (code) {
     case "community":
       return [
@@ -536,7 +542,20 @@ function starterMenu(code: string): Array<{ label: string; url: string }> {
       ];
     case "shop":
       return [
-        { label: "상품", url: "/shop" },
+        /*
+         * 상품 아래에 하위 메뉴를 미리 만들어 둔다 — **2단 메뉴가 있다는 것을 보여 주려고**다.
+         * 관리자 → 메뉴에서 "하위 추가"가 있는 줄 모르면 분류가 늘어도 한 줄에 계속 붙인다.
+         * 링크는 정렬 파라미터라 분류를 안 만들어도 동작한다(빈 하위 메뉴가 아니다).
+         */
+        {
+          label: "상품",
+          url: "/shop",
+          children: [
+            { label: "전체 상품", url: "/shop" },
+            { label: "새로 나온 상품", url: "/shop?sort=recent" },
+            { label: "인기 상품", url: "/shop?sort=popular" },
+          ],
+        },
         { label: "공지사항", url: "/board/notice" },
         { label: "이용 안내", url: "/guide" },
         { label: "소개", url: "/about" },

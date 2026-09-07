@@ -313,9 +313,9 @@ export class PageRenderService {
   }
 
   /** 테마 템플릿이 {{#each menu}}로 순회할 내비게이션 */
-  private async menu(location: string): Promise<Array<{ label: string; url: string }>> {
+  private async menu(location: string): Promise<MenuNode[]> {
     const [row] = await this.db.select().from(menus).where(eq(menus.location, location)).limit(1);
-    return (row?.items ?? []) as Array<{ label: string; url: string }>;
+    return (row?.items ?? []) as MenuNode[];
   }
 }
 
@@ -327,23 +327,66 @@ export class PageRenderService {
  * 그래서 **가장 길게 맞는 항목 하나만** 표시한다 — "/board" 와 "/board/free"
  * 가 함께 켜지면 강조가 두 곳이 되어 아무 의미가 없다.
  */
-export function markCurrent<T extends { url: string }>(
+export interface MenuNode {
+  label: string;
+  url: string;
+  children?: MenuNode[];
+}
+
+export function markCurrent<T extends { url: string; children?: T[] }>(
   items: T[],
   path: string,
-): Array<T & { current?: true }> {
+): Array<T & { current?: true; hasChildren?: true; children?: Array<T & { current: boolean }> }> {
   const here = `/${String(path ?? "").replace(/^\/+|\/+$/g, "")}`;
-  let bestIdx = -1;
+  const norm = (u: string) => `/${String(u ?? "").replace(/^\/+|\/+$/g, "")}`;
+  const hits = (u: string) => {
+    const url = norm(u);
+    // 홈("/")은 하위 경로를 삼키면 안 된다 — 모든 경로가 "/" 로 시작한다
+    return url === "/" ? here === "/home" || here === "/" : here === url || here.startsWith(`${url}/`);
+  };
+
+  /*
+   * 상위 항목과 그 아래 항목이 함께 켜지면 강조가 두 곳이 되어 아무 의미가 없다.
+   * 그래서 **가장 길게 맞는 것 하나만** 켠다 — 하위 항목까지 통틀어서 고른다
+   * (드롭다운의 "상의 > 티셔츠"에서 켜져야 하는 것은 티셔츠다).
+   */
+  let bestPath: number[] = [];
   let bestLen = -1;
   items.forEach((item, i) => {
-    const url = `/${String(item.url ?? "").replace(/^\/+|\/+$/g, "")}`;
-    // 홈("/")은 하위 경로를 삼키면 안 된다 — 모든 경로가 "/" 로 시작한다
-    const hit = url === "/" ? here === "/home" || here === "/" : here === url || here.startsWith(`${url}/`);
-    if (hit && url.length > bestLen) {
-      bestLen = url.length;
-      bestIdx = i;
+    if (hits(item.url) && norm(item.url).length > bestLen) {
+      bestLen = norm(item.url).length;
+      bestPath = [i];
     }
+    (item.children ?? []).forEach((child, j) => {
+      if (hits(child.url) && norm(child.url).length > bestLen) {
+        bestLen = norm(child.url).length;
+        bestPath = [i, j];
+      }
+    });
   });
-  return items.map((item, i) => (i === bestIdx ? { ...item, current: true as const } : item));
+
+  return items.map((item, i) => {
+    /*
+     * 자식에는 current 를 **항상** 넣는다(true 또는 false).
+     *
+     * 템플릿 엔진의 each 는 항목 스코프를 `{...부모scope, ...item}` 으로 만든다 — 자식에 current
+     * 키가 없으면 `{{#if current}}` 가 **부모의 current 를 본다.** 상위 메뉴가 켜져 있으면
+     * 드롭다운의 모든 항목에 "현재 위치"가 붙었다(실제로 그랬다). 없는 키는 상속된다.
+     */
+    const children = item.children?.length
+      ? item.children.map((child, j) => ({
+          ...child,
+          current: bestPath.length === 2 && bestPath[0] === i && bestPath[1] === j,
+        }))
+      : undefined;
+    return {
+      ...item,
+      // 상위가 직접 켜진 경우만 current — 하위가 켜졌으면 그 하위에만 붙는다
+      ...(bestPath.length === 1 && bestPath[0] === i ? { current: true as const } : {}),
+      // 템플릿 엔진에 "배열이 비었나"를 물을 수 없어 플래그로 준다
+      ...(children ? { hasChildren: true as const, children } : {}),
+    };
+  });
 }
 
 /** og:image 는 절대 URL 이어야 한다 — /uploads/… 는 BRICK_SITE_URL 을 앞에 붙인다 */

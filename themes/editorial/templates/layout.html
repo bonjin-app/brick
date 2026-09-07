@@ -124,7 +124,7 @@
         </button>
         <a class="brick-navbar-logo" href="/">{{ site.name }}</a>
         <nav class="brick-nav" id="brick-nav" aria-label="{{ t.header.menu }}">
-          {{#each menu}}<a href="{{ url }}"{{#if current}} class="is-current" aria-current="page"{{/if}}>{{ label }}</a>{{/each}}
+          {{#each menu}}<span class="brick-nav-item"><a href="{{ url }}"{{#if current}} class="is-current" aria-current="page"{{/if}}>{{ label }}</a>{{#if hasChildren}}<span class="brick-sub">{{#each children}}<a href="{{ url }}"{{#if current}} class="is-current" aria-current="page"{{/if}}>{{ label }}</a>{{/each}}</span>{{/if}}</span>{{/each}}
         </nav>
       </div>
     </div>
