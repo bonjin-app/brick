@@ -43,6 +43,12 @@ const EDITABLE_SETTINGS: Record<string, "string" | "boolean"> = {
   "site.description": "string",
   // 공유 미리보기 이미지(og:image). 절대 URL 또는 /uploads/… 경로. 비우면 메타를 내지 않는다.
   "site.og_image": "string",
+  /*
+   * 띠배너 — 모든 화면 맨 위에 한 줄. 쇼핑몰의 "무료배송 이벤트"처럼 사이트 전체에 걸리는
+   * 공지라 페이지 블록으로는 담을 수 없다(모든 페이지에 넣어야 하고 내릴 때 다시 다 지운다).
+   */
+  "site.topbar": "string",
+  "site.topbar_url": "string",
   "site.registration_open": "boolean",
   // 검색 노출 차단 — robots.txt 가 읽는다 (SeoService)
   "site.seo_noindex": "boolean",
@@ -193,6 +199,11 @@ export class SiteController {
       // CSP 는 세 가지 값만 받는다 — 오타로 정책이 조용히 꺼지는 일이 없게
       if (key === "security.csp" && !["on", "report-only", "off"].includes(String(value))) {
         throw new BadRequestException("콘텐츠 보안 정책은 on · report-only · off 중 하나여야 합니다.");
+      }
+
+      // 띠배너 링크도 같은 규칙 — javascript: 로 사이트 전체에 스크립트를 심을 수 있으면 안 된다
+      if (key === "site.topbar_url" && String(value).trim() !== "" && !/^(https?:\/\/|\/)/.test(String(value).trim())) {
+        throw new BadRequestException("띠배너 링크는 https:// 로 시작하는 주소 또는 / 로 시작하는 경로여야 합니다.");
       }
 
       if (key === "site.og_image" && String(value).trim() !== "" && !/^(https?:\/\/|\/)/.test(String(value).trim())) {

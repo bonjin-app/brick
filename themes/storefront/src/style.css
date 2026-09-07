@@ -1045,6 +1045,56 @@ a.brick-card:hover { border-color: var(--color-text); color: inherit; }
   }
 }
 
+
+/* ── 띠배너 (사이트 설정) ─────────────────────────── */
+/*
+ * 모든 화면 맨 위 한 줄. 쇼핑몰의 "무료배송 이벤트"처럼 사이트 전체에 걸리는 공지다.
+ * 눈에 띄어야 하지만 헤더보다 크면 안 된다 — 높이를 고정하지 않고 글자에 맞춘다(긴 문구는 두 줄).
+ */
+.brick-topline {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+}
+.brick-topline-inner { min-height: 38px; padding-top: 6px; padding-bottom: 6px; }
+.brick-topline a,
+.brick-topline span {
+  flex: 1;
+  /* 링크는 손가락으로 누른다 — 글자 높이(20px)가 아니라 띠 높이만큼 잡는다 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  color: inherit;
+  text-decoration: none;
+  text-align: center;
+  line-height: 1.45;
+}
+.brick-topline a { text-decoration: underline; text-underline-offset: 0.2em; }
+.brick-topline a:hover { opacity: 0.86; }
+.brick-topline-close {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  margin-right: calc(var(--brick-pad-x) * -0.5);
+  padding: 0;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity var(--brick-t);
+}
+.brick-topline-close:hover { opacity: 1; }
+.brick-topline-close .brick-ico { width: 15px; height: 15px; }
+
+@media print { .brick-topline { display: none !important; } }
+
 @media print { .brick-quick { display: none !important; } }
 
 @media print {

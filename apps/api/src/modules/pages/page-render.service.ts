@@ -299,6 +299,13 @@ export class PageRenderService {
     locale: Locale;
     /** 공유 미리보기 이미지 — 상대 경로면 사이트 주소를 붙여 절대 URL 로 (og:image 는 절대 URL 이어야 한다) */
     ogImage: string;
+    /** 띠배너 — 모든 화면 맨 위 한 줄. 비어 있으면 테마가 그리지 않는다 */
+    topbar: string;
+    topbarUrl: string;
+    /** 링크가 없을 때 true — 템플릿 엔진에 else 가 없어 두 분기를 각자 플래그로 받는다 */
+    topbarPlain: boolean;
+    /** 내용이 바뀌면 다시 보이게 하는 표식 (손님이 닫아 둔 것을 기억하되, 새 공지는 보여야 한다) */
+    topbarKey: string;
   }> {
     const rows = await this.db.select().from(siteSettings);
     const map = new Map(rows.map((r) => [r.key, r.value]));
@@ -309,6 +316,7 @@ export class PageRenderService {
       business: toTemplateVars({ ...EMPTY_BUSINESS_INFO, ...stored }),
       locale: normalizeLocale(map.get("site.locale")),
       ogImage: absoluteUrl(String(map.get("site.og_image") ?? "").trim()),
+      ...topbarOf(String(map.get("site.topbar") ?? "").trim(), String(map.get("site.topbar_url") ?? "").trim()),
     };
   }
 
@@ -387,6 +395,30 @@ export function markCurrent<T extends { url: string; children?: T[] }>(
       ...(children ? { hasChildren: true as const, children } : {}),
     };
   });
+}
+
+/**
+ * 띠배너 스코프.
+ *
+ * topbarKey 는 문구에서 만든 짧은 지문이다 — 손님이 닫으면 브라우저가 그 키를 기억하고, 운영자가
+ * 문구를 바꾸면 키도 바뀌어 다시 보인다. 닫힘을 서버에 저장하지 않는 이유: 비회원도 보고,
+ * 그 정보로 할 수 있는 일이 없다.
+ */
+function topbarOf(
+  text: string,
+  url: string,
+): { topbar: string; topbarUrl: string; topbarPlain: boolean; topbarKey: string } {
+  if (!text) return { topbar: "", topbarUrl: "", topbarPlain: false, topbarKey: "" };
+  let hash = 0;
+  for (let i = 0; i < text.length; i++) hash = (hash * 31 + text.charCodeAt(i)) | 0;
+  // 잘못된 스킴은 설정 저장에서 막지만, 옛 데이터가 있을 수 있어 여기서도 링크를 버린다
+  const safeUrl = /^(https?:\/\/|\/)/.test(url) ? url : "";
+  return {
+    topbar: text,
+    topbarUrl: safeUrl,
+    topbarPlain: !safeUrl,
+    topbarKey: Math.abs(hash).toString(36),
+  };
 }
 
 /** og:image 는 절대 URL 이어야 한다 — /uploads/… 는 BRICK_SITE_URL 을 앞에 붙인다 */

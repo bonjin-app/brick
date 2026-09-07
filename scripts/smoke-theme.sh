@@ -323,6 +323,34 @@ check "기본 테마로 복귀" "$(code -b "$CK" -X POST "$API/api/themes/defaul
 
 
 # ════════════════════════════════════════════════════
+echo "── 띠배너 (사이트 전체 공지) — 설정 하나로 모든 화면 맨 위"
+absent "비어 있으면 마크업이 없다" "$(render "")" 'class="brick-topline"'
+check "문구 저장" "$(code -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"site.topbar":"5만원 이상 무료배송","site.topbar_url":"/shop"}')" "200"
+TL="$(render "")"
+contains "띠배너가 그려진다" "$TL" 'class="brick-topline"'
+contains "링크가 걸린다" "$TL" '<a href="/shop">5만원 이상 무료배송</a>'
+contains "닫기 버튼" "$TL" 'id="brick-topline-close"'
+contains "JS 가 보여 줄 때까지 숨긴다 (닫아 둔 손님에게 번쩍이지 않게)" "$TL" 'id="brick-topline" data-key='
+contains "닫힘을 기억할 키" "$TL" 'data-key="'
+TL_ONCE="$(echo "$TL" | grep -c '5만원 이상 무료배송' || true)"
+check "문구가 한 번만 나온다 (엔진에 else 가 없다)" "$TL_ONCE" "1"
+# 링크가 없으면 span 으로
+curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"site.topbar_url":""}' -o /dev/null
+TL2="$(render "")"
+contains "링크가 없으면 글자만" "$TL2" '<span>5만원 이상 무료배송</span>'
+absent "그때 링크 태그는 없다" "$TL2" '<a href="">5만원'
+# 문구를 바꾸면 키도 바뀐다 — 손님이 닫아 둔 옛 공지 때문에 새 공지가 묻히면 안 된다
+KEY1="$(echo "$TL2" | grep -o 'data-key="[^"]*"' | head -1)"
+curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"site.topbar":"오늘만 10% 할인"}' -o /dev/null
+KEY2="$(render "" | grep -o 'data-key="[^"]*"' | head -1)"
+[[ -n "$KEY1" && "$KEY1" != "$KEY2" ]] && ok "문구가 바뀌면 키도 바뀐다 ($KEY1 → $KEY2)" || bad "문구가 바뀌면 키도 바뀐다 ($KEY1 → $KEY2)"
+check "javascript: 링크는 거부" "$(code -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"site.topbar_url":"javascript:alert(1)"}')" "400"
+# 다섯 테마 모두 띠배너 스타일을 갖는다 (계약)
+for TH in default editorial storefront boutique corporate; do
+  contains "$TH 테마에 띠배너 스타일" "$(cat "$ROOT/themes/$TH/assets/style.css")" ".brick-topline"
+done
+curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"site.topbar":""}' -o /dev/null
+
 echo "── 2단 메뉴 (드롭다운) — 코어는 3단까지 저장하고 테마는 2단을 그린다"
 cat > "$TMP/menu2.json" <<'JSON'
 {"items":[

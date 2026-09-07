@@ -115,6 +115,7 @@ const CORE_KO: MessageCatalog = {
   "search.prev": "이전",
   "search.next": "다음",
   "header.quick": "빠른 메뉴",
+  "common.close": "닫기",
   "footer.cs": "고객센터",
   "footer.toTop": "맨 위로",
   // 홈 페이지가 아직 없을 때 테마가 그리는 폴백 화면 (설치 직후)
@@ -163,6 +164,7 @@ const CORE_EN: MessageCatalog = {
   "search.prev": "Prev",
   "search.next": "Next",
   "header.quick": "Quick menu",
+  "common.close": "Close",
   "footer.cs": "Customer service",
   "footer.toTop": "Back to top",
   "home.readyTitle": "Installation complete",

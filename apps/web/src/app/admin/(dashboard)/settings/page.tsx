@@ -92,12 +92,16 @@ export default function AdminSettingsPage() {
     <div style={{ maxWidth: 760 }}>
       <h1>{t("settings.title")}</h1>
 
-      <Card id="general" title={t("settings.general")} keys={["site.name", "site.description", "site.og_image", "site.locale", "site.seo_noindex"]}>
+      <Card id="general" title={t("settings.general")} keys={["site.topbar", "site.topbar_url", "site.name", "site.description", "site.og_image", "site.locale", "site.seo_noindex"]}>
         <Field label={t("settings.siteName")}>
           <input style={input} value={str("site.name")} onChange={(e) => set("site.name", e.target.value)} />
         </Field>
         <Field label={t("settings.siteDesc")}>
           <textarea style={{ ...input, minHeight: 70 }} value={str("site.description")} onChange={(e) => set("site.description", e.target.value)} />
+        </Field>
+        <Field label={t("settings.topbar")} hint={t("settings.topbarHint")}>
+          <input style={input} placeholder={t("settings.topbarPh")} value={str("site.topbar")} onChange={(e) => set("site.topbar", e.target.value)} />
+          <input style={{ ...input, marginTop: 6 }} placeholder="/shop 또는 https://…" value={str("site.topbar_url")} onChange={(e) => set("site.topbar_url", e.target.value)} />
         </Field>
         <Field label={t("settings.ogImage")} hint={t("settings.ogImageHint")}>
           <input style={input} placeholder="https://… 또는 /uploads/…" value={str("site.og_image")} onChange={(e) => set("site.og_image", e.target.value)} />

@@ -60,6 +60,23 @@
   <a class="brick-skip" href="#brick-content">{{ t.header.skip }}</a>
 
   {{!--
+    띠배너 — 모든 화면 맨 위 한 줄. 설정(사이트 → 띠배너)이 비어 있으면 아무것도 그리지 않는다.
+    손님이 닫으면 브라우저가 기억하고, 운영자가 문구를 바꾸면(키가 바뀌면) 다시 보인다.
+  --}}
+  {{#if site.topbar}}
+  <div class="brick-topline" id="brick-topline" data-key="{{ site.topbarKey }}" hidden>
+    <div class="brick-topline-inner mx-auto flex max-w-(--content-width) items-center gap-3 px-(--brick-pad-x)">
+      {{#if site.topbarUrl}}<a href="{{ site.topbarUrl }}">{{ site.topbar }}</a>{{/if}}
+      {{#if site.topbarPlain}}<span>{{ site.topbar }}</span>{{/if}}
+      <button type="button" class="brick-topline-close" id="brick-topline-close" aria-label="{{ t.common.close }}">
+        <svg class="brick-ico" aria-hidden="true"><use href="#i-close"></use></svg>
+      </button>
+    </div>
+  </div>
+  {{/if}}
+
+
+  {{!--
     쇼핑몰의 머리는 세 켜다 — 한국 쇼핑몰(카페24·메이크샵)에서 손님이 눈으로 익힌 순서:
       1) 가는 유틸 띠: 로그인·회원가입·주문조회·고객센터
       2) 로고 줄: 로고 + 검색 + 장바구니 같은 플러그인 링크
@@ -236,6 +253,22 @@
           if (e.key === "Escape") setOpen(false);
         });
       }
+    })();
+
+    // 띠배너 — 닫은 것을 기억한다. 문구가 바뀌면 키가 달라져 다시 보인다.
+    // 서버가 그리고 JS 가 보여 준다(hidden 으로 시작) — 닫아 둔 손님에게 한 번 번쩍이지 않게.
+    (function () {
+      var bar = document.getElementById("brick-topline");
+      if (!bar) return;
+      var key = "brick-topline:" + (bar.dataset.key || "");
+      var closed = false;
+      try { closed = localStorage.getItem(key) === "1"; } catch (e) {}
+      if (!closed) bar.hidden = false;
+      var btn = document.getElementById("brick-topline-close");
+      if (btn) btn.addEventListener("click", function () {
+        bar.hidden = true;
+        try { localStorage.setItem(key, "1"); } catch (e) {}
+      });
     })();
   </script>
 </body>
