@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-07
+
 ### 추가
 - **띠배너**(설정 → 일반) — "5만원 이상 무료배송" 처럼 사이트 전체에 걸리는 공지를 모든 화면 맨 위에
   한 줄로. 손님이 닫으면 브라우저가 기억하고, 문구를 바꾸면 다시 보인다(내용에서 만든 키로 판단).
@@ -128,7 +130,8 @@
 8종(게시판·쇼핑몰·토스결제·쪽지·포인트·설문·헬프데스크·사이트 도구), 그누보드 이전 도구,
 FTP 배포본과 Docker 이미지, E2E 스모크 2,500+ 항목.
 
-[Unreleased]: https://github.com/bonjin-app/brick/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/bonjin-app/brick/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/bonjin-app/brick/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/bonjin-app/brick/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/bonjin-app/brick/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/bonjin-app/brick/compare/v0.1.0...v0.2.0
