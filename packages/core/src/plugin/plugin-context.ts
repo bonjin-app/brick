@@ -89,6 +89,19 @@ export interface PluginContext {
       contentType: string,
       opts?: { width?: number; height?: number; quality?: number },
     ): Promise<{ buffer: Buffer; contentType: string; ext: string | null; width: number | null; height: number | null } | null>;
+    /**
+     * 미디어 라이브러리의 사진 주소에 대응하는 **썸네일 주소**를 찾는다. 없으면 null.
+     *
+     * 목록은 작은 칸에 사진을 그리는데, 운영자가 고른 것은 미디어의 **원본** 주소다.
+     * 64~300px 자리에 2400px 사진을 내려보내면 상품 24개가 깔린 첫 화면이 수 MB 가 된다 —
+     * 모바일에서 특히 아프다. 그러므로 목록에 쓸 주소는 저장할 때 이 함수로 한 번 바꿔 둔다.
+     *
+     * 주소가 미디어의 것이 아니거나(운영자가 외부 URL 을 직접 붙였다) 썸네일이 없으면
+     * (GIF·SVG, 또는 sharp 가 없는 환경) null 이다 — 그때는 원본을 쓰면 된다.
+     * **주소 규칙을 플러그인이 짐작하지 않게** 코어가 소유하는 판단이다: 스토리지가
+     * 로컬에서 S3 로 바뀌어도 플러그인은 그대로다.
+     */
+    thumbUrlFor(url: string): Promise<string | null>;
   };
 
   readonly moderation: {

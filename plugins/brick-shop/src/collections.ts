@@ -225,7 +225,7 @@ export async function viewCollection(db: Db, slug: string) {
 
   const state = stateOf(c.starts_at, c.ends_at);
   const { rows: products } = await db.execute(sql`
-    SELECT p.slug, p.name, p.price, p.list_price, p.image_url, p.status
+    SELECT p.slug, p.name, p.price, p.list_price, coalesce(p.thumb_url, p.image_url) AS image_url, p.status
     FROM shop_collection_items ci
     JOIN shop_products p ON p.id = ci.product_id
     WHERE ci.collection_id = ${String(c.id)}::uuid

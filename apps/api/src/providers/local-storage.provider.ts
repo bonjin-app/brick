@@ -35,4 +35,13 @@ export class LocalStorageProvider implements StorageProvider {
   publicUrl(key: string): string {
     return `/uploads/${key}`;
   }
+
+  keyFromUrl(url: string): string | null {
+    const path = String(url ?? "").trim();
+    if (!path.startsWith("/uploads/")) return null;
+    const key = decodeURIComponent(path.slice("/uploads/".length));
+    // 상대 경로 탈출은 키가 아니다 — 이 값으로 DB 를 조회하고 파일을 열게 되므로 여기서 막는다
+    if (!key || key.startsWith("/") || key.split("/").includes("..")) return null;
+    return key;
+  }
 }

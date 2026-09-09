@@ -521,6 +521,39 @@ contains "품절이면 재입고 알림 화면" "$SOLDOUT_HTML" 'brick-soldout-n
 absent "품절 상품에는 하단 바가 없다" "$SOLDOUT_HTML" 'class="brick-buybar"'
 psql_q "UPDATE shop_products SET status = 'selling' WHERE slug = 'smoke-item'" >/dev/null
 
+echo "── 목록은 썸네일을, 상세는 원본을 (64px 칸에 2400px 사진을 내려보내지 않는다)"
+# 관리자가 미디어에서 고른 것은 **원본** 주소다. 저장할 때 대응하는 썸네일을 함께 적어 둔다.
+# 실제 업로드 경로로 사진을 하나 넣는다 — 미디어가 썸네일을 만드는 그 경로여야 의미가 있다
+PNG_B64="iVBORw0KGgoAAAANSUhEUgAAAAgAAAAIAQMAAAD+wSzIAAAABlBMVEX///+/v7+jQ3Y5AAAADklEQVQI12P4AIX8EAgALgAD/aNpbtEAAAAASUVORK5CYII="
+/usr/bin/python3 -c "
+import base64, sys
+open(sys.argv[1], 'wb').write(base64.b64decode(sys.argv[2]))
+" "$TMP/pic.png" "$PNG_B64"
+MEDIA="$(curl -s -b "$CK" -X POST "$API/api/media/upload" -F "file=@$TMP/pic.png;type=image/png")"
+MEDIA_URL="$(echo "$MEDIA" | jq_get "['url']")"
+MEDIA_THUMB="$(echo "$MEDIA" | jq_get "['thumbUrl']")"
+[[ -n "$MEDIA_URL" ]] && ok "미디어 업로드" || bad "미디어 업로드 ($MEDIA)"
+[[ "$MEDIA_THUMB" != "$MEDIA_URL" ]] && ok "미디어가 썸네일을 만든다" || bad "미디어가 썸네일을 만든다 ($MEDIA_THUMB)"
+# 그 원본 주소로 상품을 만든다 — 상품은 목록용 주소를 스스로 찾아 적어야 한다
+printf '{"slug":"thumb-item","name":"썸네일 상품","price":9000,"stock":5,"status":"selling","image_url":"%s"}' "$MEDIA_URL" > "$TMP/tp.json"
+curl -s -b "$CK" -X POST "$SHOP/admin/products" -H 'content-type: application/json' --data-binary "@$TMP/tp.json" -o /dev/null
+check "저장할 때 썸네일 주소를 찾아 적는다" "$(psql_q "SELECT thumb_url FROM shop_products WHERE slug = 'thumb-item'")" "$MEDIA_THUMB"
+# 목록 API 는 썸네일을, 상세 API 는 원본을 준다
+contains "목록은 썸네일" "$(curl -s "$SHOP/products?limit=50")" "$MEDIA_THUMB"
+contains "상세는 원본" "$(curl -s "$SHOP/products/thumb-item")" "$MEDIA_URL"
+# 검색 결과도 목록이다
+contains "검색 결과도 썸네일" "$(curl -s -G "$API/api/search" --data-urlencode "q=썸네일")" "$MEDIA_THUMB"
+# 외부 URL 을 직접 붙인 상품은 썸네일이 없다 — 그때는 원본을 쓰므로 화면은 깨지지 않는다
+printf '{"slug":"ext-item","name":"외부사진 상품","price":9000,"stock":5,"status":"selling","image_url":"https://example.test/a.jpg"}' > "$TMP/ep.json"
+curl -s -b "$CK" -X POST "$SHOP/admin/products" -H 'content-type: application/json' --data-binary "@$TMP/ep.json" -o /dev/null
+check "외부 URL 은 썸네일이 없다" "$(psql_q "SELECT coalesce(thumb_url, 'NULL') FROM shop_products WHERE slug = 'ext-item'")" "NULL"
+contains "그때는 목록도 원본을 쓴다" "$(curl -s "$SHOP/products?limit=50")" "https://example.test/a.jpg"
+# 대표 사진을 바꾸면 목록용 주소도 따라 바뀐다 (안 하면 옛 썸네일이 남는다)
+printf '{"slug":"thumb-item","name":"썸네일 상품","price":9000,"stock":5,"status":"selling","image_url":"https://example.test/b.jpg"}' > "$TMP/tp2.json"
+TID="$(psql_q "SELECT id FROM shop_products WHERE slug = 'thumb-item'")"
+curl -s -b "$CK" -X PUT "$SHOP/admin/products/$TID" -H 'content-type: application/json' --data-binary "@$TMP/tp2.json" -o /dev/null
+check "사진을 바꾸면 썸네일도 갱신" "$(psql_q "SELECT coalesce(thumb_url, 'NULL') FROM shop_products WHERE slug = 'thumb-item'")" "NULL"
+
 echo "── 스토어프론트 블록"
 BLOCKS="$(curl -s "$API/api/blocks")"
 contains "상품목록 블록" "$BLOCKS" "brick-shop/product-list"

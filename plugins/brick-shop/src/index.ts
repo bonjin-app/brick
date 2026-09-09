@@ -121,7 +121,7 @@ export default definePlugin(async (ctx) => {
     const like = `%${q.replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
 
     const { rows } = await db.execute(sql`
-      SELECT p.id, p.slug, p.name, p.summary, p.image_url, p.price, p.list_price,
+      SELECT p.id, p.slug, p.name, p.summary, coalesce(p.thumb_url, p.image_url) AS image_url, p.price, p.list_price,
              p.stock, p.status, p.sold_count, p.review_count, p.rating_sum,
              c.name AS category_name, c.slug AS category_slug
       FROM shop_products p
@@ -361,6 +361,22 @@ export default definePlugin(async (ctx) => {
     if (req.user?.role !== "admin" && req.user?.role !== "manager") throw new ShopError(403, "권한이 없습니다.");
   };
 
+  /**
+   * 목록에 쓸 사진 주소 — 미디어에 썸네일이 있으면 그것을, 없으면 null.
+   *
+   * 여기서 한 번 정해 두면 목록·검색·관련 상품이 그 값을 그냥 쓴다. 조회할 때마다
+   * 찾으면 화면마다 질의가 붙고, 화면마다 빠뜨릴 수도 있다.
+   * 실패해도 상품 저장을 막지 않는다 — 썸네일은 있으면 좋은 것이고, 없으면 원본을 쓴다.
+   */
+  const thumbFor = async (url: string | null): Promise<string | null> => {
+    if (!url) return null;
+    try {
+      return await ctx.images.thumbUrlFor(url);
+    } catch {
+      return null;
+    }
+  };
+
   // ════════════════════════════════════════════════════
   //  결제
   // ════════════════════════════════════════════════════
@@ -467,7 +483,7 @@ export default definePlugin(async (ctx) => {
     requireAdmin(req);
     const page = Math.max(1, Number(req.query.page ?? 1));
     const { rows } = await db.execute(sql`
-      SELECT p.id, p.slug, p.name, p.price, p.list_price, p.stock, p.status, p.image_url,
+      SELECT p.id, p.slug, p.name, p.price, p.list_price, p.stock, p.status, coalesce(p.thumb_url, p.image_url) AS image_url,
              p.summary, p.description, p.free_shipping, p.sort_order, p.sold_count,
              p.category_id, p.tax_free, p.sub_interval, p.images, p.review_count, p.rating_sum,
              coalesce(
@@ -515,15 +531,16 @@ export default definePlugin(async (ctx) => {
     const p = validateProduct(body);
     const images = parseImages(String(body.images_text ?? ""));
     const options = parseOptions(String(body.options_text ?? ""));
+    const mainImage = p.imageUrl ?? images[0] ?? null;
     const id = uuidv7();
     try {
       await db.execute(sql`
         INSERT INTO shop_products
-          (id, slug, name, price, list_price, stock, status, image_url, summary, description,
+          (id, slug, name, price, list_price, stock, status, image_url, thumb_url, summary, description,
            free_shipping, sort_order, images, category_id, tax_free, sub_interval)
         VALUES
           (${id}, ${p.slug}, ${p.name}, ${p.price}, ${p.listPrice}, ${p.stock}, ${p.status},
-           ${p.imageUrl ?? images[0] ?? null}, ${p.summary}, ${p.description},
+           ${mainImage}, ${await thumbFor(mainImage)}, ${p.summary}, ${p.description},
            ${p.freeShipping}, ${p.sortOrder}, ${JSON.stringify(images)}::jsonb,
            ${p.categoryId}::uuid, ${p.taxFree}, ${p.subInterval})
       `);
@@ -543,12 +560,13 @@ export default definePlugin(async (ctx) => {
     const p = validateProduct(body);
     const images = parseImages(String(body.images_text ?? ""));
     const options = parseOptions(String(body.options_text ?? ""));
+    const mainImage = p.imageUrl ?? images[0] ?? null;
     try {
       const { rows } = await db.execute(sql`
         UPDATE shop_products SET
           slug = ${p.slug}, name = ${p.name}, price = ${p.price}, list_price = ${p.listPrice},
           stock = ${p.stock}, status = ${p.status},
-          image_url = ${p.imageUrl ?? images[0] ?? null}, summary = ${p.summary},
+          image_url = ${mainImage}, thumb_url = ${await thumbFor(mainImage)}, summary = ${p.summary},
           description = ${p.description}, free_shipping = ${p.freeShipping}, sort_order = ${p.sortOrder},
           images = ${JSON.stringify(images)}::jsonb, category_id = ${p.categoryId}::uuid,
           tax_free = ${p.taxFree}, sub_interval = ${p.subInterval}, updated_at = now()
@@ -2175,7 +2193,7 @@ export default definePlugin(async (ctx) => {
     async search({ query, offset, limit }) {
       const { rows } = await db.execute(sql`
         SELECT p.slug, p.name, p.summary, p.description, p.price, p.status, p.created_at,
-               p.image_url, c.name AS category_name
+               coalesce(p.thumb_url, p.image_url) AS image_url, c.name AS category_name
         FROM shop_products p
         LEFT JOIN shop_categories c ON c.id = p.category_id
         WHERE ${productSearchWhere(query)}

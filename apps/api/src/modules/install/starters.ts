@@ -104,7 +104,8 @@ interface SeedContext {
    * 샘플 이미지를 미디어에 넣는다 — 실제 업로드와 같은 경로를 쓰므로 미디어 화면에도
    * 보이고 운영자가 지울 수 있다. 이미지 처리(sharp)를 못 쓰면 null 을 돌려준다.
    */
-  addSampleImage?: (name: string, svg: string) => Promise<string | null>;
+  /** 샘플 사진을 미디어에 넣고 원본·목록용(썸네일) 주소를 준다. sharp 가 없으면 null */
+  addSampleImage?: (name: string, svg: string) => Promise<{ url: string; thumbUrl: string | null } | null>;
 }
 
 /**
@@ -608,7 +609,8 @@ async function seedShopSamples(ctx: SeedContext): Promise<number> {
       `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">` +
       `<stop offset="0" stop-color="${p.from}"/><stop offset="1" stop-color="${p.to}"/></linearGradient></defs>` +
       `<rect width="1000" height="1000" fill="url(#g)"/></svg>`;
-    const imageUrl = (await ctx.addSampleImage?.(`${p.slug}.jpg`, svg)) ?? null;
+    const added = (await ctx.addSampleImage?.(`${p.slug}.jpg`, svg)) ?? null;
+    const imageUrl = added?.url ?? null;
     // 홈 배너가 이 사진을 쓴다 (아래 페이지 생성 단계에서 읽는다)
     if (imageUrl) {
       if (p.slug === "sample-mug") SAMPLE_IMG.mug = imageUrl;
@@ -618,9 +620,9 @@ async function seedShopSamples(ctx: SeedContext): Promise<number> {
 
     await ctx.db.execute(sql`
       INSERT INTO shop_products
-        (id, slug, name, summary, description, image_url, price, list_price, stock, status, sort_order)
+        (id, slug, name, summary, description, image_url, thumb_url, price, list_price, stock, status, sort_order)
       VALUES
-        (${uuidv7()}, ${p.slug}, ${p.name}, ${p.summary}, ${body}, ${imageUrl},
+        (${uuidv7()}, ${p.slug}, ${p.name}, ${p.summary}, ${body}, ${imageUrl}, ${added?.thumbUrl ?? null},
          ${p.price}, ${p.listPrice}, ${p.stock},
          ${p.stock === 0 ? "soldout" : "selling"}, ${i})
       ON CONFLICT (slug) DO NOTHING

@@ -480,6 +480,7 @@ export class PluginLoaderService implements OnModuleInit {
         canProcess: (contentType: string) => this.imageService.canProcess(contentType),
         optimize: (buffer, contentType, opts) => this.imageService.optimize(buffer, contentType, opts),
         thumbnail: (buffer, contentType, opts) => this.imageService.thumbnail(buffer, contentType, opts),
+        thumbUrlFor: (url: string) => this.thumbUrlFor(url),
       },
       moderation: {
         findBannedWord: (text: string) => this.moderation.findBannedWord(text),
@@ -684,6 +685,26 @@ export class PluginLoaderService implements OnModuleInit {
     const manifest = JSON.parse(raw) as PluginManifest;
     if (!manifest.name || !manifest.entry) throw new Error(`invalid manifest for plugin "${name}"`);
     return manifest;
+  }
+
+  /**
+   * 미디어 사진 주소 → 그 사진의 썸네일 주소 (없으면 null).
+   *
+   * 주소 규칙(publicUrl)은 스토리지 제공자가 소유하므로 여기서 뒤집는다 — 플러그인이
+   * "/uploads/ 를 떼면 키" 라고 짐작하기 시작하면 S3 로 바꿀 때 전부 깨진다.
+   */
+  private async thumbUrlFor(url: string): Promise<string | null> {
+    const target = String(url ?? "").trim();
+    if (!target) return null;
+    // 주소 → 키는 제공자가 뒤집는다. 우리가 저장한 것이 아니면(외부 URL) 볼 것도 없다
+    const key = this.storage.keyFromUrl(target);
+    if (!key) return null;
+    const { sql } = await import("drizzle-orm");
+    const { rows } = await this.db.execute(sql`
+      SELECT thumb_key FROM media_files WHERE storage_key = ${key} LIMIT 1
+    `);
+    const thumbKey = rows[0]?.thumb_key;
+    return thumbKey ? this.storage.publicUrl(String(thumbKey)) : null;
   }
 
   private async runPluginMigrations(pluginName: string, dir: string): Promise<void> {

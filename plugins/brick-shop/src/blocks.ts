@@ -212,7 +212,9 @@ export function registerStorefrontBlocks(
       const current = Math.min(page, totalPages);
 
       const { rows } = await db.execute(sql`
-        SELECT p.slug, p.name, p.price, p.list_price, p.image_url, p.status, p.stock,
+        -- 목록은 **썸네일**을 쓴다. 대표 사진(원본)을 64~300px 칸에 그리면 상품 24개가
+        -- 깔린 첫 화면이 수 MB 가 된다. 썸네일이 없으면(외부 URL·GIF·SVG) 원본을 쓴다.
+        SELECT p.slug, p.name, p.price, p.list_price, coalesce(p.thumb_url, p.image_url) AS image_url, p.status, p.stock,
                p.review_count, p.rating_sum, p.created_at, p.sold_count
         FROM shop_products p
         LEFT JOIN shop_categories c ON c.id = p.category_id

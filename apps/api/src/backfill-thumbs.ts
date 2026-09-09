@@ -125,6 +125,41 @@ async function main(): Promise<void> {
     }
   }
 
+  // ── 상품 목록 썸네일 주소 (쇼핑몰이 설치되어 있을 때만) ────────────────────────
+  // 목록은 shop_products.thumb_url 을 쓴다. 그 컬럼이 생기기 전에 등록된 상품은 비어 있어
+  // 원본을 그대로 내려보내므로, 미디어에 이미 있는 썸네일을 이어 준다. 새로 만드는 파일은
+  // 없다 — 주소만 잇는다.
+  const hasShop = await client.query(
+    "SELECT 1 FROM information_schema.columns WHERE table_name = 'shop_products' AND column_name = 'thumb_url'",
+  );
+  if (hasShop.rowCount) {
+    const prods = await client.query<{ id: string; name: string; image_url: string }>(
+      "SELECT id, name, image_url FROM shop_products WHERE thumb_url IS NULL AND image_url IS NOT NULL",
+    );
+    console.log(`\n상품 대표 사진 대상 ${prods.rowCount}건`);
+    for (const row of prods.rows) {
+      // publicUrl 규칙은 스토리지 제공자가 소유한다 — 여기서 주소를 짐작하지 않는다
+      const key = storage.keyFromUrl(row.image_url);
+      if (!key) {
+        skipped++;
+        continue; // 외부 URL 을 직접 붙인 상품
+      }
+      const media = await client.query<{ thumb_key: string | null }>(
+        "SELECT thumb_key FROM media_files WHERE storage_key = $1 LIMIT 1",
+        [key],
+      );
+      const thumbKey = media.rows[0]?.thumb_key;
+      if (!thumbKey) {
+        skipped++;
+        continue; // 미디어에 없거나 썸네일이 없는 사진(GIF·SVG)
+      }
+      const thumbUrl = storage.publicUrl(thumbKey);
+      if (!dry) await client.query("UPDATE shop_products SET thumb_url = $1 WHERE id = $2", [thumbUrl, row.id]);
+      done++;
+      console.log(`  ${dry ? "[예정]" : "✓"} 상품 ${row.name} → ${thumbUrl}`);
+    }
+  }
+
   await client.end();
   console.log(`\n완료: ${done}건 ${dry ? "예정" : "생성"}, ${skipped}건 건너뜀`);
 }

@@ -132,7 +132,7 @@ export async function quote(
     }
 
     const { rows } = await db.execute(sql`
-      SELECT p.id, p.slug, p.name, p.price, p.stock, p.status, p.free_shipping, p.tax_free, p.image_url,
+      SELECT p.id, p.slug, p.name, p.price, p.stock, p.status, p.free_shipping, p.tax_free, coalesce(p.thumb_url, p.image_url) AS image_url,
              o.id AS option_id, o.name AS option_name, o.extra_price, o.stock AS option_stock, o.is_active
       FROM shop_products p
       LEFT JOIN shop_product_options o

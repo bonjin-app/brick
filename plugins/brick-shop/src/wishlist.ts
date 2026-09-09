@@ -67,7 +67,7 @@ export async function removeFromWishlist(
 export async function listWishlist(db: Db, owner: Owner) {
   const { rows } = await db.execute(sql`
     SELECT w.product_id, w.created_at,
-           p.slug, p.name, p.price, p.list_price, p.image_url, p.status, p.stock,
+           p.slug, p.name, p.price, p.list_price, coalesce(p.thumb_url, p.image_url) AS image_url, p.status, p.stock,
            p.review_count, p.rating_sum
     FROM shop_wishlist w JOIN shop_products p ON p.id = w.product_id
     WHERE ${ownerFilter(owner)}
@@ -170,7 +170,7 @@ export async function listRecentViews(db: Db, owner: Owner, limit = 10) {
   if (!owner.userId && !owner.guestToken) return { items: [] };
   const { rows } = await db.execute(sql`
     SELECT r.product_id, r.viewed_at,
-           p.slug, p.name, p.price, p.list_price, p.image_url, p.status, p.stock
+           p.slug, p.name, p.price, p.list_price, coalesce(p.thumb_url, p.image_url) AS image_url, p.status, p.stock
     FROM shop_recent_views r JOIN shop_products p ON p.id = r.product_id
     WHERE ${ownerFilter(owner)} AND p.status IN ('selling', 'soldout')
     ORDER BY r.viewed_at DESC

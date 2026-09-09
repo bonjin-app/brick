@@ -106,7 +106,7 @@ export class InstallController {
    * SVG 를 받아 PNG 로 굽는다: SVG 는 업로드 금지 형식이고(스크립트를 담을 수 있다),
    * 굽고 나면 썸네일까지 같은 파이프라인을 탄다. sharp 가 없으면 null — 사진 없는 상품이 된다.
    */
-  private async addSampleImage(fileName: string, svg: string): Promise<string | null> {
+  private async addSampleImage(fileName: string, svg: string): Promise<{ url: string; thumbUrl: string | null } | null> {
     try {
       if (!(await this.images.isAvailable())) return null;
       const source = Buffer.from(svg, "utf8");
@@ -139,7 +139,8 @@ export class InstallController {
         thumbKey,
         uploaderId: null,
       });
-      return stored.url;
+      // 목록은 썸네일을 쓴다 — 상품이 이 주소를 함께 저장한다
+      return { url: stored.url, thumbUrl: thumbKey ? this.storage.publicUrl(thumbKey) : null };
     } catch (err) {
       this.logger.warn(`샘플 이미지 생성 실패 (${fileName}) — 사진 없이 진행합니다: ${String(err)}`);
       return null;

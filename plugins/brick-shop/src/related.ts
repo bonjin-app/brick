@@ -123,7 +123,7 @@ export async function listRelated(
   const cap = Math.min(24, Math.max(1, Math.floor(limit)));
 
   const { rows: manual } = await db.execute(sql`
-    SELECT p.id, p.slug, p.name, p.price, p.list_price, p.image_url, p.status
+    SELECT p.id, p.slug, p.name, p.price, p.list_price, coalesce(p.thumb_url, p.image_url) AS image_url, p.status
     FROM shop_related_products r
     JOIN shop_products p ON p.id = r.related_id
     WHERE r.product_id = ${productId}::uuid AND ${SELLABLE}
@@ -183,7 +183,7 @@ export async function coPurchased(
       ORDER BY o.paid_at DESC
       LIMIT 500
     )
-    SELECT p.id, p.slug, p.name, p.price, p.list_price, p.image_url, p.status,
+    SELECT p.id, p.slug, p.name, p.price, p.list_price, coalesce(p.thumb_url, p.image_url) AS image_url, p.status,
            count(DISTINCT oi.order_id) AS together
     FROM shop_order_items oi
     JOIN src ON src.order_id = oi.order_id
@@ -191,7 +191,7 @@ export async function coPurchased(
     WHERE oi.product_id NOT IN (${excludeList})
       AND oi.quantity > oi.cancelled_qty
       AND ${SELLABLE}
-    GROUP BY p.id, p.slug, p.name, p.price, p.list_price, p.image_url, p.status
+    GROUP BY p.id, p.slug, p.name, p.price, p.list_price, p.thumb_url, p.image_url, p.status
     ORDER BY together DESC, p.sold_count DESC, p.name
     LIMIT ${cap}
   `);
