@@ -430,6 +430,60 @@ contains "후기 영역 서버 렌더 포함" \
   "$(curl -s -X POST "$API/api/blocks/render" -H 'content-type: application/json' \
       -d '{"name":"brick-shop/product-detail","props":{"slug":"opt-item"}}')" "brick-pd-tabs"
 
+echo "── 후기 정렬 · 사진 후기만 보기"
+# 읽는 쪽을 보는 시험이므로 후기는 SQL 로 넣는다 — 후기 하나에 구매자 하나를 만들면
+# 설정이 시험보다 길어지고, 그 설정은 이미 위에서 검증했다.
+psql_q() {
+  node -e '
+    const { Client } = require("'"$ROOT"'/apps/api/node_modules/pg");
+    (async () => {
+      const c = new Client(process.env.DATABASE_URL); await c.connect();
+      const r = await c.query(process.argv[1]);
+      console.log(r.rows.map((x) => Object.values(x).join("|")).join("\n"));
+      await c.end();
+    })().catch((e) => { console.error(e.message); process.exit(1); });
+  ' "$1"
+}
+psql_q "INSERT INTO shop_reviews (id, product_id, author_name, rating, content, images, created_at)
+        VALUES (gen_random_uuid(), '$OPID', '사진고객', 5, '실물 사진 올립니다', '[\"/uploads/a.jpg\",\"/uploads/b.jpg\"]', now() - interval '3 days'),
+               (gen_random_uuid(), '$OPID', '불만고객', 1, '기대와 달랐습니다', '[]', now() + interval '1 minute')" >/dev/null
+rating_first() { python3 -c "import sys,json;d=json.load(sys.stdin);print(d['items'][0]['rating'] if d['items'] else '')"; }
+ratings_of()   { python3 -c "import sys,json;d=json.load(sys.stdin);print(','.join(str(i['rating']) for i in d['items']))"; }
+photos_all()   { python3 -c "import sys,json;d=json.load(sys.stdin);print('yes' if d['items'] and all(i['images'] for i in d['items']) else 'no')"; }
+
+RL_DEFAULT="$(curl -s "$SHOP/products/$OPID/reviews")"
+check "기본은 최신순 (방금 넣은 1점이 먼저)" "$(echo "$RL_DEFAULT" | rating_first)" "1"
+contains "사진 후기 수를 알려준다" "$RL_DEFAULT" '"photoCount":2'
+check "별점 높은순" "$(curl -s "$SHOP/products/$OPID/reviews?sort=high" | rating_first)" "5"
+check "별점 낮은순" "$(curl -s "$SHOP/products/$OPID/reviews?sort=low" | rating_first)" "1"
+# 첫 항목만 보면 나머지가 뒤섞여도 통과한다 — 전체가 정렬되어 있는지 본다
+# (구체적인 별점을 박지 않는다: 위의 "본인 후기 수정" 시험이 별점을 바꾼다)
+sorted_check() { python3 -c "
+import sys, json
+r = [i['rating'] for i in json.load(sys.stdin)['items']]
+print('desc' if r == sorted(r, reverse=True) else 'asc' if r == sorted(r) else 'mixed', len(r))
+"; }
+check "별점 높은순은 전체가 내림차순" "$(curl -s "$SHOP/products/$OPID/reviews?sort=high" | sorted_check)" "desc 4"
+check "별점 낮은순은 전체가 오름차순" "$(curl -s "$SHOP/products/$OPID/reviews?sort=low" | sorted_check)" "asc 4"
+check "모르는 정렬 값은 기본으로" "$(curl -s "$SHOP/products/$OPID/reviews?sort=../etc" | rating_first)" "1"
+RL_PHOTO="$(curl -s "$SHOP/products/$OPID/reviews?photo=1")"
+check "사진 후기만 — 전부 사진이 있다" "$(echo "$RL_PHOTO" | photos_all)" "yes"
+contains "사진 후기만 — 총 개수가 2" "$RL_PHOTO" '"total":2'
+# 필터를 켠 응답에도 photoCount 가 남아야 스위치를 다시 끌 수 있다
+contains "사진 필터를 켜도 스위치가 남는다" "$RL_PHOTO" '"photoCount":2'
+check "사진 필터와 정렬을 함께" "$(curl -s "$SHOP/products/$OPID/reviews?photo=1&sort=high" | ratings_of)" "5,3"
+# 별점이 같으면 최신순 — 정해지지 않으면 "더 보기"에서 같은 후기가 두 번 보인다
+psql_q "INSERT INTO shop_reviews (id, product_id, author_name, rating, content, created_at)
+        VALUES (gen_random_uuid(), '$OPID', '동점고객', 5, '같은 별점 최신', now() + interval '2 minutes')" >/dev/null
+contains "같은 별점 안에서는 최신 먼저" \
+  "$(curl -s "$SHOP/products/$OPID/reviews?sort=high" | python3 -c "import sys,json;print(json.load(sys.stdin)['items'][0]['content'])")" "같은 별점 최신"
+# 화면에 도구 자리가 있는가 (목록은 스크립트가 채우므로 자리와 문구를 본다)
+DETAIL_HTML="$(curl -s -X POST "$API/api/blocks/render" -H 'content-type: application/json' \
+  -d '{"name":"brick-shop/product-detail","props":{"slug":"opt-item"}}')"
+contains "후기 도구 자리" "$DETAIL_HTML" 'data-review-tools'
+contains "정렬 문구가 실려 있다" "$DETAIL_HTML" '별점 높은순'
+contains "사진 후기만 문구" "$DETAIL_HTML" '사진 후기만'
+
 echo "── 스토어프론트 블록"
 BLOCKS="$(curl -s "$API/api/blocks")"
 contains "상품목록 블록" "$BLOCKS" "brick-shop/product-list"

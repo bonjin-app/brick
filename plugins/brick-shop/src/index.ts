@@ -15,7 +15,7 @@ import { CASH_RECEIPT_RESOURCE, CATEGORY_RESOURCE, COLLECTION_RESOURCE, GRADE_RE
 import { registerStorefrontBlocks } from "./blocks.js";
 import {
   createInquiry, createReview, deleteInquiry, deleteReview, findPurchase,
-  listInquiries, listReviews, replyToInquiry, replyToReview, setReviewVisible, updateReview,
+  listInquiries, listReviews, replyToInquiry, replyToReview, REVIEW_SORTS, setReviewVisible, updateReview,
 } from "./reviews.js";
 import { formatOptions, parseImages, parseOptions, syncOptions } from "./options.js";
 import {
@@ -1545,11 +1545,15 @@ export default definePlugin(async (ctx) => {
     req.user?.role === "admin" || req.user?.role === "manager";
 
   ctx.registerRoute("GET", "/products/:id/reviews", async (req) => {
+    const asked = String(req.query.sort ?? "");
     return await listReviews(db, {
       productId: req.params.id,
       page: Number(req.query.page ?? 1),
       viewerId: req.user?.id ?? null,
       isManager: isManager(req),
+      // 모르는 값은 기본(최신순)으로 — 쿼리스트링을 그대로 믿지 않는다
+      sort: (REVIEW_SORTS as readonly string[]).includes(asked) ? asked : "recent",
+      photoOnly: String(req.query.photo ?? "") === "1",
     });
   });
 

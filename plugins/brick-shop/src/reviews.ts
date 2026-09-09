@@ -180,26 +180,52 @@ export async function replyToReview(db: Db, reviewId: string, reply: string): Pr
   if (!rows.length) throw new ShopError(404, "후기를 찾을 수 없습니다.");
 }
 
+/** 후기 정렬 — 고른 값만 SQL 로 간다(문자열을 그대로 넣지 않는다) */
+export const REVIEW_SORTS = ["recent", "high", "low"] as const;
+export type ReviewSort = (typeof REVIEW_SORTS)[number];
+
 export async function listReviews(
   db: Db,
-  params: { productId: string; page: number; viewerId?: string | null; isManager?: boolean },
+  params: {
+    productId: string;
+    page: number;
+    viewerId?: string | null;
+    isManager?: boolean;
+    sort?: string;
+    photoOnly?: boolean;
+  },
 ) {
   const size = 10;
   const page = Math.max(1, params.page);
   // 관리자는 숨긴 후기도 본다 (숨김 처리를 확인·되돌리기 위해)
   const visibility = params.isManager ? sql`TRUE` : sql`r.is_visible = true`;
 
-  const [items, counted, summary] = await Promise.all([
+  /*
+   * 사진 후기만 보기 — 옷·가구처럼 "실물이 어떤가"가 전부인 상품에서 손님이 가장 먼저
+   * 찾는 것이 남의 사진이다. 글 후기 스무 개 사이에 섞여 있으면 찾다가 그만둔다.
+   */
+  const photoCond = params.photoOnly ? sql` AND jsonb_array_length(r.images) > 0` : sql.empty();
+  /*
+   * 별점 정렬에는 항상 최신순을 뒤에 붙인다 — 같은 별점 안에서 순서가 정해지지 않으면
+   * "더 보기"를 누를 때마다 PostgreSQL 이 다른 순서를 줄 수 있고, 그러면 같은 후기가
+   * 두 번 보이거나 어떤 후기는 끝까지 보이지 않는다(LIMIT/OFFSET 페이지의 함정).
+   */
+  const order =
+    params.sort === "high" ? sql`r.rating DESC, r.created_at DESC`
+    : params.sort === "low" ? sql`r.rating ASC, r.created_at DESC`
+    : sql`r.created_at DESC`;
+
+  const [items, counted, summary, photos] = await Promise.all([
     db.execute(sql`
       SELECT r.id, r.user_id, r.author_name, r.rating, r.content, r.images,
              r.admin_reply, r.admin_replied_at, r.is_visible, r.order_no, r.created_at
       FROM shop_reviews r
-      WHERE r.product_id = ${params.productId}::uuid AND ${visibility}
-      ORDER BY r.created_at DESC LIMIT ${size} OFFSET ${(page - 1) * size}
+      WHERE r.product_id = ${params.productId}::uuid AND ${visibility}${photoCond}
+      ORDER BY ${order} LIMIT ${size} OFFSET ${(page - 1) * size}
     `).then((r) => r.rows),
     db.execute(sql`
       SELECT count(*) AS n FROM shop_reviews r
-      WHERE r.product_id = ${params.productId}::uuid AND ${visibility}
+      WHERE r.product_id = ${params.productId}::uuid AND ${visibility}${photoCond}
     `).then((r) => Number(r.rows[0]?.n ?? 0)),
     // 별점 분포 — 상세 화면에 막대로 보여준다
     db.execute(sql`
@@ -207,6 +233,11 @@ export async function listReviews(
       WHERE product_id = ${params.productId}::uuid AND is_visible = true
       GROUP BY rating
     `).then((r) => r.rows),
+    // 사진 후기 수 — **사진 필터와 무관하게** 센다. 아니면 필터를 켠 순간 스위치가 사라진다
+    db.execute(sql`
+      SELECT count(*) AS n FROM shop_reviews r
+      WHERE r.product_id = ${params.productId}::uuid AND ${visibility} AND jsonb_array_length(r.images) > 0
+    `).then((r) => Number(r.rows[0]?.n ?? 0)),
   ]);
 
   const distribution: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
@@ -231,6 +262,8 @@ export async function listReviews(
     total: counted,
     page,
     pageSize: size,
+    /** 사진이 붙은 후기 수 — 화면이 "사진 후기만" 스위치를 낼지 판단한다 */
+    photoCount: photos,
     average: total > 0 ? Math.round((sum / total) * 10) / 10 : 0,
     ratingCount: total,
     distribution,

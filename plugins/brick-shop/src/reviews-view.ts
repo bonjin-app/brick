@@ -41,6 +41,8 @@ export function reviewSection(product: {
       <div class="brick-review-dist" data-dist></div>
     </div>` : ""}
     <div data-review-form></div>
+    ${/* 정렬·사진 필터는 목록과 함께 다시 그려지므로 목록 밖의 자리에 둔다 */ ""}
+    <div class="brick-review-tools" data-review-tools hidden></div>
     <div data-review-list><p class="brick-shop-empty">${escapeHtml(t("common.loading"))}</p></div>
   </div>
 
@@ -75,6 +77,18 @@ const REVIEW_CSS = `
 .brick-dist-row{display:grid;grid-template-columns:34px 1fr 40px;align-items:center;gap:8px;font-size:13px;color:var(--color-text-soft, #45454f)}
 .brick-dist-bar{height:8px;background:var(--color-line, #e4e4ea);border-radius:4px;overflow:hidden}
 .brick-dist-bar i{display:block;height:100%;background:var(--color-warning, #96610a)}
+.brick-review-tools{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:18px 0 4px}
+.brick-review-tools button{min-height:34px;padding:0 12px;border:0;background:none;font-size:13.5px;color:var(--color-muted, #6c6c7a);cursor:pointer;border-radius:var(--radius, 3px)}
+.brick-review-tools button:hover{color:var(--color-text, #17171c);background:var(--color-bg-soft, #f6f6f9)}
+.brick-review-tools button.is-on{color:var(--color-text, #17171c);font-weight:700;background:var(--color-bg-soft, #f6f6f9)}
+/* 정렬 버튼과 같은 선택자 무게로 쓴다 (.brick-review-tools button 이 이미 border:0 을 건다) */
+/* 오른쪽 끝(margin-left:auto)으로 밀지 않는다 — 테마의 고정 퀵메뉴가 그 자리에 있어
+   좁은 데스크톱 폭에서 스위치가 가려진다(실제로 그랬다). 정렬 버튼 옆에 붙인다 */
+.brick-review-tools button.brick-review-photoonly{margin-left:10px;border:1px solid var(--color-line, #e4e4ea);border-radius:999px}
+/* 체크는 항상 자리를 차지한다 (색만 감춘다) — 켜고 끌 때 글자가 밀리지 않게 */
+.brick-review-tools button.brick-review-photoonly::before{content:"✓";display:inline-grid;place-items:center;width:14px;height:14px;margin-right:7px;border:1px solid var(--color-line, #e4e4ea);border-radius:3px;font-size:10px;line-height:1;color:transparent;vertical-align:-2px}
+.brick-review-tools button.brick-review-photoonly.is-on{background:var(--color-text, #17171c);color:var(--color-bg, #ffffff);border-color:var(--color-text, #17171c)}
+.brick-review-tools button.brick-review-photoonly.is-on::before{border-color:currentColor;color:currentColor}
 .brick-review-item,.brick-inquiry-item{padding:20px 4px;border-bottom:1px solid var(--color-line, #e4e4ea)}
 .brick-review-head{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:14px}
 .brick-review-head time{color:var(--color-muted, #6c6c7a);font-size:13px}
@@ -128,8 +142,14 @@ const reviewScript = () => `
   root.dataset.ready = '1';
   var pid = root.dataset.product;
   var API = '/api/plugins/brick-shop';
-  var state = { reviews: 1, inquiries: 1, myRating: 5 };
+  var state = { reviews: 1, inquiries: 1, myRating: 5, reviewSort: 'recent', reviewPhoto: false };
 
+  var TOOL_SORTS = [
+    ['recent', ${JSON.stringify(t("reviews.sortRecent"))}],
+    ['high', ${JSON.stringify(t("reviews.sortHigh"))}],
+    ['low', ${JSON.stringify(t("reviews.sortLow"))}]
+  ];
+  var PHOTO_ONLY = ${JSON.stringify(t("reviews.photoOnly"))};
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
   function stars(n){ n = Math.round(Number(n)||0);
@@ -182,11 +202,51 @@ const reviewScript = () => `
     box.innerHTML = html;
   }
 
+  /*
+   * 후기 정렬·사진 필터.
+   *
+   * 상품 목록의 것과 달리 링크가 아니라 버튼이다 — 후기 영역은 주소로 가리킬 수 없고
+   * (탭 안의 목록이다) 목록 자체를 스크립트가 채우므로, 링크로 만들면 주소만 바뀌고
+   * 아무 일도 일어나지 않는 것처럼 보인다.
+   */
+  function renderTools(data){
+    var box = get(root, '[data-review-tools]');
+    if (!box) return;
+    // 후기가 한 개면 정렬할 것이 없다. 사진 후기가 있으면 스위치는 낸다
+    if (Number(data.total) <= 1 && !Number(data.photoCount)) { box.hidden = true; return; }
+    box.hidden = false;
+    var labels = TOOL_SORTS;
+    var html = labels.map(function(pair){
+      var on = state.reviewSort === pair[0];
+      return '<button type="button" data-rsort="' + pair[0] + '"' + (on ? ' class="is-on" aria-current="true"' : '') + '>' +
+        esc(pair[1]) + '</button>';
+    }).join('');
+    if (Number(data.photoCount) > 0) {
+      html += '<button type="button" class="brick-review-photoonly' + (state.reviewPhoto ? ' is-on' : '') +
+        '" data-rphoto aria-pressed="' + (state.reviewPhoto ? 'true' : 'false') + '">' +
+        esc(PHOTO_ONLY.replace('{n}', data.photoCount)) + '</button>';
+    }
+    box.innerHTML = html;
+    box.querySelectorAll('[data-rsort]').forEach(function(b){
+      b.addEventListener('click', function(){
+        if (state.reviewSort === b.dataset.rsort) return;
+        state.reviewSort = b.dataset.rsort;
+        loadReviews(1);
+      });
+    });
+    var pb = box.querySelector('[data-rphoto]');
+    if (pb) pb.addEventListener('click', function(){ state.reviewPhoto = !state.reviewPhoto; loadReviews(1); });
+  }
+
   function renderReviews(data){
     renderDist(data);
+    renderTools(data);
     var list = get(root, '[data-review-list]');
     if (!data.items.length) {
-      list.innerHTML = '<p class="brick-shop-empty">' + ${JSON.stringify(t("reviews.empty"))} + '</p>';
+      // "후기가 없다"와 "사진 후기가 없다"는 다른 말이다 — 스위치를 켠 것을 잊은 손님이
+      // 상품에 후기가 하나도 없다고 오해한다
+      list.innerHTML = '<p class="brick-shop-empty">' +
+        (state.reviewPhoto ? ${JSON.stringify(t("reviews.emptyPhoto"))} : ${JSON.stringify(t("reviews.empty"))}) + '</p>';
       return;
     }
     list.innerHTML = data.items.map(function(r){
@@ -226,7 +286,8 @@ const reviewScript = () => `
 
   function loadReviews(page, append){
     state.reviews = page || 1;
-    json(API + '/products/' + pid + '/reviews?page=' + state.reviews).then(function(res){
+    var q = '?page=' + state.reviews + '&sort=' + state.reviewSort + (state.reviewPhoto ? '&photo=1' : '');
+    json(API + '/products/' + pid + '/reviews' + q).then(function(res){
       if (!res.ok) { get(root, '[data-review-list]').innerHTML = '<p class="brick-shop-empty">' + ${JSON.stringify(t("reviews.loadFail"))} + '</p>'; return; }
       if (append) {
         // 더 보기: 기존 목록 뒤에 이어 붙인다
