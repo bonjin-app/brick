@@ -431,6 +431,20 @@ export function registerStorefrontBlocks(
         <button type="button" data-act="buy" class="brick-primary">${escapeHtml(t("detail.buyBtn"))}</button>
       </div>
       <p class="brick-buy-msg" role="status"></p>
+      ${/*
+         모바일 하단 고정 구매 바.
+         폼 **안**에 둔다 — 구매 스크립트가 폼 안의 button[data-act] 를 이미 묶으므로
+         옵션·수량·오류 처리가 그대로 재사용된다. 밖에 두면 같은 논리를 두 벌 쓰게 되고,
+         두 벌은 반드시 어긋난다.
+       */ ""}
+      <div class="brick-buybar" aria-hidden="true">
+        <div class="brick-buybar-info">
+          <strong>${won(Number(p.price))}</strong>
+          <span class="brick-buybar-msg" role="status"></span>
+        </div>
+        <button type="button" data-act="cart">${escapeHtml(t("detail.cartBtn"))}</button>
+        <button type="button" data-act="buy" class="brick-primary">${escapeHtml(t("detail.buyBtn"))}</button>
+      </div>
     </form>`}
   </div>
 </div>
@@ -850,6 +864,23 @@ const STOREFRONT_CSS = `
 .brick-buy-actions button{flex:1;padding:14px;border:1px solid var(--color-line, #e4e4ea);border-radius:8px;background:var(--color-bg, #ffffff);font-size:15px;cursor:pointer}
 .brick-buy-actions .brick-primary{background:var(--color-primary,#d0402c);color:var(--color-on-primary, #ffffff);border-color:transparent;font-weight:700}
 .brick-buy-msg{min-height:20px;font-size:14px;margin:10px 0 0}
+/* 하단 고정 구매 바 — 좁은 화면에서만. 넓은 화면은 원래 버튼이 늘 보인다 */
+.brick-buybar{display:none}
+@media(max-width:640px){
+  .brick-buybar.is-on{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:60;gap:8px;align-items:center;
+    padding:10px 12px;padding-bottom:max(10px, env(safe-area-inset-bottom));
+    background:var(--color-bg, #ffffff);border-top:1px solid var(--color-line, #e4e4ea);box-shadow:0 -2px 12px rgba(0,0,0,.08)}
+  .brick-buybar-info{flex:1;min-width:0;display:grid}
+  .brick-buybar-info strong{font-size:16px;line-height:1.2}
+  .brick-buybar-msg{font-size:11.5px;color:var(--color-muted, #6c6c7a);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .brick-buybar button{flex:0 0 auto;min-height:44px;padding:0 14px;border:1px solid var(--color-line, #e4e4ea);border-radius:8px;
+    background:var(--color-bg, #ffffff);font-size:14px;cursor:pointer}
+  .brick-buybar button.brick-primary{background:var(--color-primary,#d0402c);color:var(--color-on-primary, #ffffff);border-color:transparent;font-weight:700}
+  /* 바가 가리는 만큼 아래를 비운다. 테마의 고정 버튼도 위로 올린다 —
+     .brick-quick 이 없는 테마에는 아무 일도 일어나지 않는다 */
+  .brick-buybar-on body{padding-bottom:76px}
+  .brick-buybar-on .brick-quick{bottom:84px}
+}
 .brick-soldout-notice{padding:16px;background:var(--color-line, #e4e4ea);border-radius:8px;text-align:center;color:var(--color-muted, #6c6c7a)}
 .brick-detail-description{margin:40px 0;line-height:1.8}
 .brick-cart table{width:100%;border-collapse:collapse;font-size:14px}
@@ -969,6 +1000,9 @@ const buyScript = (cartPath: string) => `
   var form = document.currentScript.parentNode.querySelector('.brick-buy-form');
   if (!form) return;
   var msg = form.querySelector('.brick-buy-msg');
+  var barMsg = form.querySelector('.brick-buybar-msg');
+  // 하단 바에서 누르면 폼의 안내문은 화면 밖이다 — 두 곳에 같은 말을 쓴다
+  function say(text){ msg.textContent = text; if (barMsg) barMsg.textContent = text; }
   function payload(){
     var opt = form.querySelector('#brick-opt');
     return {
@@ -980,19 +1014,38 @@ const buyScript = (cartPath: string) => `
   }
   form.querySelectorAll('button[data-act]').forEach(function(btn){
     btn.addEventListener('click', function(){
-      msg.textContent = ${JSON.stringify(t("buy.processing"))};
+      say(${JSON.stringify(t("buy.processing"))});
       fetch('/api/plugins/brick-shop/cart', {
         method: 'POST', headers: {'content-type':'application/json'}, body: JSON.stringify(payload())
       }).then(function(r){ return r.json().then(function(d){ return {ok:r.ok, d:d}; }); })
         .then(function(res){
-          if (!res.ok) { msg.textContent = res.d.message || ${JSON.stringify(t("buy.addFail"))}; return; }
+          if (!res.ok) { say(res.d.message || ${JSON.stringify(t("buy.addFail"))}); return; }
           if (res.d.guestToken) localStorage.setItem('brick_shop_guest', res.d.guestToken);
           if (btn.dataset.act === 'buy') { location.href = ${JSON.stringify(cartPath)}; return; }
-          msg.textContent = ${JSON.stringify(t("buy.added"))};
+          say(${JSON.stringify(t("buy.added"))});
         })
-        .catch(function(){ msg.textContent = ${JSON.stringify(t("buy.error"))}; });
+        .catch(function(){ say(${JSON.stringify(t("buy.error"))}); });
     });
   });
+
+  /*
+   * 하단 바는 **원래 버튼이 화면에서 사라졌을 때만** 나온다.
+   * 늘 띄워두면 좁은 화면의 세로를 상시로 먹고, 버튼이 바로 위에 보이는데 아래에도
+   * 있으면 어느 것을 눌러야 하는지 헷갈린다. IntersectionObserver 가 없는 브라우저에서는
+   * 바를 내지 않는다 — 없어도 원래 버튼으로 살 수 있다.
+   */
+  var bar = form.querySelector('.brick-buybar');
+  var anchor = form.querySelector('.brick-buy-actions');
+  if (bar && anchor && 'IntersectionObserver' in window) {
+    new IntersectionObserver(function(entries){
+      var gone = !entries[0].isIntersecting;
+      bar.classList.toggle('is-on', gone);
+      // 화면 낭독기에 같은 버튼이 두 벌 읽히지 않게
+      if (gone) bar.removeAttribute('aria-hidden'); else bar.setAttribute('aria-hidden', 'true');
+      // 테마가 고정 요소(맨 위로 버튼 등)를 비켜 놓을 수 있게 훅을 남긴다
+      document.documentElement.classList.toggle('brick-buybar-on', gone);
+    }, { rootMargin: '0px' }).observe(anchor);
+  }
 })();
 </script>`;
 

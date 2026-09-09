@@ -26,6 +26,7 @@ ok()  { PASS=$((PASS+1)); echo "  ✅ $1"; }
 bad() { FAIL=$((FAIL+1)); echo "  ❌ $1"; }
 check()    { [[ "$2" == "$3" ]] && ok "$1" || bad "$1 (기대 $3, 실제 $2)"; }
 contains() { [[ "$2" == *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 없음: ${2:0:140})"; }
+absent()   { [[ "$2" != *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 가 있음)"; }
 code()     { curl -s -o /dev/null -w "%{http_code}" "$@"; }
 jq_get()   { python3 -c "import sys,json;d=json.load(sys.stdin);print(d$1)" 2>/dev/null || echo ""; }
 
@@ -137,7 +138,12 @@ for pid in "${PIDS[@]}"; do wait "$pid" || true; done
 # "0건 성공"이라는 회귀를 보고하지 못하고 조용히 중단된다
 SUCCESS="$( { grep -l orderNo "$TMP"/o*.json 2>/dev/null | wc -l | tr -d ' '; } || true )"
 check "동시 주문 6건 중 3건만 성공 (초과판매 없음)" "$SUCCESS" "3"
-contains "실패는 명확한 재고 메시지" "$(cat "$TMP"/o*.json)" "재고가"
+# 문구는 **경쟁 결과에 따라 갈린다**: 재고가 남은 것을 보고 밀린 주문은 "재고가 N개만
+# 남았습니다", 이미 0이 된 뒤에 도착한 주문은 "품절되었습니다". 둘 다 맞는 말이므로 어느
+# 쪽이든 통과시킨다 — 하나만 못박으면 타이밍에 따라 CI 가 붉어진다(실제로 그랬다).
+FAILMSG="$(cat "$TMP"/o*.json)"
+{ [[ "$FAILMSG" == *"재고가"* || "$FAILMSG" == *"품절"* ]]; } \
+  && ok "실패는 명확한 재고 메시지" || bad "실패는 명확한 재고 메시지 (${FAILMSG:0:160})"
 contains "주문번호 중복 없음(시퀀스)" "$(curl -s -b "$CK" "$SHOP/admin/orders")" '"total":3'
 
 echo "── 관리자 대시보드 — 오늘의 사이트 (registerDashboardCard)"
@@ -478,11 +484,42 @@ psql_q "INSERT INTO shop_reviews (id, product_id, author_name, rating, content, 
 contains "같은 별점 안에서는 최신 먼저" \
   "$(curl -s "$SHOP/products/$OPID/reviews?sort=high" | python3 -c "import sys,json;print(json.load(sys.stdin)['items'][0]['content'])")" "같은 별점 최신"
 # 화면에 도구 자리가 있는가 (목록은 스크립트가 채우므로 자리와 문구를 본다)
-DETAIL_HTML="$(curl -s -X POST "$API/api/blocks/render" -H 'content-type: application/json' \
-  -d '{"name":"brick-shop/product-detail","props":{"slug":"opt-item"}}')"
+# 블록 렌더는 JSON 을 돌려준다 — 따옴표가 이스케이프된 채로 찾으면 늘 어긋난다
+render_block() { curl -s -X POST "$API/api/blocks/render" -H 'content-type: application/json' -d "$1" \
+  | python3 -c "import sys,json;print(json.load(sys.stdin).get('html',''))"; }
+DETAIL_HTML="$(render_block '{"name":"brick-shop/product-detail","props":{"slug":"opt-item"}}')"
 contains "후기 도구 자리" "$DETAIL_HTML" 'data-review-tools'
 contains "정렬 문구가 실려 있다" "$DETAIL_HTML" '별점 높은순'
 contains "사진 후기만 문구" "$DETAIL_HTML" '사진 후기만'
+
+echo "── 모바일 하단 구매 바 (내려 읽는 동안 살 수 있어야 한다)"
+contains "하단 바가 있다" "$DETAIL_HTML" 'class="brick-buybar"'
+contains "하단 바에 가격이 있다" "$DETAIL_HTML" 'class="brick-buybar-info"'
+contains "하단 바에도 두 버튼" "$DETAIL_HTML" 'class="brick-buybar-msg"'
+# 폼 **안**에 있어야 구매 스크립트가 묶는다 — 밖으로 나가면 눌러도 아무 일이 없다
+inside_form() { /usr/bin/python3 -c "
+import sys, re
+h = sys.stdin.read()
+m = re.search(r'<form class=\"brick-buy-form\".*?</form>', h, re.S)
+print('yes' if m and 'brick-buybar' in m.group(0) else 'no')
+"; }
+check "하단 바가 구매 폼 안에 있다" "$(echo "$DETAIL_HTML" | inside_form)" "yes"
+inside_form_acts() { /usr/bin/python3 -c "
+import sys, re
+m = re.search(r'<form class=.brick-buy-form.*?</form>', sys.stdin.read(), re.S)
+print(m.group(0).count('data-act=') if m else 0)
+"; }
+# 버튼 수: 폼 안의 data-act 가 네 개(원래 둘 + 하단 둘)여야 스크립트가 넷 다 묶는다
+# 재입고 알림 버튼(폼 밖)도 같은 속성을 쓰므로 전체를 세면 안 된다 — 폼 안만 센다
+check "폼 안의 data-act 버튼이 네 개" "$(echo "$DETAIL_HTML" | inside_form_acts)" "4"
+contains "좁은 화면에서만 나온다" "$DETAIL_HTML" '@media(max-width:640px)'
+contains "테마가 비켜설 훅" "$DETAIL_HTML" '.brick-buybar-on .brick-quick'
+# 품절 상품에는 구매 폼이 없으므로 바도 없다
+psql_q "UPDATE shop_products SET status = 'soldout' WHERE slug = 'smoke-item'" >/dev/null
+SOLDOUT_HTML="$(render_block '{"name":"brick-shop/product-detail","props":{"slug":"smoke-item"}}')"
+contains "품절이면 재입고 알림 화면" "$SOLDOUT_HTML" 'brick-soldout-notice'
+absent "품절 상품에는 하단 바가 없다" "$SOLDOUT_HTML" 'class="brick-buybar"'
+psql_q "UPDATE shop_products SET status = 'selling' WHERE slug = 'smoke-item'" >/dev/null
 
 echo "── 스토어프론트 블록"
 BLOCKS="$(curl -s "$API/api/blocks")"
