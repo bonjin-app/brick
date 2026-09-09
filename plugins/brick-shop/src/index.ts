@@ -2272,13 +2272,70 @@ export default definePlugin(async (ctx) => {
             WHERE created_at >= (date_trunc('day', now() AT TIME ZONE ${SITE_TZ}) AT TIME ZONE ${SITE_TZ})
               AND status NOT IN ('cancelled', 'refunded')
           ) AS today,
-          count(*) FILTER (WHERE status = 'pending') AS awaiting
+          -- 어제는 반개구간이다 [어제 0시, 오늘 0시) — 겹치면 같은 주문이 두 번 센다
+          count(*) FILTER (
+            WHERE created_at >= ((date_trunc('day', now() AT TIME ZONE ${SITE_TZ}) - interval '1 day') AT TIME ZONE ${SITE_TZ})
+              AND created_at < (date_trunc('day', now() AT TIME ZONE ${SITE_TZ}) AT TIME ZONE ${SITE_TZ})
+              AND status NOT IN ('cancelled', 'refunded')
+          ) AS yesterday
         FROM shop_orders
       `);
+      /*
+       * 부가문구는 **어제**다. 전에는 입금대기 건수였는데, 그것은 이제 "처리 대기" 카드가
+       * 말한다 — 두 카드가 같은 숫자를 말하면 하나는 자리만 차지한다. 오늘 숫자는 어제와
+       * 나란히 놓을 때만 뜻이 생긴다(방문자 카드가 이미 그 관례를 쓴다).
+       */
       return {
         value: Number(rows[0]?.today ?? 0),
-        sub: ctx.t("dash.awaitingPayment", { n: Number(rows[0]?.awaiting ?? 0) }),
+        sub: ctx.t("dash.yesterdayOrders", { n: Number(rows[0]?.yesterday ?? 0) }),
       };
+    },
+  });
+
+  /*
+   * 처리 대기 — **할 일** 카드.
+   *
+   * 대시보드에 있던 것은 정보였다("오늘 주문 3건"). 운영자가 아침에 관리자를 여는 이유는
+   * 정보를 보려는 것이 아니라 **밀린 일을 처리하려는 것**이다: 입금을 확인하고, 결제된
+   * 주문을 보내고, 후기와 문의에 답한다. 그 숫자들이 각각 다른 화면에 흩어져 있어서
+   * 운영자는 매일 네 곳을 돌아야 했다.
+   *
+   * 한 카드에 묶는다. 카드를 넷으로 늘리면 대시보드가 숫자밭이 되고, 정작 "지금 할 일이
+   * 있나?"라는 질문에 한눈에 답하지 못한다.
+   */
+  ctx.registerDashboardCard({
+    title: "처리 대기",
+    order: 21,
+    link: "/admin/x/brick-shop/orders",
+    load: async () => {
+      const { rows } = await db.execute(sql`
+        SELECT
+          (SELECT count(*) FROM shop_orders WHERE status = 'pending') AS awaiting_payment,
+          -- 보내야 하는 것: 결제되었거나 준비중인데 아직 배송으로 넘기지 않은 주문.
+          -- 송장이 없는 것만 세지 않는다 — 송장 없이 발송하는 가게도 있다(직접 배달·방문 수령).
+          (SELECT count(*) FROM shop_orders WHERE status IN ('paid', 'preparing')) AS to_ship,
+          (SELECT count(*) FROM shop_reviews WHERE admin_reply IS NULL AND is_visible = true) AS reviews,
+          (SELECT count(*) FROM shop_inquiries WHERE admin_reply IS NULL) AS inquiries
+      `);
+      const r = rows[0] ?? {};
+      const pay = Number(r.awaiting_payment ?? 0);
+      const ship = Number(r.to_ship ?? 0);
+      const rev = Number(r.reviews ?? 0);
+      const inq = Number(r.inquiries ?? 0);
+      const total = pay + ship + rev + inq;
+      // 0 이면 "무엇이 0인지"를 늘어놓지 않는다 — 밀린 일이 없다는 사실이 답이다
+      if (total === 0) return { value: 0, sub: ctx.t("dash.queueClear") };
+      /*
+       * 후기와 문의는 "답변"으로 합친다. 넷을 늘어놓으면 190px 카드에서 세 줄로 접혀
+       * 격자가 들쭉날쭉해지고, 무엇보다 운영자에게는 둘 다 **답을 쓰는 같은 일**이다.
+       * 어느 쪽 답변인지는 눌러 들어가면 보인다.
+       */
+      const parts = [
+        pay ? ctx.t("dash.queuePay", { n: pay }) : "",
+        ship ? ctx.t("dash.queueShip", { n: ship }) : "",
+        rev + inq ? ctx.t("dash.queueReply", { n: rev + inq }) : "",
+      ].filter(Boolean);
+      return { value: total, sub: parts.join(" · ") };
     },
   });
 

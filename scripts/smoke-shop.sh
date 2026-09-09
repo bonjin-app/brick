@@ -150,10 +150,19 @@ echo "── 관리자 대시보드 — 오늘의 사이트 (registerDashboardCa
 DASH="$(curl -s -b "$CK" "$API/api/admin/dashboard")"
 contains "오늘 주문 카드" "$DASH" '"title":"오늘 주문"'
 contains "오늘 주문 3건" "$DASH" '"value":3'
-contains "입금대기 부가문구 (ctx.t)" "$DASH" "입금대기 3건"
+# 오늘 숫자는 어제와 나란히 놓을 때만 뜻이 생긴다. 입금대기는 "처리 대기" 카드가 말한다 —
+# 두 카드가 같은 숫자를 말하면 하나는 자리만 차지한다
+contains "어제와 견주는 부가문구 (ctx.t)" "$DASH" "어제 0건"
+absent "입금대기를 두 카드가 말하지 않는다" "$DASH" "입금대기"
 contains "코어 회원 통계" "$DASH" '"members":'
 contains "카드는 관리 화면으로 연결" "$DASH" '"link":"/admin/x/brick-shop/orders"'
 check "비로그인은 대시보드 불가" "$(code "$API/api/admin/dashboard")" "401"
+
+# 정보가 아니라 **할 일**이 보여야 한다 — 운영자는 밀린 일을 처리하러 관리자를 연다
+contains "처리 대기 카드" "$DASH" '"title":"처리 대기"'
+contains "입금 확인이 할 일에 잡힌다" "$DASH" "입금 확인 3"
+# 이 시점에는 결제된 주문이 없다 — 없는 항목은 문구에 넣지 않는다(0을 늘어놓으면 소음이다)
+absent "0 인 항목은 문구에 없다" "$DASH" "발송 0"
 
 echo "── 재고 소진 후"
 printf '{"items":[{"productId":"%s","quantity":1}],"orderer":{"ordererName":"늦은손님","ordererPhone":"010-0000-0000","postcode":"06236","address1":"서울"}}' "$PID" > "$TMP/late.json"
@@ -491,6 +500,10 @@ DETAIL_HTML="$(render_block '{"name":"brick-shop/product-detail","props":{"slug"
 contains "후기 도구 자리" "$DETAIL_HTML" 'data-review-tools'
 contains "정렬 문구가 실려 있다" "$DETAIL_HTML" '별점 높은순'
 contains "사진 후기만 문구" "$DETAIL_HTML" '사진 후기만'
+
+# 후기·문의도 할 일이다 — 답변을 기다리는 것이 대시보드에 잡혀야 한다
+DASH2="$(curl -s -b "$CK" "$API/api/admin/dashboard")"
+contains "답변 안 한 후기가 할 일에 잡힌다" "$DASH2" "답변 "
 
 echo "── 모바일 하단 구매 바 (내려 읽는 동안 살 수 있어야 한다)"
 contains "하단 바가 있다" "$DETAIL_HTML" 'class="brick-buybar"'
