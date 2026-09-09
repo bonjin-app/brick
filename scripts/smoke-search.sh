@@ -66,6 +66,9 @@ psql_q() {
 }
 
 # 한글 검색어는 반드시 인코딩해서 보낸다 (브라우저는 항상 인코딩한다)
+# 페이지 렌더는 JSON({"html":...})을 돌려준다 — 그대로 찾으면 따옴표가 이스케이프되어 어긋난다
+render_page() { curl -s "$API/api/render/page?$1" | python3 -c "import sys,json;print(json.load(sys.stdin).get('html',''))"; }
+
 srch() {  # srch <쿠키파일|-> <검색어> [추가 쿼리...]
   local ck="$1"; shift
   local q="$1"; shift
@@ -494,12 +497,34 @@ psql_q "ALTER TABLE board_boards RENAME COLUMN title_tmp TO title" >/dev/null
 contains "고치면 다시 나온다" "$(curl -s -b "$CK" "$API/api/admin/link-targets")" '"code":"boards"'
 
 echo "── 공개 검색 화면 — /search 는 페이지가 없어도 렌더된다 (core/search 폴백)"
-SPAGE="$(curl -s "$API/api/render/page?path=search&q=%EC%9A%B0%EC%82%B0")"  # "우산" — 수트가 만든 페이지가 걸린다
+SPAGE="$(render_page "path=search&q=%EC%9A%B0%EC%82%B0")"  # "우산" — 수트가 만든 페이지가 걸린다
 contains "검색 화면이 뜬다 (페이지 없이)" "$SPAGE" "통합검색"
 contains "검색 폼" "$SPAGE" "brick-search-form"
 contains "결과 문구" "$SPAGE" "검색 결과"
 absent  "0건 그룹은 그리지 않는다" "$SPAGE" "0건</small>"
-contains "빈 검색은 폼만" "$(curl -s "$API/api/render/page?path=search")" "brick-search-form"
+contains "빈 검색은 폼만" "$(render_page "path=search")" "brick-search-form"
+
+echo "── 검색 결과의 사진 (글자만으로는 고를 수 없는 결과가 있다)"
+# 상품에 대표 사진을, 글 하나에 목록 썸네일을 준다 (업로드 경로는 여기서 시험할 것이 아니다)
+psql_q "UPDATE shop_products SET image_url = '/uploads/umb-a.jpg' WHERE slug = 'umbrella-a'" >/dev/null
+psql_q "UPDATE board_posts SET thumb_url = '/uploads/post-umb.jpg' WHERE title LIKE '%우산%' AND thumb_url IS NULL" >/dev/null
+# 상품 검색 결과 — 사진이 오는가
+PROD_JSON="$(srch - "우산" --data-urlencode "scope=products")"
+contains "상품 검색 응답에 썸네일" "$PROD_JSON" '"thumbnail":"/uploads/umb-a.jpg"'
+POST_JSON="$(srch - "우산" --data-urlencode "scope=posts")"
+contains "게시글 검색 응답에 썸네일" "$POST_JSON" '"thumbnail":"/uploads/post-umb.jpg"'
+# 화면 — 사진이 있는 그룹만 사진 목록이 된다
+SPHOTO="$(render_page "path=search&q=%EC%9A%B0%EC%82%B0&scope=products")"
+contains "사진 있는 그룹은 사진 목록" "$SPHOTO" 'class="has-thumbs"'
+contains "사진이 실제로 그려진다" "$SPHOTO" 'src="/uploads/umb-a.jpg"'
+contains "사진은 지연 로딩" "$SPHOTO" 'loading="lazy"'
+# 사진 없는 항목도 같은 그룹 안에서는 빈 칸을 갖는다 (줄 높이가 흔들리지 않게)
+contains "사진 없는 항목엔 빈 칸" "$SPHOTO" '<span class="brick-search-thumb"></span>'
+# 사진이 아예 없는 그룹은 지금 모양 그대로
+SPAGES="$(render_page "path=search&q=%EC%9A%B0%EC%82%B0&scope=pages")"
+absent "사진 없는 그룹은 그대로" "$SPAGES" 'class="has-thumbs"'
+# 사진이 없어도 제목 선택자는 살아 있어야 한다 (감싸개를 넣으면서 li > a 가 깨졌다)
+contains "제목 감싸개" "$SPAGES" 'class="brick-search-body"'
 
 echo
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"

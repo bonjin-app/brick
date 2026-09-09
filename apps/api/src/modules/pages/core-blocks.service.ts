@@ -519,11 +519,29 @@ ${eyebrow ? `    <span class="brick-eyebrow">${esc(eyebrow)}</span>
 
         // 0건 그룹은 그리지 않는다 — "페이지 0건" 줄은 정보가 아니라 소음이다
         const groups = result.groups.filter((g) => g.total > 0).map((g) => {
+          /*
+           * 사진은 **그룹 단위**로 켠다.
+           *
+           * 상품처럼 글자만으로 고를 수 없는 결과에는 사진이 있어야 하고(제목 열 줄에서
+           * 머그컵을 고를 수는 없다), 공지·문의처럼 사진이 없는 대상은 지금 모양이 맞다.
+           * 항목마다 켜면 한 목록 안에서 줄 높이가 달라져 들쭉날쭉해지므로, 그룹에 사진이
+           * 하나라도 있으면 그 그룹 전체를 사진 목록으로 그리고 없는 항목은 빈 칸을 둔다.
+           */
+          const withThumbs = g.items.some((it) => it.thumbnail);
           const items = g.items.map((it) => `
     <li>
+      ${withThumbs
+        ? `<span class="brick-search-thumb">${
+            it.thumbnail
+              ? `<img src="${esc(it.thumbnail)}" alt="" loading="lazy" decoding="async" />`
+              : ""
+          }</span>`
+        : ""}
+      <span class="brick-search-body">
       <a href="${esc(it.path)}">${esc(it.title)}</a>
       ${it.meta ? `<span class="brick-search-meta">${esc(it.meta)}</span>` : ""}
       ${it.excerpt ? `<p class="brick-search-excerpt">${esc(it.excerpt)}</p>` : ""}
+      </span>
     </li>`).join("");
           // 분류를 좁히지 않았을 때는 그룹마다 "더보기"로 그 분류 검색으로 안내한다
           const more = !scope && g.total > g.items.length
@@ -532,7 +550,7 @@ ${eyebrow ? `    <span class="brick-eyebrow">${esc(eyebrow)}</span>
           return `
   <section class="brick-search-group">
     <h2>${esc(g.label)} <small>${esc(t("search.groupTotal", { total: g.total }))}${more}</small></h2>
-    <ul>${items}</ul>
+    <ul${withThumbs ? ' class="has-thumbs"' : ""}>${items}</ul>
   </section>`;
         }).join("");
 
@@ -561,8 +579,16 @@ ${eyebrow ? `    <span class="brick-eyebrow">${esc(eyebrow)}</span>
 .brick-search-group ul { list-style: none; padding: 0; margin: 0; }
 .brick-search-group li { padding: 14px 0; border-bottom: 1px solid var(--color-line, #e4e4ea); }
 .brick-search-group li:last-child { border-bottom: 0; }
-.brick-search-group li > a { font-size: 16px; font-weight: 600; color: var(--color-text, #17171c); text-decoration: none; }
-.brick-search-group li > a:hover { color: var(--color-primary-text, #b63a2e); text-decoration: underline; }
+/* 제목은 이제 .brick-search-body 안에 있다 (사진과 나란히 놓기 위한 감싸개) */
+/* flex:1 로 남는 폭을 받고, min-width:0 으로 긴 단어가 칸을 밀어내지 않게 한다 */
+.brick-search-body { display: block; flex: 1 1 auto; min-width: 0; }
+.brick-search-body > a { font-size: 16px; font-weight: 600; color: var(--color-text, #17171c); text-decoration: none; }
+.brick-search-body > a:hover { color: var(--color-primary-text, #b63a2e); text-decoration: underline; }
+/* 사진이 있는 그룹만 가로 배치. 사진 없는 항목은 빈 칸을 둔다 — 줄 높이가 흔들리지 않게 */
+.brick-search-group ul.has-thumbs li { display: flex; gap: 14px; align-items: flex-start; }
+.brick-search-thumb { flex: 0 0 auto; display: block; width: 64px; height: 64px; overflow: hidden;
+  border-radius: 8px; background: var(--color-bg-soft, #f6f6f9); }
+.brick-search-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .brick-search-meta { margin-left: 8px; font-size: 12.5px; color: var(--color-muted, #6c6c7a); }
 .brick-search-excerpt { margin: 5px 0 0; font-size: 14px; line-height: 1.6; color: var(--color-text-soft, #45454f); }
 .brick-search-pager { display: flex; gap: 16px; margin-top: 22px; }

@@ -2175,7 +2175,7 @@ export default definePlugin(async (ctx) => {
     async search({ query, offset, limit }) {
       const { rows } = await db.execute(sql`
         SELECT p.slug, p.name, p.summary, p.description, p.price, p.status, p.created_at,
-               c.name AS category_name
+               p.image_url, c.name AS category_name
         FROM shop_products p
         LEFT JOIN shop_categories c ON c.id = p.category_id
         WHERE ${productSearchWhere(query)}
@@ -2189,6 +2189,8 @@ export default definePlugin(async (ctx) => {
         // 짧은 설명이 있으면 그것을, 없으면 상세에서 발췌한다
         excerpt: searchExcerpt(String(r.summary || r.description || ""), query),
         date: r.created_at as Date,
+        // 글자만으로는 머그컵을 고를 수 없다 — 검색 결과에도 사진을 준다
+        thumbnail: r.image_url ? String(r.image_url) : null,
         meta: [
           String(r.category_name ?? "") || null,
           `${Number(r.price).toLocaleString("ko-KR")}원`,

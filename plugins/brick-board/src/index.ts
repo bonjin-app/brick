@@ -1080,7 +1080,7 @@ ${items}
     },
     async search({ query, viewer, offset, limit }) {
       const { rows } = await db.execute(sql`
-        SELECT p.id, p.title, p.content, p.created_at, b.slug AS board_slug, b.title AS board_title
+        SELECT p.id, p.title, p.content, p.created_at, p.thumb_url, b.slug AS board_slug, b.title AS board_title
         FROM board_posts p
         JOIN board_boards b ON b.id = p.board_id
         WHERE ${postSearchWhere(query, viewer)}
@@ -1093,6 +1093,8 @@ ${items}
         title: String(r.title),
         excerpt: searchExcerpt(String(r.content ?? ""), query),
         date: r.created_at as Date,
+        // 사진 게시판의 글은 제목만으로 무엇인지 알 수 없다 (목록과 같은 썸네일을 쓴다)
+        thumbnail: r.thumb_url ? String(r.thumb_url) : null,
         meta: String(r.board_title),
       }));
     },
