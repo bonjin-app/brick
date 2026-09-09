@@ -336,6 +336,7 @@
   "dash.queueShip": "To ship {n}",
   "dash.queueReply": "Replies {n}",
   "오늘 주문": "Orders today",
+  "처리 대기": "Pending tasks",
   "checkout.title": "Checkout",
   "checkout.loading": "Loading your cart…",
   "checkout.emptyCart": "Your cart is empty.",

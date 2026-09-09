@@ -203,7 +203,16 @@ contains "옵션 라벨이 영어" "$RES_EN" '"label":"Paid"'
 contains "설명(help)도 영어" "$RES_EN" "restores stock automatically"
 DASH_EN="$(curl -s -b "$CK" "$API/api/admin/dashboard")"
 contains "대시보드 카드 제목도 영어" "$DASH_EN" '"title":"Orders today"'
-contains "카드 부가문구(ctx.t)도 영어" "$DASH_EN" "Awaiting payment: 0"
+contains "카드 부가문구(ctx.t)도 영어" "$DASH_EN" "Yesterday 0"
+# 카드 제목은 **선언 문자열**이다(원문이 번역 키) — locales/en.json 에 넣는 것을 잊으면
+# 영어 사이트에 한국어 제목이 뜬다. 카드를 새로 만들 때마다 실제로 잊는다(그래서 전수로 본다).
+KO_TITLES="$(echo "$DASH_EN" | /usr/bin/python3 -c "
+import sys, json, re
+d = json.load(sys.stdin)
+bad = [c['title'] for c in d.get('cards', []) if re.search(r'[가-힣]', c.get('title') or '')]
+print(','.join(bad))
+")"
+[[ -z "$KO_TITLES" ]] && ok "모든 카드 제목이 번역되어 있다" || bad "번역 안 된 카드 제목: $KO_TITLES"
 
 echo "── 한국어로 복귀"
 curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' \
