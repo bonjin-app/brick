@@ -36,6 +36,7 @@ export function registerStorefrontBlocks(
         sort: { type: "string", title: "정렬 (recent | popular | price_asc | price_desc)", default: "recent" },
         title: { type: "string", title: "제목 (비우면 표시 안 함)" },
         sortable: { type: "boolean", title: "손님이 정렬을 바꿀 수 있게 (상품 목록 화면용)", default: false },
+        paged: { type: "boolean", title: "페이지 나누기 (상품 목록 화면용)", default: false },
       },
     },
     render: async (props, blockCtx) => {
@@ -65,18 +66,49 @@ export function registerStorefrontBlocks(
        * 스크립트 없이 동작한다. 쇼핑몰에서 "낮은 가격순"은 공유되는 주소다.
        * 다른 쿼리(분류·페이지)는 유지해야 하므로 현재 쿼리를 복사해 sort 만 바꾼다.
        */
+      /** 현재 쿼리를 유지하며 일부만 바꾼 주소 — 정렬 막대와 페이저가 같은 규칙을 쓴다 */
+      const linkWith = (changes: Record<string, string | null>): string => {
+        const params = new URLSearchParams(Object.entries(blockCtx?.query ?? {}));
+        for (const [k, v] of Object.entries(changes)) {
+          if (v === null) params.delete(k);
+          else params.set(k, v);
+        }
+        const qs = params.toString();
+        return `${shopBaseOf(blockCtx)}${qs ? `?${qs}` : ""}`;
+      };
+
       const sortBar = sortable
         ? `<div class="brick-sort" role="group" aria-label="${escapeHtml(t("sort.label"))}">${SORTS.map((key) => {
-            const params = new URLSearchParams(
-              Object.entries(blockCtx?.query ?? {}).filter(([k]) => k !== "sort" && k !== "page"),
-            );
-            params.set("sort", key);
             const on = key === sort;
-            return `<a href="${escapeHtml(`${shopBaseOf(blockCtx)}?${params.toString()}`)}"${
+            // 정렬을 바꾸면 1페이지로 — 3페이지에서 정렬만 바꾸면 손님은 엉뚱한 곳에 있다
+            return `<a href="${escapeHtml(linkWith({ sort: key, page: null }))}"${
               on ? ' class="is-on" aria-current="true"' : ""
             }>${escapeHtml(t(`sort.${key}`))}</a>`;
           }).join("")}</div>`
         : "";
+
+      /*
+       * 페이지 나누기 — 목록 화면에서만 켠다(홈의 진열 섹션은 limit 만큼 보여주고 끝이다).
+       *
+       * 이것이 없으면 **상품이 limit 를 넘는 순간 나머지를 볼 방법이 없다.** 기본 24 였으니
+       * 25번째 상품부터는 사이트에 있어도 손님이 닿을 수 없었다 — 쇼핑몰에서 치명적이다.
+       */
+      const paged = props.paged === true;
+      const page = paged ? Math.max(1, Math.floor(Number(blockCtx?.query?.page ?? 1)) || 1) : 1;
+
+      let total = 0;
+      if (paged) {
+        const { rows: countRows } = await db.execute(sql`
+          SELECT count(*)::int AS n
+          FROM shop_products p
+          LEFT JOIN shop_categories c ON c.id = p.category_id
+          WHERE p.status IN ('selling', 'soldout') AND (${category} = '' OR c.slug = ${category})
+        `);
+        total = Number(countRows[0]?.n ?? 0);
+      }
+      const totalPages = paged ? Math.max(1, Math.ceil(total / limit)) : 1;
+      // 없는 페이지를 요청하면 마지막 페이지를 보여준다 — 빈 화면보다 낫다(주소를 손으로 고친 경우)
+      const current = Math.min(page, totalPages);
 
       const { rows } = await db.execute(sql`
         SELECT p.slug, p.name, p.price, p.list_price, p.image_url, p.status, p.stock,
@@ -85,7 +117,7 @@ export function registerStorefrontBlocks(
         LEFT JOIN shop_categories c ON c.id = p.category_id
         WHERE p.status IN ('selling', 'soldout') AND (${category} = '' OR c.slug = ${category})
         ORDER BY ${order}
-        LIMIT ${limit}
+        LIMIT ${limit} OFFSET ${(current - 1) * limit}
       `);
 
       if (!rows.length) {
@@ -147,7 +179,11 @@ export function registerStorefrontBlocks(
       const heading = props.title ? `<h2 class="brick-shop-heading">${escapeHtml(props.title)}</h2>` : "";
 
 
-      return `${heading}${sortBar}<div class="brick-product-grid" style="--brick-cols:${columns}">${cards}\n</div>${STOREFRONT_CSS}`;
+      // 페이저는 게시판과 같은 프리미티브(.brick-pager)를 쓴다 — 테마가 이미 모양을 갖고 있다
+      const pager = paged && totalPages > 1 ? renderPager(current, totalPages, (n) => linkWith({ page: n === 1 ? null : String(n) })) : "";
+      const totalNote = paged && total > 0 ? `<span class="brick-shop-total">${escapeHtml(t("list.total", { n: total }))}</span>` : "";
+
+      return `${heading}${totalNote}${sortBar}<div class="brick-product-grid" style="--brick-cols:${columns}">${cards}\n</div>${pager}${STOREFRONT_CSS}`;
     },
   };
   ctx.registerBlock(productListBlock);
@@ -347,7 +383,7 @@ ${buyScript(`${shopBaseOf(blockCtx)}/cart`)}${GALLERY_SCRIPT}${restockScript()}$
         const nav = await categoryListBlock.render({}, blockCtx);
         // 목록 화면에서는 손님이 정렬을 고를 수 있다(홈의 진열 섹션과 달리)
         const list = await productListBlock.render(
-          { limit: props.limit ?? 24, columns: props.columns ?? 4, category, sortable: true },
+          { limit: props.limit ?? 24, columns: props.columns ?? 4, category, sortable: true, paged: true },
           blockCtx,
         );
         return `${nav}\n${list}`;
@@ -657,6 +693,7 @@ const STOREFRONT_CSS = `
     radial-gradient(circle at 9px 9px, currentColor 2.5px, transparent 3px),
     linear-gradient(135deg, transparent 55%, currentColor 55%, currentColor 72%, transparent 72%);
 }
+.brick-shop-total{display:block;margin:12px 0 -4px;font-size:13.5px;color:var(--color-muted, #6c6c7a)}
 .brick-sort{display:flex;flex-wrap:wrap;gap:2px;margin:14px 0 4px;align-items:center}
 .brick-sort a{display:inline-flex;align-items:center;min-height:36px;padding:0 12px;font-size:13.5px;color:var(--color-muted, #6c6c7a);text-decoration:none;border-radius:var(--radius, 3px);transition:color .16s ease,background .16s ease}
 .brick-sort a:hover{color:var(--color-text, #17171c);background:var(--color-bg-soft, #f6f6f9)}
@@ -734,6 +771,28 @@ const GALLERY_SCRIPT = `
  * 만들 때 쓴다 — '/cart' 로 하드코딩하면 상점 페이지 slug 가 'shop' 일 때
  * 존재하지 않는 경로로 떨어진다 (장바구니는 <상점 페이지>/cart 로 라우팅된다).
  */
+/**
+ * 페이지 번호 막대 — 게시판의 것과 같은 구조·클래스(.brick-pager)다.
+ * 코드를 공유하지 않는 이유: 플러그인끼리 의존하면 하나를 끄면 다른 하나가 깨진다.
+ * 클래스 계약만 공유하고(테마가 모양을 갖는다) 구현은 각자 둔다.
+ */
+function renderPager(current: number, totalPages: number, link: (n: number) => string): string {
+  const window = 5;
+  const start = Math.max(1, current - Math.floor(window / 2));
+  const end = Math.min(totalPages, start + window - 1);
+  const parts: string[] = [];
+  if (current > 1) parts.push(`<a href="${escapeHtml(link(current - 1))}">&#8249; ${escapeHtml(t("pager.prev"))}</a>`);
+  if (start > 1) parts.push(`<a href="${escapeHtml(link(1))}">1</a>${start > 2 ? "<span>&hellip;</span>" : ""}`);
+  for (let n = start; n <= end; n++) {
+    parts.push(n === current ? `<strong>${n}</strong>` : `<a href="${escapeHtml(link(n))}">${n}</a>`);
+  }
+  if (end < totalPages) {
+    parts.push(`${end < totalPages - 1 ? "<span>&hellip;</span>" : ""}<a href="${escapeHtml(link(totalPages))}">${totalPages}</a>`);
+  }
+  if (current < totalPages) parts.push(`<a href="${escapeHtml(link(current + 1))}">${escapeHtml(t("pager.next"))} &#8250;</a>`);
+  return `<nav class="brick-pager" aria-label="${escapeHtml(t("pager.label"))}">${parts.join("")}</nav>`;
+}
+
 function shopBaseOf(blockCtx?: { path?: string; pathTail?: string }): string {
   const path = String(blockCtx?.path ?? "").replace(/^\/+|\/+$/g, "");
   const tail = String(blockCtx?.pathTail ?? "").replace(/^\/+|\/+$/g, "");

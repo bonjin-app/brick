@@ -348,6 +348,60 @@ AMT2="$(psql_q "SELECT zone_fee, total FROM shop_orders WHERE order_no='$NOS'")"
 check "서울 주문은 지역비 0 (23000)" "$AMT2" "0|23000"
 
 echo
+echo "── 상품 목록 페이지 나누기 (limit 를 넘는 상품에 닿을 수 있는가)"
+# 상품을 limit 보다 많이 만든다 — 전에는 25번째 상품부터 사이트에 있어도 볼 방법이 없었다
+node -e "
+const pg = require('$ROOT/apps/api/node_modules/pg');
+const { randomUUID } = require('crypto');
+(async () => {
+  const c = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await c.connect();
+  for (let i = 1; i <= 30; i++) {
+    await c.query(
+      \"INSERT INTO shop_products (id, slug, name, description, price, stock, status, sort_order) \" +
+      \"VALUES (\$1, \$2, \$3, '', \$4, 10, 'selling', \$5) ON CONFLICT (slug) DO NOTHING\",
+      [randomUUID(), 'pg' + String(i).padStart(2, '0'), '쪽나눔 ' + i, 1000 * i, 500 + i],
+    );
+  }
+  await c.end();
+})();
+" 2>/dev/null
+bust_cache
+count_cards() { /usr/bin/python3 -c "
+import sys, re
+print(len(re.findall(r'brick-product-name\">', sys.stdin.read())))
+"; }
+PAGE1="$(sf_render "shop")"
+check "1쪽은 limit(24)만큼" "$(echo "$PAGE1" | count_cards)" "24"
+contains "총 개수를 알려준다" "$PAGE1" 'class="brick-shop-total">'
+contains "페이저가 나온다 (게시판과 같은 프리미티브)" "$PAGE1" 'class="brick-pager"'
+contains "다음 쪽 링크" "$PAGE1" 'href="/shop?page=2"'
+PAGE2="$(sf_render "shop&page=2")"
+[[ "$(echo "$PAGE2" | count_cards)" -gt 0 ]] && ok "2쪽에 나머지 상품이 있다" || bad "2쪽에 나머지 상품이 있다"
+contains "2쪽에서 현재 위치 표시" "$PAGE2" "<strong>2</strong>"
+contains "1쪽 링크에는 page 를 붙이지 않는다 (정규 주소)" "$PAGE2" 'href="/shop">1</a>'
+# 1쪽과 2쪽의 상품이 겹치지 않아야 한다 — OFFSET 이 틀리면 같은 상품을 두 번 보여준다
+FIRST1="$(echo "$PAGE1" | /usr/bin/python3 -c "
+import sys, re
+m = re.findall(r'brick-product-name\">([^<]+)', sys.stdin.read())
+print(m[0] if m else '')
+")"
+FIRST2="$(echo "$PAGE2" | /usr/bin/python3 -c "
+import sys, re
+m = re.findall(r'brick-product-name\">([^<]+)', sys.stdin.read())
+print(m[0] if m else '')
+")"
+[[ -n "$FIRST1" && "$FIRST1" != "$FIRST2" ]] && ok "쪽마다 다른 상품 ($FIRST1 / $FIRST2)" || bad "쪽마다 다른 상품 ($FIRST1 / $FIRST2)"
+# 없는 쪽을 요청하면 마지막 쪽 (빈 화면보다 낫다 — 주소를 손으로 고친 경우)
+contains "없는 쪽은 마지막 쪽으로" "$(sf_render "shop&page=999")" 'class="brick-pager"'
+# 정렬과 함께 쓸 수 있다
+SORT_PAGE="$(sf_render "shop&sort=price_desc")"
+contains "페이저 링크가 정렬을 유지한다" "$SORT_PAGE" 'sort=price_desc&amp;page=2'
+contains "정렬 링크는 쪽을 1 로 되돌린다" "$(sf_render "shop&sort=recent&page=2")" 'href="/shop?sort=popular"'
+# 홈의 진열 섹션에는 페이저가 없다 (limit 만큼 보여주고 끝)
+absent "홈에는 페이저가 없다" "$(sf_render "&page=2")" 'class="brick-pager"'
+absent "홈에는 총 개수도 없다" "$(sf_render "&page=2")" 'class="brick-shop-total">'
+
 echo "── 상품 정렬 (손님이 고른다 · 링크라 주소가 공유된다)"
 psql_q "UPDATE shop_products SET sold_count = 40 WHERE slug = 'sample-tote'" >/dev/null
 bust_cache

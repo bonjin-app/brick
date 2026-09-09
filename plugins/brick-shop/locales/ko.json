@@ -196,5 +196,9 @@
   "reviews.imageOnly": "이미지 파일만 올릴 수 있습니다 (png·jpg·gif·webp).",
   "reviews.imageTooBig": "사진은 8MB 이하만 올릴 수 있습니다.",
   "reviews.uploading": "사진 올리는 중…",
-  "reviews.photoRemove": "사진 빼기"
+  "reviews.photoRemove": "사진 빼기",
+  "pager.prev": "이전",
+  "pager.next": "다음",
+  "pager.label": "페이지",
+  "list.total": "총 {n}개"
 }

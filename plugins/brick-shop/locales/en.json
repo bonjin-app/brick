@@ -436,5 +436,9 @@
   "reviews.imageOnly": "Images only (png, jpg, gif, webp).",
   "reviews.imageTooBig": "Each photo must be 8MB or less.",
   "reviews.uploading": "Uploading…",
-  "reviews.photoRemove": "Remove photo"
+  "reviews.photoRemove": "Remove photo",
+  "pager.prev": "Prev",
+  "pager.next": "Next",
+  "pager.label": "Pages",
+  "list.total": "{n} items"
 }
