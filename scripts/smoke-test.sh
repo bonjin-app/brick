@@ -264,5 +264,38 @@ check "스탬프 붙은 테마 자산은 1년 immutable" "$(curl -s -o /dev/null
 check "스탬프 없는 자산은 1시간" "$(curl -s -o /dev/null -w '%header{cache-control}' "$API/themes/default/assets/style.css")" "public, max-age=3600"
 check "텍스트 응답은 br 로 압축된다" "$(curl -s -o /dev/null -w '%header{content-encoding}' -H 'Accept-Encoding: br, gzip' "$API/themes/default/assets/style.css")" "br"
 
+echo "── DB 순단을 견디는가 (PostgreSQL 재시작·풀 순단에 사이트가 내려가면 안 된다)"
+# 작업 큐는 1초마다 DB 를 폴링한다. 그 질의가 던지는 오류를 흘리면 미처리 프로미스 거부가
+# 되어 **Node 가 프로세스를 죽인다** — 실제로 그랬다. DB 는 살아 있는데 연결만 끊어 본다.
+kill_conns() {
+  node -e '
+    const { Client } = require("'"$ROOT"'/apps/api/node_modules/pg");
+    (async () => {
+      const c = new Client(process.env.DATABASE_URL); await c.connect();
+      const r = await c.query(
+        "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid()",
+      );
+      console.log(r.rowCount);
+      await c.end();
+    })().catch((e) => { console.error(e.message); process.exit(1); });
+  '
+}
+KILLED="$(kill_conns)"
+[[ "${KILLED:-0}" -ge 1 ]] && ok "서버의 DB 연결을 끊었다 (${KILLED}개)" || bad "연결을 끊지 못했다 (${KILLED:-없음})"
+# 큐 폴링이 그 사이에 최소 한 번 돈다 — 고치기 전에는 여기서 프로세스가 죽었다
+sleep 3
+kill -0 "$API_PID" 2>/dev/null && ok "서버 프로세스가 살아 있다" || bad "서버가 죽었다 (미처리 오류)"
+kill -0 "$API_PID" 2>/dev/null || { echo "── 죽은 이유 ──"; grep -nE "Error|error:|at [A-Za-z]" "$TMP/api.log" | tail -20; }
+# liveness 는 DB 를 건드리지 않으므로 프로세스만 살아 있으면 200 이다
+check "liveness 가 응답한다" "$(code "$API/healthz")" "200"
+# readiness 는 DB 를 본다 — 풀이 새 커넥션을 맺으면 곧 200 으로 돌아온다
+for i in 1 2 3 4 5; do
+  READY="$(code "$API/readyz")"
+  [[ "$READY" == "200" ]] && break
+  sleep 1
+done
+check "readiness 가 스스로 회복된다" "$READY" "200"
+check "DB 를 읽는 요청도 된다" "$(code "$API/api/render/page?path=")" "200"
+
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 [[ $FAIL -eq 0 ]] || { echo; echo "── 서버 로그 ──"; tail -40 "$TMP/api.log"; exit 1; }
