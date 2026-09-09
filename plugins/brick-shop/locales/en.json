@@ -435,6 +435,8 @@
   "filter.under": "Under {price}",
   "filter.over": "{price} and up",
   "filter.range": "{from} – {to}",
+  "filter.label": "Refine",
+  "filter.instock": "In stock only",
   "reviews.photos": "Photos (up to 3)",
   "reviews.noImage": "No image file.",
   "reviews.tooManyImages": "Up to 3 photos.",

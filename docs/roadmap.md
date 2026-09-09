@@ -555,3 +555,4 @@ node 런타임(51MB)·Next standalone(31MB)·API(23MB, sharp 18MB 포함).
 - [x] 사진 후기 업로드 (구매자만·1600px·EXIF 제거·최대 3장). smoke-shop 118 (+12)
 - [x] 상품 목록 페이지 나누기 — limit 를 넘는 상품에 닿을 수 없던 것(쇼핑몰에서 치명적). smoke-storefront 138
 - [x] 가격대 필터 — 눈금을 **상품 값에서** 만든다(1·2·5×10ⁿ 격자 · 구간별 개수 · 빈 구간 제거). smoke-storefront 160 (+22)
+- [x] 품절 제외 스위치 — 기본은 보여 주는 쪽(재입고 알림·검색 유입). 눈금은 스위치에 흔들리지 않게 고정. smoke-storefront 174 (+14)

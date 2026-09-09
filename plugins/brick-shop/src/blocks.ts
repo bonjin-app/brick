@@ -38,6 +38,7 @@ export function registerStorefrontBlocks(
         sortable: { type: "boolean", title: "손님이 정렬을 바꿀 수 있게 (상품 목록 화면용)", default: false },
         paged: { type: "boolean", title: "페이지 나누기 (상품 목록 화면용)", default: false },
         priceFilter: { type: "boolean", title: "가격대로 좁히기 (상품 목록 화면용)", default: false },
+        stockFilter: { type: "boolean", title: "품절 제외 토글 (상품 목록 화면용)", default: false },
       },
     },
     render: async (props, blockCtx) => {
@@ -81,6 +82,19 @@ export function registerStorefrontBlocks(
         : sql.empty();
 
       /*
+       * 품절 제외 — 기본은 **보여 주는** 쪽이다.
+       *
+       * 품절 상품은 진열대에 남겨두는 것이 한국 쇼핑몰의 관례다: 재입고 알림을 받고,
+       * 그 물건이 잘 팔린다는 신호가 되고, 검색에서 들어온 주소가 404 가 되지 않는다.
+       * 대신 "지금 살 수 있는 것만" 보려는 손님에게 스위치를 준다.
+       */
+      const stockFilter = props.stockFilter === true;
+      const instock = stockFilter && String(blockCtx?.query?.instock ?? "") === "1";
+      // 카드에 품절 표시를 붙이는 판단과 같은 식이어야 한다 — 다르면 목록과 카드가 어긋난다
+      const SOLDOUT = sql`(p.status = 'soldout' OR (p.stock IS NOT NULL AND p.stock <= 0))`;
+      const stockCond = instock ? sql` AND NOT ${SOLDOUT}` : sql.empty();
+
+      /*
        * 정렬 막대 — 링크로 만든다(select + JS 가 아니라).
        *
        * 링크는 검색엔진이 따라가고, 손님이 새 탭으로 열 수 있고, 뒤로 가기가 자연스럽고,
@@ -117,17 +131,31 @@ export function registerStorefrontBlocks(
       const paged = props.paged === true;
       const page = paged ? Math.max(1, Math.floor(Number(blockCtx?.query?.page ?? 1)) || 1) : 1;
 
-      // 분류까지만 좁힌 집합 — 가격대 눈금과 구간별 개수는 **현재 가격대와 무관해야** 한다.
-      // 아니면 한 구간을 고른 순간 다른 구간이 모두 0 이 되어 되돌릴 길이 사라진다.
-      const scope = sql`
+      /*
+       * 집합을 두 단계로 나눈다.
+       *
+       * scopeBase(분류까지만) — 가격대 **눈금**과 품절 상품 유무를 여기서 본다. 눈금이
+       *   품절 제외 여부에 따라 움직이면 스위치를 누를 때마다 구간이 바뀌어 손님이 길을 잃고,
+       *   품절 유무를 좁힌 집합에서 보면 품절을 제외한 순간 스위치가 사라져 되돌릴 수 없다.
+       * scope(+품절 제외) — 구간별 개수와 총 개수. 다른 축의 필터는 반영해야 맞다.
+       *
+       * 어느 쪽도 **가격대는 넣지 않는다**: 한 구간을 고른 순간 나머지 구간이 모두 0 이 되면
+       * 되돌릴 길이 사라진다.
+       */
+      const scopeBase = sql`
         FROM shop_products p
         LEFT JOIN shop_categories c ON c.id = p.category_id
         WHERE p.status IN ('selling', 'soldout') AND (${category} = '' OR c.slug = ${category})`;
+      const scope = sql`${scopeBase}${stockCond}`;
 
       let bands: PriceBand[] = [];
-      if (priceFilter) {
-        const { rows: span } = await db.execute(sql`SELECT min(p.price)::int AS lo, max(p.price)::int AS hi ${scope}`);
-        bands = priceBands(Number(span[0]?.lo ?? 0), Number(span[0]?.hi ?? 0));
+      let soldoutN = 0;
+      if (priceFilter || stockFilter) {
+        const { rows: span } = await db.execute(sql`
+          SELECT min(p.price)::int AS lo, max(p.price)::int AS hi,
+                 count(*) FILTER (WHERE ${SOLDOUT})::int AS soldout ${scopeBase}`);
+        soldoutN = Number(span[0]?.soldout ?? 0);
+        if (priceFilter) bands = priceBands(Number(span[0]?.lo ?? 0), Number(span[0]?.hi ?? 0));
       }
 
       let total = 0;
@@ -149,12 +177,11 @@ export function registerStorefrontBlocks(
       }
 
       /*
-       * 구간이 하나뿐이면 막대를 내지 않는다 — 전부 같은 가격대라면 좁힐 것이 없고,
+       * 구간이 하나뿐이면 가격 눈금을 내지 않는다 — 전부 같은 가격대라면 좁힐 것이 없고,
        * 누를 수 있는 버튼이 하나인 필터는 화면만 차지한다.
        */
-      const priceBar = bands.length >= 2
-        ? `<div class="brick-filter" role="group" aria-label="${escapeHtml(t("filter.price"))}">` +
-          `<span class="brick-filter-label">${escapeHtml(t("filter.price"))}</span>` +
+      const priceGroup = bands.length >= 2
+        ? `<span class="brick-filter-label">${escapeHtml(t("filter.price"))}</span>` +
           // "전체"는 구간이 아니라 구간을 지우는 링크다 — 같은 map 에 섞으면 둘 다 어색해진다
           [{ band: null }, ...bands.map((band) => ({ band }))]
             .map(({ band }) => {
@@ -168,8 +195,17 @@ export function registerStorefrontBlocks(
                 band === null ? t("filter.all") : `${bandLabel(band)} (${band.count ?? 0})`;
               return `<a href="${escapeHtml(href)}"${on ? ' class="is-on" aria-current="true"' : ""}>${escapeHtml(label)}</a>`;
             })
-            .join("") +
-          "</div>"
+            .join("")
+        : "";
+
+      // 품절이 하나도 없으면 스위치를 내지 않는다 — 아무것도 바꾸지 못하는 스위치다
+      const stockToggle = stockFilter && soldoutN > 0
+        ? `<a class="brick-filter-toggle${instock ? " is-on" : ""}" aria-pressed="${instock}" ` +
+          `href="${escapeHtml(linkWith({ instock: instock ? null : "1", page: null }))}">${escapeHtml(t("filter.instock"))}</a>`
+        : "";
+
+      const priceBar = priceGroup || stockToggle
+        ? `<div class="brick-filter" role="group" aria-label="${escapeHtml(t("filter.label"))}">${priceGroup}${stockToggle}</div>`
         : "";
       const totalPages = paged ? Math.max(1, Math.ceil(total / limit)) : 1;
       // 없는 페이지를 요청하면 마지막 페이지를 보여준다 — 빈 화면보다 낫다(주소를 손으로 고친 경우)
@@ -180,7 +216,7 @@ export function registerStorefrontBlocks(
                p.review_count, p.rating_sum, p.created_at, p.sold_count
         FROM shop_products p
         LEFT JOIN shop_categories c ON c.id = p.category_id
-        WHERE p.status IN ('selling', 'soldout') AND (${category} = '' OR c.slug = ${category})${priceCond}
+        WHERE p.status IN ('selling', 'soldout') AND (${category} = '' OR c.slug = ${category})${priceCond}${stockCond}
         ORDER BY ${order}
         LIMIT ${limit} OFFSET ${(current - 1) * limit}
       `);
@@ -448,7 +484,15 @@ ${buyScript(`${shopBaseOf(blockCtx)}/cart`)}${GALLERY_SCRIPT}${restockScript()}$
         const nav = await categoryListBlock.render({}, blockCtx);
         // 목록 화면에서는 손님이 정렬을 고를 수 있다(홈의 진열 섹션과 달리)
         const list = await productListBlock.render(
-          { limit: props.limit ?? 24, columns: props.columns ?? 4, category, sortable: true, paged: true, priceFilter: true },
+          {
+            limit: props.limit ?? 24,
+            columns: props.columns ?? 4,
+            category,
+            sortable: true,
+            paged: true,
+            priceFilter: true,
+            stockFilter: true,
+          },
           blockCtx,
         );
         return `${nav}\n${list}`;
@@ -768,6 +812,10 @@ const STOREFRONT_CSS = `
 .brick-filter a{display:inline-flex;align-items:center;min-height:34px;padding:0 13px;font-size:13.5px;color:var(--color-text-soft, #45454f);text-decoration:none;border:1px solid var(--color-line, #e4e4ea);border-radius:999px;transition:border-color .16s ease,color .16s ease,background .16s ease}
 .brick-filter a:hover{border-color:var(--color-text-soft, #45454f);color:var(--color-text, #17171c)}
 .brick-filter a.is-on{border-color:var(--color-text, #17171c);background:var(--color-text, #17171c);color:var(--color-bg, #ffffff);font-weight:600}
+.brick-filter-toggle{margin-left:10px}
+/* 체크는 항상 자리를 차지한다 (색만 감춘다) — 켜고 끌 때 글자가 밀리지 않게 */
+.brick-filter-toggle::before{content:"✓";display:inline-grid;place-items:center;width:14px;height:14px;margin-right:7px;border:1px solid var(--color-line, #e4e4ea);border-radius:3px;font-size:10px;line-height:1;color:transparent}
+.brick-filter-toggle.is-on::before{border-color:currentColor;color:currentColor}
 .brick-tags{position:absolute;top:8px;left:8px;display:flex;flex-wrap:wrap;gap:4px;z-index:1}
 .brick-tag{display:inline-flex;align-items:center;height:20px;padding:0 7px;font-size:11px;font-weight:700;letter-spacing:.02em;border-radius:var(--radius, 3px);color:#fff;background:#111318}
 .brick-tag-new{background:#1f7a4d}

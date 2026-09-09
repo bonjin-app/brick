@@ -476,6 +476,30 @@ contains "숫자가 아닌 값은 무시한다" "$(sf_render "shop&min=abc")" 'c
 # 좁힐 것이 없으면 막대를 내지 않는다 (구간이 하나뿐이거나 상품이 없을 때)
 absent "빈 분류에는 가격 막대가 없다" "$(sf_render "shop&category=none")" 'class="brick-filter"'
 
+echo "── 품절 제외 (기본은 보여 준다 — 재입고 알림·검색 유입 때문에)"
+SOLDOUT_N="$(band_count "(status = 'soldout' OR (stock IS NOT NULL AND stock <= 0))")"
+IN_N="$(band_count "NOT (status = 'soldout' OR (stock IS NOT NULL AND stock <= 0))")"
+BASE="$(sf_render "shop")"
+contains "품절 상품이 있으면 스위치가 나온다" "$BASE" 'class="brick-filter-toggle"'
+contains "스위치는 꺼진 상태로 시작" "$BASE" 'aria-pressed="false"'
+contains "기본 목록에는 품절 상품이 보인다" "$BASE" '<span class="brick-badge-soldout">'
+IN="$(sf_render "shop&instock=1")"
+contains "켜면 눌린 상태로 보인다" "$IN" 'aria-pressed="true"'
+absent "켜면 품절 상품이 사라진다" "$IN" '<span class="brick-badge-soldout">'
+contains "총 개수가 품절 제외를 따른다" "$IN" ">총 ${IN_N}개<"
+[[ "$SOLDOUT_N" -gt 0 && "$IN_N" -lt "$(band_count "true")" ]] && ok "품절이 실제로 빠졌다 (품절 ${SOLDOUT_N}개)" || bad "품절이 실제로 빠졌다"
+contains "다시 누르면 꺼진다 (같은 링크가 스위치)" "$IN" 'href="/shop">'
+# 눈금은 품절 제외에 따라 움직이지 않는다 — 누를 때마다 구간이 바뀌면 손님이 길을 잃는다
+contains "가격 눈금이 그대로다" "$IN" '>10,000원 미만 ('
+# 구간별 개수는 다른 축의 필터를 반영한다
+IN_MID_N="$(band_count "NOT (status = 'soldout' OR (stock IS NOT NULL AND stock <= 0)) AND price >= 10000 AND price < 20000")"
+contains "구간별 개수는 품절 제외를 반영한다" "$IN" ">10,000원 ~ 20,000원 (${IN_MID_N})<"
+# 링크 규칙 — 다른 축을 유지한다
+contains "스위치가 정렬·가격대를 유지한다" "$(sf_render "shop&min=10000&max=20000&sort=price_desc")" 'min=10000&amp;max=20000&amp;sort=price_desc&amp;instock=1'
+contains "가격대 링크가 스위치를 유지한다" "$IN" 'instock=1&amp;min=10000&amp;max=20000'
+contains "정렬 링크가 스위치를 유지한다" "$IN" 'instock=1&amp;sort=popular'
+absent "홈의 진열 섹션에는 스위치가 없다" "$(sf_render "&instock=1")" 'class="brick-filter-toggle'
+
 echo "── 상품 뱃지 NEW · BEST · 할인율 (진열대의 관례)"
 # 샘플 상품으로 세 경우를 만든다: 많이 팔린 것(BEST) · 오래된 것(NEW 아님) · 품절(뱃지 없음)
 psql_q "UPDATE shop_products SET sold_count = 33 WHERE slug = 'sample-tote'" >/dev/null

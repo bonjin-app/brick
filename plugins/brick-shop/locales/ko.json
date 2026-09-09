@@ -195,6 +195,8 @@
   "filter.under": "{price} 미만",
   "filter.over": "{price} 이상",
   "filter.range": "{from} ~ {to}",
+  "filter.label": "목록 좁히기",
+  "filter.instock": "품절 제외",
   "reviews.photos": "사진 (최대 3장)",
   "reviews.noImage": "이미지 파일이 없습니다.",
   "reviews.tooManyImages": "사진은 3장까지 올릴 수 있습니다.",
