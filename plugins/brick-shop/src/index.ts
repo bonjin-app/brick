@@ -2,7 +2,7 @@ import { definePlugin, isUniqueViolation, isValidBusinessNo, maskEmail, rawRespo
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import { t } from "./i18n.js";
-import { DEFAULT_SETTINGS, ShopError, STATUS_LABEL, escapeHtml, won,
+import { DEFAULT_SETTINGS, ShopError, STATUS_LABEL, STATUS_TRANSITIONS, escapeHtml, pgArray, won,
          type Db, type OrderStatus, type ShopSettings } from "./types.js";
 import { quote } from "./pricing.js";
 import { addToCart, clearCart, getCartItems, updateCartItem, type CartOwner } from "./cart.js";
@@ -678,6 +678,90 @@ export default definePlugin(async (ctx) => {
     `);
     const { rows: cnt } = await db.execute(sql`SELECT count(*) AS n FROM shop_orders`);
     return { items: rows, total: Number(cnt[0]?.n ?? 0), page, pageSize: 30 };
+  });
+
+  /**
+   * 주문 일괄 처리 — 매일 아침 되풀이하는 두 가지.
+   *
+   * 상태 변경은 **한 건씩 changeOrderStatus 로** 돈다. 한 번의 UPDATE 로 묶으면 빠르지만
+   * 그 함수가 하는 일(상태 전이 검사·이력 기록·재고 복원·포인트 환원)을 전부 다시 써야 하고,
+   * 두 벌이 된 순간 어긋난다. 주문 목록의 한 페이지(수십 건)를 다루는 일이므로 속도보다
+   * 한 가지 진실이 중요하다.
+   *
+   * 전이할 수 없는 주문은 **건너뛴다**. 스무 건을 골랐는데 세 건이 이미 배송완료라고 해서
+   * 나머지 열일곱 건을 막으면 운영자는 무엇이 걸렸는지 찾아 지우고 다시 눌러야 한다.
+   */
+  ctx.registerRoute("POST", "/admin/orders/bulk", async (req) => {
+    requireAdmin(req);
+    const body = req.body as { action?: string; ids?: string[] };
+    const ids = Array.isArray(body.ids)
+      ? body.ids.map(String).filter((x) => /^[0-9a-f-]{36}$/i.test(x)).slice(0, 500)
+      : [];
+    if (!ids.length) throw new ShopError(400, "선택된 주문이 없습니다.");
+
+    /*
+     * 작업마다 **거쳐야 하는 상태를 못박는다.**
+     *
+     * 결제완료에서 배송중으로 가는 전이는 없다 — 준비중을 거치도록 되어 있다(상품을 챙기는
+     * 단계가 실제로 있으므로 맞는 규칙이다). 그렇다고 운영자에게 "준비중으로" 와 "배송중으로"
+     * 를 두 번 누르게 할 이유는 없다: 발송 처리를 눌렀다는 것은 이미 챙겼다는 뜻이므로
+     * 우리가 거쳐 간다. 이력에는 사실대로 두 줄이 남는다.
+     *
+     * 경로를 자동으로 찾지 않는다(BFS 등). 취소·환불도 전이 가능한 상태이므로, 길을
+     * 알아서 찾게 하면 어느 날 주문이 취소를 지나가게 된다.
+     */
+    const ROUTES: Record<string, readonly OrderStatus[]> = {
+      "mark-paid": ["paid"],
+      "mark-shipped": ["preparing", "shipped"],
+    };
+    const route = ROUTES[String(body.action ?? "")];
+    if (!route) throw new ShopError(400, "알 수 없는 작업입니다.");
+    const target = route[route.length - 1];
+
+    const { rows } = await db.execute(sql`
+      SELECT id, status FROM shop_orders WHERE id = ANY(${pgArray(ids)}::uuid[])
+    `);
+    let affected = 0;
+    let skipped = 0;
+    for (const row of rows) {
+      const from = String(row.status) as OrderStatus;
+      // 이미 목표 상태면 성공으로 센다 (멱등 — 두 번 눌러도 "0건 처리"라고 하지 않는다)
+      if (from === target) {
+        affected++;
+        continue;
+      }
+      /*
+       * 끝까지 갈 수 있는지 **먼저** 확인한다. 중간에 막히면 그 주문은 준비중에 남고,
+       * 운영자는 목록에서 "발송 처리했는데 왜 준비중이지"를 만난다 — 반쯤 처리된 상태가
+       * 가장 나쁘다.
+       */
+      let probe = from;
+      let reachable = true;
+      for (const step of route) {
+        if (probe === step) continue;
+        if (!STATUS_TRANSITIONS[probe]?.includes(step)) {
+          reachable = false;
+          break;
+        }
+        probe = step;
+      }
+      if (!reachable) {
+        skipped++;
+        continue;
+      }
+      let current = from;
+      for (const step of route) {
+        if (current === step) continue;
+        await changeOrderStatus(db, String(row.id), step, {
+          note: `일괄 ${STATUS_LABEL[step]}`,
+          actorId: req.user?.id ?? null,
+          pointsPort: pointsPort(),
+        });
+        current = step;
+      }
+      affected++;
+    }
+    return { ok: true, affected, skipped };
   });
 
   ctx.registerRoute("PUT", "/admin/orders/:id", async (req) => {

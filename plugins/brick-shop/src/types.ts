@@ -101,3 +101,15 @@ export function escapeHtml(s: unknown): string {
 export function won(amount: number): string {
   return `${Number(amount).toLocaleString("ko-KR")}원`;
 }
+
+/**
+ * PostgreSQL 배열 리터럴 — `$1::uuid[]` 에 넣을 문자열.
+ *
+ * drizzle 의 sql 템플릿은 JS 배열을 **파라미터 나열**로 푼다: `ANY(${ids})` 는
+ * `ANY(($1, $2))` 가 되어 구문 오류가 나고, 원소가 하나면 스칼라로 넘어가
+ * "malformed array literal" 이 난다(일괄 처리에서 실제로 500 이 났다). 배열 하나를
+ * 문자열 리터럴로 만들어 넘기면 파라미터 하나로 안전하게 캐스팅된다.
+ */
+export function pgArray(values: readonly string[]): string {
+  return `{${values.map((v) => `"${String(v).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join(",")}}`;
+}

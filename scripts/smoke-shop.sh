@@ -27,6 +27,18 @@ bad() { FAIL=$((FAIL+1)); echo "  ❌ $1"; }
 check()    { [[ "$2" == "$3" ]] && ok "$1" || bad "$1 (기대 $3, 실제 $2)"; }
 contains() { [[ "$2" == *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 없음: ${2:0:140})"; }
 absent()   { [[ "$2" != *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 가 있음)"; }
+# DB 를 직접 보거나 고칠 때 쓴다 (읽는 쪽을 보는 시험에서 설정을 짧게 하기 위해)
+psql_q() {
+  node -e '
+    const { Client } = require("'"$ROOT"'/apps/api/node_modules/pg");
+    (async () => {
+      const c = new Client(process.env.DATABASE_URL); await c.connect();
+      const r = await c.query(process.argv[1]);
+      console.log(r.rows.map((x) => Object.values(x).join("|")).join("\n"));
+      await c.end();
+    })().catch((e) => { console.error(e.message); process.exit(1); });
+  ' "$1"
+}
 code()     { curl -s -o /dev/null -w "%{http_code}" "$@"; }
 jq_get()   { python3 -c "import sys,json;d=json.load(sys.stdin);print(d$1)" 2>/dev/null || echo ""; }
 
@@ -164,6 +176,60 @@ contains "입금 확인이 할 일에 잡힌다" "$DASH" "입금 확인 3"
 # 이 시점에는 결제된 주문이 없다 — 없는 항목은 문구에 넣지 않는다(0을 늘어놓으면 소음이다)
 absent "0 인 항목은 문구에 없다" "$DASH" "발송 0"
 
+echo "── 주문 일괄 처리 (열두 건이면 열두 번 폼을 열어야 했다)"
+# 이 절은 주문 상태를 바꾼다 — **자기 상품과 자기 주문**을 만들어 쓴다. 앞 절이 만든
+# 주문을 빌려 쓰면 뒷 절("잘못된 전이 차단" 등)이 이미 배송중인 주문을 보게 되어 깨진다
+# (실제로 그랬다). 스모크는 순서 의존적이므로 상태를 바꾸는 검사는 자기 것만 만진다.
+printf '{"slug":"bulk-item","name":"일괄 상품","price":5000,"stock":50,"status":"selling"}' > "$TMP/bp.json"
+curl -s -b "$CK" -X POST "$SHOP/admin/products" -H 'content-type: application/json' --data-binary "@$TMP/bp.json" -o /dev/null
+BULK_PID="$(psql_q "SELECT id FROM shop_products WHERE slug = 'bulk-item'")"
+BULK_IDS="$(/usr/bin/python3 -c "
+import json, subprocess, sys
+ids = []
+for i in range(3):
+    body = json.dumps({
+        'items': [{'productId': sys.argv[1], 'quantity': 1}],
+        'orderer': {'ordererName': f'일괄손님{i}', 'ordererPhone': '010-9999-8888',
+                    'postcode': '06236', 'address1': '서울'},
+    })
+    out = subprocess.run(['curl', '-s', '-X', 'POST', sys.argv[2] + '/orders',
+                          '-H', 'content-type: application/json', '-d', body],
+                         capture_output=True, text=True).stdout
+    ids.append(json.loads(out)['id'])
+print(json.dumps(ids))
+" "$BULK_PID" "$SHOP")"
+BULK_N="$(echo "$BULK_IDS" | /usr/bin/python3 -c "import sys,json;print(len(json.load(sys.stdin)))")"
+check "일괄 시험용 주문 3건" "$BULK_N" "3"
+printf '{"action":"mark-paid","ids":%s}' "$BULK_IDS" > "$TMP/bulk.json"
+BULK_RES="$(curl -s -b "$CK" -X POST "$SHOP/admin/orders/bulk" -H 'content-type: application/json' --data-binary "@$TMP/bulk.json")"
+contains "일괄 입금 확인이 처리 건수를 알려준다" "$BULK_RES" "\"affected\":${BULK_N}"
+check "실제로 결제완료가 되었다" "$(psql_q "SELECT count(*) FROM shop_orders o JOIN shop_order_items i ON i.order_id = o.id WHERE i.product_id = '$BULK_PID'::uuid AND o.status = 'paid'")" "$BULK_N"
+# 멱등 — 두 번 눌러도 "0건"이라고 하지 않는다
+contains "다시 눌러도 같은 건수" "$(curl -s -b "$CK" -X POST "$SHOP/admin/orders/bulk" -H 'content-type: application/json' --data-binary "@$TMP/bulk.json")" "\"affected\":${BULK_N}"
+# 발송 처리 — 결제완료 → 배송중은 준비중을 거쳐야 하는데, 운영자에게 두 번 누르게 하지 않는다
+BULK_RES2="$(curl -s -b "$CK" -X POST "$SHOP/admin/orders/bulk" -H 'content-type: application/json' -d "$(printf '{"action":"mark-shipped","ids":%s}' "$BULK_IDS")")"
+contains "일괄 발송 처리 (준비중을 거쳐 간다)" "$BULK_RES2" "\"affected\":${BULK_N}"
+check "배송중이 되었다" "$(psql_q "SELECT count(*) FROM shop_orders o JOIN shop_order_items i ON i.order_id = o.id WHERE i.product_id = '$BULK_PID'::uuid AND o.status = 'shipped'")" "$BULK_N"
+# 이력에는 거쳐 간 단계가 사실대로 남는다 (준비중 + 배송중)
+FIRST_BULK_ID="$(echo "$BULK_IDS" | /usr/bin/python3 -c "import sys,json;print(json.load(sys.stdin)[0])")"
+check "이력에 준비중도 남는다" "$(psql_q "SELECT count(*) FROM shop_order_events WHERE order_id = '$FIRST_BULK_ID' AND to_status = 'preparing'")" "1"
+# 전이할 수 없는 건은 건너뛰고 나머지를 막지 않는다 (배송중 → 결제완료는 불가)
+SKIP_RES="$(curl -s -b "$CK" -X POST "$SHOP/admin/orders/bulk" -H 'content-type: application/json' -d "$(printf '{"action":"mark-paid","ids":%s}' "$BULK_IDS")")"
+contains "전이 불가는 건너뛴다" "$SKIP_RES" "\"skipped\":${BULK_N}"
+contains "건너뛰어도 오류가 아니다" "$SKIP_RES" '"ok":true'
+# 위험한 것은 일괄로 주지 않는다 — 취소·환불은 재고·포인트를 되돌리고 복구할 수 없다
+# 위험한 것은 일괄로 주지 않는다 — 취소·환불은 재고·포인트를 되돌리고 복구할 수 없다
+ORDER_BULK="$(curl -s -b "$CK" "$API/api/admin/resources/brick-shop/orders" | /usr/bin/python3 -c "
+import sys, json
+print(json.dumps(json.load(sys.stdin).get('bulkActions', []), ensure_ascii=False))
+")"
+contains "발송 처리가 일괄 작업에 있다" "$ORDER_BULK" '"mark-shipped"'
+absent "취소는 일괄 작업에 없다" "$ORDER_BULK" "cancel"
+absent "환불도 일괄 작업에 없다" "$ORDER_BULK" "refund"
+check "선택이 없으면 거부" "$(code -b "$CK" -X POST "$SHOP/admin/orders/bulk" -H 'content-type: application/json' -d '{"action":"mark-paid","ids":[]}')" "400"
+check "모르는 작업은 거부" "$(code -b "$CK" -X POST "$SHOP/admin/orders/bulk" -H 'content-type: application/json' -d "$(printf '{"action":"drop-all","ids":%s}' "$BULK_IDS")")" "400"
+check "비관리자는 일괄 처리 불가" "$(code -X POST "$SHOP/admin/orders/bulk" -H 'content-type: application/json' -d '{"action":"mark-paid","ids":["00000000-0000-0000-0000-000000000000"]}')" "403"
+
 echo "── 재고 소진 후"
 printf '{"items":[{"productId":"%s","quantity":1}],"orderer":{"ordererName":"늦은손님","ordererPhone":"010-0000-0000","postcode":"06236","address1":"서울"}}' "$PID" > "$TMP/late.json"
 check "품절 상품 주문 차단" \
@@ -174,9 +240,13 @@ contains "품절이어도 장바구니 조회 가능" "$LENIENT" '"available":fa
 contains "품절 사유 표시" "$LENIENT" '"issue"'
 
 echo "── 주문 상태 전이"
+# "목록 첫 항목"으로 집으면 앞 절이 주문을 하나 더 만들 때마다 깨진다(실제로 그랬다) —
+# 이 검사가 필요한 것은 **입금대기 주문**이므로 그것을 명시적으로 고른다
 OID="$(curl -s -b "$CK" "$SHOP/admin/orders" | python3 -c "
 import sys,json
-print(json.load(sys.stdin)['items'][0]['id'])")"
+for o in json.load(sys.stdin)['items']:
+    if o['status'] == 'pending': print(o['id']); break")"
+[[ -n "$OID" ]] && ok "전이 시험용 입금대기 주문" || bad "전이 시험용 입금대기 주문이 없다"
 check "잘못된 전이 차단(pending→delivered)" \
   "$(code -b "$CK" -X PUT "$SHOP/admin/orders/$OID" -H 'content-type: application/json' \
       -d '{"status":"delivered"}')" "400"
@@ -446,19 +516,6 @@ contains "후기 영역 서버 렌더 포함" \
       -d '{"name":"brick-shop/product-detail","props":{"slug":"opt-item"}}')" "brick-pd-tabs"
 
 echo "── 후기 정렬 · 사진 후기만 보기"
-# 읽는 쪽을 보는 시험이므로 후기는 SQL 로 넣는다 — 후기 하나에 구매자 하나를 만들면
-# 설정이 시험보다 길어지고, 그 설정은 이미 위에서 검증했다.
-psql_q() {
-  node -e '
-    const { Client } = require("'"$ROOT"'/apps/api/node_modules/pg");
-    (async () => {
-      const c = new Client(process.env.DATABASE_URL); await c.connect();
-      const r = await c.query(process.argv[1]);
-      console.log(r.rows.map((x) => Object.values(x).join("|")).join("\n"));
-      await c.end();
-    })().catch((e) => { console.error(e.message); process.exit(1); });
-  ' "$1"
-}
 psql_q "INSERT INTO shop_reviews (id, product_id, author_name, rating, content, images, created_at)
         VALUES (gen_random_uuid(), '$OPID', '사진고객', 5, '실물 사진 올립니다', '[\"/uploads/a.jpg\",\"/uploads/b.jpg\"]', now() - interval '3 days'),
                (gen_random_uuid(), '$OPID', '불만고객', 1, '기대와 달랐습니다', '[]', now() + interval '1 minute')" >/dev/null

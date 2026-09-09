@@ -151,6 +151,24 @@ export const ORDER_RESOURCE: AdminResource = {
     { name: "delivery_memo", label: "배송 요청사항", type: "text", readOnly: true },
     { name: "payment_method", label: "결제수단", type: "text", readOnly: true },
   ],
+  /*
+   * 일괄 작업 — 매일 아침 되풀이하는 두 가지만 준다.
+   *
+   * 무통장입금 가게는 입금을 확인하고 결제완료로 바꾸는 일을 하루에 수십 번 한다. 그리고
+   * 결제된 주문을 발송으로 넘긴다. 지금은 주문마다 수정 폼을 열어야 했다 — 열두 건이면
+   * 열두 번이다.
+   *
+   * 취소·환불은 **일괄로 주지 않는다.** 재고를 되돌리고 포인트를 환원하며 되돌릴 수 없는
+   * 일인데, 목록에서 체크박스를 잘못 눌러 스무 건을 환불하는 사고는 복구할 방법이 없다.
+   * 그런 일은 주문 하나를 열어 확인하고 하는 것이 맞다.
+   *
+   * 상태 전이 규칙(STATUS_TRANSITIONS)은 일괄에서도 그대로다 — 배송완료 주문에 "입금 확인"을
+   * 걸어도 그 건은 건너뛰고, 몇 건이 처리되고 몇 건이 건너뛰어졌는지 알려준다.
+   */
+  bulkActions: [
+    { code: "mark-paid", label: "입금 확인 (결제완료로)" },
+    { code: "mark-shipped", label: "발송 처리 (배송중으로)" },
+  ],
 };
 
 export const COUPON_RESOURCE: AdminResource = {
