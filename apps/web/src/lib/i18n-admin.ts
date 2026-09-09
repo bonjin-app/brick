@@ -314,8 +314,11 @@ const KO = {
   "x.emptyItems": "아직 등록된 {label}이(가) 없습니다.",
   "x.richtextPh": "HTML을 입력할 수 있습니다",
   "x.noneOption": "— 선택 없음 —",
-  "x.imageHint": "미디어에서 업로드한 뒤 URL을 붙여넣으세요.",
+  "x.imageHint": "주소를 직접 넣거나 오른쪽 버튼으로 미디어에서 고르세요.",
   "x.mediaLink": "미디어",
+  "x.pickFromMedia": "미디어에서 고르기",
+  "x.uploading": "올리는 중…",
+  "x.noImages": "미디어에 사진이 없습니다. 위에서 파일을 고르면 바로 올라갑니다.",
 } as const;
 
 const EN: Record<keyof typeof KO, string> = {
@@ -620,8 +623,11 @@ const EN: Record<keyof typeof KO, string> = {
   "x.emptyItems": "No {label} yet.",
   "x.richtextPh": "HTML is allowed",
   "x.noneOption": "— none —",
-  "x.imageHint": "Upload in Media, then paste the URL here.",
+  "x.imageHint": "Paste a URL, or use the button to pick from Media.",
   "x.mediaLink": "Media",
+  "x.pickFromMedia": "Pick from Media",
+  "x.uploading": "Uploading…",
+  "x.noImages": "No images in Media yet. Choose a file above to upload one.",
 };
 
 export type AdminMessageKey = keyof typeof KO;
