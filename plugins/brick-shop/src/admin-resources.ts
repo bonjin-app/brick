@@ -34,8 +34,9 @@ export const PRODUCT_RESOURCE: AdminResource = {
     { name: "status", label: "판매 상태", type: "select", inList: true,
       options: Object.entries(PRODUCT_STATUS_LABEL).map(([value, label]) => ({ value, label })) },
     { name: "image_url", label: "대표 이미지", type: "image" },
-    { name: "images_text", label: "추가 이미지", type: "textarea",
-      help: "한 줄에 이미지 주소 하나. 최대 20장. 상세 화면에서 갤러리로 보여집니다. 대표 이미지를 비우면 첫 줄이 대표가 됩니다." },
+    // 값은 여전히 "한 줄에 주소 하나"다 — 서버 파싱(parseImages)은 그대로 쓴다
+    { name: "images_text", label: "추가 이미지", type: "images", max: 20,
+      help: "상세 화면에서 갤러리로 보여집니다. 대표 이미지를 비우면 첫 장이 대표가 됩니다." },
     { name: "options_text", label: "옵션", type: "textarea",
       help: "한 줄에 하나: 이름|추가금|재고 (예: 색상: 빨강|1000|10). 추가금·재고는 생략 가능하고, 재고를 비우면 무한입니다. 이름을 그대로 두면 장바구니에 담긴 옵션이 유지됩니다." },
     // slug 로 지정한다 — uuid 는 운영자가 쓸 수 없고, 상품명은 중복될 수 있다

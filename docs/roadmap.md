@@ -562,3 +562,4 @@ node 런타임(51MB)·Next standalone(31MB)·API(23MB, sharp 18MB 포함).
 - [x] 목록·검색이 상품 **썸네일**을 쓴다 — 원본 2.0MB vs 썸네일 8.3KB(실측, 247배). 상품 24개 목록이면 50MB → 200KB.
   `shop_products.thumb_url` + 저장 시 `ctx.images.thumbUrlFor()` + `StorageProvider.keyFromUrl()`(주소→키 역변환) + 백필. smoke-shop 151 (+9)
 - [x] 관리 화면의 사진 필드에 **미디어에서 고르기** — 주소를 손으로 붙이는 것이 유일한 길이었다(새 탭→업로드→복사→돌아와 붙이기). 격자는 썸네일, 고른 값은 원본
+- [x] 추가 이미지도 **여러 장 한 번에** 고른다(`images` 필드 타입) — 갤러리 20장을 주소로 스무 번 붙여야 했다. 순서 변경·제거·대표 표시

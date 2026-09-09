@@ -483,7 +483,11 @@ export default definePlugin(async (ctx) => {
     requireAdmin(req);
     const page = Math.max(1, Number(req.query.page ?? 1));
     const { rows } = await db.execute(sql`
-      SELECT p.id, p.slug, p.name, p.price, p.list_price, p.stock, p.status, coalesce(p.thumb_url, p.image_url) AS image_url,
+      -- 관리 목록은 **편집 원본**을 준다. 여기서 썸네일을 주면 관리 화면이 그 값으로 폼을
+      -- 채우고, 운영자가 저장하는 순간 원본 자리에 썸네일이 박힌다(실제로 그랬다) —
+      -- 그러면 상세의 큰 사진이 400px 로 흐려지고, 그 썸네일의 썸네일은 없으므로 목록도
+      -- 원본으로 되돌아간다. 목록의 작은 미리보기를 위해 편집 값을 오염시킬 수는 없다.
+      SELECT p.id, p.slug, p.name, p.price, p.list_price, p.stock, p.status, p.image_url,
              p.summary, p.description, p.free_shipping, p.sort_order, p.sold_count,
              p.category_id, p.tax_free, p.sub_interval, p.images, p.review_count, p.rating_sum,
              coalesce(

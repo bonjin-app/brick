@@ -432,7 +432,14 @@ export interface PersonalDataEraser {
 export interface AdminField {
   name: string;
   label: string;
-  type: "text" | "textarea" | "number" | "money" | "boolean" | "select" | "date" | "image" | "richtext";
+  /**
+   * `image` 는 사진 한 장, `images` 는 여러 장(줄바꿈으로 구분된 주소 목록)이다.
+   *
+   * `images` 를 쓰면 화면이 미디어에서 **여러 장을 한 번에** 고르게 하고 순서를 바꾸게
+   * 한다. 값의 모양은 여전히 "한 줄에 주소 하나"이므로 서버는 지금 쓰던 파싱을 그대로
+   * 쓰면 된다 — 갤러리에 스무 장을 넣으려고 주소를 스무 번 복사해 붙이던 것이 문제였다.
+   */
+  type: "text" | "textarea" | "number" | "money" | "boolean" | "select" | "date" | "image" | "images" | "richtext";
   /** select 타입의 선택지 */
   options?: Array<{ value: string; label: string }>;
   /**
@@ -450,6 +457,8 @@ export interface AdminField {
    * 맨 앞에 넣는다.
    */
   optionsFrom?: string;
+  /** `images` 타입에서 고를 수 있는 장 수 (기본 20) */
+  max?: number;
   required?: boolean;
   help?: string;
   /** 목록 화면에 표시할지 (미지정 시 표시하지 않음) */

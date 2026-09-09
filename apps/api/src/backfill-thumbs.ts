@@ -133,6 +133,37 @@ async function main(): Promise<void> {
     "SELECT 1 FROM information_schema.columns WHERE table_name = 'shop_products' AND column_name = 'thumb_url'",
   );
   if (hasShop.rowCount) {
+    /*
+     * 먼저 **거꾸로 박힌 것**을 되돌린다.
+     *
+     * 한때 관리 목록 API 가 썸네일 주소를 대표 사진으로 내려주었고, 그 화면에서 상품을
+     * 저장한 운영자는 원본 자리에 썸네일이 박혔다. 그러면 상세의 큰 사진이 400px 로
+     * 흐려진다. 미디어에서 "이 썸네일의 원본"을 되찾아 제자리로 돌린다.
+     */
+    const wrong = await client.query<{ id: string; name: string; image_url: string }>(
+      "SELECT id, name, image_url FROM shop_products WHERE image_url IS NOT NULL",
+    );
+    for (const row of wrong.rows) {
+      const key = storage.keyFromUrl(row.image_url);
+      if (!key) continue;
+      const asThumb = await client.query<{ storage_key: string }>(
+        "SELECT storage_key FROM media_files WHERE thumb_key = $1 LIMIT 1",
+        [key],
+      );
+      const originalKey = asThumb.rows[0]?.storage_key;
+      if (!originalKey) continue; // 정상 — 이 주소는 어떤 것의 썸네일이 아니다
+      const originalUrl = storage.publicUrl(originalKey);
+      if (!dry) {
+        await client.query("UPDATE shop_products SET image_url = $1, thumb_url = $2 WHERE id = $3", [
+          originalUrl,
+          row.image_url,
+          row.id,
+        ]);
+      }
+      done++;
+      console.log(`  ${dry ? "[예정]" : "✓"} 상품 ${row.name} 대표 사진을 원본으로 되돌림 → ${originalUrl}`);
+    }
+
     const prods = await client.query<{ id: string; name: string; image_url: string }>(
       "SELECT id, name, image_url FROM shop_products WHERE thumb_url IS NULL AND image_url IS NOT NULL",
     );

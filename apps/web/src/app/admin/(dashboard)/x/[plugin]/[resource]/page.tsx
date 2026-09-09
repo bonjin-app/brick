@@ -8,10 +8,11 @@ import { useAdminT } from "../../../../../../lib/i18n-admin";
 interface AdminField {
   name: string;
   label: string;
-  type: "text" | "textarea" | "number" | "money" | "boolean" | "select" | "date" | "image" | "richtext";
+  type: "text" | "textarea" | "number" | "money" | "boolean" | "select" | "date" | "image" | "images" | "richtext";
   options?: Array<{ value: string; label: string }>;
   /** 선택지를 이 경로(플러그인 기준)에서 가져온다 */
   optionsFrom?: string;
+  max?: number;
   required?: boolean;
   help?: string;
   inList?: boolean;
@@ -375,6 +376,8 @@ function FieldInput({ field, value, onChange }: { field: AdminField; value: unkn
         onChange={(e) => onChange(e.target.value)} />;
     case "image":
       return <ImageField value={value} onChange={onChange} />;
+    case "images":
+      return <ImageListField value={value} onChange={onChange} max={field.max ?? 20} />;
     case "date":
       return <input type="date" style={base} value={String(value ?? "").slice(0, 10)} onChange={(e) => onChange(e.target.value)} />;
     default:
@@ -414,11 +417,101 @@ function ImageField({ value, onChange }: { value: unknown; onChange: (v: unknown
   );
 }
 
+/**
+ * 사진 여러 장 — 값은 "한 줄에 주소 하나"인 문자열이다.
+ *
+ * 모양을 바꾸지 않는 이유: 서버는 이미 그 문자열을 파싱하고 있고(상품의 추가 이미지 20장),
+ * 배열로 바꾸면 API·마이그레이션·기존 데이터가 전부 딸려 온다. 바뀐 것은 **편집하는 방법**
+ * 뿐이다 — 주소를 스무 번 복사해 붙이던 것을 한 번에 고르고 순서로 정렬한다.
+ */
+function ImageListField({ value, onChange, max }: { value: unknown; onChange: (v: unknown) => void; max: number }) {
+  const t = useAdminT();
+  const [picking, setPicking] = useState(false);
+  const [manual, setManual] = useState("");
+  const list = String(value ?? "").split("\n").map((v) => v.trim()).filter(Boolean);
+  const write = (next: string[]) => onChange(next.slice(0, max).join("\n"));
+  const move = (i: number, by: number) => {
+    const next = [...list];
+    const j = i + by;
+    if (j < 0 || j >= next.length) return;
+    [next[i], next[j]] = [next[j], next[i]];
+    write(next);
+  };
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 4, flexWrap: "wrap" }}>
+        <button type="button" onClick={() => setPicking(true)}
+          style={{ padding: "7px 12px", border: "1px solid var(--color-line)", borderRadius: 6,
+                   background: "var(--color-bg)", cursor: "pointer" }}>
+          {t("x.pickFromMedia")}
+        </button>
+        <span style={{ fontSize: 12.5, color: "var(--color-muted)" }}>{t("x.imagesCount", { n: list.length, max })}</span>
+      </div>
+      {list.length > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(96px,1fr))", gap: 10, marginTop: 10 }}>
+          {list.map((url, i) => (
+            <div key={`${url}-${i}`} style={{ border: "1px solid var(--color-line)", borderRadius: 8, overflow: "hidden",
+                                              background: "var(--color-bg)", position: "relative" }}>
+              <img src={url} alt="" loading="lazy" decoding="async"
+                style={{ width: "100%", aspectRatio: "1", objectFit: "cover", display: "block" }} />
+              {/* 첫 장이 대표가 된다 — 순서가 뜻을 가지므로 옮길 수단을 함께 둔다 */}
+              <div style={{ display: "flex", gap: 2, padding: 3, justifyContent: "center" }}>
+                <button type="button" onClick={() => move(i, -1)} disabled={i === 0} aria-label={t("x.moveLeft")}
+                  style={{ cursor: i > 0 ? "pointer" : "default", padding: "1px 6px" }}>←</button>
+                <button type="button" onClick={() => move(i, 1)} disabled={i === list.length - 1} aria-label={t("x.moveRight")}
+                  style={{ cursor: i < list.length - 1 ? "pointer" : "default", padding: "1px 6px" }}>→</button>
+                <button type="button" onClick={() => write(list.filter((_, j) => j !== i))} aria-label={t("common.delete")}
+                  style={{ cursor: "pointer", padding: "1px 6px" }}>✕</button>
+              </div>
+              {i === 0 && (
+                <span style={{ position: "absolute", top: 4, left: 4, fontSize: 10.5, fontWeight: 700, padding: "2px 5px",
+                               borderRadius: 4, background: "rgba(20,20,28,.78)", color: "#fff" }}>{t("x.mainImage")}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {/* 외부 사진을 쓰는 운영자를 막지 않는다 */}
+      <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
+        <input style={{ ...inputBase, marginTop: 0, flex: 1 }} value={manual} placeholder="https://... 또는 /uploads/..."
+          onChange={(e) => setManual(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter") return;
+            e.preventDefault();
+            if (manual.trim()) { write([...list, manual.trim()]); setManual(""); }
+          }} />
+        <button type="button" disabled={!manual.trim()}
+          onClick={() => { write([...list, manual.trim()]); setManual(""); }}
+          style={{ padding: "0 12px", border: "1px solid var(--color-line)", borderRadius: 6,
+                   background: "var(--color-bg)", cursor: manual.trim() ? "pointer" : "default" }}>
+          {t("x.addUrl")}
+        </button>
+      </div>
+      {picking && (
+        <MediaPicker multiple onClose={() => setPicking(false)}
+          onPickMany={(urls) => { write([...list, ...urls]); setPicking(false); }} />
+      )}
+    </div>
+  );
+}
+
 interface PickerRow { id: string; url: string; thumbUrl?: string; fileName: string; contentType: string }
 
-/** 미디어에서 사진 고르기 — 격자는 썸네일로 그리고, 고른 값은 원본 주소다 */
-function MediaPicker({ onPick, onClose }: { onPick: (url: string) => void; onClose: () => void }) {
+/**
+ * 미디어에서 사진 고르기 — 격자는 썸네일로 그리고, 고른 값은 원본 주소다.
+ * (저장할 때 서버가 대응하는 썸네일을 찾아 적으므로 목록은 알아서 작은 사진을 쓴다.)
+ *
+ * `multiple` 이면 여러 장을 담아 한 번에 돌려준다. 한 장씩 닫고 다시 여는 것은
+ * 스무 장을 고르는 날에 스무 번의 왕복이다.
+ */
+function MediaPicker({ onPick, onPickMany, onClose, multiple }: {
+  onPick?: (url: string) => void;
+  onPickMany?: (urls: string[]) => void;
+  onClose: () => void;
+  multiple?: boolean;
+}) {
   const t = useAdminT();
+  const [chosen, setChosen] = useState<string[]>([]);
   const [data, setData] = useState<{ items: PickerRow[]; total: number; pageSize: number }>({ items: [], total: 0, pageSize: 40 });
   const [page, setPage] = useState(1);
   const [busy, setBusy] = useState("");
@@ -445,9 +538,10 @@ function MediaPicker({ onPick, onClose }: { onPick: (url: string) => void; onClo
     const body = await res.json().catch(() => ({}));
     setBusy("");
     if (fileRef.current) fileRef.current.value = "";
+    if (!res.ok || !body.url) { setBusy(`${t("common.failPrefix")}${body.message ?? res.status}`); return; }
     // 올리자마자 쓰려고 올린 것이다 — 고르는 손을 한 번 더 요구하지 않는다
-    if (res.ok && body.url) onPick(String(body.url));
-    else setBusy(`${t("common.failPrefix")}${body.message ?? res.status}`);
+    if (multiple) { setChosen((c) => [...c, String(body.url)]); load(page); }
+    else onPick?.(String(body.url));
   }
 
   const images = data.items.filter((f) => f.contentType?.startsWith("image/"));
@@ -473,18 +567,49 @@ function MediaPicker({ onPick, onClose }: { onPick: (url: string) => void; onClo
           ? <p style={{ color: "var(--color-muted)", fontSize: 13, padding: "24px 0" }}>{t("x.noImages")}</p>
           : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(120px,1fr))", gap: 12 }}>
-              {images.map((f) => (
-                <button key={f.id} type="button" onClick={() => onPick(f.url)} title={f.fileName}
-                  style={{ padding: 0, border: "1px solid var(--color-line)", borderRadius: 8, overflow: "hidden",
+              {images.map((f) => {
+                const on = chosen.includes(f.url);
+                return (
+                <button key={f.id} type="button" title={f.fileName}
+                  onClick={() => multiple
+                    ? setChosen((c) => on ? c.filter((u) => u !== f.url) : [...c, f.url])
+                    : onPick?.(f.url)}
+                  style={{ padding: 0, borderRadius: 8, overflow: "hidden", position: "relative",
+                           border: on ? "2px solid var(--color-primary, #d0402c)" : "1px solid var(--color-line)",
                            background: "var(--color-bg)", cursor: "pointer", display: "block" }}>
                   <img src={f.thumbUrl ?? f.url} alt={f.fileName} loading="lazy" decoding="async"
                     style={{ width: "100%", aspectRatio: "1", objectFit: "cover", display: "block" }} />
                   <span style={{ display: "block", fontSize: 11.5, padding: "5px 6px", overflow: "hidden",
                                  textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--color-muted)" }}>{f.fileName}</span>
+                  {on && (
+                    <span style={{ position: "absolute", top: 4, right: 4, width: 20, height: 20, borderRadius: 10,
+                                   display: "grid", placeItems: "center", fontSize: 12, fontWeight: 700,
+                                   background: "var(--color-primary, #d0402c)", color: "#fff" }}>
+                      {chosen.indexOf(f.url) + 1}
+                    </span>
+                  )}
                 </button>
-              ))}
+                );
+              })}
             </div>
           )}
+        {multiple && (
+          <div style={{ display: "flex", gap: 8, marginTop: 14, alignItems: "center" }}>
+            <button type="button" disabled={chosen.length === 0} onClick={() => onPickMany?.(chosen)}
+              style={{ padding: "8px 14px", borderRadius: 6, border: 0, fontWeight: 700,
+                       background: chosen.length ? "var(--color-primary, #d0402c)" : "var(--color-line)",
+                       color: chosen.length ? "#fff" : "var(--color-muted)",
+                       cursor: chosen.length ? "pointer" : "default" }}>
+              {t("x.addChosen", { n: chosen.length })}
+            </button>
+            {chosen.length > 0 && (
+              <button type="button" onClick={() => setChosen([])} style={{ padding: "8px 12px", cursor: "pointer" }}>
+                {t("x.clearChosen")}
+              </button>
+            )}
+            <span style={{ fontSize: 12.5, color: "var(--color-muted)" }}>{t("x.pickOrderHint")}</span>
+          </div>
+        )}
         {lastPage > 1 && (
           <div style={{ display: "flex", gap: 8, marginTop: 14, alignItems: "center" }}>
             <button type="button" disabled={page <= 1} onClick={() => setPage(page - 1)}

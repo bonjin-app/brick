@@ -554,6 +554,22 @@ TID="$(psql_q "SELECT id FROM shop_products WHERE slug = 'thumb-item'")"
 curl -s -b "$CK" -X PUT "$SHOP/admin/products/$TID" -H 'content-type: application/json' --data-binary "@$TMP/tp2.json" -o /dev/null
 check "사진을 바꾸면 썸네일도 갱신" "$(psql_q "SELECT coalesce(thumb_url, 'NULL') FROM shop_products WHERE slug = 'thumb-item'")" "NULL"
 
+# 관리 화면은 **편집 원본**을 받아야 한다. 여기서 썸네일을 내려주면 운영자가 저장하는
+# 순간 원본 자리에 썸네일이 박히고, 상세의 큰 사진이 400px 로 흐려진다(실제로 그랬다).
+printf '{"slug":"trip-item","name":"왕복 상품","price":9000,"stock":5,"status":"selling","image_url":"%s"}' "$MEDIA_URL" > "$TMP/rt.json"
+curl -s -b "$CK" -X POST "$SHOP/admin/products" -H 'content-type: application/json' --data-binary "@$TMP/rt.json" -o /dev/null
+ADMIN_IMG="$(curl -s -b "$CK" "$SHOP/admin/products" | /usr/bin/python3 -c "
+import sys, json
+for it in json.load(sys.stdin)['items']:
+    if it['slug'] == 'trip-item': print(it.get('image_url') or ''); break")"
+check "관리 목록은 편집 원본을 준다" "$ADMIN_IMG" "$MEDIA_URL"
+# 그 값을 그대로 되돌려 저장한다 — 화면이 하는 일과 같다
+RTID="$(psql_q "SELECT id FROM shop_products WHERE slug = 'trip-item'")"
+printf '{"slug":"trip-item","name":"왕복 상품","price":9000,"stock":5,"status":"selling","image_url":"%s"}' "$ADMIN_IMG" > "$TMP/rt2.json"
+curl -s -b "$CK" -X PUT "$SHOP/admin/products/$RTID" -H 'content-type: application/json' --data-binary "@$TMP/rt2.json" -o /dev/null
+check "관리 왕복이 대표 사진을 바꾸지 않는다" "$(psql_q "SELECT image_url FROM shop_products WHERE slug = 'trip-item'")" "$MEDIA_URL"
+check "왕복 뒤에도 목록용 주소가 남는다" "$(psql_q "SELECT thumb_url FROM shop_products WHERE slug = 'trip-item'")" "$MEDIA_THUMB"
+
 echo "── 스토어프론트 블록"
 BLOCKS="$(curl -s "$API/api/blocks")"
 contains "상품목록 블록" "$BLOCKS" "brick-shop/product-list"
