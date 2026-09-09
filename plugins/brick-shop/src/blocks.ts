@@ -37,6 +37,7 @@ export function registerStorefrontBlocks(
         title: { type: "string", title: "제목 (비우면 표시 안 함)" },
         sortable: { type: "boolean", title: "손님이 정렬을 바꿀 수 있게 (상품 목록 화면용)", default: false },
         paged: { type: "boolean", title: "페이지 나누기 (상품 목록 화면용)", default: false },
+        priceFilter: { type: "boolean", title: "가격대로 좁히기 (상품 목록 화면용)", default: false },
       },
     },
     render: async (props, blockCtx) => {
@@ -58,6 +59,26 @@ export function registerStorefrontBlocks(
         : sort === "price_asc" ? sql`p.price ASC`
         : sort === "price_desc" ? sql`p.price DESC`
         : sql`p.sort_order, p.created_at DESC`;
+
+      /*
+       * 가격대 좁히기 — `?min=&max=` 로 표현한다.
+       *
+       * 상한은 **미만**(<)이다. 가격대 버튼의 문구("30,000원 미만")와 실제 결과가 어긋나면
+       * 개수와 목록이 서로 다른 말을 하게 되므로, 경계 하나를 두 곳에서 같은 뜻으로 쓴다.
+       */
+      const priceFilter = props.priceFilter === true;
+      const askedNum = (v: unknown): number | null => {
+        const n = Math.floor(Number(v));
+        return Number.isFinite(n) && n >= 0 && String(v ?? "") !== "" ? n : null;
+      };
+      const qMin = (priceFilter ? askedNum(blockCtx?.query?.min) : null) ?? 0;
+      const qMaxRaw = priceFilter ? askedNum(blockCtx?.query?.max) : null;
+      // 뒤집힌 범위(min>max)는 결과가 항상 비므로 상한을 버린다 — 주소를 손으로 고친 경우
+      const qMax = qMaxRaw !== null && qMaxRaw > qMin ? qMaxRaw : null;
+      const priceCond =
+        qMax !== null ? sql` AND p.price >= ${qMin} AND p.price < ${qMax}`
+        : qMin > 0 ? sql` AND p.price >= ${qMin}`
+        : sql.empty();
 
       /*
        * 정렬 막대 — 링크로 만든다(select + JS 가 아니라).
@@ -96,16 +117,60 @@ export function registerStorefrontBlocks(
       const paged = props.paged === true;
       const page = paged ? Math.max(1, Math.floor(Number(blockCtx?.query?.page ?? 1)) || 1) : 1;
 
-      let total = 0;
-      if (paged) {
-        const { rows: countRows } = await db.execute(sql`
-          SELECT count(*)::int AS n
-          FROM shop_products p
-          LEFT JOIN shop_categories c ON c.id = p.category_id
-          WHERE p.status IN ('selling', 'soldout') AND (${category} = '' OR c.slug = ${category})
-        `);
-        total = Number(countRows[0]?.n ?? 0);
+      // 분류까지만 좁힌 집합 — 가격대 눈금과 구간별 개수는 **현재 가격대와 무관해야** 한다.
+      // 아니면 한 구간을 고른 순간 다른 구간이 모두 0 이 되어 되돌릴 길이 사라진다.
+      const scope = sql`
+        FROM shop_products p
+        LEFT JOIN shop_categories c ON c.id = p.category_id
+        WHERE p.status IN ('selling', 'soldout') AND (${category} = '' OR c.slug = ${category})`;
+
+      let bands: PriceBand[] = [];
+      if (priceFilter) {
+        const { rows: span } = await db.execute(sql`SELECT min(p.price)::int AS lo, max(p.price)::int AS hi ${scope}`);
+        bands = priceBands(Number(span[0]?.lo ?? 0), Number(span[0]?.hi ?? 0));
       }
+
+      let total = 0;
+      const bandCounts: number[] = [];
+      if (paged || bands.length) {
+        const cols = [sql`count(*) FILTER (WHERE true ${priceCond})::int AS n`];
+        bands.forEach((b, i) => {
+          const cond = b.max === null ? sql`p.price >= ${b.min}` : sql`p.price >= ${b.min} AND p.price < ${b.max}`;
+          cols.push(sql`count(*) FILTER (WHERE ${cond})::int AS ${sql.raw(`b${i}`)}`);
+        });
+        const { rows: aggRows } = await db.execute(sql`SELECT ${sql.join(cols, sql`, `)} ${scope}`);
+        const agg = aggRows[0] ?? {};
+        total = Number(agg.n ?? 0);
+        bands.forEach((_b, i) => bandCounts.push(Number((agg as Record<string, unknown>)[`b${i}`] ?? 0)));
+        // 비어 있는 구간은 지운다 — 눌러도 "상품이 없습니다"만 나오는 버튼은 손님을 속인다.
+        // 남는 구간에는 개수를 붙인다: 몇 개가 걸릴지 보이면 헛클릭이 줄고, 어느 가격대에
+        // 물건이 몰려 있는지가 그 자체로 정보다.
+        bands = bands.map((b, i) => ({ ...b, count: bandCounts[i] })).filter((b) => (b.count ?? 0) > 0);
+      }
+
+      /*
+       * 구간이 하나뿐이면 막대를 내지 않는다 — 전부 같은 가격대라면 좁힐 것이 없고,
+       * 누를 수 있는 버튼이 하나인 필터는 화면만 차지한다.
+       */
+      const priceBar = bands.length >= 2
+        ? `<div class="brick-filter" role="group" aria-label="${escapeHtml(t("filter.price"))}">` +
+          `<span class="brick-filter-label">${escapeHtml(t("filter.price"))}</span>` +
+          // "전체"는 구간이 아니라 구간을 지우는 링크다 — 같은 map 에 섞으면 둘 다 어색해진다
+          [{ band: null }, ...bands.map((band) => ({ band }))]
+            .map(({ band }) => {
+              const on = band === null ? qMin === 0 && qMax === null : band.min === qMin && band.max === qMax;
+              const href = linkWith({
+                min: band === null || band.min === 0 ? null : String(band.min),
+                max: band === null || band.max === null ? null : String(band.max),
+                page: null,
+              });
+              const label =
+                band === null ? t("filter.all") : `${bandLabel(band)} (${band.count ?? 0})`;
+              return `<a href="${escapeHtml(href)}"${on ? ' class="is-on" aria-current="true"' : ""}>${escapeHtml(label)}</a>`;
+            })
+            .join("") +
+          "</div>"
+        : "";
       const totalPages = paged ? Math.max(1, Math.ceil(total / limit)) : 1;
       // 없는 페이지를 요청하면 마지막 페이지를 보여준다 — 빈 화면보다 낫다(주소를 손으로 고친 경우)
       const current = Math.min(page, totalPages);
@@ -115,14 +180,14 @@ export function registerStorefrontBlocks(
                p.review_count, p.rating_sum, p.created_at, p.sold_count
         FROM shop_products p
         LEFT JOIN shop_categories c ON c.id = p.category_id
-        WHERE p.status IN ('selling', 'soldout') AND (${category} = '' OR c.slug = ${category})
+        WHERE p.status IN ('selling', 'soldout') AND (${category} = '' OR c.slug = ${category})${priceCond}
         ORDER BY ${order}
         LIMIT ${limit} OFFSET ${(current - 1) * limit}
       `);
 
       if (!rows.length) {
         // 정렬을 바꿨다가 빈 결과가 나오면 되돌릴 수단이 화면에 있어야 한다 — 막대를 함께 낸다
-        return `${props.title ? `<h2 class="brick-shop-heading">${escapeHtml(props.title)}</h2>` : ""}${sortBar}<div class="brick-shop-empty">${escapeHtml(t("list.empty"))}</div>${STOREFRONT_CSS}`;
+        return `${props.title ? `<h2 class="brick-shop-heading">${escapeHtml(props.title)}</h2>` : ""}${priceBar}${sortBar}<div class="brick-shop-empty">${escapeHtml(t("list.empty"))}</div>${STOREFRONT_CSS}`;
       }
 
       /*
@@ -183,7 +248,7 @@ export function registerStorefrontBlocks(
       const pager = paged && totalPages > 1 ? renderPager(current, totalPages, (n) => linkWith({ page: n === 1 ? null : String(n) })) : "";
       const totalNote = paged && total > 0 ? `<span class="brick-shop-total">${escapeHtml(t("list.total", { n: total }))}</span>` : "";
 
-      return `${heading}${totalNote}${sortBar}<div class="brick-product-grid" style="--brick-cols:${columns}">${cards}\n</div>${pager}${STOREFRONT_CSS}`;
+      return `${heading}${priceBar}${totalNote}${sortBar}<div class="brick-product-grid" style="--brick-cols:${columns}">${cards}\n</div>${pager}${STOREFRONT_CSS}`;
     },
   };
   ctx.registerBlock(productListBlock);
@@ -383,7 +448,7 @@ ${buyScript(`${shopBaseOf(blockCtx)}/cart`)}${GALLERY_SCRIPT}${restockScript()}$
         const nav = await categoryListBlock.render({}, blockCtx);
         // 목록 화면에서는 손님이 정렬을 고를 수 있다(홈의 진열 섹션과 달리)
         const list = await productListBlock.render(
-          { limit: props.limit ?? 24, columns: props.columns ?? 4, category, sortable: true, paged: true },
+          { limit: props.limit ?? 24, columns: props.columns ?? 4, category, sortable: true, paged: true, priceFilter: true },
           blockCtx,
         );
         return `${nav}\n${list}`;
@@ -698,6 +763,11 @@ const STOREFRONT_CSS = `
 .brick-sort a{display:inline-flex;align-items:center;min-height:36px;padding:0 12px;font-size:13.5px;color:var(--color-muted, #6c6c7a);text-decoration:none;border-radius:var(--radius, 3px);transition:color .16s ease,background .16s ease}
 .brick-sort a:hover{color:var(--color-text, #17171c);background:var(--color-bg-soft, #f6f6f9)}
 .brick-sort a.is-on{color:var(--color-text, #17171c);font-weight:700;background:var(--color-bg-soft, #f6f6f9)}
+.brick-filter{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:16px 0 2px;padding-bottom:14px;border-bottom:1px solid var(--color-line, #e4e4ea)}
+.brick-filter-label{font-size:13px;font-weight:700;color:var(--color-muted, #6c6c7a);margin-right:4px}
+.brick-filter a{display:inline-flex;align-items:center;min-height:34px;padding:0 13px;font-size:13.5px;color:var(--color-text-soft, #45454f);text-decoration:none;border:1px solid var(--color-line, #e4e4ea);border-radius:999px;transition:border-color .16s ease,color .16s ease,background .16s ease}
+.brick-filter a:hover{border-color:var(--color-text-soft, #45454f);color:var(--color-text, #17171c)}
+.brick-filter a.is-on{border-color:var(--color-text, #17171c);background:var(--color-text, #17171c);color:var(--color-bg, #ffffff);font-weight:600}
 .brick-tags{position:absolute;top:8px;left:8px;display:flex;flex-wrap:wrap;gap:4px;z-index:1}
 .brick-tag{display:inline-flex;align-items:center;height:20px;padding:0 7px;font-size:11px;font-weight:700;letter-spacing:.02em;border-radius:var(--radius, 3px);color:#fff;background:#111318}
 .brick-tag-new{background:#1f7a4d}
@@ -771,6 +841,49 @@ const GALLERY_SCRIPT = `
  * 만들 때 쓴다 — '/cart' 로 하드코딩하면 상점 페이지 slug 가 'shop' 일 때
  * 존재하지 않는 경로로 떨어진다 (장바구니는 <상점 페이지>/cart 로 라우팅된다).
  */
+interface PriceBand {
+  /** 하한 (포함) */
+  min: number;
+  /** 상한 (미만). null 이면 "이상" — 열린 구간 */
+  max: number | null;
+  /** 이 구간에 걸리는 상품 수 (개수 질의 뒤에 채워진다) */
+  count?: number;
+}
+
+/**
+ * 가격대 눈금을 상품 값에서 만든다.
+ *
+ * 고정 구간("1만원 미만 / 1만~3만 / …")은 5,000원짜리 소품만 파는 가게와 500만원짜리
+ * 가구를 파는 가게에서 동시에 쓸모없다 — 전자는 모든 상품이 첫 칸에, 후자는 마지막 칸에
+ * 몰린다. 그래서 실제 최저·최고가에서 구간을 뽑고, 경계는 1·2·5×10ⁿ 격자에 맞춘다:
+ * "47,325원 미만" 같은 눈금은 계산해서 나온 값이어도 손님에게는 고장으로 보인다.
+ */
+function priceBands(lo: number, hi: number): PriceBand[] {
+  if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi <= lo) return [];
+  const step = niceStep((hi - lo) / 4);
+  const bounds: number[] = [];
+  for (let b = Math.floor(lo / step) * step + step; b < hi && bounds.length < 4; b += step) bounds.push(b);
+  if (!bounds.length) return [];
+  const bands: PriceBand[] = [{ min: 0, max: bounds[0] }];
+  for (let i = 1; i < bounds.length; i++) bands.push({ min: bounds[i - 1], max: bounds[i] });
+  bands.push({ min: bounds[bounds.length - 1], max: null });
+  return bands;
+}
+
+/** 1·2·5×10ⁿ 중 x 이상인 가장 작은 값 — 사람이 읽는 눈금 */
+function niceStep(x: number): number {
+  const target = Math.max(1, x);
+  const mag = Math.pow(10, Math.floor(Math.log10(target)));
+  for (const m of [1, 2, 5]) if (target <= mag * m) return mag * m;
+  return mag * 10;
+}
+
+function bandLabel(b: PriceBand): string {
+  if (b.max === null) return t("filter.over", { price: won(b.min) });
+  if (b.min === 0) return t("filter.under", { price: won(b.max) });
+  return t("filter.range", { from: won(b.min), to: won(b.max) });
+}
+
 /**
  * 페이지 번호 막대 — 게시판의 것과 같은 구조·클래스(.brick-pager)다.
  * 코드를 공유하지 않는 이유: 플러그인끼리 의존하면 하나를 끄면 다른 하나가 깨진다.

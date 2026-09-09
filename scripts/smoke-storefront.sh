@@ -428,6 +428,54 @@ contains "정렬 링크가 분류를 유지한다" "$SORT_LINKS" 'href="/shop?ca
 absent "정렬 링크에 page 는 남기지 않는다" "$SORT_LINKS" 'page=3&amp;sort'
 contains "빈 결과에도 막대가 남는다 (되돌릴 수단)" "$SORT_LINKS" 'class="brick-sort"'
 
+echo "── 가격대로 좁히기 (눈금을 상품 값에서 만든다)"
+# 위에서 1,000~30,000원 상품 30개 + 샘플(12,000·19,000·28,000)을 넣었다.
+# 폭 29,000 → 눈금 10,000 → "10,000원 미만 / 10,000~20,000 / 20,000원 이상"이 기대값이다.
+# 값을 빈칸으로 둘러 내보낸다 — "9,000" 은 "19,000" 의 부분문자열이라 그냥 찾으면 늘 맞는다
+prices_of() { /usr/bin/python3 -c "
+import sys, re
+h = sys.stdin.read()
+print(' ' + ' '.join(m + '원' for m in re.findall(r'<strong>([0-9,]+)원</strong>', h)) + ' ')
+"; }
+# 기대 개수는 DB 에 물어본다 — 위 절들이 상품을 더 넣을 수 있으므로 숫자를 박으면 곧 썩는다
+band_count() { psql_q "SELECT count(*) FROM shop_products WHERE status IN ('selling','soldout') AND $1"; }
+FILTER_PAGE="$(sf_render "shop")"
+contains "목록 화면에 가격 막대" "$FILTER_PAGE" 'class="brick-filter"'
+contains "기본은 전체" "$FILTER_PAGE" 'class="is-on" aria-current="true">전체'
+contains "눈금이 사람이 읽는 값이다 (미만)" "$FILTER_PAGE" '>10,000원 미만 ('
+contains "가운데 구간" "$FILTER_PAGE" '>10,000원 ~ 20,000원 ('
+contains "마지막은 열린 구간 (이상)" "$FILTER_PAGE" '>20,000원 이상 ('
+absent "홈의 진열 섹션에는 가격 막대가 없다" "$(sf_render "")" 'class="brick-filter"'
+
+# 좁히면 그 가격대만 남는다 — 상한은 **미만**이다(막대 문구와 결과가 같은 뜻이어야 한다)
+MID="$(sf_render "shop&min=10000&max=20000")"
+MID_PRICES="$(echo "$MID" | prices_of)"
+MID_N="$(band_count "price >= 10000 AND price < 20000")"
+OVER_N="$(band_count "price >= 20000")"
+contains "고른 구간이 표시된다" "$MID" 'class="is-on" aria-current="true">10,000원 ~ 20,000원'
+contains "경계 바로 아래는 포함" "$MID_PRICES" " 19,000원 "
+contains "하한은 포함" "$MID_PRICES" " 10,000원 "
+absent "상한은 미만 — 20,000원은 빠진다" "$MID_PRICES" " 20,000원 "
+absent "구간 밖(9,000원)은 빠진다" "$MID_PRICES" " 9,000원 "
+contains "총 개수가 좁힌 결과를 따른다" "$MID" ">총 ${MID_N}개<"
+contains "구간별 개수도 보여 준다" "$MID" ">10,000원 ~ 20,000원 (${MID_N})<"
+# 열린 구간
+OVER="$(sf_render "shop&min=20000")"
+contains "이상 구간도 좁혀진다" "$OVER" ">총 ${OVER_N}개<"
+absent "이상 구간에 그 아래 상품이 없다" "$(echo "$OVER" | prices_of)" " 19,000원 "
+
+# 링크 규칙 — 정렬과 같은 규칙을 쓴다(현재 쿼리를 유지하고 page 만 버린다)
+contains "가격대 링크가 정렬을 유지한다" "$(sf_render "shop&sort=price_desc")" 'sort=price_desc&amp;min=20000'
+absent "가격대 링크는 쪽을 1 로 되돌린다" "$(sf_render "shop&page=2")" 'page=2&amp;min='
+contains "정렬 링크가 가격대를 유지한다" "$MID" 'min=10000&amp;max=20000&amp;sort=popular'
+contains "전체는 가격대를 지운다" "$MID" 'href="/shop">전체</a>'
+
+# 주소를 손으로 고친 경우
+contains "뒤집힌 범위는 상한을 버린다" "$(sf_render "shop&min=20000&max=5000")" ">총 ${OVER_N}개<"
+contains "숫자가 아닌 값은 무시한다" "$(sf_render "shop&min=abc")" 'class="is-on" aria-current="true">전체'
+# 좁힐 것이 없으면 막대를 내지 않는다 (구간이 하나뿐이거나 상품이 없을 때)
+absent "빈 분류에는 가격 막대가 없다" "$(sf_render "shop&category=none")" 'class="brick-filter"'
+
 echo "── 상품 뱃지 NEW · BEST · 할인율 (진열대의 관례)"
 # 샘플 상품으로 세 경우를 만든다: 많이 팔린 것(BEST) · 오래된 것(NEW 아님) · 품절(뱃지 없음)
 psql_q "UPDATE shop_products SET sold_count = 33 WHERE slug = 'sample-tote'" >/dev/null
