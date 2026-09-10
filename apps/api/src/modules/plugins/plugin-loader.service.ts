@@ -643,6 +643,18 @@ export class PluginLoaderService implements OnModuleInit {
         const path = screen.path.replace(/^\/+|\/+$/g, "");
         // 블록 이름은 등록과 같은 규칙으로 네임스페이스를 붙인다
         const block = screen.block.startsWith(`${pluginName}/`) ? screen.block : `${pluginName}/${screen.block}`;
+        /*
+         * 같은 경로를 둘이 선언하면 먼저 켜진 쪽만 그려진다 — 조용한 가림이다.
+         * 어느 쪽이 이기는지는 활성화 순서에 달려 있어 사이트마다 달라진다.
+         * 막지는 않는다(그러면 플러그인 활성화가 실패한다) — 대신 보이게 한다.
+         */
+        const clash = this.screens.find((s) => s.path === path);
+        if (clash) {
+          this.logger.warn(
+            `plugin "${pluginName}" declares screen "/${path}" already declared by "${clash.plugin}" — ` +
+              `"${clash.plugin}" 의 화면이 그려집니다`,
+          );
+        }
         this.screens.push({ ...screen, path, block, plugin: pluginName });
         this.logger.log(`plugin "${pluginName}" registers screen "/${path}" (${block})`);
       },

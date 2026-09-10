@@ -962,6 +962,26 @@ MLOG2="$(cat "$TMP/api.log")"
 contains "발송도 알린다" "$MLOG2" "상품이 발송되었습니다 ($MNO)"
 contains "송장번호가 들어간다" "$MLOG2" "송장번호: 1234567890"
 
+# 취소·환불도 알린다. 손님이 가장 알고 싶은 두 시점이고, changeOrderStatus 를
+# 부르는 자리가 여덜 곳이라 한 곳만 배선하면 나머지는 조용해진다.
+printf '{"items":[{"productId":"%s","quantity":1}],"orderer":{"ordererName":"취소 손님","ordererPhone":"010-9999-0000","ordererEmail":"cancel@mail.test","postcode":"06236","address1":"서울"}}' "$MPID" > "$TMP/mo3.json"
+CNO="$(curl -s -X POST "$SHOP/orders" -H 'content-type: application/json' --data-binary "@$TMP/mo3.json" | /usr/bin/python3 -c "import sys,json;print(json.load(sys.stdin)['orderNo'])")"
+COID="$(curl -s -b "$CK" "$SHOP/admin/orders?status=pending" | /usr/bin/python3 -c "
+import sys, json
+for o in json.load(sys.stdin)['items']:
+    if o['order_no'] == '$CNO': print(o['id'])")"
+curl -s -b "$CK" -X PUT "$SHOP/admin/orders/$COID" -H 'content-type: application/json' \
+  -d '{"status":"cancelled","note":"재고 부족"}' -o /dev/null
+sleep 1
+contains "취소도 알린다" "$(cat "$TMP/api.log")" "주문이 취소되었습니다 ($CNO)"
+
+# 같은 상태로 다시 바꾸면 멱등 반환이므로 메일이 두 번 가지 않는다
+curl -s -b "$CK" -X PUT "$SHOP/admin/orders/$COID" -H 'content-type: application/json' \
+  -d '{"status":"cancelled"}' -o /dev/null
+sleep 1
+CANCEL_MAILS="$(grep -c "주문이 취소되었습니다 ($CNO)" "$TMP/api.log" || true)"
+check "멱등 변경에는 메일이 다시 가지 않는다" "$CANCEL_MAILS" "1"
+
 # 끌 수 있어야 한다 — 자기 메일 서버로 보내고 싶지 않은 운영자가 있다
 printf '{"bankAccount":"","shippingFee":3000,"freeShippingOver":50000,"returnShippingFee":3000,"pageSize":20,"notifyOrderMail":false}' > "$TMP/mailoff.json"
 curl -s -b "$CK" -X PUT "$SHOP/admin/settings" -H 'content-type: application/json' --data-binary "@$TMP/mailoff.json" -o /dev/null
