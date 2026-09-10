@@ -31,12 +31,17 @@ contains() { [[ "$2" == *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 없음: ${2:0:14
 absent()   { [[ "$2" != *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 가 있어서는 안 됨)"; }
 code()     { curl -s -o /dev/null -w "%{http_code}" "$@"; }
 post()     { curl -s -X POST "$1" -H 'content-type: application/json' --data-binary "@$2"; }
-# 캡차 발급 → SVG에서 정답을 추출한다 (테스트 목적. 실제 봇에게는 이 정보가 없다)
+# 캡차 발급 → 토큰과 정답.
+#
+# 정답은 서버가 BRICK_CAPTCHA=test 일 때만 응답에 실어준다(아래 export 참고).
+# 예전에는 SVG 의 <text> 를 정규식으로 긁어 읽으면서 "실제 봇에게는 이 정보가 없다"고
+# 적어두었는데, 봇에게도 똑같이 있었다 — 캡차가 아무도 막지 못하고 있었다.
+# 스모크가 정답을 알 수 있는 유일한 길이 서버의 명시적 테스트 설정이어야 한다.
 captcha_issue() {
   curl -s "$API/api/captcha" | python3 -c '
-import sys, json, re
+import sys, json
 d = json.load(sys.stdin)
-print(d["token"] + "|" + "".join(re.findall(r">([A-Z0-9])</text>", d["svg"])))'
+print(d["token"] + "|" + d.get("answer", ""))'
 }
 # 캡차를 풀어 회원가입한다
 register_with_captcha() { # <email> <password> <displayName> <파일경로>
@@ -56,6 +61,11 @@ if [[ "${BRICK_SMOKE_KEEP_DB:-}" != "1" ]]; then
   node "$ROOT/scripts/reset-test-db.mjs" || exit 1
 fi
 
+
+# 캡차를 켠 채로 돈다. 다른 스모크는 전부 off 로 도는데, 그 탓에 "서버는 캡차를
+# 요구하는데 화면에 칸이 없다"를 아무도 보지 못한 적이 있다. test 는 진짜 캡차에
+# 정답만 얹어주는 모드다 — 컨트롤러가 실제로 검증하는 경로를 그대로 지난다.
+export BRICK_CAPTCHA=test
 
 export BRICK_PLUGINS_DIR="$ROOT/plugins"
 export BRICK_THEMES_DIR="$ROOT/themes"
@@ -166,9 +176,12 @@ check "옛 비밀번호 차단" "$(code -X POST "$API/api/auth/login" -H 'conten
 echo "── 캡차 (스팸 방지)"
 CAP="$(curl -s "$API/api/captcha")"
 contains "SVG 이미지 발급" "$CAP" "<svg"
-contains "provider 표시" "$CAP" '"provider":"svg"'
+contains "provider 표시" "$CAP" '"provider":"svg'
 contains "활성 상태" "$CAP" '"enabled":true'
 contains "캐시 금지 헤더" "$(curl -sI "$API/api/captcha")" "no-store"
+# 글자는 선으로 그린다. <text> 로 그리면 정답이 마크업에 평문으로 박혀 봇이 그냥 읽는다.
+# (암호적 성질 전체는 scripts/check-captcha-secrecy.mjs 가 본다)
+absent "정답이 마크업에 남지 않는다" "$CAP" "<text"
 # 두 번 발급하면 다른 문제여야 한다
 A1="$(captcha_issue | cut -d'|' -f2)"
 A2="$(captcha_issue | cut -d'|' -f2)"

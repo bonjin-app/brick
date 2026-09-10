@@ -6,6 +6,7 @@ import { PostgresQueueProvider } from "./providers/postgres-queue.provider.js";
 import { LocalStorageProvider } from "./providers/local-storage.provider.js";
 import { SmtpMailProvider } from "./providers/smtp-mail.provider.js";
 import { SvgCaptchaProvider } from "./providers/svg-captcha.provider.js";
+import { EchoCaptchaProvider } from "./providers/echo-captcha.provider.js";
 import { loadEnv } from "./config/env.js";
 
 export const DB = "BRICK_DB";
@@ -64,11 +65,13 @@ export const ENV = "BRICK_ENV";
     },
     {
       // BRICK_CAPTCHA=off 로 끌 수 있다 (개발 편의). 기본은 켜짐.
+      // BRICK_CAPTCHA=test 는 켜 둔 채 정답을 알려준다 — E2E 스모크 전용이다.
       provide: CAPTCHA,
-      useFactory: (env: ReturnType<typeof loadEnv>, cache: unknown) =>
-        process.env.BRICK_CAPTCHA === "off"
-          ? new DisabledCaptchaProvider()
-          : new SvgCaptchaProvider(env.secret, cache as never),
+      useFactory: (env: ReturnType<typeof loadEnv>, cache: unknown) => {
+        if (process.env.BRICK_CAPTCHA === "off") return new DisabledCaptchaProvider();
+        if (process.env.BRICK_CAPTCHA === "test") return new EchoCaptchaProvider(env.secret, cache as never);
+        return new SvgCaptchaProvider(env.secret, cache as never);
+      },
       inject: [ENV, CACHE],
     },
   ],
