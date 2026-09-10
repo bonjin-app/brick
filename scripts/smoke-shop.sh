@@ -437,6 +437,31 @@ done
 check "없는 상품은 404" "$(code -b "$CK" "$SHOP/admin/products/00000000-0000-0000-0000-000000000000")" "404"
 check "비관리자는 단건도 못 본다" "$(code "$SHOP/admin/products/$ONE_ID")" "403"
 
+echo "── 주문서 오류는 어느 칸인지 알려준다 (결제 직전에 막히면 판매가 끝난다)"
+# 손님이 여덟 칸 중 어디를 고쳐야 하는지 메시지만으로는 알 수 없다
+BADCART="$(curl -s -X POST "$SHOP/cart" -H 'content-type: application/json' -d "{\"productId\":\"$BULK_PID\",\"quantity\":1}")"
+BADGT="$(echo "$BADCART" | jq_get "['guestToken']")"
+err_field() {  # err_field <주문자 JSON 조각>
+  printf '{"guestToken":"%s","orderer":%s}' "$BADGT" "$1" > "$TMP/badorder.json"
+  curl -s -X POST "$SHOP/orders" -H 'content-type: application/json' --data-binary "@$TMP/badorder.json"
+}
+PHONE_ERR="$(err_field '{"ordererName":"홍길동","ordererPhone":"전화가아님","postcode":"06236","address1":"서울"}')"
+contains "형식 오류에 칸 이름" "$PHONE_ERR" '"field":"ordererPhone"'
+contains "사람이 읽는 문구도 그대로" "$PHONE_ERR" "연락처 형식"
+NAME_ERR="$(err_field '{"ordererName":"","ordererPhone":"010-1111-2222","postcode":"06236","address1":"서울"}')"
+contains "빈 칸도 어느 칸인지" "$NAME_ERR" '"field":"ordererName"'
+MAIL_ERR="$(err_field '{"ordererName":"홍길동","ordererPhone":"010-1111-2222","ordererEmail":"골뱅이없음","postcode":"06236","address1":"서울"}')"
+contains "이메일도" "$MAIL_ERR" '"field":"ordererEmail"'
+# 칸을 특정할 수 없는 오류는 field 없이 온다 (화면이 메시지로 안내한다)
+absent "칸을 모르는 오류에는 field 가 없다" "$(curl -s -X POST "$SHOP/orders" -H 'content-type: application/json' -d '{"orderer":{"ordererName":"홍","ordererPhone":"010-1111-2222","postcode":"06236","address1":"서울"}}')" '"field"'
+# 화면이 그 칸으로 데려갈 준비가 되어 있는가
+CO_HTML="$(curl -s -X POST "$API/api/blocks/render" -H 'content-type: application/json' \
+  -d '{"name":"brick-shop/checkout"}' | /usr/bin/python3 -c "import sys,json;print(json.load(sys.stdin).get('html',''))")"
+contains "오류 칸에 표시를 건다" "$CO_HTML" "aria-invalid"
+contains "그 칸으로 포커스를 옮긴다" "$CO_HTML" "bad.focus()"
+contains "오류는 즉시 읽힌다 (status 가 아니라 alert)" "$CO_HTML" 'class="brick-buy-msg" role="alert"'
+contains "눈으로도 보이게" "$CO_HTML" '[aria-invalid="true"]'
+
 echo "── 재고 소진 후"
 printf '{"items":[{"productId":"%s","quantity":1}],"orderer":{"ordererName":"늦은손님","ordererPhone":"010-0000-0000","postcode":"06236","address1":"서울"}}' "$PID" > "$TMP/late.json"
 check "품절 상품 주문 차단" \

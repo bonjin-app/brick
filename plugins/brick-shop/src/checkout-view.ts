@@ -58,7 +58,11 @@ export function registerCheckoutView(ctx: PluginContext, t: (k: string, p?: Reco
     </p>
 
     <button type="submit" class="brick-primary brick-co-submit">${escapeHtml(t("checkout.submit"))}</button>
-    <p class="brick-buy-msg" role="status"></p>
+    ${/*
+       진행 안내와 오류가 같은 자리를 쓴다. 오류는 즉시 읽혀야 하므로 alert 다 —
+       status(polite)는 스크린리더가 하던 말을 끝낸 뒤에야 읽는다.
+     */ ""}
+    <p class="brick-buy-msg" role="alert"></p>
   </form>
 
   <section class="brick-co-done" id="brick-co-done" hidden>
@@ -87,6 +91,9 @@ ${checkoutScript(t)}
 .brick-co-totals .brick-grand { font-weight: 700; font-size: 16px; border-top: 1px solid var(--color-line, #e7e7ec); padding-top: 8px; margin-top: 6px; }
 .brick-co-form .brick-field { display: block; margin-top: 12px; font-size: 13.5px; color: var(--color-text-soft, #45454f); }
 .brick-co-form .brick-field input { display: block; width: 100%; margin-top: 5px; }
+/* 문제가 있는 칸은 눈으로도 보여야 한다 — aria-invalid 만으로는 스크린리더에만 전해진다 */
+.brick-co-form [aria-invalid="true"] { border-color: var(--color-danger, #c8322f); outline: 2px solid var(--color-danger, #c8322f); outline-offset: 1px; }
+.brick-co-form .brick-buy-msg.is-error { color: var(--color-danger, #c8322f); font-weight: 600; }
 .brick-co-addr { display: grid; grid-template-columns: 130px 1fr; gap: 10px; }
 .brick-co-pay { background: var(--color-bg-soft, #f7f7f9); border: 1px solid var(--color-line, #e7e7ec); border-radius: 10px; padding: 12px 14px; }
 .brick-co-submit { width: 100%; padding: 14px; margin-top: 18px; font-size: 15px; }
@@ -147,6 +154,7 @@ const checkoutScript = (t: (k: string) => string) => `
     e.preventDefault();
     var btn = form.querySelector('.brick-co-submit');
     btn.disabled = true;
+    msg.classList.remove('is-error');
     msg.textContent = ${JSON.stringify(t("checkout.submitting"))};
     var f = new FormData(form);
     var orderer = {};
@@ -164,7 +172,25 @@ const checkoutScript = (t: (k: string) => string) => `
     }).then(function(r){ return r.json().then(function(d){ return {ok: r.ok, d: d}; }); })
       .then(function(res){
         if (!res.ok) {
+          /*
+           * 어느 칸이 문제인지 데려간다.
+           *
+           * 메시지만 띄우면 손님은 여덟 칸 중 어디를 고쳐야 하는지 위로 올라가 찾아야 하고,
+           * 그 지점이 결제 직전이다 — 여기서 그만두면 판매가 끝난다. 서버가 field 를 주면
+           * 그 칸에 표시를 걸고 포커스를 옮긴다(스크린리더도 그 칸의 라벨을 읽는다).
+           */
+          form.querySelectorAll('[aria-invalid="true"]').forEach(function(el){ el.removeAttribute('aria-invalid'); });
+          msg.classList.add('is-error');
           msg.textContent = res.d.message || ${JSON.stringify(t("checkout.fail"))};
+          var bad = res.d.field ? form.querySelector('[name="' + String(res.d.field).replace(/[^A-Za-z0-9_]/g, '') + '"]') : null;
+          if (bad) {
+            bad.setAttribute('aria-invalid', 'true');
+            bad.focus();
+            bad.scrollIntoView({ block: 'center' });
+          } else {
+            // 어느 칸인지 모르면 적어도 메시지는 보이게 한다
+            msg.scrollIntoView({ block: 'center' });
+          }
           btn.disabled = false;
           return;
         }
@@ -186,7 +212,9 @@ const checkoutScript = (t: (k: string) => string) => `
         window.scrollTo(0, 0);
       })
       .catch(function(){
+        msg.classList.add('is-error');
         msg.textContent = ${JSON.stringify(t("checkout.fail"))};
+        msg.scrollIntoView({ block: 'center' });
         btn.disabled = false;
       });
   });

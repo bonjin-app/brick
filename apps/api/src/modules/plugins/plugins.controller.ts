@@ -127,7 +127,18 @@ export class PluginsController {
       // 플러그인이 { status } 를 가진 에러를 던지면 HTTP 상태코드로 매핑한다
       const status = (err as { status?: number })?.status;
       if (status && status >= 400 && status < 600) {
-        throw new HttpException((err as Error).message, status);
+        /*
+         * `field` 가 있으면 함께 보낸다 — 어느 입력이 문제인지 화면이 알아야 손님을 그
+         * 칸으로 데려갈 수 있다. 긴 폼에서 "형식이 올바르지 않습니다"만 받으면 손님은
+         * 여덟 칸을 하나씩 되짚어야 한다.
+         */
+        const field = (err as { field?: unknown })?.field;
+        throw new HttpException(
+          typeof field === "string" && field
+            ? { statusCode: status, message: (err as Error).message, field }
+            : (err as Error).message,
+          status,
+        );
       }
       throw err;
     }

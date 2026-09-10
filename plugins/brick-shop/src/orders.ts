@@ -405,13 +405,14 @@ function validateOrderer(o: OrdererInput): void {
     ["postcode", "우편번호"],
     ["address1", "주소"],
   ];
+  // 어느 칸인지 함께 알려준다 — 화면이 그 칸으로 데려간다(주문서에는 칸이 여덟 개다)
   for (const [key, label] of required) {
-    if (!String(o?.[key] ?? "").trim()) throw new ShopError(400, `${label}을(를) 입력해주세요.`);
+    if (!String(o?.[key] ?? "").trim()) throw new ShopError(400, `${label}을(를) 입력해주세요.`, String(key));
   }
   if (!/^[0-9\-+() ]{7,30}$/.test(o.ordererPhone.trim())) {
-    throw new ShopError(400, "연락처 형식이 올바르지 않습니다.");
+    throw new ShopError(400, "연락처 형식이 올바르지 않습니다.", "ordererPhone");
   }
   if (o.ordererEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(o.ordererEmail)) {
-    throw new ShopError(400, "이메일 형식이 올바르지 않습니다.");
+    throw new ShopError(400, "이메일 형식이 올바르지 않습니다.", "ordererEmail");
   }
 }

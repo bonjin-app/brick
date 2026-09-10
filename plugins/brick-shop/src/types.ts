@@ -13,6 +13,13 @@ export class ShopError extends Error {
   constructor(
     public status: number,
     message: string,
+    /**
+     * 어느 입력이 문제인가 (폼 필드 이름).
+     *
+     * "연락처 형식이 올바르지 않습니다"만 받으면 손님은 여덟 칸 중 어디를 고쳐야 하는지
+     * 위로 올라가 찾아야 한다. 이름을 함께 주면 화면이 그 칸으로 데려간다.
+     */
+    public field?: string,
   ) {
     super(message);
   }
