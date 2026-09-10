@@ -922,6 +922,54 @@ echo "── 통계"
 contains "매출 통계" "$(curl -s -b "$CK" "$SHOP/admin/stats")" "revenue"
 contains "재고 부족 알림" "$(curl -s -b "$CK" "$SHOP/admin/stats")" "lowStock"
 
+echo "── 주문 안내 메일 (주문서가 \"주문 안내를 받습니다\"라고 약속한다)"
+# 그 약속을 서버가 지키지 않고 있었다 — 이메일 칸을 받아 두고 아무것도 보내지 않았다.
+# SMTP 가 없으면 LogMailProvider 가 서버 로그에 본문을 찍으므로 내용까지 확인한다.
+# 자기 상품·주문을 만든다 — 앞 절의 주문을 빌려 상태를 바꾸면 뒷 절이 깨진다.
+printf '{"bankAccount":"○○은행 111-222-333 (예금주: 스모크)","shippingFee":3000,"freeShippingOver":50000,"returnShippingFee":3000,"pageSize":20,"notifyOrderMail":true}' > "$TMP/mailset.json"
+curl -s -b "$CK" -X PUT "$SHOP/admin/settings" -H 'content-type: application/json' --data-binary "@$TMP/mailset.json" -o /dev/null
+printf '{"slug":"mail-item","name":"안내메일 상품","price":12000,"stock":5,"status":"selling"}' > "$TMP/mp.json"
+MPID="$(curl -s -b "$CK" -X POST "$SHOP/admin/products" -H 'content-type: application/json' \
+  --data-binary "@$TMP/mp.json" | /usr/bin/python3 -c "import sys,json;print(json.load(sys.stdin)['id'])")"
+printf '{"items":[{"productId":"%s","quantity":1}],"orderer":{"ordererName":"손님","ordererPhone":"010-3333-4444","ordererEmail":"guest@mail.test","postcode":"06236","address1":"서울"}}' "$MPID" > "$TMP/mo.json"
+MORD="$(curl -s -X POST "$SHOP/orders" -H 'content-type: application/json' --data-binary "@$TMP/mo.json")"
+MNO="$(echo "$MORD" | /usr/bin/python3 -c "import sys,json;print(json.load(sys.stdin)['orderNo'])")"
+sleep 1
+MLOG="$(cat "$TMP/api.log")"
+contains "접수 안내가 나간다" "$MLOG" "to: guest@mail.test"
+contains "제목에 주문번호" "$MLOG" "주문이 접수되었습니다 ($MNO)"
+contains "무통장이면 입금 계좌를 알려준다" "$MLOG" "입금 계좌: ○○은행 111-222-333"
+# 비회원은 주문번호를 옮겨 적지 않으면 다시 찾을 길이 없다 — 링크에 토큰을 실어야 한다
+contains "비회원 조회 링크에 토큰" "$MLOG" "/shop/orders/$MNO?token="
+contains "품목과 금액" "$MLOG" "안내메일 상품 × 1"
+
+printf '{"orderNo":"%s","provider":"bank_transfer","providerTid":"mail-1","amount":15000}' "$MNO" > "$TMP/mpay.json"
+curl -s -b "$CK" -X POST "$SHOP/payments/confirm" -H 'content-type: application/json' --data-binary "@$TMP/mpay.json" -o /dev/null
+sleep 1
+contains "입금 확인도 알린다" "$(cat "$TMP/api.log")" "결제가 확인되었습니다 ($MNO)"
+
+# 발송은 송장번호가 본체다. 전이 규칙상 preparing 을 지나야 shipped 가 된다.
+MOID="$(curl -s -b "$CK" "$SHOP/admin/orders?status=paid" | /usr/bin/python3 -c "
+import sys, json
+for o in json.load(sys.stdin)['items']:
+    if o['order_no'] == '$MNO': print(o['id'])")"
+curl -s -b "$CK" -X PUT "$SHOP/admin/orders/$MOID" -H 'content-type: application/json' \
+  -d '{"status":"preparing"}' -o /dev/null
+curl -s -b "$CK" -X PUT "$SHOP/admin/orders/$MOID" -H 'content-type: application/json' \
+  -d '{"status":"shipped","tracking_no":"1234567890"}' -o /dev/null
+sleep 1
+MLOG2="$(cat "$TMP/api.log")"
+contains "발송도 알린다" "$MLOG2" "상품이 발송되었습니다 ($MNO)"
+contains "송장번호가 들어간다" "$MLOG2" "송장번호: 1234567890"
+
+# 끌 수 있어야 한다 — 자기 메일 서버로 보내고 싶지 않은 운영자가 있다
+printf '{"bankAccount":"","shippingFee":3000,"freeShippingOver":50000,"returnShippingFee":3000,"pageSize":20,"notifyOrderMail":false}' > "$TMP/mailoff.json"
+curl -s -b "$CK" -X PUT "$SHOP/admin/settings" -H 'content-type: application/json' --data-binary "@$TMP/mailoff.json" -o /dev/null
+printf '{"items":[{"productId":"%s","quantity":1}],"orderer":{"ordererName":"손님둘","ordererPhone":"010-5555-6666","ordererEmail":"off@mail.test","postcode":"06236","address1":"서울"}}' "$MPID" > "$TMP/mo2.json"
+curl -s -X POST "$SHOP/orders" -H 'content-type: application/json' --data-binary "@$TMP/mo2.json" -o /dev/null
+sleep 1
+absent "끄면 보내지 않는다" "$(cat "$TMP/api.log")" "to: off@mail.test"
+
 echo
 echo "── 할 일이 답변만 남았을 때 (주문 상태를 통째로 바꾸므로 **맨 끝**에 둔다)"
 # 앞 절의 주문을 빌려 쓰지 않고 상태를 바꾸는 검사는 뒷 절을 깨뜨린다 — 두 번 겪었다

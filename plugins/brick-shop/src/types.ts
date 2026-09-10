@@ -81,6 +81,13 @@ export interface ShopSettings {
   /** 상품 목록 페이지당 개수 */
   pageSize: number;
   /**
+   * 주문 안내 메일을 보낼까.
+   *
+   * 주문서는 이메일을 "주문 안내를 받습니다"라며 받는다. 기본은 켜짐이다 —
+   * 받아 둔 주소로 아무것도 보내지 않는 것이 기본값이어서는 안 된다.
+   */
+  notifyOrderMail: boolean;
+  /**
    * 반품 배송비 (원).
    *
    * 단순 변심 반품에서 고객이 부담하는 반송비다 (전자상거래법 제18조 제9항).
@@ -95,6 +102,7 @@ export const DEFAULT_SETTINGS: ShopSettings = {
   freeShippingOver: 50000,
   bankAccount: "",
   pageSize: 20,
+  notifyOrderMail: true,
   returnShippingFee: 3000,
 };
 

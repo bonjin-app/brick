@@ -551,6 +551,8 @@ export const SHOP_SETTINGS_RESOURCE: AdminResource = {
     { name: "bankAccount", label: "무통장 입금 계좌", type: "text",
       placeholder: "○○은행 123-456-789012 (예금주: 브릭상점)",
       help: "주문 완료 화면과 주문 조회에 그대로 표시됩니다." },
+    { name: "notifyOrderMail", label: "주문 안내 메일을 보낸다", type: "boolean",
+      help: "접수·입금 확인·발송·취소·환불을 주문서에 적힌 주소로 알립니다. 비회원에게는 주문 조회 링크가 함께 갑니다." },
     { name: "shippingFee", label: "기본 배송비", type: "money", required: true },
     { name: "freeShippingOver", label: "무료배송 기준 금액", type: "money",
       help: "이 금액 이상이면 배송비를 받지 않습니다. 0 이면 무료배송이 없습니다." },

@@ -249,6 +249,30 @@ export async function createOrder(
  * 주문 상태 변경.
  * 전이 규칙을 강제하고, 취소/환불이면 재고를 되돌린다.
  */
+/**
+ * 상태가 바뀐 뒤 알릴 곳.
+ *
+ * 왜 모듈 하나에 담아 두는가: `changeOrderStatus` 는 여덜 곳에서 불린다(주문 취소,
+ * 관리자 단건·일괄, 결제 승인, 환불, 정기결제 두 곳). 호출부마다 "메일도 보내라"를
+ * 손으로 붙이면 언젠가 한 곳이 빠지고, 그 경로만 조용해진다 — 손님은 발송 안내를
+ * 받다가 어느 날부터 못 받는다. 전이가 일어나는 지점은 하나뿐이므로 여기서 알린다.
+ * (결제 게이트웨이를 `registerGateway` 로 꽂는 것과 같은 방식이다.)
+ *
+ * **커밋 뒤에** 부른다. 트랜잭션 안에서 보내면 되돌려진 전이에도 메일이 나간다.
+ */
+export type OrderTransitionListener = (info: {
+  orderId: string;
+  from: OrderStatus;
+  to: OrderStatus;
+}) => void;
+
+let transitionListener: OrderTransitionListener | null = null;
+
+/** 플러그인 초기화에서 한 번 등록한다 */
+export function onOrderTransition(listener: OrderTransitionListener | null): void {
+  transitionListener = listener;
+}
+
 export async function changeOrderStatus(
   db: Db,
   orderId: string,
@@ -261,6 +285,9 @@ export async function changeOrderStatus(
     pointsPort?: PointsPort | null;
   } = {},
 ): Promise<void> {
+  /** 실제로 바뀌었는가 — 멱등 반환과 구분해야 알림이 두 번 가지 않는다 */
+  let changed: OrderStatus | null = null;
+
   await db.transaction(async (tx) => {
     // 동시 상태 변경 방지 — 주문 행을 잠근다 (FOR UPDATE는 트랜잭션 안에서만 유효)
     const { rows } = await tx.execute(sql`
@@ -372,7 +399,12 @@ export async function changeOrderStatus(
       INSERT INTO shop_order_events (id, order_id, from_status, to_status, note, actor_id)
       VALUES (${uuidv7()}, ${orderId}, ${current}, ${to}, ${opts.note ?? null}, ${opts.actorId ?? null}::uuid)
     `);
+    changed = current;
   });
+
+  // 커밋된 뒤에만 알린다 — 되돌려진 전이에 메일이 나가서는 안 된다.
+  // 멱등 반환(current === to)이면 changed 가 비어 있어 알리지 않는다.
+  if (changed) transitionListener?.({ orderId, from: changed, to });
 }
 
 /**

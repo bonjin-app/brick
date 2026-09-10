@@ -122,7 +122,7 @@
   "checkout.orderNo": "주문번호",
   "checkout.total": "결제 금액",
   "checkout.bankAccount": "입금 계좌",
-  "checkout.guestHint": "비회원 주문입니다 — 주문번호를 꼭 보관해주세요. 주문 확인은 이 기기에서 다시 접속하면 됩니다.",
+  "checkout.guestHint": "비회원 주문입니다 — 주문번호를 꼭 보관해주세요. 이메일을 남기셨다면 주문 조회 링크를 함께 보냈습니다.",
   "checkout.subtotal": "상품 금액",
   "checkout.discount": "할인",
   "checkout.shippingFee": "배송비",

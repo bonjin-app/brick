@@ -134,12 +134,29 @@ const listScript = (t: (k: string) => string, labels: string) => `
 })();
 </script>`;
 
-/** 상세 화면 — 회원 쿠키로 시도, 실패하면 이 기기의 guestToken 으로 재시도 */
+/**
+ * 상세 화면 — 회원 쿠키로 시도, 실패하면 guestToken 으로 재시도.
+ *
+ * 토큰은 **주소에서도** 읽는다. 예전에는 이 기기의 localStorage 만 봤는데, 그러면
+ * 주문 안내 메일의 링크를 다른 기기(대개 폰)에서 열면 아무것도 보이지 않는다 —
+ * 서버는 `?token=` 을 받는데 화면이 그것을 쓰지 않았다. 주소로 들어온 토큰은
+ * localStorage 에도 넣어 그 기기에서 다음 조회가 되게 한다.
+ */
 const detailScript = (t: (k: string, p?: Record<string, string | number>) => string, labels: string) => `
 <script>
 (function(){
   var root = document.getElementById('brick-order-detail');
   if (!root) return;
+
+  /** 이 주문을 볼 수 있는 토큰 — 주소가 먼저, 없으면 이 기기에 저장된 것 */
+  function guestToken(){
+    var fromUrl = new URLSearchParams(location.search).get('token');
+    if (fromUrl) {
+      try { localStorage.setItem('brick_shop_guest', fromUrl); } catch (e) { /* 사생활 보호 모드 */ }
+      return fromUrl;
+    }
+    try { return localStorage.getItem('brick_shop_guest'); } catch (e) { return null; }
+  }
   var body = document.getElementById('brick-order-body');
   var no = root.dataset.orderNo;
   var LABEL = ${labels};
@@ -148,7 +165,7 @@ const detailScript = (t: (k: string, p?: Record<string, string | number>) => str
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 
   function load(withToken){
-    var guest = localStorage.getItem('brick_shop_guest');
+    var guest = guestToken();
     var url = '/api/plugins/brick-shop/orders/' + encodeURIComponent(no) +
       (withToken && guest ? '?token=' + encodeURIComponent(guest) : '');
     return fetch(url).then(function(r){ return r.ok ? r.json() : null; });
@@ -157,7 +174,7 @@ const detailScript = (t: (k: string, p?: Record<string, string | number>) => str
   function renderReturnSection(orderNo){
     var slot = document.getElementById('brick-ret-slot');
     if (!slot) return;
-    var guest = localStorage.getItem('brick_shop_guest');
+    var guest = guestToken();
     var q = guest ? ('?token=' + encodeURIComponent(guest)) : '';
     fetch('/api/plugins/brick-shop/orders/' + encodeURIComponent(orderNo) + '/returnable' + q)
       .then(function(r){ return r.ok ? r.json() : null; })

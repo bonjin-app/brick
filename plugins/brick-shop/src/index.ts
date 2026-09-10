@@ -6,7 +6,7 @@ import { DEFAULT_SETTINGS, ORDER_STATUS, PRODUCT_STATUS_LABEL, ShopError, STATUS
          type Db, type OrderStatus, type ShopSettings } from "./types.js";
 import { quote } from "./pricing.js";
 import { addToCart, clearCart, getCartItems, updateCartItem, type CartOwner } from "./cart.js";
-import { changeOrderStatus, createOrder, type PointsPort } from "./orders.js";
+import { changeOrderStatus, createOrder, onOrderTransition, type PointsPort } from "./orders.js";
 import { bankTransferGateway, confirmPayment, gateways, refundPayment, registerGateway } from "./payments.js";
 import { CASH_RECEIPT_RESOURCE, CATEGORY_RESOURCE, COLLECTION_RESOURCE, GRADE_RESOURCE, COUPON_RESOURCE, INQUIRY_RESOURCE,
          ORDER_RESOURCE, PRODUCT_RESOURCE, RETURN_RESOURCE, REVIEW_RESOURCE,
@@ -14,6 +14,7 @@ import { CASH_RECEIPT_RESOURCE, CATEGORY_RESOURCE, COLLECTION_RESOURCE, GRADE_RE
          TAX_INVOICE_RESOURCE } from "./admin-resources.js";
 import { registerStorefrontBlocks } from "./blocks.js";
 import { importProducts } from "./import.js";
+import { sendOrderMail } from "./order-mail.js";
 import {
   createInquiry, createReview, deleteInquiry, deleteReview, findPurchase,
   listInquiries, listReviews, replyToInquiry, replyToReview, REVIEW_SORTS, setReviewVisible, updateReview,
@@ -96,6 +97,39 @@ export default definePlugin(async (ctx) => {
     ...DEFAULT_SETTINGS,
     ...((await ctx.settings.get<Partial<ShopSettings>>("settings")) ?? {}),
   });
+
+  /**
+   * 주문 안내 메일.
+   *
+   * 주문서의 이메일 칸은 "이메일 (선택 — 주문 안내를 받습니다)" 라고 적혀 있는데,
+   * 그 주소로 나가는 메일이 하나도 없었다. 접수·입금 확인·발송·취소·환불을 알린다.
+   *
+   * 설정으로 끌 수 있다(`notifyOrderMail`). 실패는 삼킨다 — 메일이 안 나갔다고
+   * 주문이나 상태 변경을 되돌리면 그쪽이 더 큰 사고다.
+   */
+  const notifyOrder = async (orderId: string, status: OrderStatus): Promise<void> => {
+    try {
+      const s = await settings();
+      if (!s.notifyOrderMail) return;
+      await sendOrderMail(db, {
+        send: (msg) => ctx.mail.send(msg),
+        siteUrl: ctx.site.url,
+        siteName: await ctx.site.name(),
+        bankAccount: s.bankAccount,
+        log: (m) => ctx.logger.warn(m),
+      }, { orderId, status });
+    } catch (err) {
+      ctx.logger.warn(`주문 안내 메일 실패 (${orderId}): ${(err as Error).message}`);
+    }
+  };
+
+  /*
+   * 상태가 바뀌면 알린다.
+   *
+   * changeOrderStatus 는 여덜 곳에서 불린다. 호출부마다 붙이면 언젠가 한 곳이 빠지고,
+   * 그 경로만 조용해진다 — 그래서 전이가 일어나는 지점 하나에서 알린다.
+   */
+  onOrderTransition(({ orderId, to }) => { void notifyOrder(orderId, to); });
 
   /**
    * 포인트 서비스 — brick-point가 설치·활성화된 경우에만 존재한다.
@@ -304,6 +338,9 @@ export default definePlugin(async (ctx) => {
     });
 
     const s = await settings();
+    // 접수 안내. 주문서의 이메일 칸은 "주문 안내를 받습니다"라고 적혀 있다 —
+    // 그 약속을 지키는 자리다. 실패해도 주문은 이미 만들어졌으므로 막지 않는다.
+    void notifyOrder(result.id, "pending");
     return { ...result, bankAccount: s.bankAccount };
   });
 
@@ -2269,6 +2306,7 @@ export default definePlugin(async (ctx) => {
       shippingFee: Math.max(0, Math.floor(Number(b.shippingFee ?? DEFAULT_SETTINGS.shippingFee))),
       freeShippingOver: Math.max(0, Math.floor(Number(b.freeShippingOver ?? DEFAULT_SETTINGS.freeShippingOver))),
       bankAccount: String(b.bankAccount ?? "").slice(0, 200),
+      notifyOrderMail: b.notifyOrderMail !== false,
       pageSize: Math.min(60, Math.max(4, Math.floor(Number(b.pageSize ?? DEFAULT_SETTINGS.pageSize)))),
       returnShippingFee: Math.max(0, Math.floor(Number(b.returnShippingFee ?? DEFAULT_SETTINGS.returnShippingFee))),
     };
