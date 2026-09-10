@@ -279,8 +279,14 @@ export interface DashboardCard {
   order?: number;
   /** 누르면 이동할 관리자 경로 (예: "/admin/x/brick-shop/orders") */
   link?: string;
-  /** 요청 시점에 값을 계산한다. sub 는 값 아래 작은 글씨 */
-  load(): Promise<{ value: string | number; sub?: string }>;
+  /**
+   * 요청 시점에 값을 계산한다. sub 는 값 아래 작은 글씨.
+   *
+   * `link` 를 돌려주면 선언한 `link` 를 **그때의 상황으로 덮어쓴다**. "처리 대기 5건"을
+   * 눌렀을 때 지금 가장 급한 목록으로 보내려면 고정 주소로는 안 된다 — 입금 확인이 0 인데
+   * 입금 대기 목록으로 보내면 빈 화면이 나온다.
+   */
+  load(): Promise<{ value: string | number; sub?: string; link?: string }>;
 }
 
 /** 연결할 수 있는 주소 하나 */
@@ -507,6 +513,29 @@ export interface AdminResource {
    * 트랜잭션)은 플러그인의 라우트가 책임진다.
    */
   bulkActions?: AdminBulkAction[];
+  /**
+   * 목록을 좁히는 드롭다운. 고른 값은 목록 라우트에 `?<name>=<value>` 로 전달된다.
+   *
+   * **목록이 길어지면 필터 없이는 쓸 수 없다.** 대시보드가 "발송 대기 12건"이라고 알려도
+   * 목록에 가면 취소·배송완료까지 섞인 전체가 나오고, 운영자는 그 열두 건을 눈으로 찾는다.
+   * 화면은 주소의 쿼리를 초기값으로 읽으므로, 카드나 안내 링크가
+   * `/admin/x/my-plugin/orders?status=paid` 로 곧바로 보낼 수 있다.
+   *
+   * 거르는 일은 **플러그인이** 한다 — 코어는 그 테이블의 뜻을 모른다.
+   */
+  filters?: AdminFilter[];
+}
+
+/** 목록을 좁히는 드롭다운 하나 */
+export interface AdminFilter {
+  /** 목록 라우트에 넘길 쿼리 이름 (예: "status") */
+  name: string;
+  /** 드롭다운 라벨. 원문이 번역 키다 */
+  label: string;
+  /** 정적 선택지 */
+  options?: Array<{ value: string; label: string }>;
+  /** 선택지를 플러그인 라우트에서 받는다 (`[{ value, label }]`) */
+  optionsFrom?: string;
 }
 
 /** 일괄 작업 하나 */

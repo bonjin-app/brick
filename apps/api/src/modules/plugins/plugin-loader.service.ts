@@ -347,7 +347,12 @@ export class PluginLoaderService implements OnModuleInit {
         ...a,
         label: tr(a.label),
         confirm: tr(a.confirm),
-        input: a.input ? { ...a.input, label: tr(a.input.label) } : undefined,
+        input: a.input ? { ...a.input, label: tr(a.input.label), help: tr(a.input.help) } : undefined,
+      })),
+      filters: resource.filters?.map((f) => ({
+        ...f,
+        label: tr(f.label),
+        options: f.options?.map((o) => ({ ...o, label: tr(o.label) })),
       })),
     };
   }
@@ -413,7 +418,8 @@ export class PluginLoaderService implements OnModuleInit {
               t.unref?.();
             }),
           ]);
-          return { ...base, value: result.value, sub: result.sub ?? null, error: false };
+          // load 가 준 link 가 선언한 link 를 이긴다 (그때의 상황을 아는 쪽이 load 다)
+          return { ...base, link: result.link ?? base.link, value: result.value, sub: result.sub ?? null, error: false };
         } catch (err) {
           // 실패한 카드는 오류로 표시한다 — 0 으로 보이는 것이 최악이다
           this.logger.error(`dashboard card "${card.plugin}/${card.title}" 실패: ${String(err)}`);

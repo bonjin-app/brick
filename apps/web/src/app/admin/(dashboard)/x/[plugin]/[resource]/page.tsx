@@ -37,6 +37,13 @@ interface AdminResource {
   can?: { create?: boolean; update?: boolean; delete?: boolean };
   description?: string;
   bulkActions?: AdminBulkAction[];
+  filters?: AdminFilter[];
+}
+interface AdminFilter {
+  name: string;
+  label: string;
+  options?: Array<{ value: string; label: string }>;
+  optionsFrom?: string;
 }
 type Row = Record<string, unknown>;
 
@@ -61,6 +68,12 @@ export default function PluginResourcePage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkCode, setBulkCode] = useState("");
   const [bulkParam, setBulkParam] = useState("");
+  /*
+   * 목록 필터. 초기값은 **주소의 쿼리**다 — 대시보드의 "발송 대기 12건" 카드가
+   * `?status=paid` 로 곧바로 보낼 수 있어야 그 숫자를 누른 뜻이 산다.
+   */
+  const [filterValues, setFilterValues] = useState<Record<string, string>>({});
+  const [filterOptions, setFilterOptions] = useState<Record<string, Array<{ value: string; label: string }>>>({});
   const [bulkOptions, setBulkOptions] = useState<Array<{ value: string; label: string }>>([]);
 
   const api = res ? `/api/plugins/${res.plugin}${res.basePath}` : null;
@@ -98,19 +111,41 @@ export default function PluginResourcePage() {
           ),
         };
       })
-      .then(setRes)
+      .then((loaded: AdminResource) => {
+        setRes(loaded);
+        // 주소의 쿼리를 초기값으로 (선언된 필터 이름만 받는다 — 아무 쿼리나 목록 라우트로
+        // 흘려보내지 않는다)
+        const fromUrl: Record<string, string> = {};
+        const search = new URLSearchParams(window.location.search);
+        for (const f of loaded.filters ?? []) {
+          const v = search.get(f.name);
+          if (v) fromUrl[f.name] = v;
+        }
+        setFilterValues(fromUrl);
+        // 라우트에서 받아오는 선택지
+        for (const f of loaded.filters ?? []) {
+          if (!f.optionsFrom) continue;
+          void fetch(`/api/plugins/${loaded.plugin}${f.optionsFrom}`)
+            .then((r) => (r.ok ? r.json() : []))
+            .then((d) => setFilterOptions((prev) => ({ ...prev, [f.name]: Array.isArray(d) ? d : [] })))
+            .catch(() => undefined);
+        }
+        return loaded;
+      })
       .catch((e: Error) => setError(e.message));
   }, [params.plugin, params.resource]);
 
   const reload = useCallback(async () => {
     if (!api) return;
-    const r = await fetch(`${api}?page=${page}`);
+    const qs = new URLSearchParams({ page: String(page) });
+    for (const [k, v] of Object.entries(filterValues)) if (v) qs.set(k, v);
+    const r = await fetch(`${api}?${qs.toString()}`);
     if (!r.ok) { setError(t("x.listLoadFail")); return; }
     const d = await r.json();
     // 플러그인은 { items, total } 또는 배열을 반환할 수 있다
     setRows(Array.isArray(d) ? d : (d.items ?? []));
     setTotal(Array.isArray(d) ? d.length : (d.total ?? 0));
-  }, [api, page]);
+  }, [api, page, filterValues]);
   useEffect(() => { void reload(); }, [reload]);
 
   async function save() {
@@ -230,6 +265,31 @@ export default function PluginResourcePage() {
         />
       ) : (
         <>
+          {(res.filters?.length ?? 0) > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", margin: "0 0 10px" }}>
+              {res.filters!.map((f) => {
+                const opts = [...(f.options ?? []), ...(filterOptions[f.name] ?? [])];
+                return (
+                  <label key={f.name} style={{ fontSize: 13.5, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ color: "var(--color-text-soft)" }}>{f.label}</span>
+                    <select value={filterValues[f.name] ?? ""}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setPage(1); // 3쪽에서 좁히면 빈 화면이 나온다
+                        setFilterValues((prev) => ({ ...prev, [f.name]: v }));
+                      }}
+                      style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid var(--color-line-strong)" }}>
+                      <option value="">{t("x.filterAll")}</option>
+                      {opts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </label>
+                );
+              })}
+              {Object.values(filterValues).some(Boolean) && (
+                <button onClick={() => { setPage(1); setFilterValues({}); }} style={btnSm}>{t("x.filterClear")}</button>
+              )}
+            </div>
+          )}
           {hasBulk && (
             <div style={{
               display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", margin: "0 0 10px",

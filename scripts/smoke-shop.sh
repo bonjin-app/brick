@@ -287,6 +287,39 @@ for a in json.load(sys.stdin):
 ")"
 check "송장 작업은 붙여넣는 입력" "$TRK_INPUT_TYPE" "textarea"
 
+echo "── 목록 좁히기 (대시보드가 보낸 그 건들만 보여야 한다)"
+ALL_N="$(curl -s -b "$CK" "$SHOP/admin/orders" | jq_get "['total']")"
+SHIPPED_N="$(curl -s -b "$CK" "$SHOP/admin/orders?status=shipped" | jq_get "['total']")"
+PENDING_N="$(curl -s -b "$CK" "$SHOP/admin/orders?status=pending" | jq_get "['total']")"
+[[ "$SHIPPED_N" -gt 0 && "$SHIPPED_N" -lt "$ALL_N" ]] \
+  && ok "상태로 좁힌다 (전체 ${ALL_N} → 배송중 ${SHIPPED_N})" || bad "상태로 좁힌다 (전체 ${ALL_N}, 배송중 ${SHIPPED_N})"
+# total 과 items 가 같은 조건을 써야 한다 — 다르면 "37건"이라 표시하고 20건만 보여준다
+ITEMS_N="$(curl -s -b "$CK" "$SHOP/admin/orders?status=shipped" | /usr/bin/python3 -c "import sys,json;print(len(json.load(sys.stdin)['items']))")"
+check "총 개수와 목록이 같은 조건" "$ITEMS_N" "$SHIPPED_N"
+ONLY_SHIPPED="$(curl -s -b "$CK" "$SHOP/admin/orders?status=shipped" | /usr/bin/python3 -c "
+import sys, json
+print('yes' if all(o['status'] == 'shipped' for o in json.load(sys.stdin)['items']) else 'no')")"
+check "걸러진 것만 나온다" "$ONLY_SHIPPED" "yes"
+# 모르는 값은 전체 (쿼리스트링을 그대로 믿지 않는다)
+check "모르는 상태는 전체" "$(curl -s -b "$CK" "$SHOP/admin/orders?status=../etc" | jq_get "['total']")" "$ALL_N"
+# 상품 목록도 좁힌다
+PROD_ALL="$(curl -s -b "$CK" "$SHOP/admin/products" | jq_get "['total']")"
+PROD_SELL="$(curl -s -b "$CK" "$SHOP/admin/products?status=selling" | jq_get "['total']")"
+[[ "$PROD_SELL" -le "$PROD_ALL" && "$PROD_SELL" -gt 0 ]] && ok "상품도 상태로 좁힌다" || bad "상품도 상태로 좁힌다 ($PROD_SELL / $PROD_ALL)"
+check "분류 값이 uuid 가 아니면 무시" "$(curl -s -b "$CK" "$SHOP/admin/products?category=notauuid" | jq_get "['total']")" "$PROD_ALL"
+# 화면이 드롭다운을 그릴 수 있어야 한다
+ORDER_FILTERS="$(curl -s -b "$CK" "$API/api/admin/resources/brick-shop/orders" | /usr/bin/python3 -c "
+import sys, json
+print(json.dumps([f['name'] for f in json.load(sys.stdin).get('filters', [])]))")"
+contains "주문 목록에 상태 필터 선언" "$ORDER_FILTERS" '"status"'
+# 대시보드 카드가 그 목록으로 곧바로 보낸다
+DASH3="$(curl -s -b "$CK" "$API/api/admin/dashboard")"
+QUEUE_LINK="$(echo "$DASH3" | /usr/bin/python3 -c "
+import sys, json
+for c in json.load(sys.stdin).get('cards', []):
+    if c['title'] == '처리 대기': print(c.get('link') or '')")"
+contains "처리 대기 카드가 급한 목록으로 보낸다" "$QUEUE_LINK" "status="
+
 echo "── 재고 소진 후"
 printf '{"items":[{"productId":"%s","quantity":1}],"orderer":{"ordererName":"늦은손님","ordererPhone":"010-0000-0000","postcode":"06236","address1":"서울"}}' "$PID" > "$TMP/late.json"
 check "품절 상품 주문 차단" \

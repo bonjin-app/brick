@@ -16,6 +16,12 @@ export const PRODUCT_RESOURCE: AdminResource = {
   basePath: "/admin/products",
   order: 10,
   description: "상품을 등록하고 가격·재고·진열 상태를 관리합니다. 금액은 원 단위입니다.",
+  // 상품이 수백 개면 목록을 넘기며 찾을 수 없다 — 분류는 라우트에서 받는다(테이블 행이므로)
+  filters: [
+    { name: "status", label: "판매 상태",
+      options: Object.entries(PRODUCT_STATUS_LABEL).map(([value, label]) => ({ value, label })) },
+    { name: "category", label: "분류", optionsFrom: "/admin/options/categories" },
+  ],
   fields: [
     { name: "name", label: "상품명", type: "text", required: true, inList: true },
     { name: "slug", label: "주소(slug)", type: "text", required: true, inList: true,
@@ -165,6 +171,14 @@ export const ORDER_RESOURCE: AdminResource = {
    * 상태 전이 규칙(STATUS_TRANSITIONS)은 일괄에서도 그대로다 — 배송완료 주문에 "입금 확인"을
    * 걸어도 그 건은 건너뛰고, 몇 건이 처리되고 몇 건이 건너뛰어졌는지 알려준다.
    */
+  /*
+   * 목록 좁히기 — 대시보드의 "발송 대기 12건"을 눌러 왔을 때 그 열두 건이 바로 보여야 한다.
+   * 필터가 없으면 취소·배송완료까지 섞인 전체가 나오고 운영자는 눈으로 찾는다.
+   */
+  filters: [
+    { name: "status", label: "주문 상태",
+      options: ORDER_STATUS.map((s) => ({ value: s, label: STATUS_LABEL[s] })) },
+  ],
   bulkActions: [
     { code: "mark-paid", label: "입금 확인 (결제완료로)" },
     { code: "mark-shipped", label: "발송 처리 (배송중으로)" },

@@ -116,6 +116,29 @@ ctx.registerHeaderAction({ label: "쪽지함", path: "/memo", requiresLogin: tru
 - **숫자 배지처럼 사용자별 값은 여기 담지 마세요** — 비로그인 렌더는 캐시되므로 남의
   값이 새어 나갑니다. 배지는 블록이 클라이언트에서 채웁니다.
 
+## 목록 필터 (AdminResource.filters)
+
+목록이 길어지면 필터 없이는 쓸 수 없습니다. 대시보드가 "발송 대기 12건"이라고 알려도
+목록에 가면 취소·배송완료까지 섞인 전체가 나오고, 운영자는 그 열두 건을 눈으로 찾습니다.
+
+```ts
+filters: [
+  { name: "status", label: "주문 상태", options: [{ value: "paid", label: "결제완료" }] },
+  { name: "category", label: "분류", optionsFrom: "/admin/options/categories" },
+]
+```
+
+고른 값은 목록 라우트에 `?status=paid` 로 옵니다. **거르는 일은 플러그인이 합니다** —
+코어는 그 테이블의 뜻을 모릅니다. 두 가지를 지키세요.
+
+- 모르는 값은 무시하고 전체를 주세요. 쿼리스트링을 그대로 SQL 에 붙이면 안 됩니다.
+- `count` 와 목록이 **같은 조건**을 써야 합니다. 다르면 "37건"이라 표시하고 20건만 보여줍니다.
+
+화면은 주소의 쿼리를 초기값으로 읽으므로, 대시보드 카드가
+`/admin/x/my-plugin/orders?status=paid` 로 곧바로 보낼 수 있습니다. 카드의 `load` 가
+`link` 를 돌려주면 **그때 가장 급한 곳**으로 바꿀 수 있습니다 — 입금 확인이 0 인데
+입금 대기 목록으로 보내면 빈 화면이 나옵니다.
+
 ## 일괄 작업의 입력
 
 `bulkActions[].input` 은 두 가지입니다. `optionsFrom` 을 주면 **고르는** 값이고(라우트가

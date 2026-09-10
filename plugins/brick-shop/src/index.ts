@@ -2,7 +2,7 @@ import { definePlugin, isUniqueViolation, isValidBusinessNo, maskEmail, rawRespo
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import { t } from "./i18n.js";
-import { DEFAULT_SETTINGS, ShopError, STATUS_LABEL, STATUS_TRANSITIONS, escapeHtml, pgArray, won,
+import { DEFAULT_SETTINGS, ORDER_STATUS, PRODUCT_STATUS_LABEL, ShopError, STATUS_LABEL, STATUS_TRANSITIONS, escapeHtml, pgArray, won,
          type Db, type OrderStatus, type ShopSettings } from "./types.js";
 import { quote } from "./pricing.js";
 import { addToCart, clearCart, getCartItems, updateCartItem, type CartOwner } from "./cart.js";
@@ -482,6 +482,16 @@ export default definePlugin(async (ctx) => {
   ctx.registerRoute("GET", "/admin/products", async (req) => {
     requireAdmin(req);
     const page = Math.max(1, Number(req.query.page ?? 1));
+    /*
+     * 상태·분류로 좁힌다 — 상품이 수백 개면 목록을 넘기며 찾을 수 없다.
+     * 분류는 uuid 이므로 모양을 검사한다(아니면 캐스팅에서 500 이 난다).
+     */
+    const askedStatus = String(req.query.status ?? "");
+    const pStatus = askedStatus in PRODUCT_STATUS_LABEL ? askedStatus : "";
+    const askedCat = String(req.query.category ?? "");
+    const pCat = /^[0-9a-f-]{36}$/i.test(askedCat) ? askedCat : "";
+    const prodWhere = sql`WHERE (${pStatus} = '' OR p.status = ${pStatus})
+                            AND (${pCat} = '' OR p.category_id = nullif(${pCat}, '')::uuid)`;
     const { rows } = await db.execute(sql`
       -- 관리 목록은 **편집 원본**을 준다. 여기서 썸네일을 주면 관리 화면이 그 값으로 폼을
       -- 채우고, 운영자가 저장하는 순간 원본 자리에 썸네일이 박힌다(실제로 그랬다) —
@@ -505,9 +515,9 @@ export default definePlugin(async (ctx) => {
                 WHERE r.product_id = p.id),
                ''
              ) AS related_text
-      FROM shop_products p ORDER BY p.sort_order, p.created_at DESC LIMIT 30 OFFSET ${(page - 1) * 30}
+      FROM shop_products p ${prodWhere} ORDER BY p.sort_order, p.created_at DESC LIMIT 30 OFFSET ${(page - 1) * 30}
     `);
-    const { rows: cnt } = await db.execute(sql`SELECT count(*) AS n FROM shop_products`);
+    const { rows: cnt } = await db.execute(sql`SELECT count(*) AS n FROM shop_products p ${prodWhere}`);
     // 관리 화면은 배열을 편집할 수 없으므로 줄바꿈 텍스트로 바꿔 보낸다
     return {
       items: rows.map((r) => ({
@@ -668,15 +678,23 @@ export default definePlugin(async (ctx) => {
   ctx.registerRoute("GET", "/admin/orders", async (req) => {
     requireAdmin(req);
     const page = Math.max(1, Number(req.query.page ?? 1));
+    /*
+     * 상태로 좁힌다 — 대시보드의 "발송 대기 12건"이 `?status=paid` 로 보낸다.
+     * 모르는 값은 무시한다(전체). 쿼리스트링을 그대로 SQL 에 붙이지 않는다.
+     */
+    const asked = String(req.query.status ?? "");
+    const status = (ORDER_STATUS as readonly string[]).includes(asked) ? asked : "";
+    // count 와 목록이 **같은 조건**을 써야 한다 — 다르면 "37건"이라 표시하고 20건만 보여준다
+    const where = sql`WHERE (${status} = '' OR o.status = ${status})`;
     const { rows } = await db.execute(sql`
       SELECT o.id, o.order_no, o.status, o.total, o.created_at, o.orderer_name, o.tracking_no,
              o.receiver_name, o.receiver_phone, o.delivery_memo, o.payment_method,
              o.postcode || ' ' || o.address1 || ' ' || coalesce(o.address2, '') AS address_full,
              (SELECT string_agg(i.product_name || ' x' || i.quantity, ', ')
               FROM shop_order_items i WHERE i.order_id = o.id) AS items_summary
-      FROM shop_orders o ORDER BY o.created_at DESC LIMIT 30 OFFSET ${(page - 1) * 30}
+      FROM shop_orders o ${where} ORDER BY o.created_at DESC LIMIT 30 OFFSET ${(page - 1) * 30}
     `);
-    const { rows: cnt } = await db.execute(sql`SELECT count(*) AS n FROM shop_orders`);
+    const { rows: cnt } = await db.execute(sql`SELECT count(*) AS n FROM shop_orders o ${where}`);
     return { items: rows, total: Number(cnt[0]?.n ?? 0), page, pageSize: 30 };
   });
 
@@ -2462,7 +2480,12 @@ export default definePlugin(async (ctx) => {
   ctx.registerDashboardCard({
     title: "처리 대기",
     order: 21,
-    link: "/admin/x/brick-shop/orders",
+    /*
+     * 가장 급한 것으로 보낸다. 입금 확인은 손님이 돈을 넣고 기다리는 일이므로 발송보다
+     * 먼저다 — 그것이 0이 되면 발송 대기로 보낸다. 목록이 필터를 지원하므로 눌렀을 때
+     * 그 건들만 보인다(전에는 취소·배송완료까지 섞인 전체가 나왔다).
+     */
+    link: "/admin/x/brick-shop/orders?status=pending",
     load: async () => {
       const { rows } = await db.execute(sql`
         SELECT
@@ -2480,7 +2503,18 @@ export default definePlugin(async (ctx) => {
       const inq = Number(r.inquiries ?? 0);
       const total = pay + ship + rev + inq;
       // 0 이면 "무엇이 0인지"를 늘어놓지 않는다 — 밀린 일이 없다는 사실이 답이다
-      if (total === 0) return { value: 0, sub: ctx.t("dash.queueClear") };
+      if (total === 0) return { value: 0, sub: ctx.t("dash.queueClear"), link: "/admin/x/brick-shop/orders" };
+      /*
+       * 지금 가장 급한 목록으로 보낸다. 입금 확인은 손님이 돈을 넣고 기다리는 일이므로
+       * 발송보다 먼저다. 둘 다 0 이고 답변만 남았으면 후기 관리로 보낸다 — 눌렀을 때
+       * 빈 목록이 나오는 것이 가장 나쁘다.
+       */
+      const link =
+        pay > 0 ? "/admin/x/brick-shop/orders?status=pending"
+        : ship > 0 ? "/admin/x/brick-shop/orders?status=paid"
+        : rev > 0 ? "/admin/x/brick-shop/reviews"
+        : inq > 0 ? "/admin/x/brick-shop/inquiries"
+        : "/admin/x/brick-shop/orders";
       /*
        * 후기와 문의는 "답변"으로 합친다. 넷을 늘어놓으면 190px 카드에서 세 줄로 접혀
        * 격자가 들쭉날쭉해지고, 무엇보다 운영자에게는 둘 다 **답을 쓰는 같은 일**이다.
@@ -2491,7 +2525,7 @@ export default definePlugin(async (ctx) => {
         ship ? ctx.t("dash.queueShip", { n: ship }) : "",
         rev + inq ? ctx.t("dash.queueReply", { n: rev + inq }) : "",
       ].filter(Boolean);
-      return { value: total, sub: parts.join(" · ") };
+      return { value: total, sub: parts.join(" · "), link };
     },
   });
 
