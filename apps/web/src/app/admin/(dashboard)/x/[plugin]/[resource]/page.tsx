@@ -38,6 +38,7 @@ interface AdminResource {
   description?: string;
   bulkActions?: AdminBulkAction[];
   filters?: AdminFilter[];
+  importFrom?: { path: string; label: string; help?: string; sample?: string };
 }
 interface AdminFilter {
   name: string;
@@ -74,6 +75,8 @@ export default function PluginResourcePage() {
    */
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
   const [filterOptions, setFilterOptions] = useState<Record<string, Array<{ value: string; label: string }>>>({});
+  // 붙여넣어 여러 행을 등록·수정하는 모달
+  const [importing, setImporting] = useState(false);
   const [bulkOptions, setBulkOptions] = useState<Array<{ value: string; label: string }>>([]);
 
   const api = res ? `/api/plugins/${res.plugin}${res.basePath}` : null;
@@ -248,10 +251,17 @@ export default function PluginResourcePage() {
         <h1 style={{ margin: 0, flex: 1 }}>
           {res.title} <span style={{ color: "var(--color-muted)", fontSize: 15 }}>{t("x.countN", { n: total })}</span>
         </h1>
+        {res.importFrom && !editing && (
+          <button onClick={() => setImporting(true)} style={btn}>{res.importFrom.label}</button>
+        )}
         {can.create && !editing && (
           <button onClick={() => setEditing(blank())} style={btn}>{t("x.addItem", { label: res.itemLabel })}</button>
         )}
       </div>
+      {importing && res.importFrom && api && (
+        <ImportDialog spec={res.importFrom} api={api} onClose={() => setImporting(false)}
+          onDone={() => { setImporting(false); setPage(1); void reload(); }} />
+      )}
       {res.description && <p style={{ color: "var(--color-text-soft)", fontSize: 14 }}>{res.description}</p>}
       {message && <p style={{ color: "var(--color-success)" }}>{message}</p>}
 
@@ -568,6 +578,102 @@ function ImageListField({ value, onChange, max }: { value: unknown; onChange: (v
         <MediaPicker multiple onClose={() => setPicking(false)}
           onPickMany={(urls) => { write([...list, ...urls]); setPicking(false); }} />
       )}
+    </div>
+  );
+}
+
+/**
+ * 붙여넣어 여러 행을 등록·수정한다.
+ *
+ * 파일 업로드가 아니라 붙여넣기인 이유: 실무의 원본은 엑셀이고, 거기서 범위를 복사하면
+ * 탭으로 구분된 텍스트가 그대로 온다. 파일로 받으면 "다른 이름으로 저장 → 형식 고르기 →
+ * 업로드"가 앞에 붙는데, 그 세 단계에서 사람이 가장 많이 미끄러진다.
+ */
+function ImportDialog({ spec, api, onClose, onDone }: {
+  spec: { path: string; label: string; help?: string; sample?: string };
+  api: string;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const t = useAdminT();
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ created: number; updated: number; failed: Array<{ line: number; message: string }> } | null>(null);
+  const [error, setError] = useState("");
+
+  /*
+   * 닫을 때 **결과가 있었으면 목록을 새로 읽는다.** 실패가 섞여 있어도 성공한 줄은 이미
+   * 들어갔으므로, 그냥 닫으면 운영자는 옛 목록을 보며 "안 들어갔나?" 하게 된다.
+   */
+  const finish = result ? onDone : onClose;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") finish(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [finish]);
+
+  async function run() {
+    setBusy(true);
+    setError("");
+    const r = await fetch(`${api}${spec.path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    const d = await r.json().catch(() => ({}));
+    setBusy(false);
+    if (!r.ok) { setError(String(d.message ?? r.status)); return; }
+    setResult({ created: Number(d.created ?? 0), updated: Number(d.updated ?? 0), failed: Array.isArray(d.failed) ? d.failed : [] });
+  }
+
+  return (
+    <div role="dialog" aria-modal="true" aria-label={spec.label}
+      onClick={(e) => { if (e.target === e.currentTarget) finish(); }}
+      style={{ position: "fixed", inset: 0, zIndex: 70, background: "rgba(10,10,14,.55)",
+               display: "flex", alignItems: "center", justifyContent: "center", padding: "min(4vh, 32px) min(4vw, 32px)" }}>
+      <div style={{ background: "var(--color-bg-sunken, #fff)", borderRadius: 10, padding: 18,
+                    width: "min(760px, 100%)", maxHeight: "100%", overflow: "auto" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+          <strong style={{ fontSize: 15 }}>{spec.label}</strong>
+          <button type="button" onClick={finish} style={{ marginLeft: "auto", padding: "6px 12px",
+            border: "1px solid var(--color-line)", borderRadius: 6, background: "var(--color-bg)", cursor: "pointer" }}>
+            {t("common.close")}
+          </button>
+        </div>
+        {spec.help && <p style={{ fontSize: 13, color: "var(--color-text-soft)", margin: "0 0 10px", whiteSpace: "pre-wrap" }}>{spec.help}</p>}
+        <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={spec.sample}
+          style={{ width: "100%", height: 220, boxSizing: "border-box", padding: 10, borderRadius: 6,
+                   border: "1px solid var(--color-line-strong)", fontFamily: "ui-monospace, Menlo, monospace", fontSize: 12.5 }} />
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10 }}>
+          <button type="button" onClick={run} disabled={busy || !text.trim()}
+            style={{ padding: "8px 14px", borderRadius: 6, border: 0, fontWeight: 700,
+                     background: text.trim() ? "var(--color-primary, #d0402c)" : "var(--color-line)",
+                     color: text.trim() ? "#fff" : "var(--color-muted)", cursor: text.trim() ? "pointer" : "default" }}>
+            {busy ? t("x.importRunning") : t("x.importRun")}
+          </button>
+          {result && (
+            <span style={{ fontSize: 13.5 }}>
+              {t("x.importResult", { c: result.created, u: result.updated, f: result.failed.length })}
+            </span>
+          )}
+          {error && <span style={{ fontSize: 13.5, color: "var(--color-danger)" }}>{error}</span>}
+        </div>
+        {/* 실패한 줄은 번호와 이유를 함께 — 그것 없이는 이백 줄에서 무엇을 고칠지 모른다 */}
+        {result && result.failed.length > 0 && (
+          <ul style={{ margin: "10px 0 0", padding: "0 0 0 18px", fontSize: 13, color: "var(--color-danger)" }}>
+            {result.failed.slice(0, 20).map((f, i) => <li key={i}>{t("x.importLine", { n: f.line })}: {f.message}</li>)}
+            {result.failed.length > 20 && <li>{t("x.importMoreFailed", { n: result.failed.length - 20 })}</li>}
+          </ul>
+        )}
+        {result && (
+          <div style={{ marginTop: 12 }}>
+            <button type="button" onClick={onDone} style={{ padding: "8px 14px", borderRadius: 6,
+              border: "1px solid var(--color-line)", background: "var(--color-bg)", cursor: "pointer" }}>
+              {t("x.importDoneClose")}
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

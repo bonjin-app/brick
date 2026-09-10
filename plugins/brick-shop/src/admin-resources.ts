@@ -16,6 +16,15 @@ export const PRODUCT_RESOURCE: AdminResource = {
   basePath: "/admin/products",
   order: 10,
   description: "상품을 등록하고 가격·재고·진열 상태를 관리합니다. 금액은 원 단위입니다.",
+  // 엑셀에서 복사해 붙여넣으면 그대로 등록된다 — 폼으로 이백 번 입력할 수는 없다
+  importFrom: {
+    path: "/import",
+    label: "붙여넣어 등록",
+    help: "엑셀에서 머리글을 포함해 복사한 뒤 붙여넣으세요. 주소(slug)와 상품명은 필수이고, "
+        + "이미 있는 주소는 수정됩니다. 분류는 이름으로 적습니다. "
+        + "쓸 수 있는 머리글: 주소, 상품명, 판매가, 정가, 재고, 상태, 분류, 요약, 설명, 대표이미지, 진열순서, 무료배송",
+    sample: "주소\t상품명\t판매가\t재고\t상태\nmug-white\t머그컵 화이트\t12000\t30\t판매중\nmug-black\t머그컵 블랙\t12000\t0\t품절",
+  },
   // 상품이 수백 개면 목록을 넘기며 찾을 수 없다 — 분류는 라우트에서 받는다(테이블 행이므로)
   filters: [
     { name: "status", label: "판매 상태",

@@ -13,6 +13,7 @@ import { CASH_RECEIPT_RESOURCE, CATEGORY_RESOURCE, COLLECTION_RESOURCE, GRADE_RE
          PAYMENT_REQUEST_RESOURCE, SHIPPING_ZONE_RESOURCE, SUBSCRIPTION_RESOURCE,
          TAX_INVOICE_RESOURCE } from "./admin-resources.js";
 import { registerStorefrontBlocks } from "./blocks.js";
+import { importProducts } from "./import.js";
 import {
   createInquiry, createReview, deleteInquiry, deleteReview, findPurchase,
   listInquiries, listReviews, replyToInquiry, replyToReview, REVIEW_SORTS, setReviewVisible, updateReview,
@@ -537,6 +538,18 @@ export default definePlugin(async (ctx) => {
       page,
       pageSize: 30,
     };
+  });
+
+  /**
+   * 상품 붙여넣기 등록 — 엑셀에서 복사한 표를 그대로 받는다.
+   *
+   * 캐시를 한 번만 비운다. 이백 줄마다 비우면 그동안 사이트가 캐시 없이 돈다.
+   */
+  ctx.registerRoute("POST", "/admin/products/import", async (req) => {
+    requireAdmin(req);
+    const result = await importProducts(db, String((req.body as { text?: unknown })?.text ?? ""));
+    if (result.created || result.updated) await ctx.cache.invalidateTag("pages");
+    return result;
   });
 
   ctx.registerRoute("POST", "/admin/products", async (req) => {

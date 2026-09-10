@@ -320,6 +320,50 @@ for c in json.load(sys.stdin).get('cards', []):
     if c['title'] == '처리 대기': print(c.get('link') or '')")"
 contains "처리 대기 카드가 급한 목록으로 보낸다" "$QUEUE_LINK" "status="
 
+echo "── 상품 붙여넣기 등록 (엑셀에서 옮겨 오는 길)"
+imp() {  # imp <붙여넣을 텍스트>
+  /usr/bin/python3 -c "
+import json, subprocess, sys
+body = json.dumps({'text': sys.argv[1]})
+print(subprocess.run(['curl', '-s', '-b', sys.argv[3], '-X', 'POST', sys.argv[2] + '/admin/products/import',
+                      '-H', 'content-type: application/json', '-d', body],
+                     capture_output=True, text=True).stdout)
+" "$1" "$SHOP" "$CK"
+}
+# 엑셀에서 복사하면 탭으로 구분된다
+IMP1="$(imp "$(printf '주소\t상품명\t판매가\t재고\t상태\nimp-a\t가져온 상품 A\t11000\t5\t판매중\nimp-b\t가져온 상품 B\t22000\t0\t품절')")"
+contains "탭 구분 표를 등록한다" "$IMP1" '"created":2'
+check "실제로 들어갔다" "$(psql_q "SELECT count(*) FROM shop_products WHERE slug LIKE 'imp-%'")" "2"
+check "한글 상태 표기도 읽는다" "$(psql_q "SELECT status FROM shop_products WHERE slug = 'imp-b'")" "soldout"
+# 같은 표를 다시 붙여도 두 벌이 되지 않는다 (주소가 있으면 수정)
+IMP2="$(imp "$(printf '주소\t상품명\t판매가\t재고\nimp-a\t가져온 상품 A (수정)\t13000\t7')")"
+contains "이미 있는 주소는 수정" "$IMP2" '"updated":1'
+check "상품이 늘지 않았다" "$(psql_q "SELECT count(*) FROM shop_products WHERE slug LIKE 'imp-%'")" "2"
+check "값이 바뀌었다" "$(psql_q "SELECT price FROM shop_products WHERE slug = 'imp-a'")" "13000"
+# 쉼표 구분과 따옴표 (상품명에 쉼표가 들어간다)
+IMP3="$(imp "$(printf '주소,상품명,판매가\nimp-c,\"머그컵, 화이트\",9000')")"
+contains "쉼표 구분도 읽는다" "$IMP3" '"created":1'
+check "따옴표 안의 쉼표를 지킨다" "$(psql_q "SELECT name FROM shop_products WHERE slug = 'imp-c'")" "머그컵, 화이트"
+# 실패한 줄만 건너뛰고 나머지는 넣는다 — 오타 하나로 이백 줄을 막지 않는다
+IMP4="$(imp "$(printf '주소\t상품명\t판매가\nimp-d\t정상 상품\t5000\n\t이름만 있음\t5000\nimp-e\t가격이 글자\t오천원\nUPPER\t대문자 주소\t5000')")"
+contains "정상인 줄은 들어간다" "$IMP4" '"created":1'
+contains "실패한 줄을 알려준다" "$IMP4" '"line":3'
+contains "실패 이유도 알려준다" "$IMP4" "숫자가 아닙니다"
+contains "주소 규칙 위반도 잡는다" "$IMP4" "영문 소문자"
+check "정상인 줄만 저장됐다" "$(psql_q "SELECT count(*) FROM shop_products WHERE slug IN ('imp-d','imp-e')")" "1"
+# 없는 분류는 조용히 넘어가지 않는다 (오타를 삼키면 분류 없는 상품이 쌓인다)
+contains "없는 분류는 실패로" "$(imp "$(printf '주소\t상품명\t판매가\t분류\nimp-f\t분류 오타\t5000\t없는분류')")" "없는 분류입니다"
+# 머리글이 없으면 무엇이 무엇인지 알 수 없다
+contains "머리글이 없으면 거부" "$(imp "$(printf 'imp-g\t머리글 없음\t5000')")" "머리글"
+check "한 줄만 있으면 거부" "$(code -b "$CK" -X POST "$SHOP/admin/products/import" -H 'content-type: application/json' -d '{"text":"주소\t상품명"}')" "400"
+check "비관리자는 가져올 수 없다" "$(code -X POST "$SHOP/admin/products/import" -H 'content-type: application/json' -d '{"text":"x"}')" "403"
+# 화면이 붙여넣기 버튼을 그릴 수 있어야 한다
+IMPORT_SPEC="$(curl -s -b "$CK" "$API/api/admin/resources/brick-shop/products" | /usr/bin/python3 -c "
+import sys, json
+print(json.dumps(json.load(sys.stdin).get('importFrom') or {}, ensure_ascii=False))")"
+contains "상품 리소스가 가져오기를 선언" "$IMPORT_SPEC" '"/import"'
+contains "예시도 함께 준다" "$IMPORT_SPEC" "mug-white"
+
 echo "── 재고 소진 후"
 printf '{"items":[{"productId":"%s","quantity":1}],"orderer":{"ordererName":"늦은손님","ordererPhone":"010-0000-0000","postcode":"06236","address1":"서울"}}' "$PID" > "$TMP/late.json"
 check "품절 상품 주문 차단" \
