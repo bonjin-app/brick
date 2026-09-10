@@ -46,6 +46,14 @@ const pg = require('$ROOT/apps/api/node_modules/pg');
 # 방문 집계 훅은 응답을 기다리지 않으므로(void doAction) 잠깐 준다
 settle() { sleep 0.4; }
 
+# 방문 집계는 **사이트 시간대**로 날짜를 자른다(플러그인의 TODAY 상수와 같은 식).
+# 여기서 PostgreSQL 의 current_date(서버 시간대 = CI 에서 UTC)를 쓰면 UTC 23시대에만
+# 하루가 어긋나 전부 실패한다 — 실제로 CI 가 23:55 에 돌아 그렇게 됐다.
+SITE_TZ_SQL="'${BRICK_TIMEZONE:-Asia/Seoul}'"
+TODAY_SQL="(now() AT TIME ZONE ${SITE_TZ_SQL})::date"
+# 어긋남을 재현하려면 DB 세션 시간대와 다른 사이트 시간대로 돌린다:
+#   BRICK_TIMEZONE=Pacific/Niue bash scripts/smoke-site.sh   (UTC-11 — 오전에는 하루 이르다)
+
 echo "▶ brick-site 사이트 운영 스모크 테스트"
 
 if [[ "${BRICK_SMOKE_KEEP_DB:-}" != "1" ]]; then
@@ -100,7 +108,7 @@ visit() { curl -s -H "user-agent: $1" "$API/api/render/page?path=${2:-home}" >/d
 
 visit "$UA" home
 settle
-check "첫 방문 1명" "$(psql_one "SELECT total FROM site_visit_daily WHERE visit_day = current_date")" "1"
+check "첫 방문 1명" "$(psql_one "SELECT total FROM site_visit_daily WHERE visit_day = ${TODAY_SQL}")" "1"
 
 # 같은 UA·같은 IP → 같은 사람. 여러 번 봐도 1명이다
 visit "$UA" home
@@ -108,19 +116,19 @@ visit "$UA" shop
 visit "$UA" home
 settle
 check "같은 방문자 재방문은 세지 않음" \
-  "$(psql_one "SELECT total FROM site_visit_daily WHERE visit_day = current_date")" "1"
+  "$(psql_one "SELECT total FROM site_visit_daily WHERE visit_day = ${TODAY_SQL}")" "1"
 check "원본도 1행만" "$(psql_one "SELECT count(*) FROM site_visits")" "1"
 
 # 다른 UA → 다른 사람 (사무실처럼 IP가 같아도 구분된다)
 visit "Mozilla/5.0 (Windows NT 10.0) OtherBrowser/2.0" home
 settle
 check "다른 브라우저는 다른 방문자" \
-  "$(psql_one "SELECT total FROM site_visit_daily WHERE visit_day = current_date")" "2"
+  "$(psql_one "SELECT total FROM site_visit_daily WHERE visit_day = ${TODAY_SQL}")" "2"
 
 visit "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0) Mobile/15E148" home
 settle
 check "모바일 방문 구분 집계" \
-  "$(psql_one "SELECT mobile FROM site_visit_daily WHERE visit_day = current_date")" "1"
+  "$(psql_one "SELECT mobile FROM site_visit_daily WHERE visit_day = ${TODAY_SQL}")" "1"
 
 echo "── 집계에서 빼는 것"
 visit "Googlebot/2.1 (+http://www.google.com/bot.html)" home
@@ -128,20 +136,20 @@ visit "curl/8.4.0" home
 visit "SomeUptimeMonitor/1.0" home
 settle
 check "검색봇·모니터링은 세지 않음" \
-  "$(psql_one "SELECT total FROM site_visit_daily WHERE visit_day = current_date")" "3"
+  "$(psql_one "SELECT total FROM site_visit_daily WHERE visit_day = ${TODAY_SQL}")" "3"
 
 # 관리자 방문 (기본 설정에서는 세지 않는다)
 curl -s -b "$CK" -H "user-agent: AdminBrowser/1.0 Mozilla" \
   "$API/api/render/page?path=home" >/dev/null
 settle
 check "관리자 방문은 기본 제외" \
-  "$(psql_one "SELECT total FROM site_visit_daily WHERE visit_day = current_date")" "3"
+  "$(psql_one "SELECT total FROM site_visit_daily WHERE visit_day = ${TODAY_SQL}")" "3"
 
 # 관리 화면 요청은 방문이 아니다
 curl -s -H "user-agent: $UA-2 Mozilla" "$API/api/render/page?path=admin/dashboard" >/dev/null
 settle
 check "/admin 경로는 방문 아님" \
-  "$(psql_one "SELECT total FROM site_visit_daily WHERE visit_day = current_date")" "3"
+  "$(psql_one "SELECT total FROM site_visit_daily WHERE visit_day = ${TODAY_SQL}")" "3"
 
 echo "── 개인정보 (IP를 원문으로 두지 않는다)"
 absent "IP 원문 미저장" "$(psql_one "SELECT string_agg(ip_prefix, ',') FROM site_visits")" "127.0.0.1"
@@ -299,21 +307,21 @@ check "비관리자 설정 변경 차단" \
 contains "관리자 방문 집계 켜기" \
   "$(curl -s -b "$CK" -X PUT "$ST/admin/settings" -H 'content-type: application/json' \
       -d '{"countVisits":true,"countAdmins":true}')" '"countAdmins":true'
-BEFORE_ADMIN="$(psql_one "SELECT total FROM site_visit_daily WHERE visit_day = current_date")"
+BEFORE_ADMIN="$(psql_one "SELECT total FROM site_visit_daily WHERE visit_day = ${TODAY_SQL}")"
 curl -s -b "$CK" -H "user-agent: AdminBrowser/9.9 Mozilla" \
   "$API/api/render/page?path=home" >/dev/null
 settle
-AFTER_ADMIN="$(psql_one "SELECT total FROM site_visit_daily WHERE visit_day = current_date")"
+AFTER_ADMIN="$(psql_one "SELECT total FROM site_visit_daily WHERE visit_day = ${TODAY_SQL}")"
 check "설정을 켜면 관리자도 집계" "$((AFTER_ADMIN - BEFORE_ADMIN))" "1"
 
 contains "집계 끄기" \
   "$(curl -s -b "$CK" -X PUT "$ST/admin/settings" -H 'content-type: application/json' \
       -d '{"countVisits":false}')" '"countVisits":false'
-BEFORE_OFF="$(psql_one "SELECT total FROM site_visit_daily WHERE visit_day = current_date")"
+BEFORE_OFF="$(psql_one "SELECT total FROM site_visit_daily WHERE visit_day = ${TODAY_SQL}")"
 visit "TotallyNewBrowser/1.0 Mozilla" home
 settle
 check "끄면 더 세지 않음" \
-  "$(psql_one "SELECT total FROM site_visit_daily WHERE visit_day = current_date")" "$BEFORE_OFF"
+  "$(psql_one "SELECT total FROM site_visit_daily WHERE visit_day = ${TODAY_SQL}")" "$BEFORE_OFF"
 
 echo
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
