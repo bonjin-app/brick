@@ -102,6 +102,9 @@ jobs:
       - name: 플러그인이 내는 링크에 화면이 있다 (헤더의 쪽지함이 404 였다)
         run: node scripts/check-plugin-screens.mjs
 
+      - name: 플러그인을 끄면 등록한 것이 전부 걷힌다
+        run: node scripts/check-plugin-cleanup.mjs
+
       - name: 마이그레이션
         run: node apps/api/dist/migrate.js
         env:

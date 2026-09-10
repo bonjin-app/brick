@@ -297,6 +297,18 @@ export class PluginLoaderService implements OnModuleInit {
     for (let i = this.headerActions.length - 1; i >= 0; i--) {
       if (this.headerActions[i].plugin === name) this.headerActions.splice(i, 1);
     }
+    /*
+     * 선언 화면도 걷어낸다.
+     *
+     * 남겨 두면 꺼진 플러그인의 경로가 계속 매칭되는데 그릴 블록은 이미 없다 —
+     * 손님은 404 대신 깨진 화면을 본다. 재적재(reload)는 deactivate 뒤 activate 를
+     * 부르므로, 걷어내지 않으면 항목이 두 벌씩 쌓인다.
+     */
+    for (let i = this.screens.length - 1; i >= 0; i--) {
+      if (this.screens[i].plugin === name) this.screens.splice(i, 1);
+    }
+    // 번역 카탈로그도 놓아준다 — 다시 켜면 활성화 때 새로 읽는다
+    this.pluginCatalogs.delete(name);
     // 꺼진 플러그인 때문에 정책이 계속 넓게 열려 있으면 안 된다
     this.csp.declare(name, undefined);
     this.logger.log(`plugin "${name}" deactivated`);

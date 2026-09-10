@@ -27,7 +27,7 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-3233%20passing-2ea043.svg" alt="스모크 테스트 3233개" />
+  <img src="https://img.shields.io/badge/E2E-3237%20passing-2ea043.svg" alt="스모크 테스트 3237개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
   <a href="https://github.com/bonjin-app/brick/pkgs/container/brick">
     <img src="https://img.shields.io/badge/docker-amd64%20%C2%B7%20arm64-2496ed.svg" alt="Docker image (amd64 · arm64)" />
@@ -367,7 +367,7 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 3,233개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 3,237개 항목):
 
 | 수트 | 항목 | 무엇을 못박는가 |
 |---|---:|---|
@@ -392,7 +392,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `smoke-grades.sh` | 43 | 순매출 산정(반품 차감) · 견적=주문 금액 · 쿠폰 합산 상한 · 안분 정합 |
 | `smoke-coupons.sh` | 60 | 1인 한도(취소 제외) · 발급형 1장 1회 · 취소 반환/환불 미반환 · 생일 자동 지급(월·일만 수집) · **쿠폰함 화면(코드는 서버 렌더에 없다)** |
 | `smoke-board.sh` | 172 | 권한 4단계 · 답변형 · 비밀글 · 첨부 원자성 · XSS · **목록 스킨·썸네일·이전/다음·일괄 작업·그룹 권한·링크** · **첨부 이미지 축소** · **갤러리 썸네일·data-thumb·사진만 글** · **관리 목록 필터** · **내 스크랩 화면** |
-| `smoke-point.sh` | 60 | FIFO 소모 · 멱등 적립 · 만료 · 동시성 · **회원 내역 화면 도달** · **부분 저장이 나머지를 지우지 않는다** |
+| `smoke-point.sh` | 64 | FIFO 소모 · 멱등 적립 · 만료 · 동시성 · **회원 내역 화면 도달** · **부분 저장이 나머지를 지우지 않는다** · **끄면 선언 화면·회원 메뉴·블록이 함께 사라진다** |
 | `smoke-memo.sh` | 79 | 프라이버시 · 차단 · 포인트 차감 트랜잭션 · 슬래시 없는 루트 경로 · **페이지 없이 열리는 선언 화면(같은 slug 페이지가 이긴다)** |
 | `smoke-shop.sh` | 256 | 재고 동시성 · 금액 위조 · 구매 검증 후기 · 비밀 문의 · **사진 후기** · **후기 정렬·사진 필터** · **모바일 구매 바** · **목록 썸네일·관리 왕복** · **처리 대기 카드** · **주문 일괄 처리·송장 일괄 입력** · **목록 필터** · **붙여넣기 등록** · **답변 대기 필터** · **목록 인덱스·응답 크기** · **오류 칸 안내** · **주문 안내 메일(로그 본문까지)** · **쇼핑몰 설정 화면** |
 | `smoke-site.sh` | 73 | 방문자 집계(IP 해시) · 팝업 노출 규칙 |
@@ -416,6 +416,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `check-settings-screens.mjs` | 설정 저장 API 만 있고 그것을 부르는 화면이 없는 것 (**배송비와 입금 계좌를 curl 로만 바꿀 수 있었다**) |
 | `check-plugin-screens.mjs` | 플러그인이 내는 링크가 가리키는 곳에 화면이 없는 것 (**헤더의 "쪽지함"이 404 였다**) |
 | `check-admin-guards.mjs` | 관리 라우트가 역할을 정하지 않는 것 (디스패처가 manager 까지 통과시키므로 admin 전용은 자기 줄에서 막아야 한다) |
+| `check-plugin-cleanup.mjs` | 플러그인을 끄고도 등록한 것이 남는 것 (**꺼진 플러그인의 경로가 매칭되는데 그릴 블록이 없어 깨진 화면이 나온다**) |
 
 그 밖에 CI 가 정적으로 보는 것: 테마 CSS 컴파일 산출물 일치, 모달의 `useModalFocus`,
 메일이 보내는 링크에 화면이 있는지, 마이그레이션 멱등성(2회 실행).
@@ -480,7 +481,7 @@ themes/
   boutique/       부티크 — 여백 위주
   corporate/      회사 홈페이지 — 히어로·특징 카드
 docs-site/        GitHub Pages 랜딩페이지
-scripts/          스모크 테스트 34종 + 정적 검사 5종 + OIDC 스텁 + 배포본 생성(build-release.sh)
+scripts/          스모크 테스트 34종 + 정적 검사 6종 + OIDC 스텁 + 배포본 생성(build-release.sh)
 docker/           Dockerfile, entrypoint
 ```
 

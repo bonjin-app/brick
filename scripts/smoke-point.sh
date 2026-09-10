@@ -31,6 +31,7 @@ ok()  { PASS=$((PASS+1)); echo "  ✅ $1"; }
 bad() { FAIL=$((FAIL+1)); echo "  ❌ $1"; }
 check()    { [[ "$2" == "$3" ]] && ok "$1" || bad "$1 (기대 $3, 실제 $2)"; }
 contains() { [[ "$2" == *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 없음: ${2:0:140})"; }
+absent()   { [[ "$2" != *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 가 있어서는 안 됨)"; }
 code()     { curl -s -o /dev/null -w "%{http_code}" "$@"; }
 jpost()    { curl -s -X POST "$1" -H 'content-type: application/json' --data-binary "@$2"; }
 balance()  { curl -s -b "$MEMBER" "$PT/my" | python3 -c 'import sys,json;print(json.load(sys.stdin)["balance"])'; }
@@ -272,9 +273,18 @@ contains "설정 리소스 등록" "$NAV" '"name":"settings"'
 contains "내 포인트 블록" "$(curl -s "$API/api/blocks")" "brick-point/my-points"
 
 echo "── 플러그인 비활성화 시 서비스 해제"
+# 끄기 전에 선언 화면이 열리는 것을 확인해 둔다 (끈 뒤와 대조하기 위해)
+check "끄기 전 내역 화면은 200" \
+  "$(curl -s "$API/api/render/page?path=points" | /usr/bin/python3 -c 'import sys,json;print(json.load(sys.stdin).get("status"))')" "200"
 curl -s -b "$ADMIN" -X POST "$API/api/plugins/brick-point/deactivate" >/dev/null
 contains "포인트 비활성화 후 쇼핑몰은 계속 동작" "$(curl -s "$SH/payment-methods")" '"pointsAvailable":false'
 check "포인트 API는 사라짐" "$(code "$PT/my")" "404"
+# 끈 플러그인의 흔적이 남으면 안 된다 — 경로는 매칭되는데 그릴 블록이 없으면
+# 손님은 404 대신 깨진 화면을 본다 (registerScreen 을 더하면서 실제로 잊었다)
+check "선언 화면도 사라짐 (404)" \
+  "$(curl -s "$API/api/render/page?path=points" | /usr/bin/python3 -c 'import sys,json;print(json.load(sys.stdin).get("status"))')" "404"
+absent "회원 메뉴에서도 사라짐" "$(curl -s "$API/api/member/menu")" '"path":"/points"'
+absent "블록도 사라짐" "$(curl -s "$API/api/blocks")" "brick-point/my-point-history"
 
 echo
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
