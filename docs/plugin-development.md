@@ -116,6 +116,28 @@ ctx.registerHeaderAction({ label: "쪽지함", path: "/memo", requiresLogin: tru
 - **숫자 배지처럼 사용자별 값은 여기 담지 마세요** — 비로그인 렌더는 캐시되므로 남의
   값이 새어 나갑니다. 배지는 블록이 클라이언트에서 채웁니다.
 
+## 일괄 작업의 입력
+
+`bulkActions[].input` 은 두 가지입니다. `optionsFrom` 을 주면 **고르는** 값이고(라우트가
+`[{ value, label }]` 을 돌려줍니다), `type: "textarea"` 를 주면 **붙여넣는** 값입니다.
+
+```ts
+{
+  code: "set-tracking",
+  label: "송장번호 입력 + 발송",
+  input: { name: "tracking", label: "주문번호와 송장번호 (한 줄에 하나)",
+           type: "textarea", placeholder: "…", help: "…" },
+}
+```
+
+선택지로 표현할 수 없는 입력이 있습니다: 택배사에서 받은 송장번호처럼 값이 행마다 다르고
+밖에서 옵니다. 그것을 선택지로 만들려면 행마다 칸을 그려야 하고, 그러면 스무 건에 스무 번
+타이핑입니다. 값은 `params[name]` 으로 그대로 옵니다 — 파싱은 플러그인이 합니다.
+
+라우트는 `{ ok, affected, skipped }` 를 돌려주세요. `skipped` 가 있으면 화면이 "3건을
+처리했습니다. 2건은 지금 상태에서 할 수 없어 건너뛰었습니다."로 알려줍니다 — 건너뛴 것을
+말하지 않으면 운영자는 나머지를 어디서 찾을지 모릅니다.
+
 ## 대시보드 카드 (registerDashboardCard)
 
 관리자 첫 화면에 "오늘의 숫자"를 올립니다. 등록하지 않으면 운영자는

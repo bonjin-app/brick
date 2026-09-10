@@ -230,6 +230,63 @@ check "선택이 없으면 거부" "$(code -b "$CK" -X POST "$SHOP/admin/orders/
 check "모르는 작업은 거부" "$(code -b "$CK" -X POST "$SHOP/admin/orders/bulk" -H 'content-type: application/json' -d "$(printf '{"action":"drop-all","ids":%s}' "$BULK_IDS")")" "400"
 check "비관리자는 일괄 처리 불가" "$(code -X POST "$SHOP/admin/orders/bulk" -H 'content-type: application/json' -d '{"action":"mark-paid","ids":["00000000-0000-0000-0000-000000000000"]}')" "403"
 
+echo "── 송장번호 일괄 입력 (택배사 목록을 그대로 붙여넣는다)"
+# 새 주문 두 건을 만들어 입금 확인까지 해 둔다 (발송 직전 상태)
+TRK_IDS="$(/usr/bin/python3 -c "
+import json, subprocess, sys
+ids = []
+for i in range(2):
+    body = json.dumps({
+        'items': [{'productId': sys.argv[1], 'quantity': 1}],
+        'orderer': {'ordererName': f'송장손님{i}', 'ordererPhone': '010-7777-6666',
+                    'postcode': '06236', 'address1': '서울'},
+    })
+    out = subprocess.run(['curl', '-s', '-X', 'POST', sys.argv[2] + '/orders',
+                          '-H', 'content-type: application/json', '-d', body],
+                         capture_output=True, text=True).stdout
+    ids.append(json.loads(out)['id'])
+print(json.dumps(ids))
+" "$BULK_PID" "$SHOP")"
+curl -s -b "$CK" -X POST "$SHOP/admin/orders/bulk" -H 'content-type: application/json' \
+  -d "$(printf '{"action":"mark-paid","ids":%s}' "$TRK_IDS")" -o /dev/null
+# 주문번호를 읽어 택배사 파일 흉내를 만든다 — 쉼표·탭·공백을 섞어 넣는다
+TRK_TEXT="$(/usr/bin/python3 -c "
+import json, subprocess, sys
+ids = json.loads(sys.argv[1])
+out = subprocess.run(['curl', '-s', '-b', sys.argv[3], sys.argv[2] + '/admin/orders'],
+                     capture_output=True, text=True).stdout
+byid = {o['id']: o['order_no'] for o in json.loads(out)['items']}
+seps = [', ', '\t']
+lines = [byid[i] + seps[n % 2] + f'99900{n}' for n, i in enumerate(ids)]
+lines.append('20000101-999999, 없는주문송장')   # 선택 밖의 주문번호가 섞여 있어도 무해해야 한다
+print('\n'.join(lines))
+" "$TRK_IDS" "$SHOP" "$CK")"
+printf '{"action":"set-tracking","ids":%s,"params":{"tracking":%s}}' \
+  "$TRK_IDS" "$(/usr/bin/python3 -c "import json,sys;print(json.dumps(sys.argv[1]))" "$TRK_TEXT")" > "$TMP/trk.json"
+TRK_RES="$(curl -s -b "$CK" -X POST "$SHOP/admin/orders/bulk" -H 'content-type: application/json' --data-binary "@$TMP/trk.json")"
+contains "두 건에 송장이 들어갔다" "$TRK_RES" '"affected":2'
+TRK_FIRST="$(echo "$TRK_IDS" | /usr/bin/python3 -c "import sys,json;print(json.load(sys.stdin)[0])")"
+check "송장번호가 저장됐다" "$(psql_q "SELECT tracking_no FROM shop_orders WHERE id = '$TRK_FIRST'::uuid")" "999000"
+check "발송까지 함께 넘어갔다" "$(psql_q "SELECT status FROM shop_orders WHERE id = '$TRK_FIRST'::uuid")" "shipped"
+# 탭으로 구분한 줄도 받는다 (택배사마다 파일 모양이 다르다)
+TRK_SECOND="$(echo "$TRK_IDS" | /usr/bin/python3 -c "import sys,json;print(json.load(sys.stdin)[1])")"
+check "탭 구분도 읽는다" "$(psql_q "SELECT tracking_no FROM shop_orders WHERE id = '$TRK_SECOND'::uuid")" "999001"
+# 선택 밖의 주문번호가 섞여 있어도 다른 주문을 건드리지 않는다
+check "선택 밖 주문번호는 무시" "$(psql_q "SELECT count(*) FROM shop_orders WHERE tracking_no = '없는주문송장'")" "0"
+# 목록에 없는 선택은 건너뛴다 (송장을 못 받은 주문)
+SKIP_TRK="$(curl -s -b "$CK" -X POST "$SHOP/admin/orders/bulk" -H 'content-type: application/json' \
+  -d "$(printf '{"action":"set-tracking","ids":%s,"params":{"tracking":"20000101-000001, 111"}}' "$TRK_IDS")")"
+contains "송장을 못 받은 주문은 건너뛴다" "$SKIP_TRK" '"skipped":2'
+check "빈 입력은 거부" "$(code -b "$CK" -X POST "$SHOP/admin/orders/bulk" -H 'content-type: application/json' -d "$(printf '{"action":"set-tracking","ids":%s,"params":{"tracking":"   "}}' "$TRK_IDS")")" "400"
+# 화면이 붙여넣는 칸을 그릴 수 있어야 한다 (선택지가 아니라 자유 입력).
+# 문자열로 찾지 않는다 — json.dumps 의 공백 유무에 검사가 걸린다(실제로 걸렸다)
+TRK_INPUT_TYPE="$(echo "$ORDER_BULK" | /usr/bin/python3 -c "
+import sys, json
+for a in json.load(sys.stdin):
+    if a.get('code') == 'set-tracking': print((a.get('input') or {}).get('type', ''))
+")"
+check "송장 작업은 붙여넣는 입력" "$TRK_INPUT_TYPE" "textarea"
+
 echo "── 재고 소진 후"
 printf '{"items":[{"productId":"%s","quantity":1}],"orderer":{"ordererName":"늦은손님","ordererPhone":"010-0000-0000","postcode":"06236","address1":"서울"}}' "$PID" > "$TMP/late.json"
 check "품절 상품 주문 차단" \

@@ -520,10 +520,23 @@ export interface AdminBulkAction {
   /** 파괴적 작업 — 화면이 붉게 표시한다 */
   destructive?: boolean;
   /**
-   * 작업에 필요한 값 하나 (예: 이동 대상 게시판). 선택지는 플러그인 라우트에서
-   * `[{ value, label }]` 로 받는다. `params[name]` 으로 전달된다.
+   * 작업에 필요한 값 하나. `params[name]` 으로 전달된다.
+   *
+   * `optionsFrom` 을 주면 **고르는** 값이다 — 플러그인 라우트가 `[{ value, label }]` 을
+   * 돌려준다(예: 이동 대상 게시판).
+   *
+   * `type: "textarea"` 를 주면 **붙여넣는** 값이다. 선택지로 표현할 수 없는 입력이 있다:
+   * 택배사에서 받은 "주문번호,송장번호" 목록처럼 값이 주문마다 다르고 밖에서 온다.
+   * 그것을 선택지로 만들려면 주문마다 칸을 그려야 하고, 그러면 스무 건에 스무 번 타이핑이다.
    */
-  input?: { name: string; label: string; optionsFrom: string };
+  input?: {
+    name: string;
+    label: string;
+    optionsFrom?: string;
+    type?: "select" | "textarea";
+    placeholder?: string;
+    help?: string;
+  };
 }
 
 /**

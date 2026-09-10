@@ -168,6 +168,18 @@ export const ORDER_RESOURCE: AdminResource = {
   bulkActions: [
     { code: "mark-paid", label: "입금 확인 (결제완료로)" },
     { code: "mark-shipped", label: "발송 처리 (배송중으로)" },
+    {
+      code: "set-tracking",
+      label: "송장번호 입력 + 발송",
+      input: {
+        name: "tracking",
+        label: "주문번호와 송장번호 (한 줄에 하나)",
+        type: "textarea",
+        placeholder: "20260909-000001, 1234567890\n20260909-000002 9876543210",
+        help: "택배사에서 받은 목록을 그대로 붙여넣으세요. 쉼표·탭·공백으로 나눕니다. "
+            + "선택한 주문 중 목록에 있는 것만 송장번호를 넣고 배송중으로 넘깁니다.",
+      },
+    },
   ],
 };
 

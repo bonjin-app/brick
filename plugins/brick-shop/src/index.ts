@@ -693,11 +693,83 @@ export default definePlugin(async (ctx) => {
    */
   ctx.registerRoute("POST", "/admin/orders/bulk", async (req) => {
     requireAdmin(req);
-    const body = req.body as { action?: string; ids?: string[] };
+    const body = req.body as { action?: string; ids?: string[]; params?: Record<string, unknown> };
     const ids = Array.isArray(body.ids)
       ? body.ids.map(String).filter((x) => /^[0-9a-f-]{36}$/i.test(x)).slice(0, 500)
       : [];
     if (!ids.length) throw new ShopError(400, "선택된 주문이 없습니다.");
+
+    /*
+     * 송장번호 일괄 입력 — 택배사에서 받은 "주문번호,송장번호" 목록을 그대로 붙여넣는다.
+     *
+     * 발송까지 한 작업으로 묶는다: 송장을 받았다는 것은 보냈다는 뜻이고, 두 작업으로 나누면
+     * 운영자가 붙여넣고 또 발송을 눌러야 한다. 송장 없이 보내는 가게를 위해 "발송 처리"는
+     * 그대로 남겨 둔다.
+     *
+     * **선택한 주문만** 건드린다. 붙여넣은 목록에 다른 주문번호가 섞여 있어도(택배사 파일을
+     * 통째로 붙이면 그렇다) 선택 밖의 주문은 손대지 않는다 — 목록에서 고른 것이 운영자의
+     * 의도이고, 파일은 참고 자료다.
+     */
+    if (String(body.action ?? "") === "set-tracking") {
+      const raw = String(body.params?.tracking ?? "");
+      // 쉼표·탭·공백 무엇으로 나눠도 받는다 — 택배사마다 파일 모양이 다르다
+      const pairs = new Map<string, string>();
+      for (const line of raw.split(/\r?\n/)) {
+        const parts = line.split(/[,\t]|\s{1,}/).map((x) => x.trim()).filter(Boolean);
+        if (parts.length < 2) continue;
+        pairs.set(parts[0], parts[1]);
+      }
+      if (!pairs.size) throw new ShopError(400, "주문번호와 송장번호를 한 줄에 하나씩 넣어주세요.");
+
+      const { rows } = await db.execute(sql`
+        SELECT id, order_no, status FROM shop_orders WHERE id = ANY(${pgArray(ids)}::uuid[])
+      `);
+      let affected = 0;
+      let skipped = 0;
+      for (const row of rows) {
+        const tracking = pairs.get(String(row.order_no));
+        if (!tracking) {
+          skipped++;
+          continue; // 붙여넣은 목록에 없는 주문 — 건드리지 않는다
+        }
+        const from = String(row.status) as OrderStatus;
+        // 송장번호는 상태와 무관하게 남긴다(배송중인 주문의 송장을 고칠 수도 있다)
+        await db.execute(sql`
+          UPDATE shop_orders SET tracking_no = ${tracking}, updated_at = now()
+          WHERE id = ${String(row.id)}::uuid
+        `);
+        if (from !== "shipped") {
+          const route: OrderStatus[] = from === "paid" ? ["preparing", "shipped"] : ["shipped"];
+          let probe: OrderStatus = from;
+          let reachable = true;
+          for (const step of route) {
+            if (probe === step) continue;
+            if (!STATUS_TRANSITIONS[probe]?.includes(step)) {
+              reachable = false;
+              break;
+            }
+            probe = step;
+          }
+          if (!reachable) {
+            // 송장은 넣었지만 발송으로 넘길 수 없는 주문(취소·환불 등) — 처리로 세지 않는다
+            skipped++;
+            continue;
+          }
+          let current: OrderStatus = from;
+          for (const step of route) {
+            if (current === step) continue;
+            await changeOrderStatus(db, String(row.id), step, {
+              note: `일괄 ${STATUS_LABEL[step]} (송장 ${tracking})`,
+              actorId: req.user?.id ?? null,
+              pointsPort: pointsPort(),
+            });
+            current = step;
+          }
+        }
+        affected++;
+      }
+      return { ok: true, affected, skipped };
+    }
 
     /*
      * 작업마다 **거쳐야 하는 상태를 못박는다.**

@@ -24,7 +24,7 @@ interface AdminBulkAction {
   label: string;
   confirm?: string;
   destructive?: boolean;
-  input?: { name: string; label: string; optionsFrom: string };
+  input?: { name: string; label: string; optionsFrom?: string; type?: "select" | "textarea"; placeholder?: string; help?: string };
 }
 interface AdminResource {
   plugin: string;
@@ -142,7 +142,8 @@ export default function PluginResourcePage() {
   useEffect(() => {
     setBulkParam("");
     setBulkOptions([]);
-    if (!res || !bulkAction?.input) return;
+    // 붙여넣는 입력(textarea)에는 받아올 선택지가 없다
+    if (!res || !bulkAction?.input?.optionsFrom) return;
     fetch(`/api/plugins/${res.plugin}${bulkAction.input.optionsFrom}`)
       .then((r) => (r.ok ? r.json() : []))
       .then((d) => setBulkOptions(Array.isArray(d) ? d : []))
@@ -162,7 +163,11 @@ export default function PluginResourcePage() {
     });
     const d = await r.json().catch(() => ({}));
     if (r.ok) {
-      setMessage(t("x.bulkDone", { n: Number(d.affected ?? selected.size) }));
+      // 건너뛴 것이 있으면 함께 말한다 — "3건 처리"만 보면 나머지 열일곱을 어디서 찾나
+      const skipped = Number(d.skipped ?? 0);
+      setMessage(skipped > 0
+        ? t("x.bulkDoneSkipped", { n: Number(d.affected ?? selected.size), s: skipped })
+        : t("x.bulkDone", { n: Number(d.affected ?? selected.size) }));
       setSelected(new Set());
       setBulkCode("");
       void reload();
@@ -238,13 +243,25 @@ export default function PluginResourcePage() {
                 <option value="">{t("x.bulkPick")}</option>
                 {res.bulkActions!.map((a) => <option key={a.code} value={a.code}>{a.label}</option>)}
               </select>
-              {bulkAction?.input && (
+              {bulkAction?.input && (bulkAction.input.type === "textarea" ? (
+                /* 붙여넣는 입력은 한 줄 칸에 들어가지 않는다 — 막대 아래로 온전히 내린다 */
+                <div style={{ flexBasis: "100%", order: 9 }}>
+                  <label style={{ display: "block", fontSize: 13, marginBottom: 4 }}>{bulkAction.input.label}</label>
+                  <textarea value={bulkParam} onChange={(e) => setBulkParam(e.target.value)}
+                    placeholder={bulkAction.input.placeholder}
+                    style={{ width: "100%", height: 110, boxSizing: "border-box", padding: 9, borderRadius: 6,
+                             border: "1px solid var(--color-line-strong)", fontFamily: "ui-monospace, Menlo, monospace", fontSize: 13 }} />
+                  {bulkAction.input.help && (
+                    <div style={{ fontSize: 12.5, color: "var(--color-muted)", marginTop: 4 }}>{bulkAction.input.help}</div>
+                  )}
+                </div>
+              ) : (
                 <select aria-label={bulkAction.input.label} value={bulkParam} onChange={(e) => setBulkParam(e.target.value)}
                   style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid var(--color-line-strong)" }}>
                   <option value="">{bulkAction.input.label}</option>
                   {bulkOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
-              )}
+              ))}
               <button onClick={runBulk} disabled={!bulkAction || selected.size === 0}
                 style={{ ...btnSm, ...(bulkAction?.destructive ? { color: "var(--color-danger)", borderColor: "var(--color-danger)" } : {}) }}>
                 {t("x.bulkRun")}
