@@ -27,7 +27,7 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-3179%20passing-2ea043.svg" alt="스모크 테스트 3179개" />
+  <img src="https://img.shields.io/badge/E2E-3233%20passing-2ea043.svg" alt="스모크 테스트 3233개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
   <a href="https://github.com/bonjin-app/brick/pkgs/container/brick">
     <img src="https://img.shields.io/badge/docker-amd64%20%C2%B7%20arm64-2496ed.svg" alt="Docker image (amd64 · arm64)" />
@@ -367,13 +367,13 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 3,179개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 3,233개 항목):
 
 | 수트 | 항목 | 무엇을 못박는가 |
 |---|---:|---|
 | `smoke-test.sh` | 73 | 설치 · 인증 · 페이지 · 미디어 · 플러그인 로드 · **공유 이미지·immutable 캐시·압축** · **이미지 최적화·EXIF 제거** · **썸네일 백필** · **og 1200×630 자동 변형** · **업로드 immutable·ETag·304** · **DB 순단 회복** |
 | `smoke-member.sh` | 132 | 약관 강제 · 동의 이력 · 개인정보 파기 · 주문 보존 · 프로필 이미지·공개 카드·닉네임 변경 주기 · **관리자 메모·이메일 변경** · **가입 오류 칸 안내** · **인증 링크 화면** |
-| `smoke-helpdesk.sh` | 109 | 문의 열거 방지 · 비회원 조회 · 사이트맵 유출 |
+| `smoke-helpdesk.sh` | 113 | 문의 열거 방지 · 비회원 조회 · 사이트맵 유출 · **설정 화면(비회원 문의 스위치 · GET/PUT 모양 일치)** |
 | `smoke-migrate.sh` | 155 | 덤프 파싱 · 레벨 매핑 · **비밀번호 보존** · 영카트 상품·주문 · 멱등성 |
 | `smoke-returns.sh` | 105 | 할인 안분 · 이중 재고 복원 방어 · 청약철회 기간 · 비회원 청약철회 |
 | `smoke-storefront.sh` | 174 | 사업자번호 체크섬 · 위시리스트 격리 · 지역비 실수령 · **샘플 상품** · **NEW·BEST 뱃지** · **정렬** · **쪽나눔** · **가격대·품절 필터** |
@@ -382,30 +382,43 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `smoke-reports.sh` | 137 | 부분 환불 차감 · KST 날짜 경계 · 상품별·주문별 합 일치 · 추천에서 반품·미공개 제외 |
 | `smoke-tax.sh` | 110 | 카드 이중 발급 거부 · 금액 분해 합 일치 · 면세 스냅샷 · 반품 시 증빙 취소 |
 | `smoke-account-security.sh` | 116 | RFC 6238 벡터 · 코드 재사용 차단 · 위험 작업 재인증(세션 단위) · IP 제한 자기잠금 방지 |
-| `smoke-payments.sh` | 130 | 스텁 PG로 실제 나가는 금액 검증 · 멱등키 · 개인결제가 매출에 포함되는가 |
+| `smoke-payments.sh` | 132 | 스텁 PG로 실제 나가는 금액 검증 · 멱등키 · 개인결제가 매출에 포함되는가 |
 | `smoke-search.sh` | 126 | 비밀글·비공개 게시판 미노출 · ILIKE 이스케이프 · total 정확성 · 0건 기록 · **블록 CSS 미색인** · **결과 사진** |
 | `smoke-restock.sh` | 87 | 품절만 신청 · 옵션 단위 · 한 번만 발송 · 광고 아님 · 경로 무관 감지 |
-| `smoke-starter.sh` | 67 | 유형별 기본 구성 생성 · 홈 렌더 · **모든 메뉴 링크가 404 없이 렌더** · 일반 페이지로 수정 가능 |
+| `smoke-starter.sh` | 73 | 유형별 기본 구성 생성 · 홈 렌더 · **모든 메뉴 링크가 404 없이 렌더** · 일반 페이지로 수정 가능 |
 | `smoke-collections.sh` | 31 | 종료=안내·숨김=404 · 진열 순서 · 원자적 저장 · 캐시 무효화 |
 | `smoke-subscriptions.sh` | 70 | 빌링키만 저장 · 청구액 고정(변경 시 중지) · 해지 즉시 · 멱등키 회수 · 몰아 청구 금지 |
 | `smoke-updates.sh` | 33 | Ed25519 서명 검증 · 키 고정(TOFU) · 변조·위조·다운그레이드 거부 |
 | `smoke-grades.sh` | 43 | 순매출 산정(반품 차감) · 견적=주문 금액 · 쿠폰 합산 상한 · 안분 정합 |
-| `smoke-coupons.sh` | 54 | 1인 한도(취소 제외) · 발급형 1장 1회 · 취소 반환/환불 미반환 · 생일 자동 지급(월·일만 수집) |
-| `smoke-board.sh` | 169 | 권한 4단계 · 답변형 · 비밀글 · 첨부 원자성 · XSS · **목록 스킨·썸네일·이전/다음·일괄 작업·그룹 권한·링크** · **첨부 이미지 축소** · **갤러리 썸네일·data-thumb·사진만 글** · **관리 목록 필터** |
-| `smoke-point.sh` | 55 | FIFO 소모 · 멱등 적립 · 만료 · 동시성 |
-| `smoke-memo.sh` | 76 | 프라이버시 · 차단 · 포인트 차감 트랜잭션 · 슬래시 없는 루트 경로 |
-| `smoke-shop.sh` | 240 | 재고 동시성 · 금액 위조 · 구매 검증 후기 · 비밀 문의 · **사진 후기** · **후기 정렬·사진 필터** · **모바일 구매 바** · **목록 썸네일·관리 왕복** · **처리 대기 카드** · **주문 일괄 처리·송장 일괄 입력** · **목록 필터** · **붙여넣기 등록** · **답변 대기 필터** · **목록 인덱스·응답 크기** · **오류 칸 안내** |
+| `smoke-coupons.sh` | 60 | 1인 한도(취소 제외) · 발급형 1장 1회 · 취소 반환/환불 미반환 · 생일 자동 지급(월·일만 수집) · **쿠폰함 화면(코드는 서버 렌더에 없다)** |
+| `smoke-board.sh` | 172 | 권한 4단계 · 답변형 · 비밀글 · 첨부 원자성 · XSS · **목록 스킨·썸네일·이전/다음·일괄 작업·그룹 권한·링크** · **첨부 이미지 축소** · **갤러리 썸네일·data-thumb·사진만 글** · **관리 목록 필터** · **내 스크랩 화면** |
+| `smoke-point.sh` | 60 | FIFO 소모 · 멱등 적립 · 만료 · 동시성 · **회원 내역 화면 도달** · **부분 저장이 나머지를 지우지 않는다** |
+| `smoke-memo.sh` | 79 | 프라이버시 · 차단 · 포인트 차감 트랜잭션 · 슬래시 없는 루트 경로 · **페이지 없이 열리는 선언 화면(같은 slug 페이지가 이긴다)** |
+| `smoke-shop.sh` | 256 | 재고 동시성 · 금액 위조 · 구매 검증 후기 · 비밀 문의 · **사진 후기** · **후기 정렬·사진 필터** · **모바일 구매 바** · **목록 썸네일·관리 왕복** · **처리 대기 카드** · **주문 일괄 처리·송장 일괄 입력** · **목록 필터** · **붙여넣기 등록** · **답변 대기 필터** · **목록 인덱스·응답 크기** · **오류 칸 안내** · **주문 안내 메일(로그 본문까지)** · **쇼핑몰 설정 화면** |
 | `smoke-site.sh` | 73 | 방문자 집계(IP 해시) · 팝업 노출 규칙 |
 | `smoke-social.sh` | 76 | state 쿠키 결속 · 코드 1회성 · 계정 탈취 경로 |
-| `smoke-security.sh` | 65 | 캡차 · 레이트리밋 · 결제 위조 · 권한 우회 · **CSP** · **캡차 칸 안내** |
+| `smoke-security.sh` | 73 | 캡차 · 레이트리밋 · 결제 위조 · 권한 우회 · **CSP** · **캡차 칸 안내** · **비회원 스팸 방어(재입고·문의 캡차·IP 한도)** |
 | `smoke-release.sh` | 75 | FTP 설치 경로 · 동봉 플러그인 · **동봉 테마 전부** · 고아 프로세스 정리 · **update.mjs 교체·롤백 왕복** · **HOSTNAME 바인딩** · **공개 화면 보안 헤더** |
 | `smoke-create-plugin.sh` | 45 | 템플릿 생성→빌드→ZIP 설치→계약 전부 실사용 · escapeHtml · 실제 탈퇴로 파기 검증 |
 | `smoke-openapi.sh` | 24 | 실제 라우트에서 생성 · 플러그인 켜고 끄면 문서도 변함 · 자체 완결 문서 페이지 |
 | `smoke-registry.sh` | 23 | 서명 통과해야 설치 · 키·주소 고정(TOFU) · 레지스트리 키 바꿔치기 방어 |
 | `smoke-theme.sh` | 223 | 라이트·다크 두 벌 · 토큰 CSS 주입 차단 · 테마 고치면 캐시 갱신 · 랜딩 블록 · **글 상세의 문서 제목** · **두 번째 테마(editorial) 같은 계약** · **Storefront** · **Boutique** · **미리보기** · **배너 슬라이드** · 퀵메뉴 · **Corporate** · **2단 메뉴** · **띠배너** |
 | `smoke-moderation.sh` | 31 | 금지 단어(우회 포함)·사칭 이름·금지 도메인·차단 IP(자기잠금)·분류 필수 |
-| `smoke-i18n.sh` | 53 | 언어가 실제 렌더를 바꿈 · 즉시 반영 · ko 폴백+로그 · 값은 번역 안 함 · 관리 선언 라벨 · **카드 제목 전수** · 템플릿 잔해 금지 |
+| `smoke-i18n.sh` | 54 | 언어가 실제 렌더를 바꿈 · 즉시 반영 · ko 폴백+로그 · 값은 번역 안 함 · 관리 선언 라벨 · **카드 제목 전수** · **리소스 선언 문자열 전수** · 템플릿 잔해 금지 |
 
+**정적 검사** — 서버는 되는데 화면이 없는(또는 그 반대인) 구멍을 CI 가 잡습니다.
+전부 실제로 겪은 결함에서 나왔습니다.
+
+| 검사 | 무엇을 막는가 |
+|---|---|
+| `check-captcha-screens.mjs` | 서버가 캡차를 검증하는데 화면에 칸이 없거나, 칸만 있고 서버가 검증하지 않는 것 (**기본 설정으로 설치한 사이트에서 회원가입이 막혀 있었다**) |
+| `check-captcha-secrecy.mjs` | 캡차가 정답을 흘리는 것 (SVG 의 `<text>`, 토큰의 base64 페이로드 — **둘 다로 새고 있었다**) |
+| `check-settings-screens.mjs` | 설정 저장 API 만 있고 그것을 부르는 화면이 없는 것 (**배송비와 입금 계좌를 curl 로만 바꿀 수 있었다**) |
+| `check-plugin-screens.mjs` | 플러그인이 내는 링크가 가리키는 곳에 화면이 없는 것 (**헤더의 "쪽지함"이 404 였다**) |
+| `check-admin-guards.mjs` | 관리 라우트가 역할을 정하지 않는 것 (디스패처가 manager 까지 통과시키므로 admin 전용은 자기 줄에서 막아야 한다) |
+
+그 밖에 CI 가 정적으로 보는 것: 테마 CSS 컴파일 산출물 일치, 모달의 `useModalFocus`,
+메일이 보내는 링크에 화면이 있는지, 마이그레이션 멱등성(2회 실행).
 
 ```bash
 DATABASE_URL=postgresql://brick:brick@localhost:5432/brick bash scripts/smoke-test.sh
@@ -456,12 +469,18 @@ plugins/
   brick-shop/     쇼핑몰 (관리자 리소스·트랜잭션·재고 동시성 레퍼런스)
   brick-point/    포인트 (플러그인 간 서비스 협력 레퍼런스)
   brick-memo/     쪽지 (사적 콘텐츠 프라이버시 레퍼런스)
+  brick-helpdesk/ 1:1 문의 · FAQ (비공개 문의·비회원 조회 레퍼런스)
+  brick-poll/     설문조사 (익명 집계 레퍼런스)
+  brick-site/     방문자 집계 · 팝업 (훅 구독 레퍼런스)
   brick-pay-toss/ 토스페이먼츠 (PG를 코어 수정 없이 붙이는 레퍼런스)
 themes/
-  default/        기본 테마 (런타임 템플릿 레퍼런스)
-  editorial/      두 번째 동봉 테마 — 같은 계약, 다른 인상
+  default/        기본 테마 — 커뮤니티 (런타임 템플릿 레퍼런스)
+  editorial/      매거진 — 같은 계약, 다른 인상
+  storefront/     쇼핑몰 — 퀵메뉴·2단 메뉴·띠배너
+  boutique/       부티크 — 여백 위주
+  corporate/      회사 홈페이지 — 히어로·특징 카드
 docs-site/        GitHub Pages 랜딩페이지
-scripts/          스모크 테스트 9종 + OIDC 스텁 + 배포본 생성(build-release.sh)
+scripts/          스모크 테스트 34종 + 정적 검사 5종 + OIDC 스텁 + 배포본 생성(build-release.sh)
 docker/           Dockerfile, entrypoint
 ```
 
