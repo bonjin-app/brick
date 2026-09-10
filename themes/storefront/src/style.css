@@ -959,8 +959,16 @@ a.brick-card:hover { border-color: var(--color-text); color: inherit; }
 .brick-quick a:hover { color: var(--color-text); background: var(--color-bg-soft); }
 .brick-quick .brick-ico { width: 18px; height: 18px; }
 
-@media (max-width: 1279.98px) {
-  /* 화면이 좁아지면 맨 위로만 남긴다 — 작은 화면을 아이콘으로 덮지 않는다 */
+/*
+ * 자리가 없으면 맨 위로만 남긴다 — 화면을 아이콘으로 덮지 않는다.
+ *
+ * 기준을 1432px 로 둔다. 본문은 1280px 로 가운데 정렬이므로 창이 그보다 좁으면
+ * 한쪽 여백이 퀵메뉴(62px + 오른쪽 14px)보다 작아져 **본문 오른쪽을 덮는다.**
+ * 1280·1366 은 흔한 노트북 폭이고, 세로 가운데에 떠 있어서 문단·표·카드의
+ * 오른쪽 끝을 가로로 가린다(쿠폰함의 "사용 가능" 표시가 그렇게 가려졌다).
+ * 장바구니는 헤더에도 있으므로 이 구간에서 접어도 잃는 것이 없다.
+ */
+@media (max-width: 1431.98px) {
   .brick-quick { top: auto; bottom: 18px; transform: none; }
   .brick-quick a:not(.brick-quick-top) { display: none; }
 }

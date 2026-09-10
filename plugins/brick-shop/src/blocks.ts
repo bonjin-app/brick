@@ -9,6 +9,7 @@ import { activeCollections, viewCollection } from "./collections.js";
 import { registerCheckoutView } from "./checkout-view.js";
 import { registerOrdersView } from "./orders-view.js";
 import { registerWishlistView } from "./wishlist-view.js";
+import { registerCouponsView } from "./coupons-view.js";
 
 /**
  * 스토어프론트 블록.
@@ -535,6 +536,10 @@ ${buyScript(`${shopBaseOf(blockCtx)}/cart`)}${GALLERY_SCRIPT}${restockScript()}$
         blockCtx.setSeo?.({ title: t("wish.title") });
         return wishlistBlock.render({}, blockCtx);
       }
+      if (seg[0] === "coupons") {
+        blockCtx.setSeo?.({ title: t("coupons.title") });
+        return couponsBlock.render({}, blockCtx);
+      }
       if (seg[0] === "event") {
         if (!seg[1]) blockCtx.setSeo?.({ title: t("collection.index") });
         return seg[1] ? renderCollectionPage(seg[1], blockCtx) : renderCollectionIndex();
@@ -655,6 +660,22 @@ ${cartScript(shopBaseOf(blockCtx))}${STOREFRONT_CSS}`,
   const checkoutBlock = registerCheckoutView(ctx, t);
   const ordersBlock = registerOrdersView(ctx, t);
   const { wishlistBlock } = registerWishlistView(ctx, t);
+  const { couponsBlock } = registerCouponsView(ctx, t);
+
+  /*
+   * 화면 선언 — 쇼핑몰과 그 안의 회원 화면들.
+   *
+   * `shop` 을 선언해 두면 **페이지 없이도 쇼핑몰이 돌아간다** (스타터를 쓰지 않고
+   * 플러그인만 켠 사이트에서도 장바구니 헤더 링크가 살아 있다). 스타터가 만든
+   * shop 페이지가 있으면 그 페이지가 이기고, 결과는 같다 — 같은 블록을 그린다.
+   *
+   * 회원 화면 셋은 `/account` 의 "내 활동"에 링크로 나온다. 특히 쿠폰함은
+   * 생일 쿠폰이 자동으로 들어오는 곳인데 그것을 볼 화면이 없었다.
+   */
+  ctx.registerScreen({ path: "shop", title: "쇼핑몰", block: "storefront" });
+  ctx.registerScreen({ path: "shop/orders", title: "주문 내역", block: "orders", memberMenu: true, order: 10 });
+  ctx.registerScreen({ path: "shop/coupons", title: "쿠폰함", block: "my-coupons", memberMenu: true, order: 15 });
+  ctx.registerScreen({ path: "shop/wishlist", title: "위시리스트", block: "wishlist", memberMenu: true, order: 25 });
 }
 
 /**

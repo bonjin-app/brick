@@ -189,6 +189,23 @@ EMPTY_WALLET="$(curl -s -b "$C2" "$SHOP/me/coupons")"
 check "지급 안 받은 회원의 쿠폰함은 비어 있다" "$(echo "$EMPTY_WALLET" | python3 -c "
 import sys,json; print(len(json.load(sys.stdin)['items']))")" "0"
 
+echo "── 쿠폰함 화면 (받은 쿠폰을 볼 곳)"
+# 이 API 는 상태(usable/used/expired/inactive)까지 계산해 주고 있었고 그 주석은
+# "화면이 '왜 못 쓰는지'를 보여줘야 한다"고 적고 있었다 — 그런데 화면이 없었다.
+# 그 사이 생일 쿠폰 스윕은 쿠폰함에 쿠폰을 자동으로 넣고 있었다: 받은 사람은
+# 코드를 알 길이 없어 쓸 수 없었다.
+contains "쿠폰함 블록 등록" "$(curl -s "$API/api/blocks")" "brick-shop/my-coupons"
+contains "회원 메뉴에 나온다" "$(curl -s "$API/api/member/menu")" '"path":"/shop/coupons"'
+COUPON_SCREEN="$(curl -s -b "$C1" "$API/api/render/page?path=shop/coupons" | /usr/bin/python3 -c 'import sys,json;print(json.load(sys.stdin).get("html",""))')"
+contains "화면이 열린다" "$COUPON_SCREEN" "brick-coupons"
+contains "제목이 붙는다" "$COUPON_SCREEN" "쿠폰함"
+# 내용은 회원별이라 서버 렌더에 담지 않는다 — 비로그인 렌더만 캐시되므로
+# 담으면 남의 쿠폰 코드가 캐시로 새어 나간다
+absent "쿠폰 코드가 서버 렌더에 없다" "$COUPON_SCREEN" "VIPGIFT"
+contains "비로그인은 로그인 안내" \
+  "$(curl -s "$API/api/render/page?path=shop/coupons" | /usr/bin/python3 -c 'import sys,json;print(json.load(sys.stdin).get("html",""))')" \
+  "로그인 후 이용"
+
 echo "── 사용: 한 장이 한 번만"
 OV="$(order_with "$C1" "VIPGIFT" | jq_get "['orderNo']")"
 [[ -n "$OV" ]] && ok "지급받은 쿠폰으로 주문 ($OV)" || bad "발급형 사용"
