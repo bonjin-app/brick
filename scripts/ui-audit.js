@@ -19,6 +19,8 @@
  *
  * 한계: iframe 으로 여는 화면만 본다. 클라이언트가 그리는 관리 화면은 로드 뒤 1.4초를 기다린다 —
  * 느린 환경이면 wait 를 늘릴 것. 색 대비는 보지 않는다(contrast-audit.js).
+ * 로그인·장바구니처럼 **상태가 있어야 보이는 화면**은 그 상태를 만들어 두고 돌려야 한다
+ * (관리 화면은 관리자로 로그인, 주문서는 장바구니에 담은 뒤).
  */
 (() => {
   const audit = (doc, w) => {
@@ -92,7 +94,29 @@
     return [...new Set(issues)].slice(0, 12);
   };
 
-  const DEFAULT_PATHS = ["/", "/search?q=a", "/login", "/register", "/no-such-page"];
+  /*
+   * 기본 경로.
+   *
+   * 다섯 개(홈·검색·로그인·가입·404)뿐이었다. 그 사이 화면은 손님 쪽 열몇 개와
+   * 관리자 쪽 열몇 개로 늘었고, **가장 자주 쓰는 화면이 목록에 없었다** — 폰에서
+   * 관리 주문 목록의 수정 버튼이 가로 스크롤 뒤에 숨어 있던 것을 이 도구가 놓친
+   * 이유의 절반이 그것이다(나머지 절반은 검사 자체가 없었던 것).
+   *
+   * 없는 화면은 404 로 그려지고 검사는 그냥 통과한다 — 플러그인을 켜지 않은
+   * 사이트에서도 이 목록을 그대로 쓸 수 있다.
+   */
+  const DEFAULT_PATHS = [
+    // 손님
+    "/", "/search?q=a", "/login", "/register", "/forgot-password", "/no-such-page",
+    "/account", "/board/notice", "/board/free",
+    "/shop", "/shop/cart", "/shop/orders", "/shop/coupons", "/shop/wishlist",
+    "/memo", "/points", "/scraps",
+    // 운영자 — 로그인한 상태로 열어야 내용이 보인다
+    "/admin", "/admin/pages", "/admin/media", "/admin/menus", "/admin/users",
+    "/admin/settings", "/admin/themes", "/admin/plugins", "/admin/audit",
+    "/admin/x/brick-shop/orders", "/admin/x/brick-shop/products", "/admin/x/brick-shop/settings",
+    "/admin/x/brick-board/posts",
+  ];
 
   window.brickUiAudit = async (paths = DEFAULT_PATHS, widths = [375, 1280], wait = 1400) => {
     const frame = document.createElement("iframe");
