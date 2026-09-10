@@ -429,12 +429,17 @@ function ResourceForm(props: {
   return (
     <div style={{ background: "var(--color-bg)", borderRadius: 8, padding: 24, maxWidth: 680 }}>
       <h2 style={{ marginTop: 0 }}>{value[resource.idField ?? "id"] ? t("x.editItem", { label: resource.itemLabel }) : t("x.newItem", { label: resource.itemLabel })}</h2>
+      {/*
+        라벨은 `htmlFor` 로 입력과 **연결**해야 한다. 눈으로는 위아래로 붙어 있어 보이지만,
+        연결이 없으면 스크린리더는 각 칸이 무엇인지 읽지 못하고 "편집 텍스트"라고만 한다
+        (관리 폼 열두 칸이 전부 그랬다). 라벨을 눌러 입력으로 초점이 가는 것도 이 연결이다.
+      */}
       {resource.fields.filter((f) => !f.readOnly).map((f) => (
         <div key={f.name} style={{ marginBottom: 16 }}>
-          <label style={{ display: "block", fontSize: 14, fontWeight: 600 }}>
+          <label htmlFor={`x-field-${f.name}`} style={{ display: "block", fontSize: 14, fontWeight: 600 }}>
             {f.label}{f.required && <span style={{ color: "var(--color-danger)" }}> *</span>}
           </label>
-          <FieldInput field={f} value={value[f.name]} onChange={(v) => set(f.name, v)} />
+          <FieldInput id={`x-field-${f.name}`} field={f} value={value[f.name]} onChange={(v) => set(f.name, v)} />
           {f.help && <div style={{ fontSize: 12.5, color: "var(--color-muted)", marginTop: 4 }}>{f.help}</div>}
         </div>
       ))}
@@ -452,25 +457,25 @@ const inputBase = {
   border: "1px solid var(--color-line-strong)", borderRadius: 6,
 };
 
-function FieldInput({ field, value, onChange }: { field: AdminField; value: unknown; onChange: (v: unknown) => void }) {
+function FieldInput({ id, field, value, onChange }: { id: string; field: AdminField; value: unknown; onChange: (v: unknown) => void }) {
   const t = useAdminT();
   const base = inputBase;
 
   switch (field.type) {
     case "boolean":
-      return <input type="checkbox" checked={Boolean(value)} onChange={(e) => onChange(e.target.checked)} style={{ marginTop: 6 }} />;
+      return <input id={id} type="checkbox" checked={Boolean(value)} onChange={(e) => onChange(e.target.checked)} style={{ marginTop: 6 }} />;
     case "number":
     case "money":
       return (
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <input type="number" style={base} value={String(value ?? "")} placeholder={field.placeholder}
+          <input id={id} type="number" style={base} value={String(value ?? "")} placeholder={field.placeholder}
             onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))} />
           {field.type === "money" && <span style={{ color: "var(--color-text-soft)", whiteSpace: "nowrap" }}>원</span>}
         </div>
       );
     case "select":
       return (
-        <select style={base} value={String(value ?? "")}
+        <select id={id} style={base} value={String(value ?? "")}
           onChange={(e) => onChange(e.target.value === "" ? null : e.target.value)}>
           {/* 필수가 아니면 비울 수 있어야 한다 — 분류를 지정하지 않은 상품이 있다 */}
           {!field.required && <option value="">{t("x.noneOption")}</option>}
@@ -478,20 +483,20 @@ function FieldInput({ field, value, onChange }: { field: AdminField; value: unkn
         </select>
       );
     case "textarea":
-      return <textarea style={{ ...base, height: 100 }} value={String(value ?? "")} placeholder={field.placeholder}
+      return <textarea id={id} style={{ ...base, height: 100 }} value={String(value ?? "")} placeholder={field.placeholder}
         onChange={(e) => onChange(e.target.value)} />;
     case "richtext":
-      return <textarea style={{ ...base, height: 220, fontFamily: "ui-monospace, Menlo, monospace", fontSize: 13 }}
+      return <textarea id={id} style={{ ...base, height: 220, fontFamily: "ui-monospace, Menlo, monospace", fontSize: 13 }}
         value={String(value ?? "")} placeholder={field.placeholder ?? t("x.richtextPh")}
         onChange={(e) => onChange(e.target.value)} />;
     case "image":
-      return <ImageField value={value} onChange={onChange} />;
+      return <ImageField id={id} value={value} onChange={onChange} />;
     case "images":
-      return <ImageListField value={value} onChange={onChange} max={field.max ?? 20} />;
+      return <ImageListField id={id} value={value} onChange={onChange} max={field.max ?? 20} />;
     case "date":
-      return <input type="date" style={base} value={String(value ?? "").slice(0, 10)} onChange={(e) => onChange(e.target.value)} />;
+      return <input id={id} type="date" style={base} value={String(value ?? "").slice(0, 10)} onChange={(e) => onChange(e.target.value)} />;
     default:
-      return <input style={base} value={String(value ?? "")} placeholder={field.placeholder}
+      return <input id={id} style={base} value={String(value ?? "")} placeholder={field.placeholder}
         onChange={(e) => onChange(e.target.value)} />;
   }
 }
@@ -503,14 +508,14 @@ function FieldInput({ field, value, onChange }: { field: AdminField; value: unkn
  * 붙여야 했다. 상품 하나에 사진 한 장이면 그 왕복이 한 번이지만, 스무 개를 등록하는 날에는
  * 스무 번이다. 주소 입력을 없애지는 않는다 — 외부 사진을 쓰는 운영자가 있다.
  */
-function ImageField({ value, onChange }: { value: unknown; onChange: (v: unknown) => void }) {
+function ImageField({ id, value, onChange }: { id: string; value: unknown; onChange: (v: unknown) => void }) {
   const t = useAdminT();
   const [picking, setPicking] = useState(false);
   const url = typeof value === "string" ? value : "";
   return (
     <div>
       <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
-        <input style={{ ...inputBase, flex: 1 }} value={url} placeholder="/uploads/... 또는 https://..."
+        <input id={id} style={{ ...inputBase, flex: 1 }} value={url} placeholder="/uploads/... 또는 https://..."
           onChange={(e) => onChange(e.target.value)} />
         <button type="button" onClick={() => setPicking(true)}
           style={{ padding: "0 12px", border: "1px solid var(--color-line)", borderRadius: 6,
@@ -520,7 +525,9 @@ function ImageField({ value, onChange }: { value: unknown; onChange: (v: unknown
       </div>
       {url && <img src={url} alt="" style={{ maxHeight: 90, marginTop: 8, borderRadius: 6 }} />}
       <div style={{ fontSize: 12.5, color: "var(--color-muted)", marginTop: 4 }}>
-        <a href="/admin/media" target="_blank">{t("x.mediaLink")}</a> — {t("x.imageHint")}
+        {/* 링크는 손가락으로 누를 수 있어야 한다 — 32×15 였다 */}
+        <a href="/admin/media" target="_blank"
+          style={{ display: "inline-block", padding: "6px 0", minHeight: 28 }}>{t("x.mediaLink")}</a> — {t("x.imageHint")}
       </div>
       {picking && <MediaPicker onClose={() => setPicking(false)} onPick={(picked) => { onChange(picked); setPicking(false); }} />}
     </div>
@@ -534,7 +541,7 @@ function ImageField({ value, onChange }: { value: unknown; onChange: (v: unknown
  * 배열로 바꾸면 API·마이그레이션·기존 데이터가 전부 딸려 온다. 바뀐 것은 **편집하는 방법**
  * 뿐이다 — 주소를 스무 번 복사해 붙이던 것을 한 번에 고르고 순서로 정렬한다.
  */
-function ImageListField({ value, onChange, max }: { value: unknown; onChange: (v: unknown) => void; max: number }) {
+function ImageListField({ id, value, onChange, max }: { id: string; value: unknown; onChange: (v: unknown) => void; max: number }) {
   const t = useAdminT();
   const [picking, setPicking] = useState(false);
   const [manual, setManual] = useState("");
@@ -550,7 +557,7 @@ function ImageListField({ value, onChange, max }: { value: unknown; onChange: (v
   return (
     <div>
       <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 4, flexWrap: "wrap" }}>
-        <button type="button" onClick={() => setPicking(true)}
+        <button id={id} type="button" onClick={() => setPicking(true)}
           style={{ padding: "7px 12px", border: "1px solid var(--color-line)", borderRadius: 6,
                    background: "var(--color-bg)", cursor: "pointer" }}>
           {t("x.pickFromMedia")}

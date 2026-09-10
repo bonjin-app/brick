@@ -250,6 +250,13 @@ await brickContrastAudit(["/", "/board/free", "/shop", "/shop/cart"])
 
 ## 기본기 점검 — 넘침·라벨·터치 영역
 
+[scripts/ui-audit.js](../scripts/ui-audit.js) 는 테마만이 아니라 **관리 화면에도** 돌립니다
+(`await brickUiAudit(['/admin', '/admin/x/my-plugin/things'])`). 관리 화면은 우리 눈에만
+익숙할 뿐 손님 화면과 같은 기본기가 필요합니다 — 실제로 관리 폼 열두 칸의 라벨이 입력과
+연결돼 있지 않았습니다.
+
+CSP 가 `eval` 을 막으므로 콘솔에 그대로 붙이는 대신 `<script src>` 로 넣으세요.
+
 [scripts/ui-audit.js](../scripts/ui-audit.js) 를 콘솔에 붙이고 `await brickUiAudit([경로들])` 를
 실행하면 375·1280px 두 폭에서 가로 넘침, alt 없는 이미지, 이름 없는 버튼, 라벨 없는 입력,
 28px 미만 터치 영역, `undefined`/`NaN` 노출을 잡습니다. 대비 점검과 함께 새 테마·새 블록을

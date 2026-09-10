@@ -525,6 +525,8 @@ SPAGES="$(render_page "path=search&q=%EC%9A%B0%EC%82%B0&scope=pages")"
 absent "사진 없는 그룹은 그대로" "$SPAGES" 'class="has-thumbs"'
 # 사진이 없어도 제목 선택자는 살아 있어야 한다 (감싸개를 넣으면서 li > a 가 깨졌다)
 contains "제목 감싸개" "$SPAGES" 'class="brick-search-body"'
+# 제목은 누르는 대상이다 — 줄 높이만으로는 19px 이라 손가락으로 누르기 어려웠다
+contains "제목 링크에 터치 영역" "$SPAGES" "min-height: 28px"
 
 echo
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"

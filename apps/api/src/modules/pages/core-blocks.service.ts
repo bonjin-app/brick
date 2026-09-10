@@ -582,7 +582,9 @@ ${eyebrow ? `    <span class="brick-eyebrow">${esc(eyebrow)}</span>
 /* 제목은 이제 .brick-search-body 안에 있다 (사진과 나란히 놓기 위한 감싸개) */
 /* flex:1 로 남는 폭을 받고, min-width:0 으로 긴 단어가 칸을 밀어내지 않게 한다 */
 .brick-search-body { display: block; flex: 1 1 auto; min-width: 0; }
-.brick-search-body > a { font-size: 16px; font-weight: 600; color: var(--color-text, #17171c); text-decoration: none; }
+/* 손가락으로 누를 수 있어야 한다 — 줄 높이만으로는 19px 이었다 */
+.brick-search-body > a { display: inline-block; min-height: 28px; line-height: 1.7;
+  font-size: 16px; font-weight: 600; color: var(--color-text, #17171c); text-decoration: none; }
 .brick-search-body > a:hover { color: var(--color-primary-text, #b63a2e); text-decoration: underline; }
 /* 사진이 있는 그룹만 가로 배치. 사진 없는 항목은 빈 칸을 둔다 — 줄 높이가 흔들리지 않게 */
 .brick-search-group ul.has-thumbs li { display: flex; gap: 14px; align-items: flex-start; }

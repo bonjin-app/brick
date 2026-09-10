@@ -148,7 +148,7 @@ export default function AdminDashboard() {
       <section className="brick-card" style={{ marginTop: 20 }} aria-labelledby="dash-recent">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
           <h2 id="dash-recent" className="brick-card-title" style={{ marginBottom: 0 }}>{t("dash.recent")}</h2>
-          <a href="/admin/audit" style={{ fontSize: 13.5 }}>{t("dash.recentAll")} →</a>
+          <a href="/admin/audit" style={{ fontSize: 13.5, display: "inline-block", padding: "6px 0", minHeight: 28 }}>{t("dash.recentAll")} →</a>
         </div>
         {recent === null ? null : recent.length === 0 ? (
           <p style={{ color: "var(--color-muted)", fontSize: 14, margin: "14px 0 0" }}>{t("dash.recentEmpty")}</p>
