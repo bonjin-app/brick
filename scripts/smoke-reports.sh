@@ -448,14 +448,16 @@ print(','.join(r['slug'] for r in d['related']))" <<< "$DETAIL")"
 check "입력한 순서 유지" "$REL_ORDER" "socks,shirt"
 
 echo "── 상품을 수정해도 관련 상품이 날아가지 않는다"
-# 폼이 기존 값을 되돌려 받지 못하면, 수정 저장 한 번에 지워진다
-LIST="$(curl -s -b "$CK" "$SHOP/admin/products")"
+# 폼이 기존 값을 되돌려 받지 못하면, 수정 저장 한 번에 지워진다.
+# 폼을 채우는 것은 **단건**의 일이다 — 목록에는 목록에 필요한 것만 실린다
+ONE="$(curl -s -b "$CK" "$SHOP/admin/products/$P3")"
 BELT_TEXT="$(python3 -c "
 import json, sys
-d = json.load(sys.stdin)
-row = next(p for p in d['items'] if p['slug'] == 'belt')
-print(row['related_text'].replace(chr(10), ','))" <<< "$LIST")"
+print(json.load(sys.stdin)['related_text'].replace(chr(10), ','))" <<< "$ONE")"
 check "폼에 기존 값이 채워진다" "$BELT_TEXT" "socks,shirt"
+# 목록은 가벼워야 한다 (상세 HTML·관련 상품을 30건 실으면 한 화면이 수 MB 다)
+LIST="$(curl -s -b "$CK" "$SHOP/admin/products")"
+absent "목록에는 폼용 필드를 싣지 않는다" "$LIST" '"related_text"'
 
 echo "── 중복 · 비우기"
 curl -s -b "$CK" -X PUT "$SHOP/admin/products/$P3" -H 'content-type: application/json' \
