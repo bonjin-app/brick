@@ -9,6 +9,7 @@
  *   - 라벨 없는 입력·select·textarea
  *   - 28px 미만 터치 영역 (모바일만; 본문 문단·표 안·푸터는 제외)
  *   - "undefined" · "NaN" · "[object Object]" 가 화면에 찍힌 곳
+ *   - 가로 스크롤 상자에 숨은 조작 요소 (모바일만 — 보이지 않는 버튼은 없는 버튼이다)
  *
  * 사용법:
  *   1. 사이트를 브라우저로 연다 (관리 화면을 보려면 로그인한 상태로)
@@ -52,6 +53,40 @@
           issues.push(`작은 터치 ${b.tagName.toLowerCase()} "${(b.textContent || b.getAttribute("aria-label") || "").trim().slice(0, 12)}" ${Math.round(r.width)}x${Math.round(r.height)}`);
         }
       });
+    }
+    /*
+     * 가로 스크롤 상자 안에 숨은 내용 (모바일만).
+     *
+     * 문서 넘침 검사로는 잡히지 않는다 — `overflow-x: auto` 가 넘침을 상자 안에
+     * 가두므로 문서는 멀쩡해 보인다. 그런데 손님·운영자에게는 **내용이 사라진 것**
+     * 이다. 관리자의 주문 목록이 그랬다: 폰에서는 주문번호만 보이고 상태·금액·수정
+     * 버튼은 오른쪽으로 밀려 있었다. 주문 하나를 확인하려고 좌우로 밀어야 했고,
+     * 그것이 작은 쇼핑몰 운영자가 가장 자주 하는 일이다.
+     *
+     * 스크롤이 **필요한 것 자체**가 문제는 아니다(넓은 표를 미는 것은 흔한 해법이다).
+     * 문제는 그 안에 **조작 요소**가 숨을 때다 — 보이지 않는 버튼은 없는 버튼이다.
+     */
+    if (w <= 480) {
+      for (const box of doc.querySelectorAll("*")) {
+        const st = v.getComputedStyle(box);
+        if (!/auto|scroll/.test(st.overflowX)) continue;
+        if (box.scrollWidth <= box.clientWidth + 2) continue;
+        const edge = box.getBoundingClientRect().right;
+        const hidden = [...box.querySelectorAll("a[href], button, input, select, textarea")]
+          .filter((el) => {
+            const r = el.getBoundingClientRect();
+            return r.width > 0 && r.left > edge - 2;
+          });
+        if (hidden.length) {
+          issues.push(
+            `가로 스크롤에 숨은 조작 요소 ${hidden.length}개 (${box.tagName.toLowerCase()}.${
+              String(box.className || "").split(" ")[0] || "-"
+            }: ${box.scrollWidth}px > ${box.clientWidth}px) 예: "${
+              (hidden[0].textContent || hidden[0].getAttribute("aria-label") || hidden[0].name || "").trim().slice(0, 14)
+            }"`,
+          );
+        }
+      }
     }
     if (/undefined|NaN|\[object Object\]/.test(doc.body.innerText || "")) issues.push("undefined/NaN 문자열 노출");
     return [...new Set(issues)].slice(0, 12);

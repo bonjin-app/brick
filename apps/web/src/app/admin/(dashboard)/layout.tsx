@@ -223,6 +223,39 @@ const ADMIN_CSS = `
 .brick-admin-burger[aria-expanded="true"] span:nth-child(2) { opacity: 0; }
 .brick-admin-burger[aria-expanded="true"] span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
 .brick-admin .brick-admin-close { border: 0; background: none; font-size: 26px; line-height: 1; color: #fff !important; padding: 4px 8px !important; }
+
+/*
+ * 선언형 관리 목록 — 좁은 화면에서는 표를 카드로 접는다.
+ *
+ * 주문 목록은 열이 여섯이다. 폰에서 표로 그리면 **주문번호만 보이고** 상태·금액·
+ * 수정 버튼은 가로 스크롤 뒤에 숨는다. 주문 하나를 확인하려고 좌우로 밀어야 하고,
+ * 그것이 작은 쇼핑몰 운영자가 가장 자주 하는 일이다.
+ *
+ * 각 칸은 data-label(열 제목)을 들고 있으므로 CSS 만으로 "제목: 값" 줄로 바꿀 수
+ * 있다. 자바스크립트로 화면 폭을 재지 않는다 — 회전·창 크기 변화에 바로 따라간다.
+ */
+@media (max-width: 767.98px) {
+  .brick-admin .brick-x-table { display: block; }
+  .brick-admin .brick-x-table thead { display: none; }
+  .brick-admin .brick-x-table tbody, .brick-admin .brick-x-table tr { display: block; }
+  .brick-admin .brick-x-table tr {
+    border: 1px solid var(--color-line); border-radius: 8px; margin-bottom: 10px; padding: 4px 2px;
+  }
+  .brick-admin .brick-x-table td {
+    display: flex; gap: 12px; align-items: baseline; justify-content: space-between;
+    padding: 7px 12px !important; border: 0; text-align: right;
+  }
+  .brick-admin .brick-x-table td::before {
+    content: attr(data-label); flex: none; color: var(--color-muted);
+    font-size: 12.5px; font-weight: 600; text-align: left;
+  }
+  /* 제목이 없는 칸(선택 체크박스·버튼)은 한 줄을 통째로 쓴다 */
+  .brick-admin .brick-x-table td[data-label=""]::before { content: none; }
+  .brick-admin .brick-x-table td.brick-x-actions { justify-content: flex-end; padding-top: 10px !important; }
+  .brick-admin .brick-x-table td.brick-x-pick { justify-content: flex-start; }
+  /* 비어 있을 때의 안내는 카드 테두리 없이 */
+  .brick-admin .brick-x-table tr.brick-x-empty { border: 0; }
+}
 `;
 
 const link = {

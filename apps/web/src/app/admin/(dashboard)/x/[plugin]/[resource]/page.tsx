@@ -368,7 +368,8 @@ export default function PluginResourcePage() {
             </div>
           )}
           <div style={{ overflowX: "auto", background: "var(--color-bg)", borderRadius: 8 }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+            {/* 좁은 화면에서는 이 표가 카드로 접힌다 (관리 셸 CSS: .brick-x-table) */}
+            <table className="brick-x-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
               <thead>
                 <tr style={{ textAlign: "left", borderBottom: "1px solid var(--color-line)" }}>
                   {hasBulk && (
@@ -385,22 +386,23 @@ export default function PluginResourcePage() {
                 {rows.map((row, i) => (
                   <tr key={String(row[idField] ?? i)} style={{ borderBottom: "1px solid var(--color-line)" }}>
                     {hasBulk && (
-                      <td style={{ padding: 12 }}>
+                      <td className="brick-x-pick" data-label="" style={{ padding: 12 }}>
                         <input type="checkbox" checked={selected.has(String(row[idField]))}
                           onChange={(e) => toggleOne(String(row[idField]), e.target.checked)} />
                       </td>
                     )}
+                    {/* data-label 은 좁은 화면에서 열 제목을 대신한다 — thead 가 접히므로 */}
                     {listFields.map((f) => (
-                      <td key={f.name} style={{ padding: 12 }}>{formatCell(row[f.name], f)}</td>
+                      <td key={f.name} data-label={f.label} style={{ padding: 12 }}>{formatCell(row[f.name], f)}</td>
                     ))}
-                    <td style={{ padding: 12, whiteSpace: "nowrap" }}>
+                    <td className="brick-x-actions" data-label="" style={{ padding: 12, whiteSpace: "nowrap" }}>
                       {can.update && <button onClick={() => void openEdit(row)} style={btnSm}>{t("common.edit")}</button>}
                       {can.delete && <button onClick={() => remove(row)} style={{ ...btnSm, color: "var(--color-danger)", marginLeft: 6 }}>{t("common.delete")}</button>}
                     </td>
                   </tr>
                 ))}
                 {!rows.length && (
-                  <tr><td colSpan={listFields.length + 1 + (hasBulk ? 1 : 0)} style={{ padding: 24, color: "var(--color-muted)" }}>
+                  <tr className="brick-x-empty"><td data-label="" colSpan={listFields.length + 1 + (hasBulk ? 1 : 0)} style={{ padding: 24, color: "var(--color-muted)" }}>
                     {t("x.emptyItems", { label: res.itemLabel })}
                   </td></tr>
                 )}
