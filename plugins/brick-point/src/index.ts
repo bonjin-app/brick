@@ -323,16 +323,24 @@ export default definePlugin(async (ctx) => {
       }
       return n;
     };
+    /*
+     * 빠진 값은 **현재 설정**을 유지한다.
+     *
+     * 예전에는 여기서 기본값으로 되돌렸다 — 필드 하나만 보내면 나머지 여덜 개가
+     * 조용히 초기화됐다. (같은 로직이 "/admin/settings-list" 에 한 벌 더 있었고
+     * 그쪽은 현재 값을 유지했다. 복사본이 갈라지면 이렇게 된다.)
+     */
+    const current = await settings();
     const next: PointSettings = {
-      expireDays: num(b.expireDays, DEFAULT_SETTINGS.expireDays, 0, 3650),
-      signupPoint: num(b.signupPoint, DEFAULT_SETTINGS.signupPoint, 0, 1_000_000),
-      postPoint: num(b.postPoint, DEFAULT_SETTINGS.postPoint, 0, 100_000),
-      commentPoint: num(b.commentPoint, DEFAULT_SETTINGS.commentPoint, 0, 100_000),
-      reviewPoint: num(b.reviewPoint, DEFAULT_SETTINGS.reviewPoint, 0, 100_000),
-      loginPoint: num(b.loginPoint, DEFAULT_SETTINGS.loginPoint, 0, 100_000),
-      purchaseRate: num(b.purchaseRate, DEFAULT_SETTINGS.purchaseRate, 0, 100),
-      maxUseRate: num(b.maxUseRate, DEFAULT_SETTINGS.maxUseRate, 0, 100),
-      minUse: num(b.minUse, DEFAULT_SETTINGS.minUse, 0, 1_000_000),
+      expireDays: num(b.expireDays, current.expireDays, 0, 3650),
+      signupPoint: num(b.signupPoint, current.signupPoint, 0, 1_000_000),
+      postPoint: num(b.postPoint, current.postPoint, 0, 100_000),
+      commentPoint: num(b.commentPoint, current.commentPoint, 0, 100_000),
+      reviewPoint: num(b.reviewPoint, current.reviewPoint, 0, 100_000),
+      loginPoint: num(b.loginPoint, current.loginPoint, 0, 100_000),
+      purchaseRate: num(b.purchaseRate, current.purchaseRate, 0, 100),
+      maxUseRate: num(b.maxUseRate, current.maxUseRate, 0, 100),
+      minUse: num(b.minUse, current.minUse, 0, 1_000_000),
     };
     await ctx.settings.set("settings", next);
     return next;
@@ -396,59 +404,29 @@ export default definePlugin(async (ctx) => {
 
   ctx.registerAdminResource({
     name: "settings",
+    kind: "settings",
     title: "포인트 설정",
     itemLabel: "설정",
-    basePath: "/admin/settings-list",
+    basePath: "/admin/settings",
     order: 26,
     description: "적립 정책과 사용 제한을 정합니다. 0으로 두면 해당 적립을 하지 않습니다.",
-    can: { create: false, delete: false },
     fields: [
-      { name: "signupPoint", label: "회원가입 적립", type: "number", inList: true },
-      { name: "postPoint", label: "게시글 작성 적립", type: "number", inList: true },
-      { name: "commentPoint", label: "댓글 작성 적립", type: "number", inList: true },
-      { name: "reviewPoint", label: "상품 후기 적립", type: "number", inList: true,
+      { name: "signupPoint", label: "회원가입 적립", type: "number" },
+      { name: "postPoint", label: "게시글 작성 적립", type: "number" },
+      { name: "commentPoint", label: "댓글 작성 적립", type: "number" },
+      { name: "reviewPoint", label: "상품 후기 적립", type: "number",
         help: "구매 확인된 후기에만 지급됩니다." },
       { name: "loginPoint", label: "출석(로그인) 적립", type: "number", help: "1일 1회" },
-      { name: "purchaseRate", label: "구매 적립률 (%)", type: "number", inList: true,
+      { name: "purchaseRate", label: "구매 적립률 (%)", type: "number",
         help: "결제 완료 시 결제금액의 이 비율만큼 적립합니다." },
       { name: "maxUseRate", label: "주문당 사용 한도 (%)", type: "number",
         help: "주문금액의 이 비율까지만 포인트로 결제할 수 있습니다. 100이면 전액." },
       { name: "minUse", label: "최소 사용 포인트", type: "number" },
-      { name: "expireDays", label: "유효기간 (일)", type: "number", inList: true,
+      { name: "expireDays", label: "유효기간 (일)", type: "number",
         help: "0이면 무기한. 오래된 포인트부터 자동으로 사용됩니다." },
     ],
   });
 
-  // 단일 설정을 목록 형태로 감싼다 (관리 화면이 목록을 기대한다)
-  ctx.registerRoute("GET", "/admin/settings-list", async (req) => {
-    requireAdmin(req);
-    return { items: [{ id: "settings", ...(await settings()) }], total: 1 };
-  });
-  ctx.registerRoute("PUT", "/admin/settings-list/:id", async (req) => {
-    requireAdmin(req);
-    const b = req.body as Partial<PointSettings>;
-    const num = (v: unknown, fallback: number, min: number, max: number) => {
-      const n = Math.floor(Number(v ?? fallback));
-      if (!Number.isFinite(n) || n < min || n > max) {
-        throw new PointError(400, `값이 허용 범위를 벗어났습니다 (${min}~${max}).`);
-      }
-      return n;
-    };
-    const current = await settings();
-    const next: PointSettings = {
-      expireDays: num(b.expireDays, current.expireDays, 0, 3650),
-      signupPoint: num(b.signupPoint, current.signupPoint, 0, 1_000_000),
-      postPoint: num(b.postPoint, current.postPoint, 0, 100_000),
-      commentPoint: num(b.commentPoint, current.commentPoint, 0, 100_000),
-      reviewPoint: num(b.reviewPoint, current.reviewPoint, 0, 100_000),
-      loginPoint: num(b.loginPoint, current.loginPoint, 0, 100_000),
-      purchaseRate: num(b.purchaseRate, current.purchaseRate, 0, 100),
-      maxUseRate: num(b.maxUseRate, current.maxUseRate, 0, 100),
-      minUse: num(b.minUse, current.minUse, 0, 1_000_000),
-    };
-    await ctx.settings.set("settings", next);
-    return { ok: true };
-  });
 
   // ── 만료 처리 (하루 1회) ────────────────────────────
   // 잔액 계산은 expires_at을 보므로 이 작업 없이도 잔액은 정확하다.

@@ -167,8 +167,13 @@ B="$TMP/b.txt"
 echo "── 토스 설정 (키를 넣기 전에는 결제수단으로 뜨지 않는다)"
 METHODS="$(curl -s "$SHOP/payment-methods")"
 absent "설정 전에는 목록에 없다" "$METHODS" '"toss"'
-contains "설정" "$(curl -s -b "$CK" -X PUT "$TOSS/admin/config" -H 'content-type: application/json' \
-  -d '{"secretKey":"test_sk_SECRET_VALUE_DO_NOT_LEAK","clientKey":"test_ck_public","enabled":true}')" '"ok":true'
+# 설정 화면(kind: "settings")은 저장 결과를 그대로 폼에 다시 채우므로
+# PUT 은 GET 과 같은 모양을 돌려준다 — 시크릿 키는 양쪽 모두 빈 값이다.
+TOSS_PUT="$(curl -s -b "$CK" -X PUT "$TOSS/admin/config" -H 'content-type: application/json' \
+  -d '{"secretKey":"test_sk_SECRET_VALUE_DO_NOT_LEAK","clientKey":"test_ck_public","enabled":true}')"
+contains "설정" "$TOSS_PUT" '"secretKeyConfigured":true'
+absent   "저장 응답에도 시크릿 키가 없다" "$TOSS_PUT" "SECRET_VALUE_DO_NOT_LEAK"
+contains "GET 과 같은 모양" "$TOSS_PUT" '"clientKey":"test_ck_public"'
 METHODS="$(curl -s "$SHOP/payment-methods")"
 contains "설정 후 목록에 뜬다" "$METHODS" '"toss"'
 

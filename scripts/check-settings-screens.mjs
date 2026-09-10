@@ -19,8 +19,15 @@ const ROOT = new URL("..", import.meta.url).pathname;
 const SAVES_SETTINGS = /registerRoute\(\s*"PUT",\s*"\/admin\/(settings|config)"/;
 /** 그 값을 편집하는 화면 선언 */
 const HAS_SCREEN = /kind:\s*"settings"/;
-/** 예전 우회로 — 한 행짜리 목록으로 설정 화면을 흉내낸다 */
-const OLD_WORKAROUND = /"\/admin\/(config|settings)-list"/;
+/**
+ * 예전 우회로 — 한 행짜리 목록으로 설정 화면을 흉내낸다.
+ *
+ * 셋(pay-toss·포인트·쪽지)이 이렇게 하고 있었고, 계약이 생긴 뒤 전부 옮겼다.
+ * 다시 나타나면 막는다: 포인트에서는 같은 검증 로직이 두 벌로 갈라져 한쪽은
+ * 빠진 값을 기본값으로 되돌리고 다른 쪽은 유지하고 있었다.
+ */
+const OLD_WORKAROUND =
+  /(?:registerRoute\(\s*"(?:GET|PUT)",\s*|basePath:\s*)"\/admin\/(?:config|settings)-list/;
 
 let fail = 0;
 console.log("▶ 설정 API 가 있으면 설정 화면도 있다");
@@ -35,11 +42,11 @@ for (const name of readdirSync(join(ROOT, "plugins"))) {
   const all = files.join("\n");
   if (!SAVES_SETTINGS.test(all)) continue;
 
-  if (HAS_SCREEN.test(all)) {
+  if (OLD_WORKAROUND.test(all)) {
+    console.log(`  ❌ ${name}: 한 행짜리 목록으로 설정 화면을 대신하고 있습니다 — kind: "settings" 를 쓰세요`);
+    fail++;
+  } else if (HAS_SCREEN.test(all)) {
     console.log(`  ✅ ${name}: 설정 API + 설정 화면`);
-  } else if (OLD_WORKAROUND.test(all)) {
-    // 화면은 있으니 막지 않는다. 다만 계약이 생겼으므로 옮기는 편이 낫다.
-    console.log(`  ⚠️  ${name}: 한 행짜리 목록으로 설정 화면을 대신하고 있습니다 (kind: "settings" 로 옮길 수 있습니다)`);
   } else {
     console.log(`  ❌ ${name}: 설정을 저장하는 API 는 있는데 그것을 부르는 화면이 없습니다`);
     fail++;

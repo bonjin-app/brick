@@ -404,12 +404,12 @@ export default definePlugin(async (ctx) => {
     return { ok: true };
   });
 
-  ctx.registerRoute("GET", "/admin/settings-list", async (req) => {
+  ctx.registerRoute("GET", "/admin/settings", async (req) => {
     requireAdmin(req);
-    return { items: [{ id: "settings", ...(await settings()) }], total: 1 };
+    return await settings();
   });
 
-  ctx.registerRoute("PUT", "/admin/settings-list/:id", async (req) => {
+  ctx.registerRoute("PUT", "/admin/settings", async (req) => {
     requireAdmin(req);
     const b = req.body as Partial<MemoSettings>;
     const num = (v: unknown, fallback: number, min: number, max: number) => {
@@ -427,7 +427,8 @@ export default definePlugin(async (ctx) => {
       maxLength: num(b.maxLength, current.maxLength, 10, 100_000),
     };
     await ctx.settings.set("settings", next);
-    return { ok: true };
+    // GET 과 같은 모양으로 — 설정 화면이 저장 결과를 그대로 폼에 다시 채운다
+    return next;
   });
 
   /**
@@ -482,17 +483,17 @@ export default definePlugin(async (ctx) => {
 
   ctx.registerAdminResource({
     name: "settings",
+    kind: "settings",
     title: "쪽지 설정",
     itemLabel: "설정",
-    basePath: "/admin/settings-list",
+    basePath: "/admin/settings",
     order: 31,
     description: "발송 비용과 도배 방지 정책을 정합니다.",
-    can: { create: false, delete: false },
     fields: [
-      { name: "sendPoint", label: "발송 비용 (포인트)", type: "number", inList: true,
+      { name: "sendPoint", label: "발송 비용 (포인트)", type: "number",
         help: "0이면 무료. 포인트 플러그인이 활성화되어 있어야 차감됩니다." },
-      { name: "sendInterval", label: "같은 사람 재발송 간격 (초)", type: "number", inList: true },
-      { name: "dailyLimit", label: "하루 발송 한도", type: "number", inList: true, help: "0이면 무제한" },
+      { name: "sendInterval", label: "같은 사람 재발송 간격 (초)", type: "number" },
+      { name: "dailyLimit", label: "하루 발송 한도", type: "number", help: "0이면 무제한" },
       { name: "maxLength", label: "최대 글자 수", type: "number" },
     ],
   });

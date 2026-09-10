@@ -249,6 +249,13 @@ printf '{"postPoint":50,"purchaseRate":3,"maxUseRate":30}' > "$TMP/set.json"
 contains "설정 저장" "$(curl -s -b "$ADMIN" -X PUT "$PT/admin/settings" -H 'content-type: application/json' --data-binary "@$TMP/set.json")" '"postPoint":50'
 printf '{"purchaseRate":999}' > "$TMP/badset.json"
 check "범위 밖 설정 거부" "$(code -b "$ADMIN" -X PUT "$PT/admin/settings" -H 'content-type: application/json' --data-binary "@$TMP/badset.json")" "400"
+# 빠진 값은 **현재 설정**을 유지한다. 예전에는 기본값으로 되돌렸고, 그래서 필드 하나만
+# 보내면 나머지 여덜 개가 조용히 초기화됐다 — 같은 로직이 두 벌로 갈라져 있던 탓이다.
+contains "필드 하나만 보내도 나머지는 남는다" \
+  "$(curl -s -b "$ADMIN" -X PUT "$PT/admin/settings" -H 'content-type: application/json' -d '{"commentPoint":7}')" '"postPoint":50'
+# 설정 화면은 선언으로 그려진다 — API 만 있고 화면이 없으면 curl 로만 바꿀 수 있다
+contains "설정 화면이 선언되어 있다" \
+  "$(curl -s -b "$ADMIN" "$API/api/admin/resources/brick-point/settings")" '"kind":"settings"'
 
 echo "── 관리 화면 · 블록"
 NAV="$(curl -s -b "$ADMIN" "$API/api/admin/nav")"

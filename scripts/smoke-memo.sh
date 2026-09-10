@@ -148,16 +148,16 @@ check "양쪽 삭제 후 조회 404" "$(code -b "$U1" "$MM/$MID")" "404"
 
 echo "── 도배 방지 · 하루 한도"
 printf '{"sendPoint":0,"sendInterval":300,"dailyLimit":50,"maxLength":2000}' > "$TMP/set1.json"
-curl -s -b "$ADMIN" -X PUT "$MM/admin/settings-list/settings" -H 'content-type: application/json' --data-binary "@$TMP/set1.json" >/dev/null
+curl -s -b "$ADMIN" -X PUT "$MM/admin/settings" -H 'content-type: application/json' --data-binary "@$TMP/set1.json" >/dev/null
 printf '{"receiverEmail":"u2@mm.test","content":"연속 테스트"}' > "$TMP/s2.json"
 check "첫 발송 성공" "$(code -b "$U1" -X POST "$MM/" -H 'content-type: application/json' --data-binary "@$TMP/s2.json")" "200"
 check "같은 사람 연속 발송 429" "$(code -b "$U1" -X POST "$MM/" -H 'content-type: application/json' --data-binary "@$TMP/s2.json")" "429"
 # 하루 한도 0건으로 두면 즉시 막혀야 한다
 printf '{"sendPoint":0,"sendInterval":0,"dailyLimit":1,"maxLength":2000}' > "$TMP/set2.json"
-curl -s -b "$ADMIN" -X PUT "$MM/admin/settings-list/settings" -H 'content-type: application/json' --data-binary "@$TMP/set2.json" >/dev/null
+curl -s -b "$ADMIN" -X PUT "$MM/admin/settings" -H 'content-type: application/json' --data-binary "@$TMP/set2.json" >/dev/null
 check "하루 한도 초과 429" "$(code -b "$U1" -X POST "$MM/" -H 'content-type: application/json' --data-binary "@$TMP/s2.json")" "429"
 printf '{"sendPoint":0,"sendInterval":0,"dailyLimit":0,"maxLength":2000}' > "$TMP/set3.json"
-curl -s -b "$ADMIN" -X PUT "$MM/admin/settings-list/settings" -H 'content-type: application/json' --data-binary "@$TMP/set3.json" >/dev/null
+curl -s -b "$ADMIN" -X PUT "$MM/admin/settings" -H 'content-type: application/json' --data-binary "@$TMP/set3.json" >/dev/null
 
 echo "── 차단"
 check "자신 차단 불가" "$(code -b "$U2" -X POST "$MM/blocks/$U2ID")" "400"
@@ -182,7 +182,7 @@ absent   "자신은 결과에서 제외" "$SEARCH" "$U1ID"
 
 echo "── 포인트 차감 (원자성)"
 printf '{"sendPoint":100,"sendInterval":0,"dailyLimit":0,"maxLength":2000}' > "$TMP/set4.json"
-curl -s -b "$ADMIN" -X PUT "$MM/admin/settings-list/settings" -H 'content-type: application/json' --data-binary "@$TMP/set4.json" >/dev/null
+curl -s -b "$ADMIN" -X PUT "$MM/admin/settings" -H 'content-type: application/json' --data-binary "@$TMP/set4.json" >/dev/null
 contains "발송 비용 안내" "$(curl -s -b "$U1" "$MM/cost")" '"sendPoint":100'
 BEFORE="$(balance "$U1")"
 printf '{"receiverEmail":"u2@mm.test","content":"유료 쪽지"}' > "$TMP/s4.json"
@@ -201,7 +201,7 @@ check "실패 후 잔액 0 유지" "$(balance "$U1")" "0"
 
 echo "── 전체 읽음 처리"
 printf '{"sendPoint":0,"sendInterval":0,"dailyLimit":0,"maxLength":2000}' > "$TMP/set5.json"
-curl -s -b "$ADMIN" -X PUT "$MM/admin/settings-list/settings" -H 'content-type: application/json' --data-binary "@$TMP/set5.json" >/dev/null
+curl -s -b "$ADMIN" -X PUT "$MM/admin/settings" -H 'content-type: application/json' --data-binary "@$TMP/set5.json" >/dev/null
 contains "읽음 처리 실행" "$(curl -s -b "$U2" -X POST "$MM/read-all")" '"ok":true'
 contains "안읽음 0" "$(curl -s -b "$U2" "$MM/unread-count")" '"count":0'
 
@@ -255,7 +255,7 @@ NAV="$(curl -s -b "$ADMIN" "$API/api/admin/nav")"
 contains "쪽지 리소스 등록" "$NAV" '"name":"messages"'
 contains "쪽지 설정 리소스" "$NAV" '"plugin":"brick-memo"'
 printf '{"sendPoint":-5}' > "$TMP/badset.json"
-check "범위 밖 설정 거부" "$(code -b "$ADMIN" -X PUT "$MM/admin/settings-list/settings" -H 'content-type: application/json' --data-binary "@$TMP/badset.json")" "400"
+check "범위 밖 설정 거부" "$(code -b "$ADMIN" -X PUT "$MM/admin/settings" -H 'content-type: application/json' --data-binary "@$TMP/badset.json")" "400"
 
 echo
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"

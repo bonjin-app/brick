@@ -265,7 +265,10 @@ export default definePlugin(async (ctx) => {
     return {
       clientKey: cfg.clientKey,
       enabled: cfg.enabled,
-      // 시크릿 키는 설정 여부만 알려준다
+      // 시크릿 키는 **내려보내지 않는다.** 빈 값으로 두어 폼이 비워둔 채 저장하면
+      // 기존 값이 유지되게 한다(그 규칙은 아래 PUT 이 지킨다).
+      secretKey: "",
+      // 설정 여부만 알려준다 — 운영자는 "넣었는지"를 알아야 한다
       secretKeyConfigured: Boolean(cfg.secretKey),
     };
   });
@@ -284,60 +287,36 @@ export default definePlugin(async (ctx) => {
       throw Object.assign(new Error("시크릿 키를 먼저 입력해주세요."), { status: 400 });
     }
     await ctx.settings.set("config", next);
-    return { ok: true, secretKeyConfigured: Boolean(next.secretKey) };
+    // GET 과 같은 모양으로 — 설정 화면이 저장 결과를 그대로 폼에 다시 채운다.
+    // 시크릿 키는 여기서도 비워 보낸다.
+    return {
+      clientKey: next.clientKey,
+      enabled: next.enabled,
+      secretKey: "",
+      secretKeyConfigured: Boolean(next.secretKey),
+    };
   });
 
   ctx.registerAdminResource({
     name: "config",
+    kind: "settings",
     title: "토스페이먼츠",
     itemLabel: "설정",
-    basePath: "/admin/config-list",
+    basePath: "/admin/config",
     order: 40,
     description:
       "토스페이먼츠 개발자센터에서 발급한 키를 입력하세요. " +
       "시크릿 키는 저장 후 다시 표시되지 않으며, 비워두고 저장하면 기존 값이 유지됩니다.",
-    can: { create: false, delete: false },
     fields: [
-      { name: "enabled", label: "결제 사용", type: "boolean", inList: true },
-      { name: "clientKey", label: "클라이언트 키", type: "text", inList: true,
+      { name: "enabled", label: "결제 사용", type: "boolean" },
+      { name: "clientKey", label: "클라이언트 키", type: "text",
         help: "test_ck_ 또는 live_ck_ 로 시작합니다. 공개되어도 되는 값입니다." },
       { name: "secretKey", label: "시크릿 키", type: "text",
         help: "test_sk_ 또는 live_sk_ 로 시작합니다. 절대 외부에 노출하지 마세요." },
-      { name: "secretKeyConfigured", label: "시크릿 키 설정됨", type: "boolean", readOnly: true, inList: true },
+      { name: "secretKeyConfigured", label: "시크릿 키 설정됨", type: "boolean", readOnly: true },
     ],
   });
 
-  // 관리자 리소스는 목록 형태를 기대하므로 단일 설정을 한 줄로 감싼다
-  ctx.registerRoute("GET", "/admin/config-list", async (req) => {
-    if (req.user?.role !== "admin") throw Object.assign(new Error("권한이 없습니다."), { status: 403 });
-    const cfg = await load();
-    return {
-      items: [{
-        id: "config",
-        enabled: cfg.enabled,
-        clientKey: cfg.clientKey,
-        secretKey: "",
-        secretKeyConfigured: Boolean(cfg.secretKey),
-      }],
-      total: 1,
-    };
-  });
-
-  ctx.registerRoute("PUT", "/admin/config-list/:id", async (req) => {
-    if (req.user?.role !== "admin") throw Object.assign(new Error("권한이 없습니다."), { status: 403 });
-    const b = req.body as Partial<TossSettings>;
-    const current = await load();
-    const next: TossSettings = {
-      secretKey: b.secretKey?.trim() ? b.secretKey.trim() : current.secretKey,
-      clientKey: (b.clientKey ?? current.clientKey).trim(),
-      enabled: b.enabled ?? current.enabled,
-    };
-    if (next.enabled && !next.secretKey) {
-      throw Object.assign(new Error("시크릿 키를 먼저 입력해주세요."), { status: 400 });
-    }
-    await ctx.settings.set("config", next);
-    return { ok: true };
-  });
 
   return {};
 });
