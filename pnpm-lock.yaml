@@ -81,8 +81,8 @@ importers:
         specifier: '>=5.12.1'
         version: 5.12.1
       nodemailer:
-        specifier: ^9.0.5
-        version: 9.0.5
+        specifier: ^9.1.1
+        version: 9.1.1
       pg:
         specifier: ^8.23.0
         version: 8.23.0
@@ -2180,8 +2180,8 @@ packages:
     resolution: {integrity: sha512-D9UOmYG3UH1V+ENW56t5QXBwJw1YEY18ruVeus89Rw+SyIgjPkCO84bRzO3uNIYosJbNwiabWVn48o3uJLjxFQ==}
     engines: {node: '>=18'}
 
-  nodemailer@9.0.5:
-    resolution: {integrity: sha512-wvjiKvjczmsN7U/8006JOdXubgBk2XFAbioDMbT+sM7cPs0QrhJTa6KBRX7P5REGGkDcLUz/EarWidb8G8C1jQ==}
+  nodemailer@9.1.1:
+    resolution: {integrity: sha512-izw9mVKFix6YSnC9eLgV6g1opl9DUlRio9ZNcq+Wu9Ujn2UwF+8Nl0B8nz22kEC+CTZCvinkxwJ0DeFbb6NwcQ==}
     engines: {node: '>=6.0.0'}
 
   on-exit-leak-free@2.1.2:
@@ -4309,7 +4309,7 @@ snapshots:
 
   node-releases@2.0.53: {}
 
-  nodemailer@9.0.5: {}
+  nodemailer@9.1.1: {}
 
   on-exit-leak-free@2.1.2: {}
 
