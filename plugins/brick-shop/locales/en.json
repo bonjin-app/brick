@@ -458,5 +458,8 @@
   "pager.prev": "Prev",
   "pager.next": "Next",
   "pager.label": "Pages",
-  "list.total": "{n} items"
+  "list.total": "{n} items",
+  "captcha.label": "CAPTCHA",
+  "captcha.reload": "Reload",
+  "captcha.placeholder": "Type the characters shown"
 }

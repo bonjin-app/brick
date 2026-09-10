@@ -253,5 +253,48 @@ check "끄면 헤더가 없다" "$(curl -s -b "$CK" -X PUT "$API/api/settings" -
 check "오타는 거부한다" "$(code -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"security.csp":"yes"}')" "400"
 curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"security.csp":"on"}' -o /dev/null
 
+echo
+echo "── 비회원 스팸 방어 (캡차를 요구하는 세 경로)"
+# 게시판만 캡차가 있고 재입고 알림·1:1 문의는 비어 있었다. 둘 다 메일을 유발하는
+# 경로다 — 재입고 알림은 **아무 주소나** 받아 재입고 순간 전부 발송하므로 사이트가
+# 스팸 발사대가 된다(60번 시도해 60건 등록되는 것을 재현했다).
+# 이 절은 맨 끝에 둔다: IP 한도(시간당 10건)를 소진하므로 앞 절에 영향을 주면 안 된다.
+printf '{"slug":"soldout-item","name":"품절 상품","price":10000,"stock":0,"status":"soldout"}' > "$TMP/so.json"
+curl -s -b "$CK" -X POST "$SHOP/admin/products" -H 'content-type: application/json' --data-binary "@$TMP/so.json" >/dev/null
+RA="$SHOP/products/soldout-item/restock-alert"
+
+NOCAP="$(curl -s -X POST "$RA" -H 'content-type: application/json' -d '{"email":"a1@x.test"}')"
+contains "재입고 알림 — 캡차 없이는 거부" "$NOCAP" "자동입력 방지"
+contains "어느 칸인지 알려준다" "$NOCAP" '"field":"captchaAnswer"'
+
+IFS='|' read -r CTK CAN <<< "$(captcha_issue)"
+printf '{"email":"a1@x.test","captchaToken":"%s","captchaAnswer":"%s"}' "$CTK" "$CAN" > "$TMP/ra1.json"
+contains "재입고 알림 — 캡차를 풀면 신청" "$(post "$RA" "$TMP/ra1.json")" '"productName"'
+# 토큰은 1회용이다. 재사용이 되면 봇이 한 번 풀고 목록을 통째로 넣는다.
+printf '{"email":"a2@x.test","captchaToken":"%s","captchaAnswer":"%s"}' "$CTK" "$CAN" > "$TMP/ra2.json"
+contains "재입고 알림 — 토큰 재사용 거부" "$(post "$RA" "$TMP/ra2.json")" "자동입력 방지"
+
+# 캡차를 매번 푸는 봇도 무한히는 못 하게 — 한 IP 는 시간당 20건까지
+# (회원가입과 같은 숫자. 성공한 등록만 센다 — 잘못 누른 것까지 세면 손님이 막힌다)
+LIMITED=""
+for i in $(seq 2 23); do
+  IFS='|' read -r CTK CAN <<< "$(captcha_issue)"
+  printf '{"email":"a%s@x.test","captchaToken":"%s","captchaAnswer":"%s"}' "$i" "$CTK" "$CAN" > "$TMP/ran.json"
+  RC="$(code -X POST "$RA" -H 'content-type: application/json' --data-binary "@$TMP/ran.json")"
+  [[ "$RC" == "429" ]] && { LIMITED="$i"; break; }
+done
+[[ -n "$LIMITED" ]] && ok "재입고 알림 — IP 한도로 막힌다 (${LIMITED}번째)" || bad "재입고 알림 — IP 한도가 걸리지 않는다"
+
+curl -s -b "$CK" -X POST "$API/api/plugins/brick-helpdesk/activate" >/dev/null
+HELP="$API/api/plugins/brick-helpdesk"
+# 비회원 문의는 기본 꺼져 있다 — 켜야 이 경로가 생긴다
+curl -s -b "$CK" -X PUT "$HELP/admin/settings" -H 'content-type: application/json' \
+  -d '{"allowGuest":true,"categoriesText":"일반","notifyOnAnswer":true,"pageSize":20}' >/dev/null
+printf '{"title":"문의합니다","content":"내용입니다","category":"일반","guestName":"손님","guestEmail":"g@x.test","guestPassword":"1234"}' > "$TMP/tk0.json"
+contains "1:1 문의 — 캡차 없이는 거부" "$(post "$HELP/tickets" "$TMP/tk0.json")" "자동입력 방지"
+IFS='|' read -r CTK CAN <<< "$(captcha_issue)"
+printf '{"title":"문의합니다","content":"내용입니다","category":"일반","guestName":"손님","guestEmail":"g@x.test","guestPassword":"1234","captchaToken":"%s","captchaAnswer":"%s"}' "$CTK" "$CAN" > "$TMP/tk1.json"
+contains "1:1 문의 — 캡차를 풀면 접수" "$(post "$HELP/tickets" "$TMP/tk1.json")" '"ticketNo"'
+
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 [[ $FAIL -eq 0 ]] || { echo; echo "── 서버 로그 ──"; tail -40 "$TMP/api.log"; exit 1; }

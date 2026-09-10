@@ -217,5 +217,8 @@
   "pager.prev": "이전",
   "pager.next": "다음",
   "pager.label": "페이지",
-  "list.total": "총 {n}개"
+  "list.total": "총 {n}개",
+  "captcha.label": "자동입력 방지",
+  "captcha.reload": "새로고침",
+  "captcha.placeholder": "보이는 문자 입력"
 }

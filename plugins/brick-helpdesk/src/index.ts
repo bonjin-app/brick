@@ -51,6 +51,23 @@ export default definePlugin(async (ctx) => {
   ctx.registerRoute("POST", "/tickets", async (req) => {
     const s = await settings();
 
+    /*
+     * 비회원에게는 캡차를 요구한다.
+     *
+     * 문의 한 건마다 운영자에게 메일이 나간다. 1분에 1건 제한은 사람의 실수를
+     * 막을 뿐 봇을 막지 못한다 — 하루 1440건이고, IP 를 바꾸면 그마저 없다.
+     * 게시판·재입고 알림과 같은 기준이다: 비회원은 추적 수단이 IP뿐이다.
+     */
+    if (!req.user && ctx.captcha.enabled) {
+      const b = (req.body ?? {}) as Record<string, unknown>;
+      const passed = await ctx.captcha.verify(
+        String(b.captchaToken ?? ""), String(b.captchaAnswer ?? ""),
+      );
+      if (!passed) {
+        throw new HelpError(400, "자동입력 방지 문자가 올바르지 않습니다. 다시 시도해주세요.");
+      }
+    }
+
     // 도배 방지 — 문의는 메일 알림을 유발하므로 스팸의 표적이 된다
     const key = req.user ? `help:${req.user.id}` : `help-ip:${req.ip}`;
     const recent = await ctx.cache.get<number>(key);

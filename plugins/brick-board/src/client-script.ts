@@ -12,8 +12,11 @@
  * 에디터가 만든 HTML은 **서버에서 다시 새니타이즈**한다. 클라이언트 검증은
  * 편의일 뿐이고 신뢰하지 않는다.
  */
+import { CAPTCHA_WIDGET_JS, CAPTCHA_WIDGET_CSS } from "@brick/plugin-sdk";
+
 export const BOARD_SCRIPT = `
 <script>
+${CAPTCHA_WIDGET_JS}
 (function () {
   var API = '/api/plugins/brick-board';
 
@@ -40,50 +43,9 @@ export const BOARD_SCRIPT = `
   }
 
   /* ── 캡차 ──────────────────────────────────────────
-     이미지를 서버 렌더에 넣으면 캐시된 페이지에 같은 문제가 박혀 무의미해진다.
-     그래서 클라이언트가 매번 새로 받아 채운다. */
-  document.querySelectorAll('[data-captcha]').forEach(function (box) {
-    var img = box.querySelector('.brick-captcha-image');
-    var tokenField = box.querySelector('input[name=captchaToken]');
-    var answerField = box.querySelector('input[name=captchaAnswer]');
-
-    function load() {
-      img.innerHTML = '<span class="brick-captcha-loading">불러오는 중…</span>';
-      fetch('/api/captcha', { cache: 'no-store' })
-        .then(function (r) { return r.json(); })
-        .then(function (d) {
-          if (!d.enabled) {
-            // 캡차가 꺼져 있으면 필드를 숨기고 required도 해제한다
-            box.hidden = true;
-            if (answerField) answerField.required = false;
-            return;
-          }
-          img.innerHTML = d.svg;
-          tokenField.value = d.token;
-        })
-        .catch(function () {
-          img.innerHTML = '<span class="brick-captcha-loading">불러올 수 없습니다</span>';
-        });
-    }
-    load();
-    // 폼 제출이 실패해 다시 시도할 때는 새 문제를 받아야 한다 (토큰은 1회용)
-    box.captchaReload = load;
-    var reload = box.querySelector('[data-captcha-reload]');
-    if (reload) reload.addEventListener('click', function () { answerField.value = ''; load(); });
-  });
-
-  /** 캡차 값을 payload에 담고, 실패 후 재시도를 위해 새로고침 함수를 돌려준다 */
-  function captchaOf(form) {
-    var box = form.querySelector('[data-captcha]');
-    if (!box || box.hidden) return { fields: {}, reload: function () {} };
-    return {
-      fields: {
-        captchaToken: box.querySelector('input[name=captchaToken]').value,
-        captchaAnswer: box.querySelector('input[name=captchaAnswer]').value
-      },
-      reload: function () { if (box.captchaReload) box.captchaReload(); }
-    };
-  }
+     위젯은 코어가 들고 있다(문의·재입고 알림도 같은 것을 쓴다).
+     여기서는 값을 꺼내 쓰기만 한다. */
+  function captchaOf(form) { return window.brickCaptcha.of(form); }
 
   /* ── 경량 에디터 ───────────────────────────────── */
   var editor = document.querySelector('.brick-editor');
@@ -582,12 +544,7 @@ export const BOARD_CSS = `
 .brick-write-actions a{padding:11px 22px;border:1px solid var(--color-line, #e4e4ea);border-radius:6px;text-decoration:none;color:inherit}
 
 /* 캡차 */
-.brick-captcha-row{display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap}
-.brick-captcha-image{display:inline-flex;align-items:center;min-width:160px;min-height:56px;background:var(--color-bg-soft, #f6f6f9);border-radius:6px}
-.brick-captcha-image svg{display:block;border-radius:6px}
-.brick-captcha-loading{color:var(--color-muted, #6c6c7a);font-size:12.5px;padding:0 10px}
-.brick-captcha-row button{width:34px;height:34px;border:1px solid var(--color-line, #e4e4ea);border-radius:6px;background:var(--color-bg, #ffffff);cursor:pointer;font-size:16px}
-.brick-captcha-row input{width:150px;padding:9px;border:1px solid var(--color-line, #e4e4ea);border-radius:6px;font-size:15px;letter-spacing:2px;text-transform:uppercase}
+${CAPTCHA_WIDGET_CSS}
 
 /* 카드 · 위젯 */
 .brick-board-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:18px 0}

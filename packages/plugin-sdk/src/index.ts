@@ -26,6 +26,9 @@ export type {
 export { rawResponse } from "@brick/core";
 // 한국 전용 검증 — 코어와 플러그인이 같은 규칙을 쓴다 (체크섬을 복제하면 갈라진다)
 export { isValidBusinessNo, formatBusinessNo } from "@brick/core";
+// 비회원 폼용 캡차 위젯 — 플러그인마다 베끼면 한 곳만 고쳐진다
+export { captchaFieldHtml, CAPTCHA_WIDGET_JS, CAPTCHA_WIDGET_CSS } from "@brick/core";
+export type { CaptchaWidgetLabels } from "@brick/core";
 // 검색 발췌·HTML 제거 — 여러 플러그인이 같은 규칙을 써야 한다
 export { stripHtml, searchExcerpt, escapeHtml, maskEmail, SITE_TZ } from "@brick/core";
 // DB 오류 판별 — 중복 등록을 409로 돌려줄 때 쓴다.

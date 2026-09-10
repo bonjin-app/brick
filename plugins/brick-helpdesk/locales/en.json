@@ -6,6 +6,7 @@
   "HTML을 사용할 수 있습니다.": "HTML is allowed.",
   "담당자": "Assignee",
   "답변": "Answer",
+  "답변 대기 문의": "Tickets awaiting reply",
   "답변 작성": "Write a reply",
   "답변완료": "Answered",
   "답변을 입력하고 저장하면 상태가 '답변완료'로 바뀌고 작성자에게 메일이 갑니다. 작성자가 다시 글을 쓰면 '접수'로 돌아옵니다.": "Saving a reply sets the status to 'Answered' and emails the author. If the author writes again, it returns to 'Open'.",
@@ -14,13 +15,17 @@
   "도움안됨": "Not helpful",
   "문의": "Ticket",
   "문의번호": "Ticket no.",
+  "보이는 문자 입력": "Type the characters shown",
   "분류": "Category",
   "분류 목록 화면에서 id를 복사해 넣으세요. 비우면 분류 없음.": "Copy the id from the category list. Empty = no category.",
   "분류 지정": "Category id",
   "분류명": "Category name",
   "상태": "Status",
   "상태 변경": "Change status",
+  "새로고침": "Reload",
   "순서": "Order",
+  "자동입력 방지": "CAPTCHA",
+  "자동입력 방지 문자가 올바르지 않습니다. 다시 시도해주세요.": "The characters you typed do not match. Please try again.",
   "작성자": "Author",
   "작을수록 먼저.": "Lower comes first.",
   "저장하면 대화에 추가되고 작성자에게 알립니다. 비워두면 답변하지 않습니다.": "Saving appends it to the conversation and notifies the author. Leave empty to not reply.",
@@ -33,6 +38,5 @@
   "종료하면 더 이상 답변을 받지 않습니다.": "Closing stops further replies.",
   "주소(slug)": "Slug",
   "질문": "Question",
-  "표시": "Visible",
-  "답변 대기 문의": "Tickets awaiting reply"
+  "표시": "Visible"
 }

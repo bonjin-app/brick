@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import type { BlockRenderContext } from "@brick/plugin-sdk";
+import { captchaFieldHtml, type BlockRenderContext } from "@brick/plugin-sdk";
 import { asListStyle, escapeHtml, fullDate, hasRole, humanSize, shortDate, type BoardRow, type Db } from "./types.js";
 import { t } from "./i18n.js";
 
@@ -18,20 +18,14 @@ import { t } from "./i18n.js";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * 비회원용 자동입력 방지 필드.
- *
- * 이미지는 클라이언트가 /api/captcha 로 받아 채운다 — 서버 렌더에 넣으면
- * 캐시된 페이지에 같은 문제가 박혀 무의미해진다.
+ * 비회원용 자동입력 방지 필드 — 공용 위젯(문구만 게시판 것으로).
+ * 문의·재입고 알림도 같은 것을 쓴다. 베껴 두면 한 곳만 고쳐진다.
  */
-const captchaField = () => `<div class="brick-field brick-captcha" data-captcha>
-      <span class="brick-label">${escapeHtml(t("captcha.label"))}</span>
-      <div class="brick-captcha-row">
-        <span class="brick-captcha-image" aria-live="polite"></span>
-        <button type="button" data-captcha-reload title="${escapeHtml(t("captcha.reload"))}">&#8635;</button>
-        <input name="captchaAnswer" autocomplete="off" maxlength="10" placeholder="${escapeHtml(t("captcha.placeholder"))}" required />
-      </div>
-      <input type="hidden" name="captchaToken" value="" />
-    </div>`;
+const captchaField = () => captchaFieldHtml({
+  label: t("captcha.label"),
+  reload: t("captcha.reload"),
+  placeholder: t("captcha.placeholder"),
+});
 
 /**
  * 작성자 표시 — 아바타 + 이름.

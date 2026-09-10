@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import type { PluginContext } from "@brick/plugin-sdk";
+import { CAPTCHA_WIDGET_CSS, CAPTCHA_WIDGET_JS, captchaFieldHtml, type PluginContext } from "@brick/plugin-sdk";
 import { escapeHtml, type Db, type HelpSettings } from "./types.js";
 import { listCategories, listFaqs } from "./faq.js";
 
@@ -161,6 +161,7 @@ const HELP_CSS = `
 .brick-thread-item{padding:16px;border-radius:10px;background:var(--color-bg-soft, #f6f6f9);white-space:pre-wrap;line-height:1.7}
 .brick-thread-item.is-staff{background:color-mix(in srgb, var(--color-primary, #cf4437) 9%, transparent);border-left:3px solid var(--color-primary,#d0402c)}
 .brick-thread-item b{display:block;font-size:13px;margin-bottom:6px;color:var(--color-text-soft, #45454f)}
+${CAPTCHA_WIDGET_CSS}
 </style>`;
 
 /* ── FAQ 클라이언트 (조회수 · 평가) ────────────────── */
@@ -196,8 +197,15 @@ const FAQ_SCRIPT = `
 </script>`;
 
 /* ── 1:1 문의 클라이언트 ───────────────────────────── */
+const GUEST_CAPTCHA_HTML = captchaFieldHtml({
+  label: "자동입력 방지",
+  reload: "새로고침",
+  placeholder: "보이는 문자 입력",
+});
+
 const HELP_SCRIPT = `
 <script>
+${CAPTCHA_WIDGET_JS}
 (function(){
   var root = document.currentScript.parentNode.querySelector('.brick-help');
   if (!root || root.dataset.ready) return;
@@ -205,6 +213,8 @@ const HELP_SCRIPT = `
   var body = root.querySelector('.brick-help-body');
   var API = '/api/plugins/brick-helpdesk';
   var allowGuest = root.dataset.allowGuest === '1';
+  // 비회원 문의는 캡차를 요구한다 — 문의 한 건마다 운영자에게 메일이 나간다
+  var isGuest = root.dataset.guest === '1';
   var config = { categories: ['일반'] };
 
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
@@ -276,10 +286,12 @@ const HELP_SCRIPT = `
           '<label>이메일<input type="email" data-guest-email placeholder="답변을 받을 주소" /></label>' +
           '<label>조회용 비밀번호<input type="password" data-guest-pw placeholder="4자 이상" /></label>'
         : '') +
+      (isGuest ? ${JSON.stringify(GUEST_CAPTCHA_HTML)} : '') +
       '<div class="brick-help-toolbar"><span class="brick-help-msg" data-msg></span>' +
       '<span><button data-cancel style="background:var(--color-line, #e4e4ea);color:var(--color-text, #17171c);margin-right:8px">취소</button>' +
       '<button data-submit>등록</button></span></div></div>';
 
+    window.brickCaptcha.attach(body);
     body.querySelector('[data-cancel]').addEventListener('click', showList);
     body.querySelector('[data-submit]').addEventListener('click', function(){
       var msg = body.querySelector('[data-msg]');
@@ -295,10 +307,13 @@ const HELP_SCRIPT = `
         payload.guestEmail = body.querySelector('[data-guest-email]').value;
         payload.guestPassword = body.querySelector('[data-guest-pw]').value;
       }
+      var cap = window.brickCaptcha.of(body);
+      Object.keys(cap.fields).forEach(function(k){ payload[k] = cap.fields[k]; });
       json(API + '/tickets', {
         method: 'POST', headers: {'content-type':'application/json'}, body: JSON.stringify(payload)
       }).then(function(res){
-        if (!res.ok) { msg.textContent = res.d.message || '등록에 실패했습니다.'; return; }
+        // 토큰은 1회용이므로 실패하면 새 문제를 받아야 한다
+        if (!res.ok) { cap.reload(); msg.textContent = res.d.message || '등록에 실패했습니다.'; return; }
         alert('문의가 접수되었습니다. 문의번호: ' + res.d.ticketNo);
         showList();
       });

@@ -87,6 +87,9 @@ jobs:
           grep -q "captchaToken" apps/web/src/app/register/page.tsx \
             || { echo "::error::가입 화면이 captchaToken 을 보내지 않습니다"; exit 1; }
 
+      - name: 캡차를 요구하는 모든 곳에 화면이 있다 (가입뿐 아니라)
+        run: node scripts/check-captcha-screens.mjs
+
       - name: 캡차가 정답을 흘리지 않는다 (봇이 그냥 읽을 수 있으면 캡차가 아니다)
         run: node scripts/check-captcha-secrecy.mjs
 

@@ -1341,6 +1341,42 @@ export default definePlugin(async (ctx) => {
 
   ctx.registerRoute("POST", "/products/:slug/restock-alert", async (req) => {
     const b = (req.body ?? {}) as Record<string, unknown>;
+
+    /*
+     * 비회원에게는 캡차를 요구한다.
+     *
+     * 이 폼은 **아무 주소나** 받는다 — 확인 절차가 없으므로 남의 주소도 넣을 수 있고,
+     * 재입고되는 순간 사이트가 그 주소들로 메일을 보낸다. 즉 스팸 발사대가 된다.
+     * 중복 방지 인덱스(상품+이메일)는 같은 주소를 두 번 막을 뿐, 주소를 바꾸면
+     * 얼마든지 늘어난다 — 실제로 60번 시도해 60건이 등록됐다.
+     * 게시판이 이미 같은 판단을 하고 있다: 비회원은 추적 수단이 IP뿐이다.
+     */
+    if (!req.user && ctx.captcha.enabled) {
+      const passed = await ctx.captcha.verify(
+        String(b.captchaToken ?? ""), String(b.captchaAnswer ?? ""),
+      );
+      if (!passed) {
+        throw new ShopError(400, "자동입력 방지 문자가 올바르지 않습니다. 다시 시도해주세요.", "captchaAnswer");
+      }
+    }
+
+    /*
+     * 캡차를 푼 뒤에도 한 IP 가 무한히 등록하지는 못하게 한다 (시간당 20건).
+     *
+     * 숫자는 회원가입과 같게 뒀다. 5회 같은 좁은 값은 사무실·학교·카페처럼 NAT
+     * 뒤에 여러 사람이 있는 곳에서 정상 사용자를 막는다 — 로그인에서 이미 같은
+     * 문제를 겪고 고쳤다.
+     *
+     * **성공한 등록만 센다.** 품절이 아니거나 옵션을 안 고른 요청은 아무것도
+     * 남기지 않으므로 스팸이 아니다. 그것까지 세면 손님이 몇 번 잘못 눌렀다고
+     * 정작 신청을 못 하게 된다.
+     */
+    const rlKey = `restock-ip:${req.ip}`;
+    const used = (await ctx.cache.get<number>(rlKey)) ?? 0;
+    if (used >= 20) {
+      throw new ShopError(429, "재입고 알림 신청이 너무 많습니다. 잠시 후 다시 시도해주세요.");
+    }
+
     const result = await requestRestockAlert(db, {
       productSlug: req.params.slug,
       optionId: b.optionId ? String(b.optionId) : null,
@@ -1348,6 +1384,8 @@ export default definePlugin(async (ctx) => {
       user: req.user ? { id: req.user.id, email: req.user.email } : null,
       ip: req.ip,
     });
+    await ctx.cache.set(rlKey, used + 1, 60 * 60);
+
     return {
       ...result,
       // 주소를 그대로 되돌려주지 않는다 — 남의 주소로 신청했는지 확인하는

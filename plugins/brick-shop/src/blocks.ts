@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
-import type { BlockRenderContext, PluginContext } from "@brick/plugin-sdk";
+import { CAPTCHA_WIDGET_CSS, CAPTCHA_WIDGET_JS, captchaFieldHtml,
+         type BlockRenderContext, type PluginContext } from "@brick/plugin-sdk";
 import { escapeHtml, won, type Db, type ShopSettings } from "./types.js";
 import { bindI18n, t } from "./i18n.js";
 import { reviewSection } from "./reviews-view.js";
@@ -421,7 +422,7 @@ export function registerStorefrontBlocks(
     </dl>
     ${soldout ? `<div class="brick-soldout-notice">
       <p>${escapeHtml(t("detail.soldoutNotice"))}</p>
-      ${restockForm(String(p.slug), soldoutOptions)}
+      ${restockForm(String(p.slug), soldoutOptions, !blockCtx.user)}
     </div>` : `
     <form class="brick-buy-form" data-product="${escapeHtml(p.id)}">
       ${optionSelect}
@@ -456,7 +457,7 @@ ${
   !soldout && soldoutOptions.length
     ? `<div class="brick-partial-soldout">
         <p>${escapeHtml(t("detail.partialSoldout"))}</p>
-        ${restockForm(String(p.slug), soldoutOptions)}
+        ${restockForm(String(p.slug), soldoutOptions, !blockCtx.user)}
       </div>`
     : ""
 }
@@ -702,6 +703,7 @@ function relatedSection(items: RelatedProduct[], title?: string): string {
 function restockForm(
   slug: string,
   soldoutOptions: Array<Record<string, unknown>>,
+  isGuest: boolean,
 ): string {
   const picker =
     soldoutOptions.length > 1
@@ -721,6 +723,9 @@ function restockForm(
     <label class="brick-field">${escapeHtml(t("restock.email"))}
       <input type="email" name="email" placeholder="name@example.com" required />
     </label>
+    ${isGuest ? captchaFieldHtml({
+      label: t("captcha.label"), reload: t("captcha.reload"), placeholder: t("captcha.placeholder"),
+    }) : ""}
     <button type="button" data-act="restock">${escapeHtml(t("restock.submit"))}</button>
     <p class="brick-restock-msg" role="status"></p>
     <p class="brick-restock-note">${escapeHtml(t("restock.note"))}</p>
@@ -735,6 +740,7 @@ function restockForm(
  */
 const restockScript = () => `
 <script>
+${CAPTCHA_WIDGET_JS}
 (function () {
   // 폼이 둘일 수 있다 (품절 상품 + 품절 옵션). 각각 붙인다.
   Array.prototype.forEach.call(document.querySelectorAll(".brick-restock-form"), attach);
@@ -749,6 +755,9 @@ const restockScript = () => `
     var opt = form.querySelector('[name="optionId"]');
     var body = { email: email };
     if (opt && opt.value) body.optionId = opt.value;
+    // 비회원은 캡차를 함께 보낸다 (칸이 없거나 캡차가 꺼져 있으면 빈 값)
+    var cap = window.brickCaptcha.of(form);
+    Object.keys(cap.fields).forEach(function (k) { body[k] = cap.fields[k]; });
     btn.disabled = true;
     msg.textContent = ${JSON.stringify(t("restock.submitting"))};
     fetch("/api/plugins/brick-shop/products/" + encodeURIComponent(form.dataset.slug) + "/restock-alert", {
@@ -759,6 +768,8 @@ const restockScript = () => `
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
       .then(function (res) {
         // 실패 이유를 그대로 보여준다 — "이미 신청했습니다"를 감추면 손님이 계속 누른다
+        // 토큰은 1회용이므로 실패하면 새 문제를 받아야 한다
+        if (!res.ok) cap.reload();
         msg.textContent = res.ok
           ? ${JSON.stringify(t("restock.done"))}.replace("{email}", res.d.email)
           : (res.d.message || ${JSON.stringify(t("restock.fail"))});
@@ -897,6 +908,8 @@ const STOREFRONT_CSS = `
 .brick-detail-rating a{color:var(--color-muted, #6c6c7a);font-size:13px}
 .brick-card-rating{margin-top:3px;font-size:13px;color:var(--color-muted, #6c6c7a);display:flex;gap:4px;align-items:center}
 .brick-stars{color:var(--color-warning, #96610a);letter-spacing:1px}
+/* 캡차 위젯 — .brick-restock-form button 뒤에 와야 새로고침 버튼이 작게 남는다 */
+${CAPTCHA_WIDGET_CSS}
 </style>`;
 
 /* ── 이미지 갤러리 (썸네일 클릭으로 대표 이미지 교체) ── */
