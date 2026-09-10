@@ -40,6 +40,13 @@ export class PluginLoaderService implements OnModuleInit {
     method: string;
     segments: string[]; // "/api/plugins/<plugin>/boards/:slug/posts" → 분해된 세그먼트
     handler: PluginRouteHandler;
+    /**
+     * 관리 경로인가 — 플러그인이 등록한 경로가 "/admin" 으로 시작하는가.
+     *
+     * 요청 URL 이 아니라 **등록된 경로**로 판단한다. URL 로 보면 파라미터 값이
+     * "admin" 인 요청(`/boards/admin/posts`)까지 관리 경로로 오인한다.
+     */
+    adminOnly: boolean;
     /** API 문서용 설명 (선택 — 없어도 경로는 문서에 실린다) */
     docs?: { summary?: string };
   }> = [];
@@ -50,7 +57,10 @@ export class PluginLoaderService implements OnModuleInit {
    * HEAD는 GET 라우트로 처리한다 — HTTP 표준이며, 이렇게 하지 않으면
    * `curl -I` 나 링크 검사 도구가 404를 받는다.
    */
-  matchRoute(method: string, path: string): { handler: PluginRouteHandler; params: Record<string, string> } | null {
+  matchRoute(
+    method: string,
+    path: string,
+  ): { handler: PluginRouteHandler; params: Record<string, string>; adminOnly: boolean } | null {
     const wanted = method === "HEAD" ? "GET" : method;
     const parts = path.split("/").filter(Boolean);
 
@@ -61,7 +71,9 @@ export class PluginLoaderService implements OnModuleInit {
      * 그쪽으로 빨려 들어간다(실제로 발생). 플러그인 개발자가 등록 순서를
      * 신경 쓰게 하는 것은 함정이므로, 정적 세그먼트가 많은 쪽을 고른다.
      */
-    let best: { handler: PluginRouteHandler; params: Record<string, string>; score: number } | null = null;
+    let best: {
+      handler: PluginRouteHandler; params: Record<string, string>; score: number; adminOnly: boolean;
+    } | null = null;
 
     for (const r of this.routes) {
       if (r.method !== wanted || r.segments.length !== parts.length) continue;
@@ -80,10 +92,12 @@ export class PluginLoaderService implements OnModuleInit {
         }
       }
       if (!ok) continue;
-      if (!best || score > best.score) best = { handler: r.handler, params, score };
+      if (!best || score > best.score) {
+        best = { handler: r.handler, params, score, adminOnly: r.adminOnly };
+      }
     }
 
-    return best ? { handler: best.handler, params: best.params } : null;
+    return best ? { handler: best.handler, params: best.params, adminOnly: best.adminOnly } : null;
   }
   /** 페이지 빌더 블록 레지스트리 */
   readonly blocks = new Map<string, BlockDefinition>();
@@ -531,6 +545,7 @@ export class PluginLoaderService implements OnModuleInit {
           segments: `/api/plugins/${pluginName}${clean}`.split("/").filter(Boolean),
           handler,
           docs,
+          adminOnly: clean === "/admin" || clean.startsWith("/admin/"),
         });
       },
       registerBlock: (block) => {

@@ -8,6 +8,7 @@ export * from "./hooks/hook-bus.js";
 export * from "./plugin/plugin-context.js";
 export * from "./db-errors.js";
 export * from "./korea.js";
+export * from "./roles.js";
 export * from "./text.js";
 export * from "./i18n.js";
 export * from "./time.js";

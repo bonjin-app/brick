@@ -26,6 +26,9 @@ export type {
 export { rawResponse } from "@brick/core";
 // 한국 전용 검증 — 코어와 플러그인이 같은 규칙을 쓴다 (체크섬을 복제하면 갈라진다)
 export { isValidBusinessNo, formatBusinessNo } from "@brick/core";
+// 권한 등급 — 권한 비교를 베끼면 한쪽만 고쳐지고 그것이 권한 구멍이 된다
+export { ROLE_RANK, rankOf, hasRole } from "@brick/core";
+export type { RoleBearer } from "@brick/core";
 // 비회원 폼용 캡차 위젯 — 플러그인마다 베끼면 한 곳만 고쳐진다
 export { captchaFieldHtml, CAPTCHA_WIDGET_JS, CAPTCHA_WIDGET_CSS } from "@brick/core";
 export type { CaptchaWidgetLabels } from "@brick/core";

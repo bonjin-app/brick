@@ -1,11 +1,11 @@
 import {
-  All, BadRequestException, Body, Controller, Get, HttpException, Inject, Logger,
+  All, BadRequestException, Body, Controller, ForbiddenException, Get, HttpException, Inject, Logger,
   NotFoundException, Param, Post, Req, Res, UseGuards,
 } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { sql } from "drizzle-orm";
 import type { BrickDb } from "@brick/database";
-import { SITE_TZ, isRawResponse, type PluginUploadedFile } from "@brick/core";
+import { SITE_TZ, isRawResponse, rankOf, type PluginUploadedFile } from "@brick/core";
 import { PluginLoaderService } from "./plugin-loader.service.js";
 import { AdminGuard } from "../auth/auth.guard.js";
 import { AuthService } from "../auth/auth.service.js";
@@ -104,6 +104,25 @@ export class PluginsController {
     // ctx.t 가 읽는 사이트 언어 캐시를 갱신한다 (TTL 이라 사실상 공짜)
     await this.loader.refreshLocale();
     const user = await this.auth.resolveFromRequest(req);
+
+    /*
+     * 관리 경로는 **규칙으로** 닫는다.
+     *
+     * 이 디스패처는 지금까지 아무 가드도 걸지 않았고, 플러그인의 관리 라우트
+     * 마흔 개 남짓이 각자 첫 줄에서 역할을 확인하고 있었다. 지금은 전부 확인하지만,
+     * 그것은 저자가 매번 기억한 결과다 — 한 번 잊으면 그 라우트는 그냥 열린다.
+     * 상품·주문·쿠폰·회원 등급을 누구나 바꿀 수 있게 되는 종류의 실수다.
+     *
+     * 그래서 여기서 운영자(manager 이상)를 요구한다. 핸들러의 자기 검사는 그대로
+     * 둔다 — admin 만 허용하는 라우트는 여기서 통과해도 자기 줄에서 막힌다.
+     * 이 층은 더 느슨한 바닥이고, 잊었을 때 열리지 않게 하는 것이 목적이다.
+     *
+     * 403 으로 돌려준다 — 기존 플러그인 가드와 같은 응답이라야 화면과 스모크가
+     * 같은 것을 본다(비로그인도 403 이다: 관리 경로의 존재를 알려줄 이유가 없다).
+     */
+    if (match.adminOnly && rankOf(user?.role) < rankOf("manager")) {
+      throw new ForbiddenException("권한이 없습니다.");
+    }
 
     try {
       const result = await match.handler({

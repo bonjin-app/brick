@@ -21,30 +21,12 @@ export interface SessionUser {
   email?: string;
 }
 
-/** 권한 검사에 필요한 최소 형태 — 라우트와 블록 컨텍스트 양쪽을 받는다 */
-export type RoleBearer = { role: string } | null | undefined;
-
-/**
- * 권한 등급.
- *
- * 그누보드는 1~10 레벨을 쓰지만 Brick의 역할 모델(admin/manager/member)에 맞춘다.
- * 숫자가 클수록 높은 권한이다.
+/*
+ * 권한 등급은 코어가 들고 있다 — 게시판이 갖고 있던 정의를 옮겼다.
+ * 권한 비교를 두 곳에 두면 한쪽만 고쳐지고, 그 어긋남이 곧 권한 구멍이 된다.
  */
-export const ROLE_RANK: Record<string, number> = {
-  guest: 0,
-  member: 1,
-  manager: 2,
-  admin: 3,
-};
-
-export function rankOf(role: string | undefined | null): number {
-  return ROLE_RANK[role ?? "guest"] ?? 0;
-}
-
-/** user가 required 등급 이상인가 */
-export function hasRole(user: RoleBearer, required: string): boolean {
-  return rankOf(user?.role ?? "guest") >= rankOf(required);
-}
+import { rankOf } from "@brick/plugin-sdk";
+export { ROLE_RANK, rankOf, hasRole, type RoleBearer } from "@brick/plugin-sdk";
 
 export interface BoardRow {
   id: string;

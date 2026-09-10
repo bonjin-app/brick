@@ -93,6 +93,9 @@ jobs:
       - name: 캡차가 정답을 흘리지 않는다 (봇이 그냥 읽을 수 있으면 캡차가 아니다)
         run: node scripts/check-captcha-secrecy.mjs
 
+      - name: 관리 라우트는 스스로 권한을 정한다 (디스패처는 manager 까지 통과시킨다)
+        run: node scripts/check-admin-guards.mjs
+
       - name: 마이그레이션
         run: node apps/api/dist/migrate.js
         env:
