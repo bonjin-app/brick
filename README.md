@@ -27,7 +27,7 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-3145%20passing-2ea043.svg" alt="스모크 테스트 3145개" />
+  <img src="https://img.shields.io/badge/E2E-3150%20passing-2ea043.svg" alt="스모크 테스트 3150개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
   <a href="https://github.com/bonjin-app/brick/pkgs/container/brick">
     <img src="https://img.shields.io/badge/docker-amd64%20%C2%B7%20arm64-2496ed.svg" alt="Docker image (amd64 · arm64)" />
@@ -367,7 +367,7 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 3,145개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 3,150개 항목):
 
 | 수트 | 항목 | 무엇을 못박는가 |
 |---|---:|---|
@@ -391,10 +391,10 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `smoke-updates.sh` | 33 | Ed25519 서명 검증 · 키 고정(TOFU) · 변조·위조·다운그레이드 거부 |
 | `smoke-grades.sh` | 43 | 순매출 산정(반품 차감) · 견적=주문 금액 · 쿠폰 합산 상한 · 안분 정합 |
 | `smoke-coupons.sh` | 54 | 1인 한도(취소 제외) · 발급형 1장 1회 · 취소 반환/환불 미반환 · 생일 자동 지급(월·일만 수집) |
-| `smoke-board.sh` | 168 | 권한 4단계 · 답변형 · 비밀글 · 첨부 원자성 · XSS · **목록 스킨·썸네일·이전/다음·일괄 작업·그룹 권한·링크** · **첨부 이미지 축소** · **갤러리 썸네일·data-thumb·사진만 글** · **관리 목록 필터** |
+| `smoke-board.sh` | 169 | 권한 4단계 · 답변형 · 비밀글 · 첨부 원자성 · XSS · **목록 스킨·썸네일·이전/다음·일괄 작업·그룹 권한·링크** · **첨부 이미지 축소** · **갤러리 썸네일·data-thumb·사진만 글** · **관리 목록 필터** |
 | `smoke-point.sh` | 55 | FIFO 소모 · 멱등 적립 · 만료 · 동시성 |
 | `smoke-memo.sh` | 76 | 프라이버시 · 차단 · 포인트 차감 트랜잭션 · 슬래시 없는 루트 경로 |
-| `smoke-shop.sh` | 216 | 재고 동시성 · 금액 위조 · 구매 검증 후기 · 비밀 문의 · **사진 후기** · **후기 정렬·사진 필터** · **모바일 구매 바** · **목록 썸네일·관리 왕복** · **처리 대기 카드** · **주문 일괄 처리·송장 일괄 입력** · **목록 필터** · **붙여넣기 등록** · **답변 대기 필터** |
+| `smoke-shop.sh` | 220 | 재고 동시성 · 금액 위조 · 구매 검증 후기 · 비밀 문의 · **사진 후기** · **후기 정렬·사진 필터** · **모바일 구매 바** · **목록 썸네일·관리 왕복** · **처리 대기 카드** · **주문 일괄 처리·송장 일괄 입력** · **목록 필터** · **붙여넣기 등록** · **답변 대기 필터** · **목록 인덱스** |
 | `smoke-site.sh` | 73 | 방문자 집계(IP 해시) · 팝업 노출 규칙 |
 | `smoke-social.sh` | 76 | state 쿠키 결속 · 코드 1회성 · 계정 탈취 경로 |
 | `smoke-security.sh` | 64 | 캡차 · 레이트리밋 · 결제 위조 · 권한 우회 · **CSP** |

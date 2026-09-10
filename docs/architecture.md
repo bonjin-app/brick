@@ -3125,3 +3125,37 @@ Next standalone 이 web 이 쓰지도 않는 sharp(libvips glibc·musl 두 벌 3
 **검증.** smoke-theme 223: 다섯 테마의 레이아웃·팔레트·계약(스킵 링크·헤더 액션·현재 메뉴·프리미티브),
 미리보기(활성 테마 불변·캐시 오염 없음·권한), 배너 슬라이드, 2단 메뉴, 띠배너, 대비(여섯 조합 전수).
 브라우저에서 다섯 테마 × 라이트·다크 대비 0건, ui-audit 0건.
+
+## ADR-98. 인덱스는 재고 넣는다 — 자주 여는 목록만, 실측으로 정당화하고 근거를 남긴다
+
+**맥락.** 관리 화면에 필터를 붙이고(주문 상태, 상품 상태·분류, 후기·문의 답변 여부, 게시판)
+대시보드가 그 목록으로 곧바로 보내게 만들었다. 기능은 작은 시험 DB 에서 다 동작했지만,
+그것이 상품 5,000 개·주문 20,000 건인 가게에서도 같은 속도라는 근거는 없었다.
+
+**결정.** 규모 데이터를 넣고 `EXPLAIN ANALYZE` 로 재서, **순차 스캔이 나오고 인덱스로
+실제로 빨라지는 것만** 추가한다. 네 개를 넣었다.
+
+| 화면 | 전 | 후 | 인덱스 |
+|---|---:|---:|---|
+| 관리 주문 첫 화면(필터 없음) | 1.77ms | 0.01ms | `shop_orders (created_at DESC)` |
+| 후기 관리(답변 대기 먼저) | 1.49ms | 0.02ms | `shop_reviews ((admin_reply IS NULL) DESC, created_at DESC)` |
+| 손님 상품 목록 24개 | 0.49ms | 0.01ms | `shop_products (sort_order, created_at DESC) INCLUDE (price) WHERE status IN (…)` |
+| 게시글 관리(모든 게시판) | 2.21ms | 0.01ms | `board_posts (created_at DESC)` |
+
+**왜 이 넷인가.** 기존 인덱스는 **필터를 건 경우**를 위한 것이었다
+(`shop_orders (status, created_at)`, `board_posts (board_id, is_notice, created_at)`).
+그런데 운영자가 가장 많이 여는 것은 필터 없는 **첫 화면**이고, 거기서는 선행 열이 비어
+그 인덱스를 못 탄다. 손님 쪽도 같다: `status IN (두 값)` 이라
+`shop_products (status, sort_order, created_at)` 를 못 쓴다 — 부분 인덱스라야 맞는다.
+
+**넣지 않은 것.** `shop_reviews (created_at) WHERE admin_reply IS NULL` 을 후보로 만들었지만
+표현식 인덱스가 그 일을 대신해 차이가 없었다(0.09 vs 0.10ms). 인덱스는 쓰기 비용이므로
+"있으면 좋겠지"로 넣지 않는다 — 재서 효과가 없으면 뺀다.
+
+**근거를 마이그레이션에 남긴다.** 숫자를 주석에 적어 두면 다음 사람이 "이 인덱스가 왜
+있는지" 되묻지 않고, 필요 없어졌을 때 지울 근거도 된다.
+
+**검증.** 스모크는 **인덱스를 쓸 수 있는 모양인지**만 못박는다(`enable_seqscan = off` 로
+계획을 보고 인덱스 이름을 확인). 계획 종류(Index Only Scan 인지 Bitmap 인지)는 옵티마이저
+몫이다 — 행이 적은 시험 DB 에서는 Bitmap 이 맞는 선택이고, 그것을 못박으면 규모가 달라질
+때마다 스모크가 붉어진다(실제로 한 번 붉혔다).

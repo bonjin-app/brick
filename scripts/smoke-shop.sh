@@ -388,6 +388,33 @@ import sys, json
 print('yes' if all(not q['admin_reply'] for q in json.load(sys.stdin)['items']) else 'no')")"
 check "문의도 답변 대기만" "$INQ_WAIT" "yes"
 
+echo "── 자주 여는 목록이 인덱스를 타는가 (규모에서 무너지지 않게)"
+# 계획을 직접 본다. 개수가 적은 시험 DB 에서는 순차 스캔이 더 빠를 수 있으므로
+# enable_seqscan 을 끄고 **인덱스가 존재해 쓸 수 있는지**를 확인한다.
+plan_of() {
+  node -e '
+    const { Client } = require("'"$ROOT"'/apps/api/node_modules/pg");
+    (async () => {
+      const c = new Client(process.env.DATABASE_URL); await c.connect();
+      await c.query("SET enable_seqscan = off");
+      const r = await c.query("EXPLAIN (FORMAT JSON) " + process.argv[1]);
+      console.log(JSON.stringify(r.rows[0]["QUERY PLAN"][0].Plan));
+      await c.end();
+    })().catch((e) => { console.error(e.message); process.exit(1); });
+  ' "$1"
+}
+contains "관리 주문 첫 화면이 인덱스를 쓴다" \
+  "$(plan_of "SELECT o.id FROM shop_orders o ORDER BY o.created_at DESC LIMIT 30")" "shop_orders_recent_idx"
+contains "후기 관리 정렬이 인덱스를 쓴다" \
+  "$(plan_of "SELECT r.id FROM shop_reviews r ORDER BY (r.admin_reply IS NULL) DESC, r.created_at DESC LIMIT 30")" "shop_reviews_admin_idx"
+contains "손님 상품 목록이 인덱스를 쓴다" \
+  "$(plan_of "SELECT p.slug FROM shop_products p WHERE p.status IN ('selling','soldout') ORDER BY p.sort_order, p.created_at DESC LIMIT 24")" "shop_products_public_idx"
+# 가격대 눈금도 같은 인덱스를 쓴다(price 를 INCLUDE 했다). **계획 종류는 못박지 않는다** —
+# 행이 적은 시험 DB 에서는 옵티마이저가 Bitmap 을 고르는 것이 맞고, 규모가 커지면
+# Index Only Scan 이 된다. 우리가 보장할 것은 인덱스가 쓸 수 있는 모양이라는 것뿐이다
+contains "가격 눈금도 같은 인덱스를 쓴다" \
+  "$(plan_of "SELECT min(p.price), max(p.price) FROM shop_products p WHERE p.status IN ('selling','soldout')")" "shop_products_public_idx"
+
 echo "── 재고 소진 후"
 printf '{"items":[{"productId":"%s","quantity":1}],"orderer":{"ordererName":"늦은손님","ordererPhone":"010-0000-0000","postcode":"06236","address1":"서울"}}' "$PID" > "$TMP/late.json"
 check "품절 상품 주문 차단" \

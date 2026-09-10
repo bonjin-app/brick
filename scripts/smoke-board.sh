@@ -417,6 +417,18 @@ POST_FILTERS="$(curl -s -b "$ADMIN" "$API/api/admin/resources/brick-board/posts"
 import sys, json
 print(json.dumps([f['name'] for f in json.load(sys.stdin).get('filters', [])]))")"
 contains "게시글 관리에 필터 선언" "$POST_FILTERS" '"board"'
+# 이 목록은 사이트에서 가장 길다 — 인덱스 없이는 규모에서 무너진다
+POSTS_PLAN="$(node -e '
+  const { Client } = require("'"$ROOT"'/apps/api/node_modules/pg");
+  (async () => {
+    const c = new Client(process.env.DATABASE_URL); await c.connect();
+    await c.query("SET enable_seqscan = off");
+    const r = await c.query("EXPLAIN (FORMAT JSON) SELECT p.id FROM board_posts p ORDER BY p.created_at DESC LIMIT 30");
+    console.log(JSON.stringify(r.rows[0]["QUERY PLAN"][0].Plan));
+    await c.end();
+  })().catch((e) => { console.error(e.message); process.exit(1); });
+')"
+contains "게시글 관리 목록이 인덱스를 쓴다" "$POSTS_PLAN" "board_posts_recent_idx"
 check "지운 글은 404" "$(code "$BD/posts/$GP1")" "404"
 contains "게시글 리소스가 일괄 작업을 선언한다" "$(curl -s -b "$ADMIN" "$API/api/admin/resources/brick-board/posts")" '"bulkActions"'
 
