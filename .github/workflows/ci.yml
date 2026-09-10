@@ -65,6 +65,18 @@ jobs:
           done
           [ -z "$missing" ] || { echo "::error::모달을 그리는데 useModalFocus 를 쓰지 않았습니다:$missing"; exit 1; }
 
+      - name: 메일이 보내는 링크에 화면이 있다
+        run: |
+          # 서버가 메일로 보내는 사이트 경로는 전부 웹 앱에 화면이 있어야 한다.
+          # 이메일 인증 링크(/verify-email)는 확인 API 까지 갖춰져 있는데 화면이 없어서
+          # 손님이 링크를 누르면 404 였다 — 캡차와 같은 종류의 구멍(서버는 되는데 화면이 없다).
+          missing=""
+          for path in $(grep -rhoE 'siteUrl[^`]*\}/[a-z-]+\?' apps/api/src --include='*.ts' \
+                        | grep -oE '/[a-z-]+\?' | tr -d '?' | sort -u); do
+            [ -d "apps/web/src/app${path}" ] || missing="$missing $path"
+          done
+          [ -z "$missing" ] || { echo "::error::메일이 보내는 경로에 화면이 없습니다:$missing"; exit 1; }
+
       - name: 서버가 요구하는 것을 화면이 준다 (가입 캡차)
         run: |
           # 서버는 기본으로 캡차를 요구하는데(BRICK_CAPTCHA=off 로만 끈다) 가입 화면에 입력

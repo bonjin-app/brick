@@ -171,6 +171,13 @@ check "재발송은 도배 방지에 걸린다" \
 check "잘못된 토큰 거부" \
   "$(code -X POST "$API/api/email/verify" -H 'content-type: application/json' -d '{"token":"bogus-token"}')" "400"
 
+# 메일이 보내는 링크에 화면이 있어야 한다 — 확인 API 가 있어도 화면이 없으면 손님은 404 를
+# 만난다(실제로 그랬다). 화면 파일의 존재를 본다: 스모크는 API 만 띄우므로 여기서는 소스로
+[[ -f "$ROOT/apps/web/src/app/verify-email/page.tsx" ]] \
+  && ok "인증 링크가 가리키는 화면이 있다" || bad "인증 링크가 가리키는 화면이 없다 (/verify-email)"
+grep -q "api/email/verify" "$ROOT/apps/web/src/app/verify-email/page.tsx" 2>/dev/null \
+  && ok "그 화면이 확인 API 를 부른다" || bad "그 화면이 확인 API 를 부르지 않는다"
+
 echo "── 이메일 변경은 새 주소를 인증한 뒤에 반영된다"
 check "이미 쓰는 주소로 변경 차단" \
   "$(code -b "$CK1" -X POST "$API/api/me/email/verify/send" -H 'content-type: application/json' \
