@@ -151,6 +151,29 @@ export default function PluginResourcePage() {
   }, [api, page, filterValues]);
   useEffect(() => { void reload(); }, [reload]);
 
+  /*
+   * 수정 폼은 **단건 라우트**에서 받아 채운다(계약의 `GET <basePath>/:id`).
+   *
+   * 목록 행을 그대로 쓰면 목록이 폼에 필요한 것까지 전부 실어야 하고, 상품처럼 상세
+   * HTML 이 있는 리소스는 한 화면 응답이 수 MB 가 된다. 수정은 한 번에 하나다.
+   *
+   * 그 라우트를 구현하지 않은 플러그인도 있으므로 실패하면 목록 행으로 되돌아간다 —
+   * 없는 기능 때문에 수정 자체가 막히면 안 된다.
+   */
+  async function openEdit(row: Row) {
+    const id = row[idField];
+    if (!api || !id) { setEditing({ ...row }); return; }
+    try {
+      const r = await fetch(`${api}/${encodeURIComponent(String(id))}`);
+      if (!r.ok) { setEditing({ ...row }); return; }
+      const d = await r.json();
+      const full = d && typeof d === "object" && !Array.isArray(d) ? (d.item ?? d) : null;
+      setEditing(full && full[idField] ? { ...row, ...full } : { ...row });
+    } catch {
+      setEditing({ ...row });
+    }
+  }
+
   async function save() {
     if (!api || !editing) return;
     const id = editing[idField];
@@ -365,7 +388,7 @@ export default function PluginResourcePage() {
                       <td key={f.name} style={{ padding: 12 }}>{formatCell(row[f.name], f)}</td>
                     ))}
                     <td style={{ padding: 12, whiteSpace: "nowrap" }}>
-                      {can.update && <button onClick={() => setEditing({ ...row })} style={btnSm}>{t("common.edit")}</button>}
+                      {can.update && <button onClick={() => void openEdit(row)} style={btnSm}>{t("common.edit")}</button>}
                       {can.delete && <button onClick={() => remove(row)} style={{ ...btnSm, color: "var(--color-danger)", marginLeft: 6 }}>{t("common.delete")}</button>}
                     </td>
                   </tr>

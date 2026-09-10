@@ -415,6 +415,28 @@ contains "손님 상품 목록이 인덱스를 쓴다" \
 contains "가격 눈금도 같은 인덱스를 쓴다" \
   "$(plan_of "SELECT min(p.price), max(p.price) FROM shop_products p WHERE p.status IN ('selling','soldout')")" "shop_products_public_idx"
 
+echo "── 목록은 목록에 필요한 것만 (폼에 필요한 것은 단건에서)"
+# 상세 HTML 을 목록에 실으면 응답의 대부분이 그것이 된다 — 사진·표가 든 실제 상품이면
+# 한 화면이 수 MB 다. 수정은 한 번에 하나이므로 그때 받아 오면 된다
+psql_q "UPDATE shop_products SET description = repeat('가나다라마바사아자차카타파하', 400) WHERE slug LIKE 'imp-%' OR slug LIKE 'sample-%'" >/dev/null
+LIST_SIZE="$(curl -s -b "$CK" -o /dev/null -w '%{size_download}' "$SHOP/admin/products")"
+LIST_HAS_DESC="$(curl -s -b "$CK" "$SHOP/admin/products" | /usr/bin/python3 -c "
+import sys, json
+print('yes' if any('description' in it for it in json.load(sys.stdin)['items']) else 'no')")"
+check "목록에 상세 HTML 을 싣지 않는다" "$LIST_HAS_DESC" "no"
+[[ "$LIST_SIZE" -lt 20000 ]] && ok "목록 응답이 가볍다 (${LIST_SIZE} bytes)" || bad "목록 응답이 무겁다 (${LIST_SIZE} bytes)"
+# 단건에는 폼에 필요한 것이 다 있어야 한다 — 없으면 수정할 때 값이 날아간다
+# 특정 slug 에 기대지 않는다 — 이 수트가 만드는 상품은 앞 절에 따라 달라진다
+ONE_ID="$(curl -s -b "$CK" "$SHOP/admin/products" | /usr/bin/python3 -c "
+import sys, json
+print(json.load(sys.stdin)['items'][0]['id'])")"
+ONE="$(curl -s -b "$CK" "$SHOP/admin/products/$ONE_ID")"
+for f in description images_text options_text related_text slug name price; do
+  contains "단건에 $f" "$ONE" "\"$f\""
+done
+check "없는 상품은 404" "$(code -b "$CK" "$SHOP/admin/products/00000000-0000-0000-0000-000000000000")" "404"
+check "비관리자는 단건도 못 본다" "$(code "$SHOP/admin/products/$ONE_ID")" "403"
+
 echo "── 재고 소진 후"
 printf '{"items":[{"productId":"%s","quantity":1}],"orderer":{"ordererName":"늦은손님","ordererPhone":"010-0000-0000","postcode":"06236","address1":"서울"}}' "$PID" > "$TMP/late.json"
 check "품절 상품 주문 차단" \
@@ -470,10 +492,12 @@ contains "옵션 추가금 반영" "$OPDETAIL" '"extra_price":1000'
 contains "다중 이미지 저장" "$OPDETAIL" '/uploads/b.jpg'
 contains "대표 이미지 자동 지정(첫 줄)" "$OPDETAIL" '"image_url":"/uploads/a.jpg"'
 
-# 관리 목록은 배열을 텍스트로 되돌려 준다 (선언적 폼이 편집할 수 있는 형태)
-ADMIN_LIST="$(curl -s -b "$CK" "$SHOP/admin/products")"
-contains "옵션 텍스트 역변환" "$ADMIN_LIST" '색상: 빨강|1000|5'
-contains "이미지 텍스트 역변환" "$ADMIN_LIST" '/uploads/a.jpg'
+# 폼이 편집할 수 있는 형태(배열 → 텍스트)로 되돌려 주는 것은 **단건**의 일이다.
+# 목록은 목록에 필요한 것만 싣는다(상세 HTML 을 30건 실으면 한 화면이 수 MB 다)
+OPID_ADMIN="$(psql_q "SELECT id FROM shop_products WHERE slug = 'opt-item'")"
+ADMIN_ONE="$(curl -s -b "$CK" "$SHOP/admin/products/$OPID_ADMIN")"
+contains "옵션 텍스트 역변환" "$ADMIN_ONE" '색상: 빨강|1000|5'
+contains "이미지 텍스트 역변환" "$ADMIN_ONE" '/uploads/a.jpg'
 
 check "옵션 이름 중복 차단" \
   "$(code -b "$CK" -X POST "$SHOP/admin/products" -H 'content-type: application/json' \

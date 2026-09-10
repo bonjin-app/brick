@@ -493,11 +493,48 @@ export default definePlugin(async (ctx) => {
     const pCat = /^[0-9a-f-]{36}$/i.test(askedCat) ? askedCat : "";
     const prodWhere = sql`WHERE (${pStatus} = '' OR p.status = ${pStatus})
                             AND (${pCat} = '' OR p.category_id = nullif(${pCat}, '')::uuid)`;
+    /*
+     * 목록은 **목록에 필요한 것만** 준다.
+     *
+     * 전에는 폼에 필요한 것까지 전부 실었다(상세 HTML·추가 이미지·옵션·관련 상품). 화면이
+     * 목록 행을 그대로 수정 폼에 넣었기 때문인데, 그 대가로 응답의 76% 가 상세 HTML 이었다
+     * (30건에 45KB, 사진과 표가 들어간 실제 상품이면 한 화면이 수 MB 다). 수정은 한 번에
+     * 하나이므로, 그때 단건 라우트에서 받아 오면 된다.
+     *
+     * 편집 원본을 준다는 원칙은 그대로다 — 여기서 썸네일을 주면 저장할 때 원본 자리에
+     * 썸네일이 박힌다(실제로 그랬다).
+     */
     const { rows } = await db.execute(sql`
-      -- 관리 목록은 **편집 원본**을 준다. 여기서 썸네일을 주면 관리 화면이 그 값으로 폼을
-      -- 채우고, 운영자가 저장하는 순간 원본 자리에 썸네일이 박힌다(실제로 그랬다) —
-      -- 그러면 상세의 큰 사진이 400px 로 흐려지고, 그 썸네일의 썸네일은 없으므로 목록도
-      -- 원본으로 되돌아간다. 목록의 작은 미리보기를 위해 편집 값을 오염시킬 수는 없다.
+      SELECT p.id, p.slug, p.name, p.price, p.list_price, p.stock, p.status, p.image_url,
+             p.summary, p.free_shipping, p.sort_order, p.sold_count,
+             p.category_id, p.tax_free, p.sub_interval, p.review_count, p.rating_sum
+      FROM shop_products p ${prodWhere} ORDER BY p.sort_order, p.created_at DESC LIMIT 30 OFFSET ${(page - 1) * 30}
+    `);
+    const { rows: cnt } = await db.execute(sql`SELECT count(*) AS n FROM shop_products p ${prodWhere}`);
+    return {
+      items: rows.map((r) => ({
+        ...r,
+        rating_avg:
+          Number(r.review_count) > 0
+            ? Math.round((Number(r.rating_sum) / Number(r.review_count)) * 10) / 10
+            : 0,
+      })),
+      total: Number(cnt[0]?.n ?? 0),
+      page,
+      pageSize: 30,
+    };
+  });
+
+  /**
+   * 상품 한 건 — 수정 폼이 열릴 때 받는다.
+   *
+   * 폼에 필요한 것을 여기서 조립한다(상세 HTML·추가 이미지·옵션·관련 상품). 목록에 싣지
+   * 않는 이유는 위에 적었다. 관련 상품을 되돌려 보내지 않으면 저장할 때 지워진 것으로
+   * 오해해서, 상품을 수정할 때마다 관련 상품이 날아간다.
+   */
+  ctx.registerRoute("GET", "/admin/products/:id", async (req) => {
+    requireAdmin(req);
+    const { rows } = await db.execute(sql`
       SELECT p.id, p.slug, p.name, p.price, p.list_price, p.stock, p.status, p.image_url,
              p.summary, p.description, p.free_shipping, p.sort_order, p.sold_count,
              p.category_id, p.tax_free, p.sub_interval, p.images, p.review_count, p.rating_sum,
@@ -507,8 +544,6 @@ export default definePlugin(async (ctx) => {
                 FROM shop_product_options o WHERE o.product_id = p.id),
                '[]'
              ) AS options,
-             -- 관련 상품도 폼에 되돌려 보여준다. 없으면 저장할 때 지워진 것으로
-             -- 오해해서, 상품을 수정할 때마다 관련 상품이 날아간다.
              coalesce(
                (SELECT string_agg(rp.slug, E'\n' ORDER BY r.sort_order, rp.name)
                 FROM shop_related_products r
@@ -516,27 +551,23 @@ export default definePlugin(async (ctx) => {
                 WHERE r.product_id = p.id),
                ''
              ) AS related_text
-      FROM shop_products p ${prodWhere} ORDER BY p.sort_order, p.created_at DESC LIMIT 30 OFFSET ${(page - 1) * 30}
+      FROM shop_products p WHERE p.id = ${req.params.id}::uuid LIMIT 1
     `);
-    const { rows: cnt } = await db.execute(sql`SELECT count(*) AS n FROM shop_products p ${prodWhere}`);
+    const r = rows[0];
+    if (!r) throw new ShopError(404, "상품을 찾을 수 없습니다.");
     // 관리 화면은 배열을 편집할 수 없으므로 줄바꿈 텍스트로 바꿔 보낸다
     return {
-      items: rows.map((r) => ({
-        ...r,
-        images_text: Array.isArray(r.images) ? (r.images as string[]).join("\n") : "",
-        options_text: formatOptions(
-          (r.options ?? []) as Array<{ name: unknown; extra_price: unknown; stock: unknown }>,
-        ),
-        rating_avg:
-          Number(r.review_count) > 0
-            ? Math.round((Number(r.rating_sum) / Number(r.review_count)) * 10) / 10
-            : 0,
-        images: undefined,
-        options: undefined,
-      })),
-      total: Number(cnt[0]?.n ?? 0),
-      page,
-      pageSize: 30,
+      ...r,
+      images_text: Array.isArray(r.images) ? (r.images as string[]).join("\n") : "",
+      options_text: formatOptions(
+        (r.options ?? []) as Array<{ name: unknown; extra_price: unknown; stock: unknown }>,
+      ),
+      rating_avg:
+        Number(r.review_count) > 0
+          ? Math.round((Number(r.rating_sum) / Number(r.review_count)) * 10) / 10
+          : 0,
+      images: undefined,
+      options: undefined,
     };
   });
 
