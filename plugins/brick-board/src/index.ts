@@ -779,13 +779,31 @@ ${items}
   ctx.registerRoute("GET", "/admin/posts", async (req) => {
     requireManager(req);
     const page = Math.max(1, Number(req.query.page ?? 1));
+    /*
+     * 게시판·종류로 좁힌다. 이 목록은 사이트에서 가장 길어서, 좁히지 못하면 스팸 하나를
+     * 찾으려고 수십 쪽을 넘겨야 한다. count 와 목록이 같은 조건을 쓴다.
+     */
+    const board = String(req.query.board ?? "");
+    const boardId = /^[0-9a-f-]{36}$/i.test(board) ? board : "";
+    const kind = ["notice", "secret", "normal"].includes(String(req.query.kind ?? ""))
+      ? String(req.query.kind)
+      : "";
+    const where = sql`
+      WHERE (${boardId} = '' OR p.board_id = nullif(${boardId}, '')::uuid)
+        AND (${kind} = ''
+             OR (${kind} = 'notice' AND p.is_notice)
+             OR (${kind} = 'secret' AND p.is_secret)
+             OR (${kind} = 'normal' AND NOT p.is_notice AND NOT p.is_secret))`;
     const { rows } = await db.execute(sql`
       SELECT p.id, b.title AS board, p.title, p.author_name, p.created_at,
              p.view_count, p.comment_count, p.is_notice, p.is_secret
       FROM board_posts p JOIN board_boards b ON b.id = p.board_id
+      ${where}
       ORDER BY p.created_at DESC LIMIT 30 OFFSET ${(page - 1) * 30}
     `);
-    const { rows: cnt } = await db.execute(sql`SELECT count(*) AS n FROM board_posts`);
+    const { rows: cnt } = await db.execute(sql`
+      SELECT count(*) AS n FROM board_posts p JOIN board_boards b ON b.id = p.board_id ${where}
+    `);
     return { items: rows, total: Number(cnt[0]?.n ?? 0), page, pageSize: 30 };
   });
 

@@ -100,6 +100,18 @@ export const POST_RESOURCE: AdminResource = {
   order: 20,
   description: "모든 게시판의 글을 최신순으로 봅니다. 스팸 정리에 사용하세요.",
   can: { create: false, update: false },
+  /*
+   * 이 목록은 사이트에서 가장 길다 — 글 수천 개를 30개씩 넘기며 스팸을 찾을 수는 없다.
+   * 게시판은 테이블 행이므로 라우트에서 받는다.
+   */
+  filters: [
+    { name: "board", label: "게시판", optionsFrom: "/admin/boards/options" },
+    { name: "kind", label: "종류", options: [
+      { value: "notice", label: "공지" },
+      { value: "secret", label: "비밀글" },
+      { value: "normal", label: "일반" },
+    ] },
+  ],
   fields: [
     { name: "created_at", label: "작성일시", type: "date", readOnly: true, inList: true },
     { name: "board", label: "게시판", type: "text", readOnly: true, inList: true },

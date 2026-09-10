@@ -364,6 +364,30 @@ print(json.dumps(json.load(sys.stdin).get('importFrom') or {}, ensure_ascii=Fals
 contains "상품 리소스가 가져오기를 선언" "$IMPORT_SPEC" '"/import"'
 contains "예시도 함께 준다" "$IMPORT_SPEC" "mug-white"
 
+echo "── 답변 대기만 보기 (대시보드가 보낸 그 후기·문의)"
+REV_ALL="$(curl -s -b "$CK" "$SHOP/admin/reviews" | jq_get "['total']")"
+REV_WAIT="$(curl -s -b "$CK" "$SHOP/admin/reviews?reply=waiting" | jq_get "['total']")"
+REV_DONE="$(curl -s -b "$CK" "$SHOP/admin/reviews?reply=done" | jq_get "['total']")"
+[[ $((REV_WAIT + REV_DONE)) -eq "$REV_ALL" ]] \
+  && ok "답변 대기 + 완료 = 전체 (${REV_WAIT} + ${REV_DONE} = ${REV_ALL})" || bad "답변 대기 + 완료 = 전체 (${REV_WAIT}+${REV_DONE} vs ${REV_ALL})"
+ONLY_WAIT="$(curl -s -b "$CK" "$SHOP/admin/reviews?reply=waiting" | /usr/bin/python3 -c "
+import sys, json
+print('yes' if all(not r['admin_reply'] for r in json.load(sys.stdin)['items']) else 'no')")"
+check "답변 대기만 나온다" "$ONLY_WAIT" "yes"
+# 좁히지 않아도 할 일이 위로 온다
+FIRST_UNANSWERED="$(curl -s -b "$CK" "$SHOP/admin/reviews" | /usr/bin/python3 -c "
+import sys, json
+items = json.load(sys.stdin)['items']
+print('yes' if not items or not items[0]['admin_reply'] else 'no')")"
+check "답변 대기가 먼저 온다" "$FIRST_UNANSWERED" "yes"
+check "표시 여부로도 좁힌다" "$(curl -s -b "$CK" "$SHOP/admin/reviews?visible=off" | /usr/bin/python3 -c "
+import sys, json
+print('yes' if all(r['is_visible'] is False for r in json.load(sys.stdin)['items']) else 'no')")" "yes"
+INQ_WAIT="$(curl -s -b "$CK" "$SHOP/admin/inquiries?reply=waiting" | /usr/bin/python3 -c "
+import sys, json
+print('yes' if all(not q['admin_reply'] for q in json.load(sys.stdin)['items']) else 'no')")"
+check "문의도 답변 대기만" "$INQ_WAIT" "yes"
+
 echo "── 재고 소진 후"
 printf '{"items":[{"productId":"%s","quantity":1}],"orderer":{"ordererName":"늦은손님","ordererPhone":"010-0000-0000","postcode":"06236","address1":"서울"}}' "$PID" > "$TMP/late.json"
 check "품절 상품 주문 차단" \
@@ -797,5 +821,15 @@ contains "매출 통계" "$(curl -s -b "$CK" "$SHOP/admin/stats")" "revenue"
 contains "재고 부족 알림" "$(curl -s -b "$CK" "$SHOP/admin/stats")" "lowStock"
 
 echo
+echo "── 할 일이 답변만 남았을 때 (주문 상태를 통째로 바꾸므로 **맨 끝**에 둔다)"
+# 앞 절의 주문을 빌려 쓰지 않고 상태를 바꾸는 검사는 뒷 절을 깨뜨린다 — 두 번 겪었다
+psql_q "UPDATE shop_orders SET status = 'delivered' WHERE status IN ('pending','paid','preparing','shipped')" >/dev/null
+psql_q "UPDATE shop_reviews SET admin_reply = NULL" >/dev/null
+QUEUE_LINK2="$(curl -s -b "$CK" "$API/api/admin/dashboard" | /usr/bin/python3 -c "
+import sys, json
+for c in json.load(sys.stdin).get('cards', []):
+    if c['title'] == '처리 대기': print(c.get('link') or '')")"
+contains "주문이 없으면 답변 대기로 보낸다" "$QUEUE_LINK2" "reply=waiting"
+
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 [[ $FAIL -eq 0 ]] || { echo; echo "── 서버 로그 ──"; tail -40 "$TMP/api.log"; exit 1; }

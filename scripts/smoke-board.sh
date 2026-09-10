@@ -26,6 +26,7 @@ ok()  { PASS=$((PASS+1)); echo "  ✅ $1"; }
 bad() { FAIL=$((FAIL+1)); echo "  ❌ $1"; }
 check()    { [[ "$2" == "$3" ]] && ok "$1" || bad "$1 (기대 $3, 실제 $2)"; }
 contains() { [[ "$2" == *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 없음: ${2:0:140})"; }
+jq_get()   { python3 -c "import sys,json;d=json.load(sys.stdin);print(d$1)" 2>/dev/null || echo ""; }
 absent()   { [[ "$2" != *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 가 있어서는 안 됨)"; }
 code()     { curl -s -o /dev/null -w "%{http_code}" "$@"; }
 jpost()    { curl -s -X POST "$1" -H 'content-type: application/json' --data-binary "@$2"; }
@@ -390,6 +391,32 @@ check "대상 없는 이동은 400" "$(code -b "$ADMIN" -X POST "$BD/admin/posts
 check "모르는 작업은 400" "$(code -b "$ADMIN" -X POST "$BD/admin/posts/bulk" -H 'content-type: application/json' -d '{"action":"explode","ids":["'"$GP1"'"]}')" "400"
 DL="$(curl -s -b "$ADMIN" -X POST "$BD/admin/posts/bulk" -H 'content-type: application/json' -d '{"action":"delete","ids":["'"$GP1"'","'"$GP3"'"]}')"
 contains "선택 삭제 2건" "$DL" '"affected":2'
+
+echo "── 게시글 관리 목록 좁히기 (사이트에서 가장 긴 목록)"
+POSTS_ALL="$(curl -s -b "$ADMIN" "$BD/admin/posts" | jq_get "['total']")"
+POSTS_FREE="$(curl -s -b "$ADMIN" "$BD/admin/posts?board=$FREE_ID" | jq_get "['total']")"
+[[ "$POSTS_FREE" -le "$POSTS_ALL" && "$POSTS_FREE" -gt 0 ]] \
+  && ok "게시판으로 좁힌다 (전체 ${POSTS_ALL} → 자유게시판 ${POSTS_FREE})" || bad "게시판으로 좁힌다 (${POSTS_FREE}/${POSTS_ALL})"
+ONE_BOARD="$(curl -s -b "$ADMIN" "$BD/admin/posts?board=$FREE_ID" | python3 -c "
+import sys, json
+boards = {p['board'] for p in json.load(sys.stdin)['items']}
+print('yes' if len(boards) <= 1 else 'no')")"
+check "한 게시판 글만 나온다" "$ONE_BOARD" "yes"
+# total 과 목록이 같은 조건이어야 한다
+ITEMS_FREE="$(curl -s -b "$ADMIN" "$BD/admin/posts?board=$FREE_ID" | python3 -c "import sys,json;print(len(json.load(sys.stdin)['items']))")"
+[[ "$ITEMS_FREE" -le 30 && ("$ITEMS_FREE" -eq "$POSTS_FREE" || "$POSTS_FREE" -gt 30) ]] \
+  && ok "총 개수와 목록이 같은 조건" || bad "총 개수와 목록이 같은 조건 (${ITEMS_FREE} vs ${POSTS_FREE})"
+# 종류로도 좁힌다
+ONLY_SECRET="$(curl -s -b "$ADMIN" "$BD/admin/posts?kind=secret" | python3 -c "
+import sys, json
+print('yes' if all(p['is_secret'] for p in json.load(sys.stdin)['items']) else 'no')")"
+check "비밀글만 보기" "$ONLY_SECRET" "yes"
+check "모르는 게시판 값은 전체" "$(curl -s -b "$ADMIN" "$BD/admin/posts?board=notauuid" | jq_get "['total']")" "$POSTS_ALL"
+check "모르는 종류 값도 전체" "$(curl -s -b "$ADMIN" "$BD/admin/posts?kind=../etc" | jq_get "['total']")" "$POSTS_ALL"
+POST_FILTERS="$(curl -s -b "$ADMIN" "$API/api/admin/resources/brick-board/posts" | python3 -c "
+import sys, json
+print(json.dumps([f['name'] for f in json.load(sys.stdin).get('filters', [])]))")"
+contains "게시글 관리에 필터 선언" "$POST_FILTERS" '"board"'
 check "지운 글은 404" "$(code "$BD/posts/$GP1")" "404"
 contains "게시글 리소스가 일괄 작업을 선언한다" "$(curl -s -b "$ADMIN" "$API/api/admin/resources/brick-board/posts")" '"bulkActions"'
 

@@ -1887,13 +1887,26 @@ export default definePlugin(async (ctx) => {
   ctx.registerRoute("GET", "/admin/reviews", async (req) => {
     requireAdmin(req);
     const page = Math.max(1, Number(req.query.page ?? 1));
+    /*
+     * 답변 여부로 좁힌다 — 대시보드의 "답변 2"가 여기로 보낸다. 후기가 백 개인 가게에서
+     * 답변 안 한 둘을 눈으로 찾을 수는 없다.
+     */
+    const reply = String(req.query.reply ?? "");
+    const visible = String(req.query.visible ?? "");
+    const rWhere = sql`
+      WHERE (${reply} = '' OR (${reply} = 'waiting') = (r.admin_reply IS NULL))
+        AND (${visible} = '' OR (${visible} = 'on') = r.is_visible)`;
     const { rows } = await db.execute(sql`
       SELECT r.id, r.rating, r.content, r.admin_reply, r.is_visible, r.created_at,
              r.author_name, (r.order_no IS NOT NULL) AS verified, p.name AS product_name
       FROM shop_reviews r JOIN shop_products p ON p.id = r.product_id
-      ORDER BY r.created_at DESC LIMIT 30 OFFSET ${(page - 1) * 30}
+      ${rWhere}
+      -- 답변을 기다리는 것이 먼저다 (좁히지 않았을 때도 할 일이 위로 온다)
+      ORDER BY (r.admin_reply IS NULL) DESC, r.created_at DESC LIMIT 30 OFFSET ${(page - 1) * 30}
     `);
-    const { rows: cnt } = await db.execute(sql`SELECT count(*) AS n FROM shop_reviews`);
+    const { rows: cnt } = await db.execute(sql`
+      SELECT count(*) AS n FROM shop_reviews r JOIN shop_products p ON p.id = r.product_id ${rWhere}
+    `);
     return { items: rows, total: Number(cnt[0]?.n ?? 0), page, pageSize: 30 };
   });
 
@@ -1917,13 +1930,18 @@ export default definePlugin(async (ctx) => {
   ctx.registerRoute("GET", "/admin/inquiries", async (req) => {
     requireAdmin(req);
     const page = Math.max(1, Number(req.query.page ?? 1));
+    const qReply = String(req.query.reply ?? "");
+    const qWhere = sql`WHERE (${qReply} = '' OR (${qReply} = 'waiting') = (q.admin_reply IS NULL))`;
     const { rows } = await db.execute(sql`
       SELECT q.id, q.title, q.content, q.is_secret, q.status, q.admin_reply, q.created_at,
              q.author_name, p.name AS product_name
       FROM shop_inquiries q JOIN shop_products p ON p.id = q.product_id
+      ${qWhere}
       ORDER BY (q.status = 'open') DESC, q.created_at DESC LIMIT 30 OFFSET ${(page - 1) * 30}
     `);
-    const { rows: cnt } = await db.execute(sql`SELECT count(*) AS n FROM shop_inquiries`);
+    const { rows: cnt } = await db.execute(sql`
+      SELECT count(*) AS n FROM shop_inquiries q JOIN shop_products p ON p.id = q.product_id ${qWhere}
+    `);
     return {
       items: rows.map((q) => ({
         ...q,
@@ -2525,8 +2543,8 @@ export default definePlugin(async (ctx) => {
       const link =
         pay > 0 ? "/admin/x/brick-shop/orders?status=pending"
         : ship > 0 ? "/admin/x/brick-shop/orders?status=paid"
-        : rev > 0 ? "/admin/x/brick-shop/reviews"
-        : inq > 0 ? "/admin/x/brick-shop/inquiries"
+        : rev > 0 ? "/admin/x/brick-shop/reviews?reply=waiting"
+        : inq > 0 ? "/admin/x/brick-shop/inquiries?reply=waiting"
         : "/admin/x/brick-shop/orders";
       /*
        * 후기와 문의는 "답변"으로 합친다. 넷을 늘어놓으면 190px 카드에서 세 줄로 접혀
