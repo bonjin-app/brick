@@ -100,8 +100,17 @@ export default function RegisterPage() {
     }
   }
 
+  /*
+   * 동의 줄 — 손가락으로 누를 수 있는 높이를 준다.
+   *
+   * 체크박스는 16px 이고 라벨 줄은 23px 였다. 폰에서 필수 동의가 넷이 위아래로
+   * 붙어 있으면 그 높이로는 옆줄을 누르기 쉽고, 잘못 누르면 **다른 동의가 켜진다**.
+   * 라벨 전체가 누르는 자리이므로 라벨에 높이를 준다 (체크박스만 키우면
+   * 브라우저마다 모양이 달라진다).
+   */
   const checkRow: React.CSSProperties = {
-    display: "flex", alignItems: "baseline", gap: 8, marginTop: 10, fontSize: 14, color: "var(--color-text)",
+    display: "flex", alignItems: "center", gap: 10, marginTop: 4, fontSize: 14,
+    color: "var(--color-text)", minHeight: 40, cursor: "pointer",
   };
 
   return (

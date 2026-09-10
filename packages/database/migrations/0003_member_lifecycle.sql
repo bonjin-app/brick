@@ -120,7 +120,8 @@ WHERE NOT EXISTS (SELECT 1 FROM agreements WHERE kind = 'privacy');
 
 INSERT INTO agreements (id, kind, version, title, body, is_required)
 SELECT
-  gen_random_uuid(), 'marketing', 1, '광고성 정보 수신 동의 (선택)',
+  -- 필수/선택은 is_required 가 들고 있고 가입 화면이 표시한다 — 제목에 넣으면 두 번 찍힌다
+  gen_random_uuid(), 'marketing', 1, '광고성 정보 수신 동의',
   E'신규 소식, 이벤트, 혜택 정보를 이메일로 받습니다.\n\n'
   '동의하지 않아도 회원가입과 서비스 이용에 제한이 없습니다.\n'
   '수신 동의는 내 정보 화면에서 언제든 철회할 수 있습니다.',

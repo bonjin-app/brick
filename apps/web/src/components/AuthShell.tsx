@@ -44,12 +44,19 @@ export function AuthShell({
         color: "var(--color-text)",
       }}
     >
+      {/*
+        홈으로 돌아가는 링크 — 폰에서 누를 수 있는 높이를 준다.
+        글자만 두면 23px 짜리 표적이 되고, 로그인 화면에서 사이트로 돌아가는
+        유일한 길이 그것이다.
+      */}
       <a
         href="/"
         style={{
           display: "inline-flex",
           alignItems: "center",
           gap: 8,
+          minHeight: 44,
+          padding: "0 8px",
           textDecoration: "none",
           color: "var(--color-text)",
           fontWeight: 800,
@@ -85,7 +92,12 @@ export function AuthShell({
       </section>
 
       {footer ? (
-        <p style={{ margin: 0, fontSize: 13.5, color: "var(--color-muted)", textAlign: "center" }}>
+        // 안내 줄의 링크("계정이 없나요? 회원가입")도 누르는 자리다 —
+        // 줄 높이를 넉넉히 주어 17px 표적이 되지 않게 한다
+        <p style={{
+          margin: 0, fontSize: 13.5, color: "var(--color-muted)", textAlign: "center",
+          lineHeight: 2.2,
+        }}>
           {footer}
         </p>
       ) : null}
@@ -135,4 +147,7 @@ export const authLink: CSSProperties = {
   color: "var(--color-primary-text)",
   fontWeight: 600,
   textDecoration: "none",
+  // 글자 높이만큼만 누를 수 있으면 폰에서 17px 표적이 된다
+  display: "inline-block",
+  padding: "6px 2px",
 };
