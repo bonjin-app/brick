@@ -168,6 +168,19 @@ check "잘못된 상태값 거부" \
   "$(code -b "$CK" -X PUT "$HD/admin/tickets/$T1_ID" -H 'content-type: application/json' \
       -d '{"status":"bogus"}')" "400"
 
+echo "── 설정 화면 (비회원 문의 스위치를 화면에서 켤 수 있는가)"
+# 이 화면이 없던 동안 비회원 문의를 켤 방법이 화면에 없었다 — 회사 홈페이지 스타터로
+# 설치한 사이트는 손님이 문의를 남길 수 없는 상태였고 운영자가 바꿀 수 없었다.
+HSET="$(curl -s -b "$CK" "$API/api/admin/resources/brick-helpdesk/settings")"
+contains "설정 화면이 선언되어 있다" "$HSET" '"kind":"settings"'
+contains "비회원 허용 칸" "$HSET" '"name":"allowGuest"'
+# 분류는 배열이라 선언형 폼이 편집할 수 없어 줄바꿈 텍스트로 주고받는다.
+# GET 이 그 이름을 내지 않으면 화면이 분류를 빈칸으로 보여주고, 저장하면 사라진 것처럼 된다.
+contains "GET 이 categoriesText 를 낸다" "$(curl -s -b "$CK" "$HD/admin/settings")" '"categoriesText"'
+contains "PUT 도 같은 모양으로 돌려준다" \
+  "$(curl -s -b "$CK" -X PUT "$HD/admin/settings" -H 'content-type: application/json' \
+      -d '{"allowGuest":false,"categoriesText":"일반\n주문·배송","notifyOnAnswer":true,"pageSize":20}')" '"categoriesText"'
+
 echo "── 비회원 문의 (설정을 켠 뒤)"
 contains "비회원 허용으로 변경" \
   "$(curl -s -b "$CK" -X PUT "$HD/admin/settings" -H 'content-type: application/json' \

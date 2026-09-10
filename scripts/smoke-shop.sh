@@ -874,6 +874,32 @@ curl -s -b "$CK" -X PUT "$SHOP/admin/products/$RTID" -H 'content-type: applicati
 check "관리 왕복이 대표 사진을 바꾸지 않는다" "$(psql_q "SELECT image_url FROM shop_products WHERE slug = 'trip-item'")" "$MEDIA_URL"
 check "왕복 뒤에도 목록용 주소가 남는다" "$(psql_q "SELECT thumb_url FROM shop_products WHERE slug = 'trip-item'")" "$MEDIA_THUMB"
 
+echo "── 쇼핑몰 설정 화면 (운영자가 배송비·입금 계좌를 바꿀 수 있는가)"
+# 이 화면이 없던 동안 API 는 있는데 부르는 화면이 없어서, 계좌를 채우려면 curl 을 써야
+# 했다 — 계좌가 비면 주문 완료 화면에 입금할 곳이 나오지 않는다.
+SET_RES="$(curl -s -b "$CK" "$API/api/admin/resources/brick-shop/settings")"
+contains "설정 화면이 선언되어 있다" "$SET_RES" '"kind":"settings"'
+contains "입금 계좌 칸" "$SET_RES" '"name":"bankAccount"'
+contains "배송비 칸" "$SET_RES" '"name":"shippingFee"'
+SET_GET="$(curl -s -b "$CK" "$SHOP/admin/settings")"
+printf '{"bankAccount":"○○은행 123-456 (예금주: 스모크)","shippingFee":4500,"freeShippingOver":30000,"returnShippingFee":3500,"pageSize":24}' > "$TMP/shopset.json"
+SET_PUT="$(curl -s -b "$CK" -X PUT "$SHOP/admin/settings" -H 'content-type: application/json' --data-binary "@$TMP/shopset.json")"
+contains "저장된다" "$SET_PUT" '"shippingFee":4500'
+contains "계좌도 저장된다" "$SET_PUT" "예금주: 스모크"
+# 설정 화면은 저장 결과를 그대로 폼에 다시 채운다 — GET 과 PUT 의 키가 같아야 한다.
+# 다르면 저장 직후 그 칸이 빈칸이 되고, 한 번 더 누르면 값이 사라진 것처럼 보인다.
+SHAPE="$(/usr/bin/python3 -c "
+import json,sys
+a=set(json.loads(sys.argv[1])); b=set(json.loads(sys.argv[2]))
+print('same' if a==b else 'GET-'+','.join(sorted(a-b))+' PUT-'+','.join(sorted(b-a)))" "$SET_GET" "$SET_PUT")"
+check "GET 과 PUT 의 모양이 같다" "$SHAPE" "same"
+contains "손님 화면에 반영된다 (배송비)" \
+  "$(curl -s -X POST "$API/api/blocks/render" -H 'content-type: application/json' \
+      -d '{"name":"brick-shop/product-detail","props":{"slug":"smoke-item"}}')" "4,500원"
+# 원래대로 되돌린다 — 뒤 절이 배송비를 전제한다
+printf '{"bankAccount":"","shippingFee":3000,"freeShippingOver":50000,"returnShippingFee":3000,"pageSize":20}' > "$TMP/shopset0.json"
+curl -s -b "$CK" -X PUT "$SHOP/admin/settings" -H 'content-type: application/json' --data-binary "@$TMP/shopset0.json" -o /dev/null
+
 echo "── 스토어프론트 블록"
 BLOCKS="$(curl -s "$API/api/blocks")"
 contains "상품목록 블록" "$BLOCKS" "brick-shop/product-list"

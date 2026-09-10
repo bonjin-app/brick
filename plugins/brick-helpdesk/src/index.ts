@@ -12,7 +12,7 @@ import {
   createFaq, deleteFaq, listCategories, listCategoriesAdmin, listFaqs, listFaqsAdmin,
   markViewed, rateFaq, updateFaq, validateCategory,
 } from "./faq.js";
-import { FAQ_RESOURCE, FAQ_CATEGORY_RESOURCE, TICKET_RESOURCE } from "./admin-resources.js";
+import { FAQ_RESOURCE, FAQ_CATEGORY_RESOURCE, TICKET_RESOURCE, HELP_SETTINGS_RESOURCE } from "./admin-resources.js";
 import { registerHelpdeskBlocks } from "./blocks.js";
 
 /**
@@ -330,7 +330,11 @@ export default definePlugin(async (ctx) => {
   // ── 설정 ────────────────────────────────────────────
   ctx.registerRoute("GET", "/admin/settings", async (req) => {
     requireManager(req);
-    return await settings();
+    const s = await settings();
+    // 선언형 폼은 배열을 편집할 수 없어 PUT 이 categoriesText 로 받는다.
+    // GET 도 같은 이름을 내야 폼이 왕복한다 — 없으면 화면이 분류를 빈칸으로 보여주고,
+    // 저장하는 순간 분류가 사라진다.
+    return { ...s, categoriesText: s.categories.join("\n") };
   });
 
   ctx.registerRoute("PUT", "/admin/settings", async (req) => {
@@ -350,7 +354,14 @@ export default definePlugin(async (ctx) => {
     };
     await ctx.settings.set("settings", next);
     await ctx.cache.invalidateTag("pages");
-    return next;
+    /*
+     * GET 과 **같은 모양**으로 돌려준다.
+     *
+     * 설정 화면은 저장 결과를 그대로 폼에 다시 채운다(서버가 값을 다듬으므로).
+     * 그때 응답에 categoriesText 가 없으면 분류 칸이 빈칸이 된다 — 저장 직후
+     * 화면만 보면 분류를 잃은 것처럼 보이고, 그대로 한 번 더 누르면 400 이 난다.
+     */
+    return { ...next, categoriesText: next.categories.join("\n") };
   });
 
   // ════════════════════════════════════════════════════
@@ -439,6 +450,7 @@ export default definePlugin(async (ctx) => {
   ctx.registerAdminResource(TICKET_RESOURCE);
   ctx.registerAdminResource(FAQ_RESOURCE);
   ctx.registerAdminResource(FAQ_CATEGORY_RESOURCE);
+  ctx.registerAdminResource(HELP_SETTINGS_RESOURCE);
 
   registerHelpdeskBlocks(ctx, db, settings);
 

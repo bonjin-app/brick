@@ -5,7 +5,7 @@ import {
   countClick, countView, createPopup, livePopups, updatePopup,
 } from "./popups.js";
 import { localDayTag, pruneVisits, recordVisit, todayReferers, visitStats, visitorSalt } from "./visits.js";
-import { POPUP_RESOURCE } from "./admin-resources.js";
+import { POPUP_RESOURCE, SITE_SETTINGS_RESOURCE } from "./admin-resources.js";
 import { registerSiteBlocks } from "./blocks.js";
 
 /**
@@ -196,6 +196,7 @@ export default definePlugin(async (ctx) => {
   });
 
   ctx.registerAdminResource(POPUP_RESOURCE);
+  ctx.registerAdminResource(SITE_SETTINGS_RESOURCE);
   registerSiteBlocks(ctx, db);
 
   // 대시보드 — 그누보드 관리자 첫 화면의 "오늘 방문자"

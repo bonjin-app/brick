@@ -531,3 +531,32 @@ export const SUBSCRIPTION_RESOURCE: AdminResource = {
     { name: "created_at", label: "가입일", type: "date", readOnly: true },
   ],
 };
+
+/**
+ * 쇼핑몰 설정.
+ *
+ * 이 화면이 없던 동안 배송비·무료배송 기준·**무통장 입금 계좌**를 화면에서 바꿀 수
+ * 없었다. API(`PUT /admin/settings`)는 처음부터 있었지만 그것을 부르는 화면이 없어서,
+ * 계좌를 채우려면 curl 을 써야 했다 — 계좌가 비면 손님은 어디로 입금할지 모른다.
+ */
+export const SHOP_SETTINGS_RESOURCE: AdminResource = {
+  name: "settings",
+  kind: "settings",
+  title: "쇼핑몰 설정",
+  itemLabel: "설정",
+  basePath: "/admin/settings",
+  order: 90,
+  description: "배송비와 입금 계좌를 정합니다. 무통장입금을 쓰면 계좌를 반드시 채워주세요 — 비어 있으면 주문 완료 화면에 입금할 곳이 나오지 않습니다.",
+  fields: [
+    { name: "bankAccount", label: "무통장 입금 계좌", type: "text",
+      placeholder: "○○은행 123-456-789012 (예금주: 브릭상점)",
+      help: "주문 완료 화면과 주문 조회에 그대로 표시됩니다." },
+    { name: "shippingFee", label: "기본 배송비", type: "money", required: true },
+    { name: "freeShippingOver", label: "무료배송 기준 금액", type: "money",
+      help: "이 금액 이상이면 배송비를 받지 않습니다. 0 이면 무료배송이 없습니다." },
+    { name: "returnShippingFee", label: "반품 배송비", type: "money",
+      help: "단순 변심 반품에서 고객이 부담하는 반송비입니다. 불량·오배송은 이 값을 쓰지 않습니다." },
+    { name: "pageSize", label: "상품 목록 개수", type: "number", required: true,
+      help: "한 페이지에 보일 상품 수 (4~60)." },
+  ],
+};

@@ -214,6 +214,30 @@ print(','.join(bad))
 ")"
 [[ -z "$KO_TITLES" ]] && ok "모든 카드 제목이 번역되어 있다" || bad "번역 안 된 카드 제목: $KO_TITLES"
 
+# 리소스도 같은 종류다 — 제목·필드 라벨·설명이 전부 선언 문자열이다.
+# 카드에서 잊는 실수를 리소스에서도 한다(설정 화면 셋을 새로 만들면서 실제로 그랬다).
+# 그래서 활성된 **모든** 리소스를 열어 한글이 남았는지 전수로 본다.
+KO_RES="$(/usr/bin/python3 - "$API" "$CK" <<'PYEOF'
+import json, re, subprocess, sys
+api, ck = sys.argv[1], sys.argv[2]
+def get(path):
+    out = subprocess.run(["curl", "-s", "-b", ck, api + path], capture_output=True, text=True).stdout
+    try: return json.loads(out)
+    except Exception: return {}
+bad = []
+for r in get("/api/admin/nav").get("resources", []):
+    full = get(f"/api/admin/resources/{r['plugin']}/{r['name']}")
+    texts = [("title", full.get("title")), ("description", full.get("description"))]
+    for f in full.get("fields", []):
+        texts += [(f"{f['name']}.label", f.get("label")), (f"{f['name']}.help", f.get("help"))]
+    for where, t in texts:
+        if t and re.search(r"[가-힣]", str(t)):
+            bad.append(f"{r['plugin']}/{r['name']} {where}")
+print(",".join(bad[:12]))
+PYEOF
+)"
+[[ -z "$KO_RES" ]] && ok "모든 리소스 선언 문자열이 번역되어 있다" || bad "번역 안 된 리소스 문자열: $KO_RES"
+
 echo "── 한국어로 복귀"
 curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' \
   -d '{"site.locale":"ko"}' >/dev/null

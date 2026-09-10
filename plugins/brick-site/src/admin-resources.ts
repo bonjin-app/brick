@@ -50,3 +50,25 @@ export const POPUP_RESOURCE: AdminResource = {
     { name: "click_count", label: "클릭", type: "number", readOnly: true, inList: true },
   ],
 };
+
+/**
+ * 사이트 설정 — 방문자 집계.
+ *
+ * 이 화면이 없던 동안 집계를 끄거나 보관 기간을 정할 방법이 화면에 없었다.
+ * 방문 기록은 개인정보에 가까우므로(IP 해시) 보관 기간은 운영자가 정해야 한다.
+ */
+export const SITE_SETTINGS_RESOURCE: AdminResource = {
+  name: "settings",
+  kind: "settings",
+  title: "방문자 집계 설정",
+  itemLabel: "설정",
+  order: 90,
+  basePath: "/admin/settings",
+  fields: [
+    { name: "countVisits", label: "방문자를 집계한다", type: "boolean" },
+    { name: "countAdmins", label: "운영자 방문도 센다", type: "boolean",
+      help: "기본은 세지 않습니다 — 자기 사이트를 자기가 새로고침하는 것까지 통계에 들어갑니다." },
+    { name: "keepDailyDays", label: "일별 합계 보관 기간(일)", type: "number",
+      help: "0 이면 무기한 보관합니다." },
+  ],
+};

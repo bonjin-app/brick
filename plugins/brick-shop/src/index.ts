@@ -10,7 +10,7 @@ import { changeOrderStatus, createOrder, type PointsPort } from "./orders.js";
 import { bankTransferGateway, confirmPayment, gateways, refundPayment, registerGateway } from "./payments.js";
 import { CASH_RECEIPT_RESOURCE, CATEGORY_RESOURCE, COLLECTION_RESOURCE, GRADE_RESOURCE, COUPON_RESOURCE, INQUIRY_RESOURCE,
          ORDER_RESOURCE, PRODUCT_RESOURCE, RETURN_RESOURCE, REVIEW_RESOURCE,
-         PAYMENT_REQUEST_RESOURCE, SHIPPING_ZONE_RESOURCE, SUBSCRIPTION_RESOURCE,
+         PAYMENT_REQUEST_RESOURCE, SHIPPING_ZONE_RESOURCE, SHOP_SETTINGS_RESOURCE, SUBSCRIPTION_RESOURCE,
          TAX_INVOICE_RESOURCE } from "./admin-resources.js";
 import { registerStorefrontBlocks } from "./blocks.js";
 import { importProducts } from "./import.js";
@@ -2383,6 +2383,7 @@ export default definePlugin(async (ctx) => {
   ctx.registerAdminResource(GRADE_RESOURCE);
   ctx.registerAdminResource(COLLECTION_RESOURCE);
   ctx.registerAdminResource(SUBSCRIPTION_RESOURCE);
+  ctx.registerAdminResource(SHOP_SETTINGS_RESOURCE);
 
   /**
    * 사이트맵: 판매 중인 상품 주소.

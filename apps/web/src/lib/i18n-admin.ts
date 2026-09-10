@@ -297,6 +297,9 @@ const KO = {
 
   "x.resourceNotFound": "리소스를 찾을 수 없습니다.",
   "x.listLoadFail": "목록을 불러오지 못했습니다.",
+  "x.settingsLoadFail": "설정을 불러오지 못했습니다.",
+  "x.saveFail": "저장하지 못했습니다.",
+  "x.saved": "저장했습니다.",
   "x.savedItem": "{label}을(를) 저장했습니다.",
   "x.confirmDelete": "이 {label}을(를) 삭제할까요?",
   "x.selectedN": "{n}개 선택",
@@ -623,6 +626,9 @@ const EN: Record<keyof typeof KO, string> = {
 
   "x.resourceNotFound": "Resource not found.",
   "x.listLoadFail": "Could not load the list.",
+  "x.settingsLoadFail": "Could not load the settings.",
+  "x.saveFail": "Could not save.",
+  "x.saved": "Saved.",
   "x.savedItem": "Saved {label}.",
   "x.confirmDelete": "Delete this {label}?",
   "x.selectedN": "{n} selected",

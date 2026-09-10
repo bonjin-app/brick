@@ -69,3 +69,27 @@ export const FAQ_CATEGORY_RESOURCE: AdminResource = {
     { name: "is_visible", label: "표시", type: "boolean", inList: true },
   ],
 };
+
+/**
+ * 1:1 문의 설정.
+ *
+ * 이 화면이 없던 동안 **비회원 문의를 허용하는 스위치**를 화면에서 켤 수 없었다.
+ * 기본값이 꺼짐이므로, 회사 홈페이지 스타터로 설치한 사이트는 손님이 문의를 남길 수
+ * 없는 상태였고 운영자가 그것을 바꿀 방법이 화면에 없었다.
+ */
+export const HELP_SETTINGS_RESOURCE: AdminResource = {
+  name: "settings",
+  kind: "settings",
+  title: "1:1 문의 설정",
+  itemLabel: "설정",
+  basePath: "/admin/settings",
+  order: 90,
+  fields: [
+    { name: "allowGuest", label: "비회원도 문의할 수 있다", type: "boolean",
+      help: "켜면 로그인 없이 문의를 남길 수 있습니다. 자동입력 방지 문자를 함께 요구합니다." },
+    { name: "categoriesText", label: "문의 분류", type: "textarea",
+      help: "한 줄에 하나씩 적습니다 (최대 20개)." },
+    { name: "notifyOnAnswer", label: "답변하면 메일로 알린다", type: "boolean" },
+    { name: "pageSize", label: "목록 개수", type: "number", required: true, help: "5~50" },
+  ],
+};

@@ -30,6 +30,8 @@ interface AdminBulkAction {
 interface AdminResource {
   plugin: string;
   name: string;
+  /** "settings" 는 행이 하나뿐인 설정 화면 — 목록·페이지·선택 열이 없다 */
+  kind?: "list" | "settings";
   title: string;
   itemLabel: string;
   basePath: string;
@@ -140,7 +142,7 @@ export default function PluginResourcePage() {
   }, [params.plugin, params.resource]);
 
   const reload = useCallback(async () => {
-    if (!api) return;
+    if (!api || res?.kind === "settings") return;
     const qs = new URLSearchParams({ page: String(page) });
     for (const [k, v] of Object.entries(filterValues)) if (v) qs.set(k, v);
     const r = await fetch(`${api}?${qs.toString()}`);
@@ -149,7 +151,7 @@ export default function PluginResourcePage() {
     // 플러그인은 { items, total } 또는 배열을 반환할 수 있다
     setRows(Array.isArray(d) ? d : (d.items ?? []));
     setTotal(Array.isArray(d) ? d.length : (d.total ?? 0));
-  }, [api, page, filterValues]);
+  }, [api, page, filterValues, res?.kind]);
   useEffect(() => { void reload(); }, [reload]);
 
   /*
@@ -263,6 +265,9 @@ export default function PluginResourcePage() {
 
   if (error) return <div><h1>{t("common.error")}</h1><p style={{ color: "var(--color-danger)" }}>{error}</p></div>;
   if (!res) return <p>{t("common.loading")}</p>;
+
+  // 설정 화면은 행이 하나다 — 목록·페이지·선택을 그리지 않는다
+  if (res.kind === "settings") return <ResourceSettings resource={res} />;
 
   const listFields = res.fields.filter((f) => f.inList);
   const can = { create: true, update: true, delete: true, ...res.can };
@@ -416,6 +421,77 @@ export default function PluginResourcePage() {
 }
 
 /* ── 폼: 필드 타입별 입력 위젯 ───────────────────────── */
+/**
+ * 설정 화면 — 행이 하나뿐인 리소스.
+ *
+ * `GET basePath` 로 현재 값을 받고 `PUT basePath` 로 저장한다. 목록이 없으므로
+ * 처음부터 폼이 펼쳐져 있고, 취소 버튼도 없다 — 돌아갈 목록이 없다.
+ *
+ * 저장 결과를 응답으로 되받아 화면에 다시 채운다. 서버가 값을 다듬는 경우가
+ * 있기 때문이다(배송비 음수를 0 으로, 목록 개수를 4~60 으로). 보낸 값을 그대로
+ * 두면 화면과 실제 설정이 어긋난 채로 남는다.
+ */
+function ResourceSettings({ resource }: { resource: AdminResource }) {
+  const t = useAdminT();
+  const api = `/api/plugins/${resource.plugin}${resource.basePath}`;
+  const [value, setValue] = useState<Row | null>(null);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    fetch(api)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(t("x.settingsLoadFail")))))
+      .then((d: Row) => setValue(d ?? {}))
+      .catch((e: Error) => setError(e.message));
+  }, [api]);
+
+  async function save() {
+    setMessage(""); setError("");
+    const r = await fetch(api, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(value ?? {}),
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      setError((d as { message?: string }).message ?? t("x.saveFail"));
+      return;
+    }
+    const saved = await r.json().catch(() => null);
+    if (saved && typeof saved === "object") setValue(saved as Row);
+    setMessage(t("x.saved"));
+  }
+
+  if (error && !value) return <div><h1>{t("common.error")}</h1><p style={{ color: "var(--color-danger)" }}>{error}</p></div>;
+  if (!value) return <p>{t("common.loading")}</p>;
+
+  return (
+    <div>
+      <h1 style={{ margin: 0 }}>{resource.title}</h1>
+      {resource.description && <p style={{ color: "var(--color-text-soft)", fontSize: 14 }}>{resource.description}</p>}
+      {message && <p style={{ color: "var(--color-success)" }}>{message}</p>}
+      {error && <p style={{ color: "var(--color-danger)" }}>{error}</p>}
+      <div style={{ background: "var(--color-bg)", borderRadius: 8, padding: 24, maxWidth: 680 }}>
+        {resource.fields.filter((f) => !f.readOnly).map((f) => (
+          <div key={f.name} style={{ marginBottom: 16 }}>
+            <label htmlFor={`x-set-${f.name}`} style={{ display: "block", fontSize: 14, fontWeight: 600 }}>
+              {f.label}{f.required && <span style={{ color: "var(--color-danger)" }}> *</span>}
+            </label>
+            <FieldInput
+              id={`x-set-${f.name}`}
+              field={f}
+              value={value[f.name]}
+              onChange={(v) => setValue({ ...value, [f.name]: v })}
+            />
+            {f.help && <div style={{ fontSize: 12.5, color: "var(--color-muted)", marginTop: 4 }}>{f.help}</div>}
+          </div>
+        ))}
+        <button onClick={save} style={{ ...btn, fontWeight: 700, marginTop: 8 }}>{t("common.save")}</button>
+      </div>
+    </div>
+  );
+}
+
 function ResourceForm(props: {
   resource: AdminResource;
   value: Row;
