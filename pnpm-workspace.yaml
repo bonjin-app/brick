@@ -23,3 +23,17 @@ overrides:
   # @nestjs/platform-fastify 11.2.3 이 fastify 5.11.3 을 고정한다 — trustProxy hop-count 아래에서
   # X-Forwarded-* 스푸핑(GHSA)과 스키마 검증 우회 두 건. Brick 은 BRICK_TRUST_PROXY 를 쓰므로 해당된다.
   fastify: ">=5.12.1"
+  # 상한(<메이저)을 함께 적는다 — `>=` 만 쓰면 pnpm 이 최신 메이저까지 끌어올린다.
+  # 취약점을 막는 것과 메이저 업그레이드는 다른 일이고, 뒤엣것은 따로 해야 한다
+  # (실제로 한 번에 next 16 · nodemailer 10 · js-yaml 5 로 올라갔다).
+  #
+  # Next 15.5.23 이하 — 이미지 최적화 API 의 **미인증 원격 코드 실행** 두 건(critical).
+  # Brick 은 images.unoptimized 로 그 경로를 끄지만, 설치형이라 운영자가 next.config 를
+  # 바꿀 수 있고 Windows 호스팅 건은 경로가 다르다. 버전으로 막는 것이 맞다.
+  next: ">=15.5.24 <16"
+  # nodemailer 9.0.5 — addressparser 의 2차 시간복잡도로 인한 원격 DoS(high)와
+  # 수신 도메인 검증 우회 세 건. 메일은 가입 인증·비밀번호 재설정에 쓰인다.
+  nodemailer: ">=9.1.1 <10"
+  # js-yaml 4.3.1 — 병합 키가 CPU 를 제한하지 않는다(high). 테마·플러그인 매니페스트를
+  # 읽는 도구 체인이 끌고 온다.
+  "js-yaml": ">=4.3.2 <5"
