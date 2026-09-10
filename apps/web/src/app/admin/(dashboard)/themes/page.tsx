@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAdminT } from "../../../../lib/i18n-admin";
+import { useModalFocus } from "../../../../lib/use-modal";
 
 interface ThemeRow {
   name: string;
@@ -55,13 +56,8 @@ export default function AdminThemesPage() {
     }
   }
 
-  // 미리보기가 열려 있으면 Esc 로 닫는다 (모달의 기본기)
-  useEffect(() => {
-    if (!preview) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setPreview(null); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [preview]);
+  // Esc 로 닫고, 포커스를 모달 안에 가두고, 닫으면 열었던 자리로 돌려준다
+  const previewRef = useModalFocus<HTMLDivElement>(() => setPreview(null), Boolean(preview));
 
   async function upload(e: React.FormEvent) {
     e.preventDefault();
@@ -113,6 +109,7 @@ export default function AdminThemesPage() {
 
       {preview ? (
         <div
+          ref={previewRef}
           role="dialog"
           aria-modal="true"
           aria-label={t("themes.previewOf", { name: preview.name })}

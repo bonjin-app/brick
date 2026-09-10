@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { useAdminT } from "../../../../../../lib/i18n-admin";
+import { useModalFocus } from "../../../../../../lib/use-modal";
 
 /* ── 타입 (packages/core의 AdminResource와 대응) ───────── */
 interface AdminField {
@@ -636,11 +637,7 @@ function ImportDialog({ spec, api, onClose, onDone }: {
    * 들어갔으므로, 그냥 닫으면 운영자는 옛 목록을 보며 "안 들어갔나?" 하게 된다.
    */
   const finish = result ? onDone : onClose;
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") finish(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [finish]);
+  const dialogRef = useModalFocus<HTMLDivElement>(finish);
 
   async function run() {
     setBusy(true);
@@ -657,7 +654,7 @@ function ImportDialog({ spec, api, onClose, onDone }: {
   }
 
   return (
-    <div role="dialog" aria-modal="true" aria-label={spec.label}
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={spec.label}
       onClick={(e) => { if (e.target === e.currentTarget) finish(); }}
       style={{ position: "fixed", inset: 0, zIndex: 70, background: "rgba(10,10,14,.55)",
                display: "flex", alignItems: "center", justifyContent: "center", padding: "min(4vh, 32px) min(4vw, 32px)" }}>
@@ -734,12 +731,7 @@ function MediaPicker({ onPick, onPickMany, onClose, multiple }: {
     fetch(`/api/media?page=${p}`).then((r) => r.json()).then(setData).catch(() => undefined);
   }, []);
   useEffect(() => load(page), [load, page]);
-  // 모달은 Esc 로 닫힌다 (테마 미리보기와 같은 관례)
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  const dialogRef = useModalFocus<HTMLDivElement>(onClose);
 
   async function upload() {
     const file = fileRef.current?.files?.[0];
@@ -760,7 +752,7 @@ function MediaPicker({ onPick, onPickMany, onClose, multiple }: {
   const images = data.items.filter((f) => f.contentType?.startsWith("image/"));
   const lastPage = Math.max(1, Math.ceil(data.total / (data.pageSize || 40)));
   return (
-    <div role="dialog" aria-modal="true" aria-label={t("x.pickFromMedia")}
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={t("x.pickFromMedia")}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{ position: "fixed", inset: 0, zIndex: 70, background: "rgba(10,10,14,.55)",
                display: "flex", alignItems: "center", justifyContent: "center", padding: "min(4vh, 32px) min(4vw, 32px)" }}>

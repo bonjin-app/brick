@@ -54,6 +54,17 @@ jobs:
           git diff --exit-code -- themes/*/assets/style.css \
             || { echo "::error::themes/*/src 를 고쳤으면 pnpm build:themes 결과(assets/style.css)도 커밋해야 합니다"; exit 1; }
 
+      - name: 모달은 포커스를 가둔다 (키보드 사용자가 닿을 수 있어야 한다)
+        run: |
+          # role="dialog" 를 그리는 화면은 useModalFocus 를 써야 한다. 모달을 띄우는 것만으로는
+          # 절반이다 — 포커스가 밖에 남으면 키보드만 쓰는 사람에게 그 모달은 열렸지만 닿을 수
+          # 없는 것이고, Tab 은 뒤 화면을 돌아다닌다(관리 화면 모달 셋이 그랬다).
+          missing=""
+          for f in $(grep -rl 'role="dialog"' apps/web/src --include='*.tsx'); do
+            grep -q "useModalFocus" "$f" || missing="$missing $f"
+          done
+          [ -z "$missing" ] || { echo "::error::모달을 그리는데 useModalFocus 를 쓰지 않았습니다:$missing"; exit 1; }
+
       - name: 마이그레이션
         run: node apps/api/dist/migrate.js
         env:

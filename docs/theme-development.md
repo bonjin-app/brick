@@ -257,6 +257,11 @@ await brickContrastAudit(["/", "/board/free", "/shop", "/shop/cart"])
 
 CSP 가 `eval` 을 막으므로 콘솔에 그대로 붙이는 대신 `<script src>` 로 넣으세요.
 
+`ui-audit` 이 보지 **않는** 것도 있습니다. 모달의 포커스가 그렇습니다 — 열려 있어도 검사
+도구에는 평범한 요소로 보입니다. 모달을 만들면 `useModalFocus` 로 네 가지를 챙기세요:
+열릴 때 안으로 포커스, Tab 이 밖으로 새지 않게, Esc 로 닫기, 닫으면 열었던 자리로 복귀.
+CI 가 `role="dialog"` 를 그리는 파일이 그 훅을 쓰는지 검사합니다.
+
 [scripts/ui-audit.js](../scripts/ui-audit.js) 를 콘솔에 붙이고 `await brickUiAudit([경로들])` 를
 실행하면 375·1280px 두 폭에서 가로 넘침, alt 없는 이미지, 이름 없는 버튼, 라벨 없는 입력,
 28px 미만 터치 영역, `undefined`/`NaN` 노출을 잡습니다. 대비 점검과 함께 새 테마·새 블록을
