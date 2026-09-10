@@ -99,6 +99,9 @@ jobs:
       - name: 설정 API 가 있으면 설정 화면도 있다 (curl 로만 바꿀 수 있으면 없는 기능이다)
         run: node scripts/check-settings-screens.mjs
 
+      - name: 플러그인이 내는 링크에 화면이 있다 (헤더의 쪽지함이 404 였다)
+        run: node scripts/check-plugin-screens.mjs
+
       - name: 마이그레이션
         run: node apps/api/dist/migrate.js
         env:

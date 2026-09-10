@@ -9,7 +9,7 @@ import type { BrickDb } from "@brick/database";
 import { installedPlugins, siteSettings } from "@brick/database";
 import type { PluginManifest } from "@brick/shared";
 import type { PluginContext, PluginInstance, BlockDefinition, PluginRouteHandler, PluginDb, AdminResource, HookBus, CacheProvider, QueueProvider, StorageProvider, MailProvider, CaptchaProvider, PersonalDataEraser, SitemapSource,
-  SearchSource, LinkTargetSource, DashboardCard, HeaderAction, Locale, MessageCatalog } from "@brick/core";
+  SearchSource, LinkTargetSource, DashboardCard, HeaderAction, PluginScreen, Locale, MessageCatalog } from "@brick/core";
 import { AVAILABLE_LOCALES, DEFAULT_LOCALE, makeTranslator, normalizeLocale } from "@brick/core";
 import { DB, HOOKS, CACHE, QUEUE, STORAGE, MAIL, CAPTCHA, ENV } from "../../runtime.module.js";
 import type { BrickEnv } from "../../config/env.js";
@@ -119,6 +119,11 @@ export class PluginLoaderService implements OnModuleInit {
   readonly dashboardCards: Array<DashboardCard & { plugin: string }> = [];
   /** 헤더 유틸 영역의 링크 — 테마가 그린다 (쇼핑몰 장바구니, 쪽지함 등) */
   readonly headerActions: Array<HeaderAction & { plugin: string }> = [];
+  /**
+   * 플러그인이 선언한 화면 — 페이지 행 없이도 그려진다.
+   * 같은 slug 의 페이지가 있으면 페이지가 이긴다(운영자가 그 화면을 가질 수 있어야 한다).
+   */
+  readonly screens: Array<PluginScreen & { plugin: string }> = [];
   /**
    * 플러그인 간 서비스 레지스트리.
    * 훅으로 표현할 수 없는 협력(호출자 트랜잭션 참여 등)에 쓴다.
@@ -380,7 +385,8 @@ export class PluginLoaderService implements OnModuleInit {
   }
 
   /** 선언 라벨(관리 리소스·메뉴·대시보드 카드)이 공유하는 gettext 치환 — 원문=키, 폴백=원문 */
-  private trCatalog(plugin: string, text: string): string {
+  /** 플러그인 선언 문자열 번역 — 화면 제목도 같은 규칙을 쓴다 */
+  trCatalog(plugin: string, text: string): string {
     const locale = this.localeCache.value;
     if (locale === DEFAULT_LOCALE) return text;
     return this.pluginCatalogs.get(plugin)?.[locale]?.[text] ?? text;
@@ -402,6 +408,31 @@ export class PluginLoaderService implements OnModuleInit {
    * 사용자별 숫자(장바구니 개수)는 담지 않는다: 비로그인 렌더는 캐시되므로
    * 남의 값이 새어 나간다.
    */
+  /**
+   * 경로에 해당하는 선언 화면을 찾는다.
+   *
+   * 페이지 매칭과 같은 규칙이다: 가장 긴 접두사부터 시도하고 남은 조각을
+   * `pathTail` 로 넘긴다(`/memo/sent` → screen "memo", tail "sent").
+   */
+  matchScreen(path: string): { screen: PluginScreen & { plugin: string }; pathTail: string } | null {
+    const segments = path.replace(/^\/+|\/+$/g, "").split("/").filter(Boolean);
+    for (let i = segments.length; i >= 1; i--) {
+      const candidate = segments.slice(0, i).join("/");
+      const screen = this.screens.find((s) => s.path === candidate);
+      if (screen) return { screen, pathTail: segments.slice(i).join("/") };
+    }
+    return null;
+  }
+
+  /** 회원 메뉴 — 선언 화면 중 memberMenu 를 표시한 것들 */
+  memberMenu(): Array<{ label: string; path: string }> {
+    return this.screens
+      .filter((s) => s.memberMenu)
+      .slice()
+      .sort((a, b) => (a.order ?? 100) - (b.order ?? 100))
+      .map((s) => ({ label: this.trCatalog(s.plugin, s.title), path: `/${s.path}` }));
+  }
+
   headerActionsFor(loggedIn: boolean): Array<{ label: string; url: string; icon: string | null }> {
     return this.headerActions
       .filter((a) => !a.requiresLogin || loggedIn)
@@ -595,6 +626,13 @@ export class PluginLoaderService implements OnModuleInit {
       registerHeaderAction: (action) => {
         this.headerActions.push({ ...action, plugin: pluginName });
         this.logger.log(`plugin "${pluginName}" registers header action "${action.label}"`);
+      },
+      registerScreen: (screen) => {
+        const path = screen.path.replace(/^\/+|\/+$/g, "");
+        // 블록 이름은 등록과 같은 규칙으로 네임스페이스를 붙인다
+        const block = screen.block.startsWith(`${pluginName}/`) ? screen.block : `${pluginName}/${screen.block}`;
+        this.screens.push({ ...screen, path, block, plugin: pluginName });
+        this.logger.log(`plugin "${pluginName}" registers screen "/${path}" (${block})`);
       },
     };
   }

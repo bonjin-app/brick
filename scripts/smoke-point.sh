@@ -257,6 +257,14 @@ contains "필드 하나만 보내도 나머지는 남는다" \
 contains "설정 화면이 선언되어 있다" \
   "$(curl -s -b "$ADMIN" "$API/api/admin/resources/brick-point/settings")" '"kind":"settings"'
 
+echo "── 회원이 자기 포인트 내역에 닿는가"
+# 블록만 있으면 운영자가 페이지를 만들어야 도달할 수 있고, 어떤 스타터도 만들지
+# 않으므로 사실상 묻힌다. 적립은 되는데 내역을 볼 수 없으면 포인트를 신뢰할 수 없다.
+contains "회원 메뉴에 나온다" "$(curl -s "$API/api/member/menu")" '"path":"/points"'
+PTS_PAGE="$(curl -s -b "$MEMBER" "$API/api/render/page?path=points" | /usr/bin/python3 -c 'import sys,json;print(json.load(sys.stdin).get("html",""))')"
+contains "페이지 없이도 화면이 열린다" "$PTS_PAGE" "brick-point"
+contains "제목이 붙는다" "$PTS_PAGE" "내 포인트"
+
 echo "── 관리 화면 · 블록"
 NAV="$(curl -s -b "$ADMIN" "$API/api/admin/nav")"
 contains "포인트 리소스 등록" "$NAV" '"name":"balances"'

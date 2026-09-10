@@ -47,6 +47,7 @@ const KO = {
 
 
   "account.title": "내 정보",
+  "account.myActivity": "내 활동",
   "account.backToSite": "사이트로 돌아가기",
   "account.profile": "기본 정보",
   "account.email": "이메일",
@@ -157,6 +158,7 @@ const EN: Record<keyof typeof KO, string> = {
 
 
   "account.title": "My account",
+  "account.myActivity": "My activity",
   "account.backToSite": "Back to site",
   "account.profile": "Profile",
   "account.email": "Email",

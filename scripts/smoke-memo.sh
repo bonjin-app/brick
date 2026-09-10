@@ -222,8 +222,9 @@ contains "목록에서도 사라짐" "$(curl -s -b "$U1" "$BD/my/scraps")" '"tot
 check "없는 글 스크랩 404" "$(code -b "$U1" -X POST "$BD/posts/01a040ba-0000-0000-0000-000000000000/scrap")" "404"
 
 echo "── 화면 렌더 (페이지 하나가 여러 화면)"
-printf '{"slug":"memo","title":"쪽지","status":"published","blocks":[{"block":"brick-memo/memo","props":{}}]}' > "$TMP/page.json"
-curl -s -b "$ADMIN" -X POST "$API/api/pages" -H 'content-type: application/json' --data-binary "@$TMP/page.json" >/dev/null
+# **페이지를 만들지 않는다.** 플러그인이 registerScreen 으로 선언한 화면이 그대로
+# 열려야 한다 — 예전에는 이 스모크가 자기 손으로 memo 페이지를 만들어 검사했고,
+# 그래서 실제 설치에서 헤더의 쪽지함이 404 인 것을 아무도 못 봤다.
 render() { curl -s "$API/api/render/page?path=$1" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("html",""))'; }
 # 로그인 상태 렌더 — 쿠키를 넘긴다 (이 경로는 캐시되지 않는다)
 render_as() { curl -s -b "$2" "$API/api/render/page?path=$1" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("html",""))'; }
@@ -249,6 +250,16 @@ echo "── 헤더의 쪽지함 링크는 회원에게만 보인다"
 absent   "비로그인 헤더에 쪽지함 없음" "$INBOX_HTML" '<a href="/memo"><svg class="brick-ico" aria-hidden="true"><use href="#i-message"></use></svg><span>쪽지함</span></a>'
 contains "로그인 헤더에 쪽지함" "$LOGGED" '<a href="/memo"><svg class="brick-ico" aria-hidden="true"><use href="#i-message"></use></svg><span>쪽지함</span></a>'
 contains "쪽지 배지 블록 등록" "$(curl -s "$API/api/blocks")" "brick-memo/unread-badge"
+# 링크가 가리키는 곳에 화면이 있어야 링크가 링크다
+contains "회원 메뉴에도 나온다" "$(curl -s "$API/api/member/menu")" '"path":"/memo"'
+
+echo "── 같은 slug 의 페이지가 있으면 페이지가 이긴다 (운영자가 그 화면을 가질 수 있다)"
+# 선언 화면은 기본값이고 최종 결정권은 운영자에게 있어야 한다
+printf '{"slug":"memo","title":"내 쪽지","status":"published","blocks":[{"block":"core/paragraph","props":{"text":"운영자가 바꾼 화면"}}]}' > "$TMP/page.json"
+curl -s -b "$ADMIN" -X POST "$API/api/pages" -H 'content-type: application/json' --data-binary "@$TMP/page.json" >/dev/null
+OWN="$(render "memo")"
+contains "운영자 페이지가 그려진다" "$OWN" "운영자가 바꾼 화면"
+absent   "그때 선언 화면은 그려지지 않는다" "$OWN" 'data-memo-view'
 
 echo "── 관리 화면 · 설정"
 NAV="$(curl -s -b "$ADMIN" "$API/api/admin/nav")"

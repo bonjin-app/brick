@@ -197,6 +197,42 @@ export class PageRenderService {
         });
         return { html, status: 200, slug: "search" };
       }
+      /*
+       * 플러그인이 선언한 화면.
+       *
+       * 블록만 등록하면 도달할 길이 없다 — 운영자가 페이지를 만들어 블록을 올려야
+       * 비로소 손님이 본다. 쪽지 플러그인은 헤더에 "쪽지함" 링크를 등록해 두고
+       * `/memo` 페이지를 만드는 곳이 없어서 그 링크가 404 였다.
+       *
+       * 페이지를 먼저 찾고(위 루프) 없을 때 여기로 온다 — 같은 slug 의 페이지가
+       * 있으면 페이지가 이긴다. `/search` 폴백과 같은 규칙이다.
+       */
+      const declared = this.loader.matchScreen(path);
+      if (declared) {
+        const { screen, pathTail: tail } = declared;
+        const fromBlock: { title?: string; description?: string; ownHeading?: boolean } = {};
+        const blocksHtml = await this.renderNodes(
+          [{ block: screen.block, props: screen.props ?? {} }],
+          {
+            ...blockCtx,
+            pathTail: tail,
+            setSeo: (sx) => {
+              if (sx.title?.trim()) fromBlock.title = sx.title.trim();
+              if (sx.ownHeading !== undefined) fromBlock.ownHeading = sx.ownHeading;
+            },
+          },
+        );
+        const title = fromBlock.title ?? this.loader.trCatalog(screen.plugin, screen.title);
+        const html = await this.themes.render("page", {
+          ...themeCommon, site, menu: nav,
+          title: fromBlock.ownHeading ? "" : title,
+          pageTitle: `${title} — ${site.name}`,
+          blocksHtml,
+          seo: {},
+        });
+        return { html, status: 200, slug: screen.path };
+      }
+
       const html = await this.themes.render("page", {
         ...themeCommon,
         site,

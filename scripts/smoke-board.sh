@@ -576,5 +576,13 @@ JSON
   contains "그때 썸네일은 원본 src" "$IT2" '/uploads/b.jpg|'
 fi
 
+echo "── 회원이 스크랩한 글에 닿는가"
+# 담아두는 기능만 있고 볼 화면이 없으면 스크랩 버튼은 아무 일도 하지 않는 것과 같다.
+# 페이지를 만들지 않고 확인한다 — 플러그인이 선언한 화면이 그대로 열려야 한다.
+contains "회원 메뉴에 나온다" "$(curl -s "$API/api/member/menu")" '"path":"/scraps"'
+SCRAP_PAGE="$(curl -s "$API/api/render/page?path=scraps" | /usr/bin/python3 -c 'import sys,json;print(json.load(sys.stdin).get("html",""))')"
+contains "페이지 없이도 화면이 열린다" "$SCRAP_PAGE" "brick-scraps"
+contains "제목이 붙는다" "$SCRAP_PAGE" "내 스크랩"
+
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 [[ $FAIL -eq 0 ]] || { echo; echo "── 서버 로그 ──"; tail -40 "$TMP/api.log"; exit 1; }

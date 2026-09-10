@@ -512,6 +512,14 @@ export default definePlugin(async (ctx) => {
    * 사용자별 값이라 배지 블록이 클라이언트에서 채운다.
    */
   ctx.registerHeaderAction({ label: "쪽지함", path: "/memo", order: 20, requiresLogin: true, icon: "message" });
+  /*
+   * 그 링크가 가리키는 화면을 스스로 선언한다.
+   *
+   * 예전에는 블록만 등록하고 "페이지 주소를 'memo' 로 만들면 동작합니다"라고
+   * 설명문에 적어 두었다 — 아무도 만들지 않아서 헤더의 쪽지함이 404 였다.
+   * 운영자가 memo slug 로 페이지를 만들면 그 페이지가 이긴다.
+   */
+  ctx.registerScreen({ path: "memo", title: "쪽지함", block: "memo", memberMenu: true, order: 20 });
 
   ctx.registerBlock({
     name: "memo",

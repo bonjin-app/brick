@@ -949,6 +949,12 @@ ${items}
   });
 
   // ════════════════════════════════════════════════════
+  /*
+   * 화면 선언 — 스크랩해 둔 글을 다시 볼 곳.
+   * 담아두는 기능만 있고 볼 화면이 없으면 스크랩 버튼은 아무 일도 하지 않는 것과 같다.
+   */
+  ctx.registerScreen({ path: "scraps", title: "내 스크랩", block: "my-scraps", memberMenu: true, order: 40 });
+
   ctx.registerAdminResource(GROUP_RESOURCE);
   ctx.registerAdminResource(BOARD_RESOURCE);
   ctx.registerAdminResource(POST_RESOURCE);

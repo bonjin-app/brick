@@ -336,6 +336,18 @@ export class PluginsController {
     return { ...result, activated: kind === "plugin" && this.loader.isActive(name) };
   }
 
+  /**
+   * 회원 메뉴 — 플러그인이 선언한 회원 화면 목록.
+   *
+   * 인증을 요구하지 않는다: 어떤 기능이 있는지는 비밀이 아니고, 내용은 각 화면이
+   * 스스로 지킨다. 로그인 화면에서 "가입하면 이런 게 있다"를 보여줄 수도 있다.
+   */
+  @Get("member/menu")
+  async memberMenu() {
+    await this.loader.refreshLocale();
+    return { items: this.loader.memberMenu() };
+  }
+
   /** 페이지 빌더가 사용할 블록 카탈로그 */
   @Get("blocks")
   blocks() {

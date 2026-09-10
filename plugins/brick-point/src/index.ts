@@ -402,6 +402,15 @@ export default definePlugin(async (ctx) => {
     ],
   });
 
+  /*
+   * 화면 선언 — 회원이 자기 포인트 내역을 볼 곳.
+   *
+   * 블록만 있으면 운영자가 페이지를 만들어 올려야 도달할 수 있고, 어떤 스타터도
+   * 만들지 않으므로 사실상 묻힌다. 적립은 되는데 내역을 볼 수 없으면 회원은
+   * 포인트를 신뢰하지 않는다.
+   */
+  ctx.registerScreen({ path: "points", title: "내 포인트", block: "my-point-history", memberMenu: true, order: 30 });
+
   ctx.registerAdminResource({
     name: "settings",
     kind: "settings",

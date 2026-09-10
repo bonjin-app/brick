@@ -51,6 +51,13 @@ export default function AccountPage() {
   const [pw, setPw] = useState({ current: "", next: "", confirm: "" });
   const [withdraw, setWithdraw] = useState({ password: "", confirm: "", deletePosts: false });
   const [losses, setLosses] = useState<Array<{ label: string; detail: string }>>([]);
+  /**
+   * 회원 메뉴 — 플러그인이 선언한 회원 화면(쪽지함·포인트 내역·스크랩 …).
+   *
+   * 이 목록이 없던 동안 그 화면들은 주소를 아는 사람만 쓸 수 있었다. 헤더는
+   * 자리가 좁아 늘 쓰는 것만 올라가므로, 나머지가 닿는 곳은 여기여야 한다.
+   */
+  const [memberMenu, setMemberMenu] = useState<Array<{ label: string; path: string }>>([]);
   const [gone, setGone] = useState(false);
 
   const say = (ok: string) => { setNotice(ok); setError(""); };
@@ -69,6 +76,9 @@ export default function AccountPage() {
       .catch(() => {});
     fetch("/api/me/withdraw/preview").then((s) => (s.ok ? s.json() : { items: [] }))
       .then((d) => setLosses(d.items ?? []))
+      .catch(() => {});
+    fetch("/api/member/menu").then((s) => (s.ok ? s.json() : { items: [] }))
+      .then((d) => setMemberMenu(d.items ?? []))
       .catch(() => {});
   }
   useEffect(() => { load().catch(() => oops()); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -179,6 +189,24 @@ export default function AccountPage() {
 
       {me && (
         <>
+          {/* ── 내 활동 (플러그인이 선언한 회원 화면) ── */}
+          {memberMenu.length > 0 && (
+            <section style={card}>
+              <h2 style={h2}>{t("account.myActivity")}</h2>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {memberMenu.map((m) => (
+                  <a key={m.path} href={m.path}
+                    style={{
+                      padding: "9px 14px", borderRadius: 8, fontSize: 14, textDecoration: "none",
+                      color: "inherit", border: "1px solid var(--color-line-strong)",
+                    }}>
+                    {m.label}
+                  </a>
+                ))}
+              </div>
+            </section>
+          )}
+
           {/* ── 기본 정보 ── */}
           <section style={card}>
             <h2 style={h2}>{t("account.profile")}</h2>
