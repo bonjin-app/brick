@@ -65,6 +65,16 @@ jobs:
           done
           [ -z "$missing" ] || { echo "::error::모달을 그리는데 useModalFocus 를 쓰지 않았습니다:$missing"; exit 1; }
 
+      - name: 서버가 요구하는 것을 화면이 준다 (가입 캡차)
+        run: |
+          # 서버는 기본으로 캡차를 요구하는데(BRICK_CAPTCHA=off 로만 끈다) 가입 화면에 입력
+          # 칸이 없어서 **기본 설정으로 설치한 사이트는 회원가입이 되지 않았다**. 스모크가
+          # 전부 캡차를 끄고 돌아 아무도 보지 못했다 — 화면과 서버의 연결은 이렇게 끊긴다.
+          grep -q "/api/captcha" apps/web/src/app/register/page.tsx \
+            || { echo "::error::가입 화면이 캡차를 그리지 않습니다 — 기본 설정에서 가입이 막힙니다"; exit 1; }
+          grep -q "captchaToken" apps/web/src/app/register/page.tsx \
+            || { echo "::error::가입 화면이 captchaToken 을 보내지 않습니다"; exit 1; }
+
       - name: 마이그레이션
         run: node apps/api/dist/migrate.js
         env:

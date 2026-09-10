@@ -99,6 +99,19 @@ check "개인정보만 동의해도 차단(이용약관 누락)" \
   "$(code -X POST "$API/api/register" -H 'content-type: application/json' \
       -d '{"email":"partial@mem.test","password":"password123","displayName":"일부","agreements":{"privacy":true}}')" "400"
 
+echo "── 가입 오류도 어느 칸인지 알려준다"
+# 메시지만 주면 손님은 세 칸을 되짚어야 한다 — 그 지점이 가입 직전이다
+reg_err() { curl -s -X POST "$API/api/register" -H 'content-type: application/json' -d "$1"; }
+contains "이메일 형식" \
+  "$(reg_err '{"email":"골뱅이없음","password":"password123","displayName":"홍길동","agreements":{"terms":true,"privacy":true},"ageConfirmed":true}')" '"field":"email"'
+contains "비밀번호 길이" \
+  "$(reg_err '{"email":"ok@mem.test","password":"short","displayName":"홍길동","agreements":{"terms":true,"privacy":true},"ageConfirmed":true}')" '"field":"password"'
+contains "이름 길이" \
+  "$(reg_err '{"email":"ok2@mem.test","password":"password123","displayName":"짧","agreements":{"terms":true,"privacy":true},"ageConfirmed":true}')" '"field":"displayName"'
+# 사람이 읽는 문구는 그대로 남아야 한다 (field 를 더한 것이지 바꾼 것이 아니다)
+contains "문구도 그대로" \
+  "$(reg_err '{"email":"골뱅이없음","password":"password123","displayName":"홍길동","agreements":{"terms":true,"privacy":true},"ageConfirmed":true}')" "올바른 이메일"
+
 echo "── 가입: 선택 항목은 거부해도 통과 (강제하면 위법)"
 cat > "$TMP/u1.json" <<'JSON'
 {"email":"user1@mem.test","password":"password123","displayName":"회원일",

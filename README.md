@@ -27,7 +27,7 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-3172%20passing-2ea043.svg" alt="스모크 테스트 3172개" />
+  <img src="https://img.shields.io/badge/E2E-3177%20passing-2ea043.svg" alt="스모크 테스트 3177개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
   <a href="https://github.com/bonjin-app/brick/pkgs/container/brick">
     <img src="https://img.shields.io/badge/docker-amd64%20%C2%B7%20arm64-2496ed.svg" alt="Docker image (amd64 · arm64)" />
@@ -367,12 +367,12 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 3,172개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 3,177개 항목):
 
 | 수트 | 항목 | 무엇을 못박는가 |
 |---|---:|---|
 | `smoke-test.sh` | 73 | 설치 · 인증 · 페이지 · 미디어 · 플러그인 로드 · **공유 이미지·immutable 캐시·압축** · **이미지 최적화·EXIF 제거** · **썸네일 백필** · **og 1200×630 자동 변형** · **업로드 immutable·ETag·304** · **DB 순단 회복** |
-| `smoke-member.sh` | 126 | 약관 강제 · 동의 이력 · 개인정보 파기 · 주문 보존 · 프로필 이미지·공개 카드·닉네임 변경 주기 · **관리자 메모·이메일 변경** |
+| `smoke-member.sh` | 130 | 약관 강제 · 동의 이력 · 개인정보 파기 · 주문 보존 · 프로필 이미지·공개 카드·닉네임 변경 주기 · **관리자 메모·이메일 변경** · **가입 오류 칸 안내** |
 | `smoke-helpdesk.sh` | 109 | 문의 열거 방지 · 비회원 조회 · 사이트맵 유출 |
 | `smoke-migrate.sh` | 155 | 덤프 파싱 · 레벨 매핑 · **비밀번호 보존** · 영카트 상품·주문 · 멱등성 |
 | `smoke-returns.sh` | 105 | 할인 안분 · 이중 재고 복원 방어 · 청약철회 기간 · 비회원 청약철회 |
@@ -397,7 +397,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `smoke-shop.sh` | 240 | 재고 동시성 · 금액 위조 · 구매 검증 후기 · 비밀 문의 · **사진 후기** · **후기 정렬·사진 필터** · **모바일 구매 바** · **목록 썸네일·관리 왕복** · **처리 대기 카드** · **주문 일괄 처리·송장 일괄 입력** · **목록 필터** · **붙여넣기 등록** · **답변 대기 필터** · **목록 인덱스·응답 크기** · **오류 칸 안내** |
 | `smoke-site.sh` | 73 | 방문자 집계(IP 해시) · 팝업 노출 규칙 |
 | `smoke-social.sh` | 76 | state 쿠키 결속 · 코드 1회성 · 계정 탈취 경로 |
-| `smoke-security.sh` | 64 | 캡차 · 레이트리밋 · 결제 위조 · 권한 우회 · **CSP** |
+| `smoke-security.sh` | 65 | 캡차 · 레이트리밋 · 결제 위조 · 권한 우회 · **CSP** · **캡차 칸 안내** |
 | `smoke-release.sh` | 75 | FTP 설치 경로 · 동봉 플러그인 · **동봉 테마 전부** · 고아 프로세스 정리 · **update.mjs 교체·롤백 왕복** · **HOSTNAME 바인딩** · **공개 화면 보안 헤더** |
 | `smoke-create-plugin.sh` | 45 | 템플릿 생성→빌드→ZIP 설치→계약 전부 실사용 · escapeHtml · 실제 탈퇴로 파기 검증 |
 | `smoke-openapi.sh` | 24 | 실제 라우트에서 생성 · 플러그인 켜고 끄면 문서도 변함 · 자체 완결 문서 페이지 |

@@ -20,6 +20,11 @@ interface Agreement {
  * 않던 동안 웹 가입은 항상 400 이었다. 약관 목록은 GET /api/agreements 로
  * 받아 그대로 그린다 — 목록을 하드코딩하면 운영자가 약관을 개정해도
  * 화면이 낡은 문서를 보여준다.
+ *
+ * 캡차도 같은 종류의 구멍이었다. 서버는 기본으로 캡차를 요구하는데(BRICK_CAPTCHA=off 로만
+ * 끈다) 이 화면에 입력 칸이 없어서, **기본 설정으로 설치한 사이트는 회원가입이 아예
+ * 되지 않았다** — 손님은 "자동입력 방지 문자가 올바르지 않습니다"를 보지만 그 문자를 넣을
+ * 칸이 없다. 스모크가 전부 BRICK_CAPTCHA=off 로 돌아 아무도 보지 못했다.
  */
 export default function RegisterPage() {
   const t = useT();
@@ -29,6 +34,23 @@ export default function RegisterPage() {
   const [ageConfirmed, setAgeConfirmed] = useState(false);
   const [state, setState] = useState<"idle" | "busy" | "done">("idle");
   const [error, setError] = useState("");
+  /*
+   * 어느 칸이 문제인지 — 서버가 알려주면 그 칸에 표시를 걸고 포커스를 옮긴다.
+   * 메시지만 띄우면 손님은 세 칸을 되짚어야 하고, 그 지점이 가입 직전이다.
+   */
+  const [badField, setBadField] = useState("");
+  /** 캡차 — 서버가 켜져 있다고 하면 그린다(끈 사이트에서는 칸이 없다) */
+  const [captcha, setCaptcha] = useState<{ token: string; svg: string; hint: string } | null>(null);
+  const [captchaAnswer, setCaptchaAnswer] = useState("");
+
+  /** 새 문제를 받는다 — 틀렸을 때도 다시 받아야 한다(한 번 쓴 토큰은 재사용되지 않는다) */
+  const loadCaptcha = () => {
+    fetch("/api/captcha")
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d) => setCaptcha(d?.enabled ? { token: d.token, svg: d.svg, hint: d.hint } : null))
+      .catch(() => setCaptcha(null));
+  };
+  useEffect(loadCaptcha, []);
 
   useEffect(() => {
     fetch("/api/agreements")
@@ -45,12 +67,14 @@ export default function RegisterPage() {
     if (!ageConfirmed) { setError(t("register.needAge")); return; }
     setState("busy");
     setError("");
+    setBadField("");
     const res = await fetch("/api/register", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         ...form,
         ageConfirmed,
+        ...(captcha ? { captchaToken: captcha.token, captchaAnswer } : {}),
         agreements: Object.fromEntries(agreements.map((a) => [a.kind, checked[a.kind] === true])),
       }),
     });
@@ -58,8 +82,21 @@ export default function RegisterPage() {
       setState("done");
       setTimeout(() => (window.location.href = "/login"), 1200);
     } else {
-      setError((await res.json()).message ?? t("register.fail"));
+      const body = await res.json().catch(() => ({}));
+      setError(body.message ?? t("register.fail"));
+      // 쓴 토큰은 다시 못 쓴다 — 새 문제를 받지 않으면 두 번째 시도가 반드시 실패한다
+      if (captcha) { loadCaptcha(); setCaptchaAnswer(""); }
+      const field = typeof body.field === "string" ? body.field : "";
+      setBadField(field);
       setState("idle");
+      // 표시만 하고 끝내면 손님이 어느 칸인지 찾아야 한다 — 그 칸으로 데려간다
+      if (field) {
+        requestAnimationFrame(() => {
+          const el = document.getElementById(`register-${field}`);
+          el?.focus();
+          el?.scrollIntoView({ block: "center" });
+        });
+      }
     }
   }
 
@@ -74,17 +111,42 @@ export default function RegisterPage() {
       ) : (
         <form onSubmit={submit}>
           <label style={{ ...authLabel, marginTop: 0 }}>{t("register.name")}
-            <input style={authInput} required minLength={2} maxLength={30} value={form.displayName}
+            <input id="register-displayName" style={authInput} required minLength={2} maxLength={30}
+              aria-invalid={badField === "displayName" || undefined} value={form.displayName}
               onChange={(e) => setForm({ ...form, displayName: e.target.value })} />
           </label>
           <label style={authLabel}>{t("login.email")}
-            <input style={authInput} type="email" required value={form.email}
+            <input id="register-email" style={authInput} type="email" required
+              aria-invalid={badField === "email" || undefined} value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })} />
           </label>
           <label style={authLabel}>{t("register.password8")}
-            <input style={authInput} type="password" required minLength={8} value={form.password}
+            <input id="register-password" style={authInput} type="password" required minLength={8}
+              aria-invalid={badField === "password" || undefined} value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })} />
           </label>
+
+          {captcha && (
+            <label style={authLabel}>{t("register.captcha")}
+              <span style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 5 }}>
+                {/* 서버가 만든 SVG — 문자만 그린 그림이라 마크업이 들어올 여지가 없다 */}
+                <span aria-hidden="true" style={{ lineHeight: 0, borderRadius: 6, overflow: "hidden", flex: "0 0 auto" }}
+                  dangerouslySetInnerHTML={{ __html: captcha.svg }} />
+                <button type="button" onClick={() => { loadCaptcha(); setCaptchaAnswer(""); }}
+                  style={{ padding: "8px 10px", minHeight: 34, border: "1px solid var(--color-line)",
+                           borderRadius: 6, background: "var(--color-bg)", cursor: "pointer", fontSize: 13 }}>
+                  {t("register.captchaReload")}
+                </button>
+              </span>
+              <input id="register-captchaAnswer" style={{ ...authInput, marginTop: 6 }} required
+                autoComplete="off" inputMode="text" aria-describedby="register-captcha-hint"
+                aria-invalid={badField === "captchaAnswer" || undefined}
+                value={captchaAnswer} onChange={(e) => setCaptchaAnswer(e.target.value)} />
+              <span id="register-captcha-hint" style={{ display: "block", fontSize: 12.5, color: "var(--color-muted)", marginTop: 4 }}>
+                {captcha.hint}
+              </span>
+            </label>
+          )}
 
           <div style={{ marginTop: 18, paddingTop: 14, borderTop: "1px solid var(--color-line)" }}>
             {agreements.map((a) => (
@@ -124,7 +186,7 @@ export default function RegisterPage() {
           </button>
         </form>
       )}
-      {error && <p style={{ color: "var(--color-danger)", fontSize: 14 }}>{error}</p>}
+      {error && <p role="alert" style={{ color: "var(--color-danger)", fontSize: 14 }}>{error}</p>}
       <SocialButtons next="/" />
       <p style={{ textAlign: "center", marginTop: 18, fontSize: 14, color: "var(--color-muted)" }}>
         {t("register.haveAccount")} <a href="/login" style={authLink}>{t("login.title")}</a>

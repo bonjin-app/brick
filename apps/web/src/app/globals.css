@@ -46,3 +46,10 @@
   .brick-admin td textarea, .brick-admin td input { min-width: 160px; }
   .brick-admin h1 { font-size: 22px; }
 }
+
+/* 문제가 있는 칸은 눈으로도 보여야 한다 — aria-invalid 만으로는 스크린리더에만 전해진다 */
+[aria-invalid="true"] {
+  border-color: var(--color-danger) !important;
+  outline: 2px solid var(--color-danger);
+  outline-offset: 1px;
+}

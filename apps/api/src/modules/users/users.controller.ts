@@ -72,7 +72,10 @@ export class UsersController {
     if (this.captcha.enabled) {
       const passed = await this.captcha.verify(body?.captchaToken ?? "", body?.captchaAnswer ?? "");
       if (!passed) {
-        throw new BadRequestException("자동입력 방지 문자가 올바르지 않습니다. 다시 시도해주세요.");
+        throw new BadRequestException({
+          message: "자동입력 방지 문자가 올바르지 않습니다. 다시 시도해주세요.",
+          field: "captchaAnswer",
+        });
       }
     }
 
@@ -101,16 +104,23 @@ export class UsersController {
     }
 
     const displayName = (body?.displayName ?? "").trim();
-    if (!EMAIL_RE.test(email)) throw new BadRequestException("올바른 이메일을 입력하세요.");
-    if ((body?.password ?? "").length < 8) throw new BadRequestException("비밀번호는 8자 이상이어야 합니다.");
+    /*
+     * 어느 칸이 문제인지 함께 알려준다.
+     *
+     * 메시지만 주면 손님은 세 칸을 되짚어야 하고, 그 지점이 가입 직전이다. 화면은 field 로
+     * 그 칸에 표시를 걸고 포커스를 옮긴다 — 주문서에서 같은 것을 하고 있다.
+     */
+    const invalid = (message: string, field: string) => new BadRequestException({ message, field });
+    if (!EMAIL_RE.test(email)) throw invalid("올바른 이메일을 입력하세요.", "email");
+    if ((body?.password ?? "").length < 8) throw invalid("비밀번호는 8자 이상이어야 합니다.", "password");
     if (displayName.length < 2 || displayName.length > 30) {
-      throw new BadRequestException("이름은 2~30자로 입력하세요.");
+      throw invalid("이름은 2~30자로 입력하세요.", "displayName");
     }
     // 운영진 사칭 이름·금지 단어·가입 금지 도메인 (사이트 설정)
     const nameProblem = await this.moderation.nameProblem(displayName);
-    if (nameProblem) throw new BadRequestException(nameProblem);
+    if (nameProblem) throw invalid(nameProblem, "displayName");
     const emailProblem = await this.moderation.emailProblem(email);
-    if (emailProblem) throw new BadRequestException(emailProblem);
+    if (emailProblem) throw invalid(emailProblem, "email");
 
     // 만 14세 미만은 법정대리인 동의 절차 없이 가입시킬 수 없다.
     // 생년월일 전체를 받지 않는다 — 확인에 필요한 최소는 "14세 이상인가" 뿐이다.
@@ -149,7 +159,7 @@ export class UsersController {
       });
     } catch (err) {
       if (isUniqueViolation(err, "users_email")) {
-        throw new ConflictException("이미 등록된 이메일입니다.");
+        throw new ConflictException({ message: "이미 등록된 이메일입니다.", field: "email" });
       }
       throw err;
     }

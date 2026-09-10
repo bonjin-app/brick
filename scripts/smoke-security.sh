@@ -178,6 +178,9 @@ A2="$(captcha_issue | cut -d'|' -f2)"
 # 회원가입에 캡차 강제
 printf '{"email":"nocap@sec.test","password":"passok1234","agreements":{"terms":true,"privacy":true,"third_party":true},"displayName":"봇"}' > "$TMP/nocap.json"
 check "캡차 없는 가입 차단" "$(code -X POST "$API/api/register" -H 'content-type: application/json' --data-binary "@$TMP/nocap.json")" "400"
+# 어느 칸을 고쳐야 하는지 알려준다 — 캡차는 손님이 가장 자주 틀리는 칸이다
+contains "캡차 오류도 어느 칸인지" \
+  "$(post "$API/api/register" "$TMP/nocap.json")" '"field":"captchaAnswer"'
 
 IFS='|' read -r CTK CAN <<< "$(captcha_issue)"
 printf '{"email":"wrongcap@sec.test","password":"passok1234","agreements":{"terms":true,"privacy":true,"third_party":true},"displayName":"봇","captchaToken":"%s","captchaAnswer":"ZZZZZ"}' "$CTK" > "$TMP/wrongcap.json"
