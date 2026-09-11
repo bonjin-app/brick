@@ -256,38 +256,72 @@ def post(p, payload):
     try: return json.loads(out)
     except Exception: return None
 
-def sample(f, i):
+def sample(f, i, plugin, seq):
+    """선언만 보고 만든 '그럴듯한 값'. 모르면 None — 그 칸은 보내지 않는다.
+
+    도움말(help)을 사람처럼 읽는다. 운영자에게 "5~50" 이나 "예: 63000" 이라고
+    적어 둔 화면이면 그 말이 곧 유효한 값의 정의다. 이렇게 하지 않으면 검사는
+    아무 값이나 넣어 유효성에 걸리고, **만들 수 있는 리소스만** 보게 된다.
+    """
     ty = f.get("type") or "text"
+    help_ = str(f.get("help") or "") + " " + str(f.get("placeholder") or "")
+    ex = re.search(r"예:\s*([^\s.,)]+)", help_)
+    rng = re.search(r"(\d+)\s*~\s*(\d+)", help_)
     if ty == "boolean": return True
-    if ty in ("number","money"): return 3
+    if ty in ("number","money"):
+        if rng: return int(rng.group(1))
+        if ex and ex.group(1).isdigit(): return int(ex.group(1))
+        return 3
     if ty == "select":
         opts = [o.get("value") for o in (f.get("options") or []) if o.get("value")]
-        return opts[0] if opts else None
-    if ty == "date": return "2026-01-02"
+        if opts: return opts[0]
+        # 선택지가 테이블 행인 경우 — 실제로 받아서 쓴다. 이것을 하지 않으면
+        # 상위(게시판의 그룹 등)를 요구하는 리소스를 하나도 만들지 못하고,
+        # 검사는 만들기 쉬운 몇 개만 보게 된다.
+        src = f.get("optionsFrom")
+        if src:
+            got = get(f"/api/plugins/{plugin}{src}")
+            if isinstance(got, list) and got and got[0].get("value"):
+                return got[0]["value"]
+        return None
+    if ty == "date":
+        # 시작·종료가 함께 있는 화면이 많다. 선언 순서대로 하루씩 뒤로 미뤄
+        # "종료가 시작보다 빠릅니다" 로 튕기지 않게 한다.
+        return f"2026-01-{2 + seq:02d}"
     if ty in ("image","images"): return "/uploads/probe.png"
+    if ex: return ex.group(1)
     if f["name"] == "slug": return f"probe-{i}"
     return f"probe{i}"
 
 bad = []
 checked = 0
-for idx, r in enumerate(get("/api/admin/nav").get("resources", [])):
+seen = set()
+# 두 번 돈다. 상위가 있어야 만들 수 있는 리소스가 있고(게시판은 그룹이 먼저다),
+# 목록 순서는 그 의존을 모른다 — 첫 바퀴에서 만든 것이 둘째 바퀴의 선택지가 된다.
+resources = get("/api/admin/nav").get("resources", [])
+for idx, r in enumerate(resources + resources):
     d = get(f"/api/admin/resources/{r['plugin']}/{r['name']}")
     if not isinstance(d, dict) or d.get("kind") == "settings": continue
     can = d.get("can") or {}
     # 수정할 수 없는 리소스는 폼이 열리지 않는다 — 이 검사의 대상이 아니다
     if can.get("update") is False or can.get("create") is False: continue
+    key = f"{r['plugin']}/{r['name']}"
+    if key in seen: continue
     base = f"/api/plugins/{r['plugin']}{d.get('basePath','')}"
     tag = f"{r['plugin']}/{r['name']}"
     editable = [f for f in d.get("fields", []) if f.get("name") and not f.get("readOnly")]
     payload = {}
+    dseq = 0
     for f in editable:
-        v = sample(f, idx)
+        if (f.get("type") or "") == "date": dseq += 1
+        v = sample(f, idx, r['plugin'], dseq)
         if v is not None: payload[f["name"]] = v
     if not payload: continue
     made = post(base, payload)
     # 만들 수 없는 리소스(외래키·업무 규칙)는 여기서 판단하지 않는다
     if not isinstance(made, dict) or made.get("statusCode", 200) >= 400: continue
     checked += 1
+    seen.add(key)
     idf = d.get("idField") or "id"
     rid = made.get(idf)
     one = get(f"{base}/{rid}") if rid is not None else None

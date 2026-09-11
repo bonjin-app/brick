@@ -94,6 +94,20 @@ export async function listFaqsAdmin(db: Db, page: number) {
   return { items: rows, total: Number(cnt[0]?.n ?? 0), page: Math.max(1, page), pageSize: size };
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * 분류 id 를 읽는다. uuid 가 아니면 **400 으로 돌려준다** — 그대로 SQL 에
+ * 넘기면 드라이버가 "invalid input syntax for type uuid" 로 터지고, 화면에는
+ * "Internal server error" 만 뜬다. 무엇이 잘못됐는지 운영자가 알 수 없다.
+ */
+function parseCategoryId(v: unknown): string | null {
+  const s = v === undefined || v === null ? "" : String(v).trim();
+  if (!s) return null;
+  if (!UUID_RE.test(s)) throw new HelpError(400, "분류를 목록에서 골라주세요.");
+  return s;
+}
+
 export function validateFaq(b: Record<string, unknown>) {
   const question = String(b.question ?? "").trim();
   const answer = String(b.answer ?? "").trim();
@@ -103,7 +117,7 @@ export function validateFaq(b: Record<string, unknown>) {
   return {
     question,
     answer,
-    categoryId: b.category_id ? String(b.category_id) : null,
+    categoryId: parseCategoryId(b.category_id),
     sortOrder: Math.floor(Number(b.sort_order ?? 0)) || 0,
     isVisible: b.is_visible !== false,
   };

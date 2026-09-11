@@ -279,6 +279,23 @@ export default definePlugin(async (ctx) => {
     return await listCategoriesAdmin(db);
   });
 
+  /*
+   * FAQ 등록 화면의 "분류" 드롭다운이 쓰는 선택지.
+   *
+   * 전에는 분류 칸이 그냥 텍스트였고 도움말이 "분류 목록 화면에서 id를 복사해
+   * 넣으세요"였다. 운영자는 다른 화면을 열어 uuid 를 복사해 와야 했고, 분류
+   * **이름**을 적으면 uuid 파싱이 터져 "Internal server error" 가 나왔다.
+   * 선택지가 테이블 행일 때 optionsFrom 을 쓰라는 것이 계약이 말하는 바다.
+   */
+  ctx.registerRoute("GET", "/admin/faq-categories/options", async (req) => {
+    requireManager(req);
+    const { rows } = await db.execute(sql`
+      SELECT id, name FROM help_faq_categories
+      WHERE is_visible = true ORDER BY sort_order, name
+    `);
+    return rows.map((r) => ({ value: String(r.id), label: String(r.name) }));
+  });
+
   ctx.registerRoute("POST", "/admin/faq-categories", async (req) => {
     requireManager(req);
     const v = validateCategory(req.body as Record<string, unknown>);
