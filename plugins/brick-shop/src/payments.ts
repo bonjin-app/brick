@@ -4,6 +4,7 @@ import type { Db } from "./types.js";
 import { ShopError } from "./types.js";
 import { changeOrderStatus, type PointsPort } from "./orders.js";
 import { isUniqueViolation } from "@brick/plugin-sdk";
+import { t, money } from "./i18n.js";
 
 /**
  * 결제 게이트웨이 추상화.
@@ -234,6 +235,13 @@ export async function confirmPayment(
   `);
   // 상태 머신을 통해 전이한다 (이력이 남고 규칙이 검증된다)
   await changeOrderStatus(db, String(order.id), "paid", {
+    /*
+     * 이력 note 는 **저장되는 데이터**다 — 화면 문구가 아니다.
+     *
+     * 그래서 번역하지 않는다. 쓰인 시점의 값으로 DB 에 남고, 나중에 사이트 언어를
+     * 바꿔도 과거 이력이 함께 바뀌면 안 된다(그것은 기록의 개조다). 운영자가 읽는
+     * 감사 기록이므로 한국어로 고정한다.
+     */
     note: `${gateway.displayName} 결제 승인 (${approved.toLocaleString("ko-KR")}원)`,
     actorId: params.actorId ?? null,
     pointsPort: params.pointsPort ?? null,
@@ -299,7 +307,7 @@ export async function refundPayment(
 
   if (!Number.isFinite(amount) || amount <= 0) throw new ShopError(400, "환불 금액이 올바르지 않습니다.");
   if (amount > remaining) {
-    throw new ShopError(400, `환불 가능 금액을 초과했습니다. (가능: ${remaining.toLocaleString("ko-KR")}원)`);
+    throw new ShopError(400, t("refund.overLimit", { amount: money(remaining) }));
   }
 
   // 이 취소 동작을 가리키는 멱등키.

@@ -3,6 +3,7 @@ import { uuidv7 } from "uuidv7";
 import type { Db, OrderStatus, ShopSettings } from "./types.js";
 import { ShopError, STATUS_TRANSITIONS, STOCK_RESTORING } from "./types.js";
 import { quote, type Quote } from "./pricing.js";
+import { t, localeTag } from "./i18n.js";
 
 /**
  * 포인트 서비스의 최소 계약 — brick-point가 공개하는 것 중 쇼핑몰이 쓰는 부분만.
@@ -100,7 +101,7 @@ export async function createOrder(
     if (!params.pointsPort) throw new ShopError(400, "포인트 기능이 활성화되지 않았습니다.");
     const balance = await params.pointsPort.balance(params.userId);
     if (balance < requestedPoint) {
-      throw new ShopError(400, `보유 포인트가 부족합니다. (보유: ${balance.toLocaleString("ko-KR")})`);
+      throw new ShopError(400, t("order.notEnoughPoints", { balance: balance.toLocaleString(localeTag()) }));
     }
   }
 

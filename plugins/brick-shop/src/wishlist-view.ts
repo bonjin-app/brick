@@ -1,5 +1,6 @@
 import type { PluginContext } from "@brick/plugin-sdk";
 import { escapeHtml } from "@brick/plugin-sdk";
+import { moneyFnScript } from "./i18n.js";
 
 /**
  * 위시리스트 · 최근 본 상품 화면.
@@ -80,7 +81,7 @@ const WISH_CSS = `
 const cardHelpers = (t: (k: string, p?: Record<string, string | number>) => string) => `
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
-  function fmt(n){ return Number(n).toLocaleString('ko-KR') + '원'; }
+  ${moneyFnScript("fmt")}
   function card(p, base, withDelete){
     var soldout = p.status === 'soldout' || p.stock === 0;
     var gone = p.status && p.status !== 'selling' && p.status !== 'soldout';

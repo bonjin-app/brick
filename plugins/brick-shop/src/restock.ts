@@ -12,7 +12,8 @@ import { createHash, randomBytes } from "node:crypto";
 import { uuidv7 } from "uuidv7";
 import { isUniqueViolation } from "@brick/plugin-sdk";
 import type { Db } from "./types.js";
-import { ShopError } from "./types.js";
+import { ShopError, won } from "./types.js";
+import { t } from "./i18n.js";
 
 /**
  * 한 번에 보내는 통수.
@@ -253,7 +254,7 @@ export async function sendRestockNotifications(
       const text = [
         `${label} 상품이 재입고되었습니다.`,
         "",
-        `가격: ${Number(product.price).toLocaleString("ko-KR")}원`,
+        t("restock.mailPrice", { amount: won(Number(product.price)) }),
         `바로 보기: ${productUrl}`,
         "",
         "─────────────────────────────────────",

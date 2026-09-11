@@ -1365,7 +1365,7 @@ export default definePlugin(async (ctx) => {
     const grades = await listGrades(db);
     return grades.map((g) => ({
       value: g.id,
-      label: `${g.name} (${g.minAmount.toLocaleString("ko-KR")}원~)`,
+      label: `${g.name} (${won(g.minAmount)}~)`,
     }));
   });
 
@@ -2528,7 +2528,7 @@ export default definePlugin(async (ctx) => {
         thumbnail: r.image_url ? String(r.image_url) : null,
         meta: [
           String(r.category_name ?? "") || null,
-          `${Number(r.price).toLocaleString("ko-KR")}원`,
+          won(Number(r.price)),
           String(r.status) === "soldout" ? "품절" : null,
         ].filter(Boolean).join(" · "),
       }));

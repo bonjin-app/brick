@@ -1,5 +1,6 @@
 import type { PluginContext } from "@brick/plugin-sdk";
 import { escapeHtml } from "@brick/plugin-sdk";
+import { moneyFnScript, localeTag } from "./i18n.js";
 
 /**
  * 주문 조회 화면 — <상점>/orders (목록) · <상점>/orders/<주문번호> (상세).
@@ -87,7 +88,7 @@ const listScript = (t: (k: string) => string, labels: string) => `
   var body = document.getElementById('brick-orders-body');
   var base = root.dataset.base;
   var LABEL = ${labels};
-  function fmt(n){ return Number(n).toLocaleString('ko-KR') + '원'; }
+  ${moneyFnScript("fmt")}
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 
@@ -160,7 +161,7 @@ const detailScript = (t: (k: string, p?: Record<string, string | number>) => str
   var body = document.getElementById('brick-order-body');
   var no = root.dataset.orderNo;
   var LABEL = ${labels};
-  function fmt(n){ return Number(n).toLocaleString('ko-KR') + '원'; }
+  ${moneyFnScript("fmt")}
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 
@@ -241,7 +242,7 @@ const detailScript = (t: (k: string, p?: Record<string, string | number>) => str
           payerNote.textContent = ${JSON.stringify(t("ret.shippingPayer"))} + ': ' + who +
             (payer === 'customer' && v.returnShippingFee
               ? ' · ' + ${JSON.stringify(t("ret.returnShippingNote", { amount: "__A__" }))}
-                  .replace('__A__', Number(v.returnShippingFee).toLocaleString('ko-KR'))
+                  .replace('__A__', Number(v.returnShippingFee).toLocaleString(${JSON.stringify(localeTag())}))
               : '');
         });
 

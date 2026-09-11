@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import type { Db, ShopSettings } from "./types.js";
 import { ShopError } from "./types.js";
 import { findZoneFee } from "./wishlist.js";
+import { t, money } from "./i18n.js";
 
 export interface PricedLine {
   /** 호출자가 넘긴 참조값 (장바구니 항목 id 등). 관대 모드에서 항목이 건너뛰어져도
@@ -356,7 +357,7 @@ async function applyCoupon(
     throw new ShopError(400, "쿠폰 사용 한도가 모두 소진되었습니다.");
   }
   if (subtotal < Number(c.min_amount)) {
-    throw new ShopError(400, `${Number(c.min_amount).toLocaleString("ko-KR")}원 이상 구매 시 사용할 수 있습니다.`);
+    throw new ShopError(400, t("coupon.minAmountError", { amount: money(Number(c.min_amount)) }));
   }
 
   let discount =

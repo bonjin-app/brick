@@ -20,6 +20,7 @@ import type { Db, ShopSettings } from "./types.js";
 import { ShopError } from "./types.js";
 import { createOrder, changeOrderStatus, type OrdererInput, type PointsPort } from "./orders.js";
 import { gateways, type PaymentGateway } from "./payments.js";
+import { t, money } from "./i18n.js";
 
 export const SUBSCRIPTION_QUEUE_JOB = "shop.subscription.charge";
 
@@ -210,6 +211,7 @@ async function chargeOrder(
     WHERE id = ${params.orderId}::uuid
   `);
   await changeOrderStatus(db, params.orderId, "paid", {
+    // 이력 note 는 저장되는 데이터다 — 번역하지 않는다 (payments.ts 의 같은 주석 참고)
     note: `정기결제 승인 (${approved.toLocaleString("ko-KR")}원)`,
     pointsPort: params.pointsPort ?? null,
   });
@@ -429,8 +431,10 @@ export async function chargeDueSubscriptions(
       if (!alreadyPaid && order.total !== Number(sub.agreed_total)) {
         await abandonCycleOrder(db, order.id, "정기결제 청구액 변경으로 중지");
         await halt(
-          `청구 금액이 달라졌습니다 (가입 시 ${Number(sub.agreed_total).toLocaleString("ko-KR")}원 → ` +
-          `현재 ${order.total.toLocaleString("ko-KR")}원). 변경된 금액으로 계속하려면 다시 가입해주세요.`,
+          t("sub.amountChanged", {
+            agreed: money(Number(sub.agreed_total)),
+            current: money(Number(order.total)),
+          }),
         );
         continue;
       }
