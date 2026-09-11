@@ -1814,10 +1814,17 @@ export default definePlugin(async (ctx) => {
     const b = req.body as Record<string, unknown>;
     const status = String(b.status ?? "");
     if (status === "issued") {
+      /*
+       * **선언한 이름(approval_no·receipt_url)을 먼저 읽는다.**
+       * 카멜만 읽고 있었는데 관리 화면은 선언한 이름으로 보낸다. 그래서 운영자가
+       * "국세청 승인번호" 칸에 번호를 적고 저장하면 **"국세청 승인번호를
+       * 입력해주세요"** 가 떴다 — 방금 적은 그 칸을 두고. 화면으로는 수동 발급을
+       * 끝낼 방법이 없었고, 그 화면의 도움말은 정확히 그렇게 하라고 안내한다.
+       */
       return await markCashReceiptIssued(db, {
         id: req.params.id,
-        approvalNo: String(b.approvalNo ?? ""),
-        receiptUrl: b.receiptUrl ? String(b.receiptUrl) : undefined,
+        approvalNo: pick(b.approval_no, b.approvalNo) ?? "",
+        receiptUrl: pick(b.receipt_url, b.receiptUrl),
       });
     }
     if (status === "cancelled") {
@@ -1843,8 +1850,9 @@ export default definePlugin(async (ctx) => {
     return await updateTaxInvoice(db, {
       id: req.params.id,
       status: String(b.status ?? ""),
-      invoiceNo: b.invoiceNo ? String(b.invoiceNo) : undefined,
-      invoiceUrl: b.invoiceUrl ? String(b.invoiceUrl) : undefined,
+      // 현금영수증과 같은 이유 — 선언은 invoice_no·invoice_url 이다
+      invoiceNo: pick(b.invoice_no, b.invoiceNo),
+      invoiceUrl: pick(b.invoice_url, b.invoiceUrl),
       reason: b.reason ? String(b.reason) : undefined,
     });
   });

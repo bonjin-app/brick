@@ -111,6 +111,9 @@ jobs:
       - name: 자격증명 입력칸은 화면에서 가려진다
         run: node scripts/check-secret-fields.mjs
 
+      - name: 화면이 보내는 칸 이름을 서버가 읽는다 (선언은 스네이크, 핸들러는 카멜이었다)
+        run: node scripts/check-admin-field-names.mjs
+
       - name: 문서가 세는 숫자가 실제와 맞는다 (틀린 숫자는 틀린 설명보다 발견되기 어렵다)
         run: node scripts/check-doc-counts.mjs
 

@@ -208,11 +208,17 @@ check "승인번호 없으면 400" \
 contains "왜 필요한지 알려준다" \
   "$(curl -s -b "$CK" -X PUT "$SHOP/admin/cash-receipts/$RID1" -H 'content-type: application/json' \
       -d '{"status":"issued"}')" "승인번호"
-contains "승인번호를 주면 발급완료" \
+# **관리 화면이 실제로 보내는 이름으로 보낸다.** 이 단언은 오래 카멜(approvalNo)로
+# 되어 있었는데, 그것은 핸들러가 마침 읽던 이름이지 화면이 보내는 이름이 아니다.
+# 선언은 approval_no 다. 그래서 운영자가 "국세청 승인번호" 칸에 번호를 적고 저장하면
+# "국세청 승인번호를 입력해주세요" 가 떴고 — 방금 적은 그 칸을 두고 — 화면으로는
+# 수동 발급을 끝낼 방법이 없었다. 스모크는 통과하고 있었다.
+contains "승인번호를 주면 발급완료 (화면이 보내는 이름)" \
   "$(curl -s -b "$CK" -X PUT "$SHOP/admin/cash-receipts/$RID1" -H 'content-type: application/json' \
-      -d '{"status":"issued","approvalNo":"123456789012"}')" '"ok":true'
+      -d '{"status":"issued","approval_no":"123456789012","receipt_url":"https://hometax.test/r/1"}')" '"ok":true'
 ISSUED="$(psql_q "SELECT status, approval_no, issued_at IS NOT NULL FROM shop_cash_receipts WHERE id='$RID1'")"
 check "발급 시각과 승인번호가 남는다" "$ISSUED" "issued|123456789012|true"
+check "영수증 링크도 남는다" "$(psql_q "SELECT coalesce(receipt_url,'(없음)') FROM shop_cash_receipts WHERE id='$RID1'")" "https://hometax.test/r/1"
 check "비관리자는 상태를 바꿀 수 없다" \
   "$(code -b "$B1" -X PUT "$SHOP/admin/cash-receipts/$RID1" -H 'content-type: application/json' \
       -d '{"status":"cancelled"}')" "403"
@@ -371,12 +377,15 @@ check "승인번호 없이 발급완료 불가" \
 check "사유 없이 거부 불가" \
   "$(code -b "$CK" -X PUT "$SHOP/admin/tax-invoices/$TIID" -H 'content-type: application/json' \
       -d '{"status":"rejected"}')" "400"
-contains "승인번호를 주면 발급" \
+contains "승인번호를 주면 발급 (화면이 보내는 이름)" \
   "$(curl -s -b "$CK" -X PUT "$SHOP/admin/tax-invoices/$TIID" -H 'content-type: application/json' \
-      -d '{"status":"issued","invoiceNo":"20260828-0001"}')" '"ok":true'
+      -d '{"status":"issued","invoice_no":"20260828-0001","invoice_url":"https://hometax.test/i/1"}')" '"ok":true'
 check "발급 시각이 남는다" \
   "$(psql_q "SELECT status, invoice_no, issued_at IS NOT NULL FROM shop_tax_invoices WHERE id='$TIID'")" \
   "issued|20260828-0001|true"
+check "계산서 링크도 남는다" \
+  "$(psql_q "SELECT coalesce(invoice_url,'(없음)') FROM shop_tax_invoices WHERE id='$TIID'")" \
+  "https://hometax.test/i/1"
 check "이미 발급된 것은 다시 처리 못 함" \
   "$(code -b "$CK" -X PUT "$SHOP/admin/tax-invoices/$TIID" -H 'content-type: application/json' \
       -d '{"status":"issued","invoiceNo":"x"}')" "400"
