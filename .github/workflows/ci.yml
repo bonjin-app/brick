@@ -108,6 +108,9 @@ jobs:
       - name: 참조하는 테마 토큰이 실제로 정의되어 있다 (폴백만 쓰이면 테마가 통제할 수 없다)
         run: node scripts/check-theme-tokens.mjs
 
+      - name: 문서가 세는 숫자가 실제와 맞는다 (틀린 숫자는 틀린 설명보다 발견되기 어렵다)
+        run: node scripts/check-doc-counts.mjs
+
       - name: 마이그레이션
         run: node apps/api/dist/migrate.js
         env:

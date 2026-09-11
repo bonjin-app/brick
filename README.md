@@ -83,8 +83,8 @@ Docs are in Korean; the code, ADRs and this README's structure are the map. Issu
 | 상품 후기 | 쇼핑몰 패키지에 포함 | 플러그인 | **구매 검증 · 판매자 답변** |
 | 방문자 집계 | 있음 (IP 원문 저장) | 플러그인 | **IP를 해시로만 저장** |
 | 팝업/배너 | ✅ | 플러그인 | **✅ 경로·기간·클릭 집계** |
-| 소셜 로그인 | 플러그인 | 플러그인 | **✅ 코어 내장 (5종 + 사내 SSO)** |
-| SSR / SEO | 기본 | 기본 | **Next.js SSR + ISR** |
+| 소셜 로그인 | 플러그인 | 플러그인 | **✅ 코어 내장 (구글·카카오·네이버·깃허브 + OIDC 사내 SSO)** |
+| SSR / SEO | 기본 | 기본 | **Next.js SSR + API 태그 캐시** |
 | 타입 안전성 | 없음 | 없음 | **전 구간 strict** |
 
 > ⚠️ Brick은 **순수 PHP 호스팅(Node 없음)** 에서는 동작하지 않습니다.
@@ -156,7 +156,7 @@ DB 마이그레이션은 컨테이너가 부팅할 때 스스로 적용합니다
               사용자 / 검색엔진
                      │  :3000  (유일한 공개 포트)
               ┌──────▼──────┐
-              │   Next.js   │  SSR · ISR · 관리자 UI
+              │   Next.js   │  SSR · 관리자 UI
               └──────┬──────┘
                      │  :3001  (내부 전용)
               ┌──────▼──────────────────────┐
@@ -419,6 +419,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `check-admin-guards.mjs` | 관리 라우트가 역할을 정하지 않는 것 (디스패처가 manager 까지 통과시키므로 admin 전용은 자기 줄에서 막아야 한다) |
 | `check-plugin-cleanup.mjs` | 플러그인을 끄고도 등록한 것이 남는 것 (**꺼진 플러그인의 경로가 매칭되는데 그릴 블록이 없어 깨진 화면이 나온다**) |
 | `check-theme-tokens.mjs` | 어떤 테마도 정의하지 않는 토큰을 참조하는 것 (**폴백만 쓰여 테마가 그 색을 바꿀 수 없다** — 다크 테마에 밝은 선이 박혔다) |
+| `check-doc-counts.mjs` | 문서의 숫자가 실제와 어긋나는 것 (**스모크 표가 아홉 수트만큼 어긋나 있었고, 저장소 구조는 플러그인 여덟 개를 다섯 개로 적고 있었다**) |
 
 그 밖에 CI 가 정적으로 보는 것: 테마 CSS 컴파일 산출물 일치, 모달의 `useModalFocus`,
 메일이 보내는 링크에 화면이 있는지, 마이그레이션 멱등성(2회 실행).
@@ -483,7 +484,7 @@ themes/
   boutique/       부티크 — 여백 위주
   corporate/      회사 홈페이지 — 히어로·특징 카드
 docs-site/        GitHub Pages 랜딩페이지
-scripts/          스모크 테스트 35종 + 정적 검사 7종 + OIDC 스텁 + 배포본 생성(build-release.sh)
+scripts/          스모크 테스트 35종 + 정적 검사 8종 + OIDC 스텁 + 배포본 생성(build-release.sh)
 docker/           Dockerfile, entrypoint
 ```
 
