@@ -1,5 +1,5 @@
 import { definePlugin } from "@brick/plugin-sdk";
-import { bindI18n, t } from "./i18n.js";
+import { bindI18n, t, localeTag } from "./i18n.js";
 import type { PluginDb } from "@brick/plugin-sdk";
 import { sql } from "drizzle-orm";
 import {
@@ -371,11 +371,15 @@ export default definePlugin(async (ctx) => {
         WHERE user_id = ${userId}::uuid AND remaining > 0
       `);
       const balance = Number(rows[0]?.balance ?? 0);
+      /*
+       * 탈퇴 화면에 "무엇을 잃는가"로 뜬다 — 손님이 결정을 되돌릴 수 없는 자리다.
+       * 문구가 번역되지 않아 영어 사이트에서도 한국어로 나왔다.
+       */
       return [{
-        label: "포인트",
+        label: t("point.withdrawLabel"),
         detail: balance > 0
-          ? `${balance.toLocaleString("ko-KR")}점이 소멸됩니다. 되돌릴 수 없고 환불되지 않습니다.`
-          : "잔여 포인트가 없습니다.",
+          ? t("point.withdrawLoss", { balance: balance.toLocaleString(localeTag()) })
+          : t("point.withdrawNone"),
       }];
     },
   });
@@ -460,7 +464,7 @@ export default definePlugin(async (ctx) => {
       const balance = await points.balance(blockCtx.user.id);
       return `<div class="brick-point-widget">
   <span class="brick-point-label">${t("point.title")}</span>
-  <strong class="brick-point-value">${balance.toLocaleString("ko-KR")}</strong>
+  <strong class="brick-point-value">${balance.toLocaleString(localeTag())}</strong>
 </div>${WIDGET_CSS}`;
     },
   });
@@ -523,7 +527,7 @@ const historyScript = () => `
   var rows = [];
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
-  function num(n){ return Number(n).toLocaleString('ko-KR'); }
+  function num(n){ return Number(n).toLocaleString(${JSON.stringify(localeTag())}); }
   function d2(v){
     if (!v) return '';
     var d = new Date(v);

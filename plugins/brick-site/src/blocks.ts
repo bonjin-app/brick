@@ -30,7 +30,7 @@ export function registerSiteBlocks(ctx: PluginContext, db: Db): void {
     },
     render: async (props) => {
       const s = await visitStats(db);
-      const n = (v: number) => v.toLocaleString("ko-KR");
+      const n = (v: number) => v.toLocaleString(ctx.locale === "en" ? "en-US" : "ko-KR");
       const rows = [
         { label: "오늘", value: n(s.today) },
         { label: "어제", value: n(s.yesterday) },

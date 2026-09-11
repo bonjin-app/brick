@@ -129,6 +129,8 @@ const CORE_KO: MessageCatalog = {
   "home.stepThemeBody": "색과 글꼴은 테마 토큰에서 옵니다. 라이트·다크 두 벌이 함께 옵니다.",
   "home.stepPlugins": "플러그인",
   "home.stepPluginsBody": "게시판·쇼핑몰·회원·포인트를 켜고 끄면서 필요한 것만 씁니다.",
+  "withdraw.privacyLabel": "개인정보",
+  "withdraw.privacyDetail": "이메일·이름·비밀번호는 즉시 파기되며 같은 계정으로 다시 로그인할 수 없습니다.",
 };
 
 const CORE_EN: MessageCatalog = {
@@ -177,6 +179,8 @@ const CORE_EN: MessageCatalog = {
   "home.stepThemeBody": "Colors and fonts come from theme tokens. Light and dark ship together.",
   "home.stepPlugins": "Plugins",
   "home.stepPluginsBody": "Turn boards, shop, members and points on or off as you need them.",
+  "withdraw.privacyLabel": "Personal information",
+  "withdraw.privacyDetail": "Your email, name and password are destroyed immediately and you cannot sign in again with this account.",
 };
 
 export const CORE_CATALOGS: Record<Locale, MessageCatalog> = { ko: CORE_KO, en: CORE_EN };

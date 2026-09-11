@@ -150,10 +150,19 @@ export class PluginLoaderService implements OnModuleInit {
    * 자동으로 비활성화한다 — 관리자가 화면에서 상황을 확인하고 재설치할 수 있다.
    */
   async onModuleInit(): Promise<void> {
-    // 설정이 바뀌면 언어 캐시를 즉시 버린다 — 운영자가 언어를 바꿨는데
-    // 10초 동안 옛 언어로 그리는 것은 "안 바뀌었다"로 보인다.
+    /*
+     * 설정이 바뀌면 언어 캐시를 **즉시 새로 읽는다.**
+     *
+     * 버리기만 하면 `refreshLocale()` 을 부르는 경로(페이지 렌더·플러그인 라우트·
+     * 관리 nav)에서만 새 언어가 보인다. 코어 경로가 플러그인 문구를 쓰는 곳은 그것을
+     * 부르지 않으므로 옛 언어로 남았다 — 탈퇴 화면의 "무엇을 잃는가"가 그랬다
+     * (플러그인이 describe 로 문구를 만드는데, 그 경로에 갱신이 없었다).
+     *
+     * 읽기 한 번이므로 기다리지 않는다. 설정 저장 응답이 이것 때문에 늦을 이유는 없다.
+     */
     this.hooks.onAction("site.settings_changed", "__core__", () => {
       this.localeCache = { ...this.localeCache, at: 0 };
+      void this.refreshLocale();
     });
 
     const actives = await this.db.select().from(installedPlugins).where(eq(installedPlugins.isActive, true));

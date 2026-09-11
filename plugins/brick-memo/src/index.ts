@@ -3,7 +3,7 @@ import type { PluginDb } from "@brick/plugin-sdk";
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import { MEMO_CSS, memoScript, renderMemoShell, resolveMemoView } from "./views.js";
-import { bindI18n, t } from "./i18n.js";
+import { bindI18n, t, localeTag } from "./i18n.js";
 
 class MemoError extends Error {
   constructor(
@@ -249,7 +249,7 @@ export default definePlugin(async (ctx) => {
           tx,
         );
         if (!ok) {
-          throw new MemoError(400, `포인트가 부족합니다. (필요: ${s.sendPoint.toLocaleString("ko-KR")})`);
+          throw new MemoError(400, t("memo.notEnoughPoints", { need: s.sendPoint.toLocaleString(localeTag()) }));
         }
       }
 

@@ -5,6 +5,8 @@ import type { BrickDb } from "@brick/database";
 import type { HookBus, PluginDb } from "@brick/core";
 import { DB, HOOKS } from "../../runtime.module.js";
 import { DataErasers } from "./data-erasers.js";
+import { CORE_CATALOGS, makeTranslator } from "@brick/core";
+import { PluginLoaderService } from "../plugins/plugin-loader.service.js";
 
 /**
  * 회원 탈퇴.
@@ -39,6 +41,8 @@ export class WithdrawalService {
     @Inject(DB) private readonly db: BrickDb,
     @Inject(HOOKS) private readonly hooks: HookBus,
     private readonly erasers: DataErasers,
+    /** 사이트 언어를 아는 쪽 — 탈퇴 안내도 언어를 따라야 한다 */
+    private readonly loader: PluginLoaderService,
   ) {}
 
   /**
@@ -170,9 +174,16 @@ export class WithdrawalService {
       }
     }
 
+    /*
+     * 코어가 파기하는 것 — 플러그인 항목과 같은 화면에 나란히 뜬다.
+     *
+     * 그래서 같은 언어여야 한다. 플러그인 문구는 카탈로그를 타는데 이것만 한국어로
+     * 박혀 있어서, 영어 사이트의 탈퇴 화면이 반쪽으로 섞여 보였다.
+     */
+    const t = makeTranslator({ locale: this.loader.siteLocale, catalogs: CORE_CATALOGS });
     items.push({
-      label: "개인정보",
-      detail: "이메일·이름·비밀번호는 즉시 파기되며 같은 계정으로 다시 로그인할 수 없습니다.",
+      label: t("withdraw.privacyLabel"),
+      detail: t("withdraw.privacyDetail"),
     });
 
     return { items };

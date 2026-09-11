@@ -11,7 +11,7 @@
  * 목록·본문은 로그인 사용자별 내용이므로 서버 렌더 캐시가 적용되지 않는다
  * (코어가 로그인 요청을 캐시하지 않는다 — ADR-24).
  */
-import { t } from "./i18n.js";
+import { t, localeTag } from "./i18n.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -290,7 +290,7 @@ export const memoScript = () => `
     req(API + '/cost').then(function (r) {
       if (r.ok && r.data.sendPoint > 0) {
         body.querySelector('[data-cost]').textContent =
-          ${JSON.stringify(t("memo.costNote", { n: "__N__" }))}.replace('__N__', r.data.sendPoint.toLocaleString('ko-KR'));
+          ${JSON.stringify(t("memo.costNote", { n: "__N__" }))}.replace('__N__', r.data.sendPoint.toLocaleString(${JSON.stringify(localeTag())}));
       }
     });
 

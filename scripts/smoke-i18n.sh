@@ -277,6 +277,23 @@ PYEOF
 )"
 [[ -z "$KO_RES" ]] && ok "모든 리소스 선언 문자열이 번역되어 있다" || bad "번역 안 된 리소스 문자열: $KO_RES"
 
+echo "── 코어 경로가 쓰는 플러그인 문구도 언어를 따라간다"
+# 탈퇴 화면의 "무엇을 잃는가" 는 플러그인이 describe 로 만들고 코어가 모은다.
+# 그 경로는 언어 캐시를 갱신하지 않아서 옛 언어로 남았고(설정 변경 훅이 무효화만
+# 했다), 코어가 더하는 "개인정보" 항목은 아예 번역되지 않았다 — 한 화면에 두
+# 언어가 섞여 보였다.
+curl -s -b "$CK" -X POST "$API/api/plugins/brick-point/activate" >/dev/null
+# 탈퇴 안내는 회원 자신만 볼 수 있다 (캡차는 이 수트에서 꺼져 있다)
+MEMBER_CK="$TMP/member.txt"
+curl -s -X POST "$API/api/register" -H 'content-type: application/json' \
+  -d '{"email":"loss@i18n.test","password":"memberpass123","displayName":"Loss Member","agreements":{"terms":true,"privacy":true,"marketing":false},"ageConfirmed":true}' >/dev/null
+curl -s -c "$MEMBER_CK" -X POST "$API/api/auth/login" -H 'content-type: application/json' \
+  -d '{"email":"loss@i18n.test","password":"memberpass123"}' >/dev/null
+LOSS_EN="$(curl -s -b "$MEMBER_CK" "$API/api/me/withdraw/preview")"
+contains "코어 항목이 영어" "$LOSS_EN" "Personal information"
+absent   "코어 항목에 한국어가 남지 않는다" "$LOSS_EN" "개인정보"
+contains "플러그인 항목도 영어" "$LOSS_EN" '"label":"Points"'
+
 echo "── 한국어로 복귀"
 curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' \
   -d '{"site.locale":"ko"}' >/dev/null
