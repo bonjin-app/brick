@@ -198,6 +198,19 @@ printf '{"name":"brick-board/board","props":{"board":"free"}}' > "$TMP/blk.json"
 RENDER="$(jpost "$API/api/blocks/render" "$TMP/blk.json")"
 contains "목록 서버 렌더" "$RENDER" "자유게시판"
 contains "분류 내비게이션" "$RENDER" "brick-cat-nav"
+# 시각은 **사이트 시간대**로 찍힌다.
+#
+# 서버 렌더가 d.getHours() 를 쓰고 있었다 — 그것은 컨테이너의 시간대다.
+# Docker 기본은 UTC 이고 이 저장소는 TZ 를 어디에도 지정하지 않으므로,
+# 한국 시간 02:22 에 쓴 글이 목록에 "17:22" 로, 자정 근처면 **전날 날짜**로
+# 보였다. 그래서 이 단언은 TZ 를 UTC 로 고정하고 돌려도 KST 시각이 나와야 한다.
+BOARD_NOW="$(TZ=Asia/Seoul date +%H:%M)"
+BOARD_PREV="$(TZ=Asia/Seoul date -v-1M +%H:%M 2>/dev/null || TZ=Asia/Seoul date -d '1 minute ago' +%H:%M)"
+if [[ "$RENDER" == *">$BOARD_NOW<"* || "$RENDER" == *">$BOARD_PREV<"* ]]; then
+  ok "목록의 시각이 사이트 시간대 (지금 $BOARD_NOW)"
+else
+  bad "목록의 시각이 사이트 시간대가 아니다 (기대 $BOARD_NOW 또는 $BOARD_PREV)"
+fi
 contains "답변 들여쓰기 표시" "$RENDER" "brick-reply-mark"
 printf '{"title":"<script>alert(1)</script>","content":"본문","guestName":"손님","guestPassword":"1234"}' > "$TMP/xss.json"
 jpost "$BD/boards/free/posts" "$TMP/xss.json" >/dev/null

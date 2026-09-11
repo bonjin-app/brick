@@ -25,7 +25,7 @@ export interface SessionUser {
  * 권한 등급은 코어가 들고 있다 — 게시판이 갖고 있던 정의를 옮겼다.
  * 권한 비교를 두 곳에 두면 한쪽만 고쳐지고, 그 어긋남이 곧 권한 구멍이 된다.
  */
-import { rankOf } from "@brick/plugin-sdk";
+import { rankOf, siteDateParts } from "@brick/plugin-sdk";
 export { ROLE_RANK, rankOf, hasRole, type RoleBearer } from "@brick/plugin-sdk";
 
 export interface BoardRow {
@@ -115,22 +115,27 @@ export function humanSize(bytes: number): string {
  * ko-KR 이 "PM 2:06:35" 같은 반쪽 영문으로 나온다(실제로 그랬다).
  * 날짜 표기는 런타임이 아니라 우리가 정한다.
  */
+/*
+ * 서버가 그리는 시각은 **사이트 시간대**로 찍는다.
+ *
+ * `d.getFullYear()`·`getHours()` 는 컨테이너의 시간대다. Docker 기본은 UTC 이고
+ * 이 저장소는 TZ 를 어디에도 지정하지 않으므로, 한국 시간 0시 30분에 쓴 글이
+ * 목록에 "09.11 15:30" 으로 보였다 — 날짜까지 하루 어긋난다.
+ */
 export function fullDate(value: unknown): string {
   const d = new Date(String(value));
   if (Number.isNaN(d.getTime())) return "";
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  const p = siteDateParts(d);
+  return `${p.year}.${p.month}.${p.day} ${p.hour}:${p.minute}`;
 }
 
 export function shortDate(value: unknown): string {
   const d = new Date(String(value));
   if (Number.isNaN(d.getTime())) return "";
-  const now = new Date();
-  const sameDay =
-    d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
-  return sameDay
-    ? `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
-    : `${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
+  const p = siteDateParts(d);
+  const now = siteDateParts(new Date());
+  const sameDay = p.year === now.year && p.month === now.month && p.day === now.day;
+  return sameDay ? `${p.hour}:${p.minute}` : `${p.month}.${p.day}`;
 }
 
 /**

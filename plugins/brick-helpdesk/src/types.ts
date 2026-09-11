@@ -1,3 +1,4 @@
+import { siteDateParts } from "@brick/plugin-sdk";
 import type { PluginDb } from "@brick/plugin-sdk";
 
 export type Db = PluginDb;
@@ -47,5 +48,7 @@ export function escapeHtml(s: unknown): string {
 export function shortDate(v: unknown): string {
   const d = v instanceof Date ? v : new Date(String(v));
   if (!Number.isFinite(d.getTime())) return "";
-  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
+  // 서버가 그리는 날짜는 사이트 시간대로 (컨테이너 TZ 는 보통 UTC 다)
+  const p = siteDateParts(d);
+  return `${p.year}.${p.month}.${p.day}`;
 }

@@ -38,3 +38,29 @@ export const SITE_TZ = process.env.BRICK_TIMEZONE?.trim() || "Asia/Seoul";
 export function siteToday(now: Date = new Date()): string {
   return now.toLocaleDateString("en-CA", { timeZone: SITE_TZ });
 }
+
+/**
+ * 사이트 시간대의 날짜·시각 조각 — 화면에 찍을 숫자.
+ *
+ * 서버가 그리는 화면(게시판 목록·글 상세·댓글)이 `d.getFullYear()`·`getHours()`
+ * 로 시각을 찍고 있었다. 그것은 **컨테이너의 시간대**다. Docker 기본은 UTC 이고
+ * 이 저장소는 TZ 를 어디에도 지정하지 않으므로, 한국 시간 0시 30분에 쓴 글이
+ * "2026.09.11 15:30" 으로 보였다 — 날짜까지 하루 어긋난다.
+ *
+ * 로케일 이름이 아니라 **숫자만** 뽑는다. `ko-KR` 로 시각을 포맷하면 Node 의
+ * ICU 에 따라 "오후"가 "PM" 으로 나오는 일이 있었고(그래서 게시판이 직접 포맷을
+ * 들고 있었다), 여기서 필요한 것은 어차피 `YYYY.MM.DD HH:mm` 이다.
+ */
+export function siteDateParts(value: Date): {
+  year: string; month: string; day: string; hour: string; minute: string;
+} {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: SITE_TZ,
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  }).formatToParts(value);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  // hour12:false 는 자정을 "24" 로 주는 환경이 있다 — 00 으로 맞춘다
+  const hour = get("hour") === "24" ? "00" : get("hour");
+  return { year: get("year"), month: get("month"), day: get("day"), hour, minute: get("minute") };
+}
