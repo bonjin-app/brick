@@ -438,7 +438,23 @@ ${eyebrow ? `    <span class="brick-eyebrow">${esc(eyebrow)}</span>
               `<div class="brick-slide-dots">${dots}</div>`
             : "";
 
-        const style = [height ? `--slider-h:${height}px` : "", ].filter(Boolean).join(";");
+        /*
+         * 높이를 인라인으로 넘긴다 — 좁은 화면용도 함께.
+         *
+         * 테마 다섯 벌 모두 `var(--slider-h-sm, 260px)` 로 모바일 높이를 읽는데
+         * **아무도 그 값을 넣지 않았다.** 그래서 운영자가 높이를 600 으로 정해도
+         * 데스크톱만 따르고 폰은 260 에 고정됐다 — 배너가 화면마다 다른 비율로
+         * 잘려 보인다.
+         *
+         * 폰에서는 데스크톱의 62% 로 준다(가로가 3분의 1 이하로 줄어드는데 높이를
+         * 그대로 두면 배너가 세로로 길어져 첫 화면을 다 먹는다). 180~420 으로 묶어
+         * 너무 납작하거나 너무 긴 배너를 막는다.
+         */
+        const heightSm = height ? Math.max(180, Math.min(420, Math.round(height * 0.62))) : 0;
+        const style = [
+          height ? `--slider-h:${height}px` : "",
+          heightSm ? `--slider-h-sm:${heightSm}px` : "",
+        ].filter(Boolean).join(";");
         return (
           `<section class="brick-slider${props.full ? " is-full" : ""}${height ? "" : " is-auto"}"${style ? ` style="${style}"` : ""}` +
           ` data-interval="${interval}" aria-roledescription="carousel" aria-label="배너">` +

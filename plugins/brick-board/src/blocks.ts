@@ -166,7 +166,7 @@ export function registerBoardBlocks(pluginCtx: PluginContext, db: Db): void {
     }
     return `<div class="brick-board">${body}</div>
 <style>.brick-board-index{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
-.brick-board-index-item{display:block;padding:16px;border:1px solid var(--brick-border,#e5e5ea);border-radius:10px;text-decoration:none;color:inherit}
+.brick-board-index-item{display:block;padding:16px;border:1px solid var(--color-line,#e4e4ea);border-radius:10px;text-decoration:none;color:inherit}
 .brick-board-index-item span{display:block;color:var(--color-muted, #6c6c7a);font-size:13px;margin-top:4px}
 .brick-board-group{margin:0 0 28px}.brick-board-group h2{font-size:17px;margin:0 0 10px;letter-spacing:-.3px}</style>${BOARD_CSS}`;
   }

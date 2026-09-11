@@ -417,6 +417,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `check-plugin-screens.mjs` | 플러그인이 내는 링크가 가리키는 곳에 화면이 없는 것 (**헤더의 "쪽지함"이 404 였다**) |
 | `check-admin-guards.mjs` | 관리 라우트가 역할을 정하지 않는 것 (디스패처가 manager 까지 통과시키므로 admin 전용은 자기 줄에서 막아야 한다) |
 | `check-plugin-cleanup.mjs` | 플러그인을 끄고도 등록한 것이 남는 것 (**꺼진 플러그인의 경로가 매칭되는데 그릴 블록이 없어 깨진 화면이 나온다**) |
+| `check-theme-tokens.mjs` | 어떤 테마도 정의하지 않는 토큰을 참조하는 것 (**폴백만 쓰여 테마가 그 색을 바꿀 수 없다** — 다크 테마에 밝은 선이 박혔다) |
 
 그 밖에 CI 가 정적으로 보는 것: 테마 CSS 컴파일 산출물 일치, 모달의 `useModalFocus`,
 메일이 보내는 링크에 화면이 있는지, 마이그레이션 멱등성(2회 실행).
@@ -481,7 +482,7 @@ themes/
   boutique/       부티크 — 여백 위주
   corporate/      회사 홈페이지 — 히어로·특징 카드
 docs-site/        GitHub Pages 랜딩페이지
-scripts/          스모크 테스트 34종 + 정적 검사 6종 + OIDC 스텁 + 배포본 생성(build-release.sh)
+scripts/          스모크 테스트 34종 + 정적 검사 7종 + OIDC 스텁 + 배포본 생성(build-release.sh)
 docker/           Dockerfile, entrypoint
 ```
 

@@ -105,6 +105,9 @@ jobs:
       - name: 플러그인을 끄면 등록한 것이 전부 걷힌다
         run: node scripts/check-plugin-cleanup.mjs
 
+      - name: 참조하는 테마 토큰이 실제로 정의되어 있다 (폴백만 쓰이면 테마가 통제할 수 없다)
+        run: node scripts/check-theme-tokens.mjs
+
       - name: 마이그레이션
         run: node apps/api/dist/migrate.js
         env:

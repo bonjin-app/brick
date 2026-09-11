@@ -812,12 +812,12 @@ function shortDateLocalized(d: Date | string): string {
 const COLLECTION_CSS = `
 <style>
 .brick-collection-list h1,.brick-collection h1{font-size:24px;letter-spacing:-.5px}
-.brick-collection-card{display:block;padding:20px;margin-bottom:12px;border:1px solid var(--brick-border,#e5e5ea);border-radius:12px;text-decoration:none;color:inherit}
+.brick-collection-card{display:block;padding:20px;margin-bottom:12px;border:1px solid var(--color-line,#e4e4ea);border-radius:12px;text-decoration:none;color:inherit}
 .brick-collection-card strong{font-size:17px}
 .brick-collection-card p{margin:6px 0 0;color:var(--color-muted, #6c6c7a);font-size:14px}
 .brick-collection-card span{display:block;margin-top:8px;color:var(--color-muted, #6c6c7a);font-size:12.5px}
 .brick-collection-desc{color:var(--color-text-soft, #45454f)}
-.brick-collection-notice{padding:10px 14px;background:var(--brick-surface,#f7f7fa);border-radius:8px;color:var(--color-danger, #c9342f);font-weight:600}
+.brick-collection-notice{padding:10px 14px;background:var(--color-bg-soft,#f6f6f9);border-radius:8px;color:var(--color-danger, #c9342f);font-weight:600}
 </style>`;
 
 /* ── 스토어프론트 CSS ────────────────────────────────
@@ -825,15 +825,16 @@ const COLLECTION_CSS = `
    CSS 변수는 테마 토큰을 우선 사용해 테마 디자인과 어울리게 한다. */
 const STOREFRONT_CSS = `
 <style>
-.brick-partial-soldout{margin-top:28px;padding:16px;background:var(--brick-surface,#f7f7fa);border-radius:10px}
+.brick-partial-soldout{margin-top:28px;padding:16px;background:var(--color-bg-soft,#f6f6f9);border-radius:10px}
 .brick-partial-soldout>p{margin:0 0 4px;font-weight:600}
 .brick-restock-form{margin-top:12px;display:flex;flex-direction:column;gap:8px;max-width:360px}
 .brick-restock-form button{padding:11px 16px;cursor:pointer;border-radius:var(--radius, 10px);border:1px solid var(--color-primary, #cf4437);background:var(--color-primary, #cf4437);color:var(--color-on-primary, #fff);font-weight:600}
 .brick-restock-form button:hover{background:var(--color-primary-hover, #b63a2e);border-color:var(--color-primary-hover, #b63a2e)}
-.brick-restock-msg{margin:0;font-size:13px;color:var(--brick-accent,#0a7)}
+/* 성공 색은 테마의 --color-success (--brick-accent 는 어느 테마도 정의하지 않는다) */
+.brick-restock-msg{margin:0;font-size:13px;color:var(--color-success,#11795a)}
 .brick-restock-note{margin:0;font-size:12px;color:var(--color-muted, #6c6c7a)}
 .brick-related{margin:48px 0 0}
-.brick-related h2{font-size:19px;margin:0 0 4px;padding-top:24px;border-top:1px solid var(--brick-border,#e5e5ea)}
+.brick-related h2{font-size:19px;margin:0 0 4px;padding-top:24px;border-top:1px solid var(--color-line,#e4e4ea)}
 .brick-product-grid{display:grid;grid-template-columns:repeat(var(--brick-cols,4),1fr);gap:20px;margin:20px 0}
 @media(max-width:1024px){.brick-product-grid{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}}
 @media(max-width:640px){.brick-product-grid{grid-template-columns:repeat(2,1fr);gap:14px}}

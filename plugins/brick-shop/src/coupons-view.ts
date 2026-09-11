@@ -45,7 +45,7 @@ const COUPON_CSS = `
 .brick-coupon-list { display: grid; gap: 12px; }
 .brick-coupon {
   display: flex; gap: 16px; align-items: center; padding: 16px 18px;
-  border: 1px solid var(--brick-border, #e5e5ea); border-radius: 12px;
+  border: 1px solid var(--color-line, #e4e4ea); border-radius: 12px;
 }
 .brick-coupon-amount { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; min-width: 96px; }
 .brick-coupon-body { flex: 1; min-width: 0; }
@@ -59,7 +59,15 @@ const COUPON_CSS = `
 /* 쓸 수 없는 쿠폰은 흐리게 — 목록에서 쓸 수 있는 것이 먼저 눈에 들어와야 한다 */
 .brick-coupon.is-dead { opacity: .55; }
 .brick-coupon.is-dead .brick-coupon-amount { font-weight: 600; }
-.brick-coupon-state.usable { color: var(--brick-accent, #0a7); }
+/*
+ * 성공 색은 테마의 --color-success 를 쓴다.
+ *
+ * 처음에는 --brick-accent 를 썼는데 **어떤 테마도 그 토큰을 정의하지 않는다** —
+ * 늘 폴백 #0a7 이 쓰이고, 흰 배경에서 대비가 2.99:1 이다(작은 글자 기준 4.5 미달).
+ * 테마들은 색을 --color-success 로 주고 있었고, 다섯 테마 모두 라이트·다크 두 벌을
+ * 갖고 있다.
+ */
+.brick-coupon-state.usable { color: var(--color-success, #11795a); }
 .brick-coupon-state.used, .brick-coupon-state.expired, .brick-coupon-state.inactive { color: var(--color-muted, #6c6c7a); }
 </style>`;
 
