@@ -272,6 +272,23 @@ const current = readVersion(ROOT);
 const log = (m) => console.log(m);
 const die = (m) => { console.error("✖ " + m); process.exit(1); };
 
+/*
+ * 버전 뒤의 조사. 버전은 항상 숫자로 끝나므로 **읽는 소리**로 정해진다 —
+ * 0(영)·3(삼)·6(육)은 받침이 있고, 1(일)·7(칠)·8(팔)은 ㄹ 받침이라 "으로"가
+ * 아니라 "로"를 쓰며, 2·4·5·9 는 받침이 없다. 화면에 "v0.4.0 을(를) ... 으로"
+ * 처럼 괄호를 남기면 도구가 덜 만들어진 것으로 읽힌다.
+ * (코어의 josa() 와 같은 규칙이지만 이 파일은 사용자 서버에 단독으로 나간다.)
+ */
+function j(ver, pair) {
+  const last = String(ver).trim().slice(-1);
+  const [withJong, withoutJong] = pair.split("/");
+  if (!/[0-9]/.test(last)) return `${ver}${withJong}(${withoutJong})`;
+  const rieul = "178".includes(last);       // 일·칠·팔 — ㄹ 받침
+  const jong = "013678".includes(last);     // 영·일·삼·육·칠·팔
+  if (pair === "으로/로") return `${ver}${jong && !rieul ? "으로" : "로"}`;
+  return `${ver}${jong ? withJong : withoutJong}`;
+}
+
 function readVersion(dir) {
   try { return String(JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf8")).version || "0.0.0"); } catch { return "0.0.0"; }
 }
@@ -380,14 +397,14 @@ async function rollback() {
   if (!fs.existsSync(backup)) die(`백업 디렉터리가 없습니다: ${backup}`);
   if (running()) die("서버가 아직 실행 중입니다. 먼저 멈추세요.");
   const prev = readVersion(backup);
-  if (!(await ask(`v${current} 을(를) 백업 v${prev} 으로 되돌릴까요? (DB 마이그레이션은 되돌리지 않습니다)`))) return;
+  if (!(await ask(`${j("v" + current, "을/를")} 백업 ${j("v" + prev, "으로/로")} 되돌릴까요? (DB 마이그레이션은 되돌리지 않습니다)`))) return;
   for (const f of APP_FILES) { const cur = path.join(ROOT, f); if (fs.existsSync(cur)) fs.rmSync(cur, { recursive: true, force: true }); const b = path.join(backup, f); if (fs.existsSync(b)) move(b, cur); }
   for (const kind of ["plugins", "themes"]) {
     const from = path.join(backup, kind); if (!fs.existsSync(from)) continue;
     for (const name of fs.readdirSync(from)) { const dest = path.join(ROOT, kind, name); fs.rmSync(dest, { recursive: true, force: true }); move(path.join(from, name), dest); }
   }
   fs.rmSync(backup, { recursive: true, force: true }); fs.rmSync(latestFile, { force: true });
-  log(`✓ v${prev} 으로 되돌렸습니다. 서버를 다시 시작하세요.`);
+  log(`✓ ${j("v" + prev, "으로/로")} 되돌렸습니다. 서버를 다시 시작하세요.`);
 }
 
 main().catch((e) => die(e?.message || String(e)));
