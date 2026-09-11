@@ -116,6 +116,15 @@
     "/admin/settings", "/admin/themes", "/admin/plugins", "/admin/audit",
     "/admin/x/brick-shop/orders", "/admin/x/brick-shop/products", "/admin/x/brick-shop/settings",
     "/admin/x/brick-board/posts",
+    /*
+     * 선언으로 만들어지는 화면도 넣는다. 이 목록에 없는 화면은 점검되지 않고,
+     * 그것이 "폰에서 수정 버튼이 안 보이던" 일이 오래 남아 있던 이유였다.
+     * 설정 화면(kind: "settings")은 목록 화면과 그리는 코드가 다르고,
+     * FAQ 는 드롭다운(optionsFrom)을 쓰는 유일한 화면이다.
+     */
+    "/admin/x/brick-pay-toss/config", "/admin/x/brick-helpdesk/faqs",
+    "/admin/x/brick-helpdesk/faq-categories", "/admin/x/brick-shop/grades",
+    "/admin/x/brick-shop/categories", "/admin/x/brick-shop/cash-receipts",
   ];
 
   window.brickUiAudit = async (paths = DEFAULT_PATHS, widths = [375, 1280], wait = 1400) => {

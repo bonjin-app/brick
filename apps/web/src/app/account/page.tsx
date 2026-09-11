@@ -177,7 +177,16 @@ export default function AccountPage() {
     <main style={page}>
       <header style={{ width: "100%", maxWidth: 560, margin: "0 auto 20px", display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
         <h1 style={{ margin: 0, fontSize: 24, letterSpacing: "-0.5px" }}>{t("account.title")}</h1>
-        <a href="/" style={{ fontSize: 13.5, color: "var(--color-primary)", textDecoration: "none" }}>
+        {/*
+          폰에서 이 링크의 실제 높이는 16px 였다 — 손가락으로는 잘 안 눌리고, 바로
+          위아래에 제목과 카드가 있어 빗나가면 엉뚱한 곳을 누른다. 가입 화면에서
+          같은 것을 이미 고쳤는데(홈 링크 44px) 마이페이지는 남아 있었다.
+          글자 크기는 그대로 두고 누를 자리만 넓힌다.
+        */}
+        <a href="/" style={{
+          fontSize: 13.5, color: "var(--color-primary)", textDecoration: "none",
+          display: "inline-flex", alignItems: "center", minHeight: 44, padding: "0 4px",
+        }}>
           ← {siteName || t("account.backToSite")}
         </a>
       </header>
@@ -336,8 +345,9 @@ export default function AccountPage() {
                   <br />
                   <span style={small}>{t("account.lastSeen")}: {new Date(s.lastSeenAt ?? s.createdAt).toLocaleString(localeTag)}</span>
                 </span>
+                {/* 27px 였다 — 기기를 끊는 버튼은 잘못 눌러도, 못 눌러도 곤란하다 */}
                 {!s.isCurrent && (
-                  <button style={{ ...small, border: "1px solid var(--color-line)", background: "var(--color-bg)", borderRadius: 7, padding: "5px 10px", cursor: "pointer" }}
+                  <button style={{ ...small, border: "1px solid var(--color-line)", background: "var(--color-bg)", borderRadius: 7, padding: "0 12px", minHeight: 32, cursor: "pointer" }}
                     onClick={() => revokeSession(s.id)}>
                     {t("account.sessionRevoke")}
                   </button>
