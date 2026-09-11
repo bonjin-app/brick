@@ -70,6 +70,33 @@ const claims = [
 const ciYml = readFileSync(join(ROOT, ".github/workflows/ci.yml"), "utf8");
 const unwired = checkFiles.filter((f) => !ciYml.includes(f));
 
+/**
+ * 워크플로가 **파싱되기는 하는가**.
+ *
+ * 잡을 하나도 시작하지 못하는 실행은 GitHub 에서 "failure" 로만 보이고, 잡
+ * 목록이 비어 있어 무엇이 틀렸는지 화면에 나오지 않는다. 실제로 단계 이름을
+ * `name: "오늘"을 …` 로 적어(YAML 에서 따옴표로 시작한 스칼라는 그 자리에서
+ * 끝나야 한다) 세 커밋이 연속으로 죽었다 — 그동안 검사는 로컬에서 전부
+ * 통과하고 있었으므로 워크플로가 안 도는 줄 몰랐다.
+ *
+ * 의존성 없이 보기 위해 전체 YAML 파서를 쓰지는 않는다. 실제로 밟은 함정만
+ * 잡는다: 따옴표로 시작했는데 그 줄이 따옴표로 끝나지 않는 `name:`.
+ */
+const badNames = [];
+for (const wf of readdirSync(join(ROOT, ".github/workflows"))) {
+  if (!/\.ya?ml$/.test(wf)) continue;
+  const text = readFileSync(join(ROOT, ".github/workflows", wf), "utf8");
+  text.split("\n").forEach((line, i) => {
+    const m = /^\s*(?:- )?name:\s*(.+?)\s*$/.exec(line);
+    if (!m) return;
+    const v = m[1];
+    if (!/^["']/.test(v)) return;
+    const q = v[0];
+    // 따옴표로 시작했으면 그 줄은 같은 따옴표로 끝나야 한다
+    if (!(v.length > 1 && v.endsWith(q))) badNames.push(`${wf}:${i + 1}  ${line.trim().slice(0, 60)}`);
+  });
+}
+
 /** 저장소 구조 블록에 플러그인·테마가 모두 적혀 있는가 */
 const missingPlugins = plugins.filter((p) => !readme.includes(`  ${p}/`));
 const missingThemes = themes.filter((t) => !readme.includes(`  ${t}/`));
@@ -91,6 +118,16 @@ for (const [label, missing, all] of [["플러그인", missingPlugins, plugins], 
   } else {
     console.log(`  ✅ 저장소 구조의 ${label} ${all.length}개 모두 적혀 있다`);
   }
+}
+
+if (badNames.length) {
+  for (const b of badNames) {
+    console.log(`  ❌ 워크플로가 파싱되지 않습니다 — ${b}`);
+  }
+  console.log("     (따옴표로 시작한 name 은 그 줄에서 닫아야 합니다. 잡이 하나도 돌지 않습니다.)");
+  fail += badNames.length;
+} else {
+  console.log("  ✅ 워크플로의 단계 이름이 YAML 로 읽힌다");
 }
 
 if (unwired.length) {
