@@ -255,7 +255,17 @@ print(','.join(bad))
 
 # 리소스도 같은 종류다 — 제목·필드 라벨·설명이 전부 선언 문자열이다.
 # 카드에서 잊는 실수를 리소스에서도 한다(설정 화면 셋을 새로 만들면서 실제로 그랬다).
-# 그래서 활성된 **모든** 리소스를 열어 한글이 남았는지 전수로 본다.
+#
+# 범위를 두 번 넓혔다. 처음엔 **이 스모크가 켠 세 플러그인**의
+# title/description/label/help 만 봤는데, 둘 다 실제와 달랐다:
+#   - localizeAdminResource 가 번역하는 필드는 그보다 많다 — placeholder,
+#     select 의 options[].label, bulkActions(label·confirm·input), filters,
+#     importFrom 까지. 검사하지 않는 필드는 번역이 빠져도 아무도 모른다.
+#   - 켜지 않은 플러그인(헬프데스크·쪽지·설문·사이트·결제)은 아예 보지 않았다.
+# 그래서 **있는 플러그인을 전부 켜고**, **번역되는 필드를 전부** 본다.
+for P in $(ls "$ROOT/plugins"); do
+  curl -s -b "$CK" -X POST "$API/api/plugins/$P/activate" >/dev/null || true
+done
 KO_RES="$(/usr/bin/python3 - "$API" "$CK" <<'PYEOF'
 import json, re, subprocess, sys
 api, ck = sys.argv[1], sys.argv[2]
@@ -264,18 +274,44 @@ def get(path):
     try: return json.loads(out)
     except Exception: return {}
 bad = []
-for r in get("/api/admin/nav").get("resources", []):
+def look(where, text):
+    if text and re.search(r"[가-힣]", str(text)):
+        bad.append(where)
+res = get("/api/admin/nav").get("resources", [])
+for r in res:
     full = get(f"/api/admin/resources/{r['plugin']}/{r['name']}")
-    texts = [("title", full.get("title")), ("description", full.get("description"))]
+    tag = f"{r['plugin']}/{r['name']}"
+    look(f"{tag} title", full.get("title"))
+    look(f"{tag} itemLabel", full.get("itemLabel"))
+    look(f"{tag} description", full.get("description"))
     for f in full.get("fields", []):
-        texts += [(f"{f['name']}.label", f.get("label")), (f"{f['name']}.help", f.get("help"))]
-    for where, t in texts:
-        if t and re.search(r"[가-힣]", str(t)):
-            bad.append(f"{r['plugin']}/{r['name']} {where}")
-print(",".join(bad[:12]))
+        n = f.get("name")
+        look(f"{tag} {n}.label", f.get("label"))
+        look(f"{tag} {n}.help", f.get("help"))
+        look(f"{tag} {n}.placeholder", f.get("placeholder"))
+        for o in f.get("options") or []:
+            look(f"{tag} {n}.option[{o.get('value')}]", o.get("label"))
+    for a in full.get("bulkActions") or []:
+        look(f"{tag} bulk[{a.get('name')}].label", a.get("label"))
+        look(f"{tag} bulk[{a.get('name')}].confirm", a.get("confirm"))
+        inp = a.get("input") or {}
+        look(f"{tag} bulk[{a.get('name')}].input.label", inp.get("label"))
+        look(f"{tag} bulk[{a.get('name')}].input.help", inp.get("help"))
+    for f in full.get("filters") or []:
+        look(f"{tag} filter[{f.get('name')}].label", f.get("label"))
+        for o in f.get("options") or []:
+            look(f"{tag} filter[{f.get('name')}].option[{o.get('value')}]", o.get("label"))
+    imp = full.get("importFrom") or {}
+    look(f"{tag} importFrom.label", imp.get("label"))
+    look(f"{tag} importFrom.help", imp.get("help"))
+print(f"RES={len(res)}")
+print(",".join(bad[:15]))
 PYEOF
 )"
-[[ -z "$KO_RES" ]] && ok "모든 리소스 선언 문자열이 번역되어 있다" || bad "번역 안 된 리소스 문자열: $KO_RES"
+RES_N="$(sed -n 's/^RES=//p' <<<"$KO_RES")"
+KO_RES="$(sed -n '2p' <<<"$KO_RES")"
+[[ "${RES_N:-0}" -ge 20 ]] && ok "전수 대상이 실제로 넓다 (리소스 ${RES_N}개)" || bad "리소스가 너무 적다 — 플러그인이 안 켜졌다 (${RES_N:-0}개)"
+[[ -z "$KO_RES" ]] && ok "모든 리소스의 모든 선언 문자열이 번역되어 있다" || bad "번역 안 된 리소스 문자열: $KO_RES"
 
 echo "── 코어 경로가 쓰는 플러그인 문구도 언어를 따라간다"
 # 탈퇴 화면의 "무엇을 잃는가" 는 플러그인이 describe 로 만들고 코어가 모은다.
