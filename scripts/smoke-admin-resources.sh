@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# 설정 화면 왕복 E2E 스모크 — **선언한 칸이 실제로 저장되는가**.
+# 관리 리소스 왕복 E2E 스모크 — **선언한 칸이 실제로 저장되는가**.
 #
 # 왜 별도 수트인가: `kind: "settings"` 는 계약에 한 줄이 못박혀 있다 —
 # **GET 과 PUT 의 응답 모양이 같아야 한다.** 화면이 저장 결과를 그대로 폼에
@@ -21,7 +21,7 @@
 # 그래서 "보낸 값과 같다"가 아니라 "GET 과 PUT 이 같다 + 칸이 사라지지 않았다"를
 # 못박는다. 사라짐과 갈라짐이 실제로 겪은 결함이고, 다듬기는 아니다.
 #
-# 사용법: DATABASE_URL=postgresql://... bash scripts/smoke-settings.sh
+# 사용법: DATABASE_URL=postgresql://... bash scripts/smoke-admin-resources.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -45,7 +45,7 @@ check()    { [[ "$2" == "$3" ]] && ok "$1" || bad "$1 (기대 $3, 실제 $2)"; }
 contains() { [[ "$2" == *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 없음: ${2:0:200})"; }
 code()     { curl -s -o /dev/null -w "%{http_code}" "$@"; }
 
-echo "▶ 설정 화면 왕복 스모크 테스트"
+echo "▶ 관리 리소스 왕복 스모크 테스트"
 
 if [[ "${BRICK_SMOKE_KEEP_DB:-}" != "1" ]]; then
   node "$ROOT/scripts/reset-test-db.mjs" || exit 1
@@ -55,7 +55,7 @@ export BRICK_PLUGINS_DIR="$ROOT/plugins"
 export BRICK_THEMES_DIR="$ROOT/themes"
 export BRICK_UPLOADS_DIR="$TMP/uploads"
 export BRICK_MIGRATIONS_DIR="$ROOT/packages/database/migrations"
-export BRICK_SECRET="${BRICK_SECRET:-smoke-settings-secret-val}"
+export BRICK_SECRET="${BRICK_SECRET:-smoke-adminres-secret-val}"
 export BRICK_CAPTCHA=off
 
 node "$ROOT/apps/api/dist/main.js" > "$TMP/api.log" 2>&1 &
@@ -228,6 +228,98 @@ if [[ "${BADS:-0}" -eq 0 ]]; then
   ok "모든 설정 리소스가 선언한 칸을 그대로 왕복시킨다"
 else
   while IFS= read -r line; do bad "${line#BAD=}"; done < <(grep '^BAD=' "$TMP/roundtrip.txt")
+fi
+
+echo "── 목록 리소스: 폼이 선언한 칸을 불러올 수 있는가"
+# 왜 이것을 보는가. 수정 폼은 `GET <basePath>/:id` 로 한 건을 받아 채우고, 그 라우트가
+# 없으면 **목록 행으로** 채운다(실제로 리소스 스물넷 중 스물둘에 :id 가 없다). 그래서
+# 선언한 칸이 둘 중 어디에도 **선언한 이름 그대로** 없으면 그 칸은 빈칸으로 열린다.
+# 빈칸인 채로 저장하면 PUT 이 그것을 "비우라"로 읽는다 — 이름만 고쳤는데 값이 사라진다.
+#
+# 실제로 이렇게 사라졌다:
+#   - 회원 등급: 목록이 minAmount/discountRate(카멜)로 주는데 선언은 min_amount/
+#     discount_rate 였다. 등급 이름만 고치면 기준 금액과 할인율이 0이 됐다 —
+#     기준 0원은 **전 회원이 최고 등급**이라는 뜻이다.
+#   - 상품 분류: parent_id 가 목록에 없어서, 이름만 고치면 계층이 끊어졌다.
+# 그리고 만들 때도 같은 일이 난다:
+#   - 개인결제 청구: 선언은 customer_name 인데 핸들러는 customerName 만 읽었다.
+#     전화 주문을 받아 적은 받는 분·연락처·이메일이 저장되지 않았다.
+/usr/bin/python3 - "$API" "$CK" <<'PYEOF' > "$TMP/list.txt"
+import json, re, subprocess, sys
+api, ck = sys.argv[1], sys.argv[2]
+def curl(a): return subprocess.run(["curl","-s","-b",ck,*a],capture_output=True,text=True).stdout
+def get(p):
+    try: return json.loads(curl([api+p]))
+    except Exception: return None
+def post(p, payload):
+    out = curl(["-X","POST",api+p,"-H","content-type: application/json","-d",json.dumps(payload)])
+    try: return json.loads(out)
+    except Exception: return None
+
+def sample(f, i):
+    ty = f.get("type") or "text"
+    if ty == "boolean": return True
+    if ty in ("number","money"): return 3
+    if ty == "select":
+        opts = [o.get("value") for o in (f.get("options") or []) if o.get("value")]
+        return opts[0] if opts else None
+    if ty == "date": return "2026-01-02"
+    if ty in ("image","images"): return "/uploads/probe.png"
+    if f["name"] == "slug": return f"probe-{i}"
+    return f"probe{i}"
+
+bad = []
+checked = 0
+for idx, r in enumerate(get("/api/admin/nav").get("resources", [])):
+    d = get(f"/api/admin/resources/{r['plugin']}/{r['name']}")
+    if not isinstance(d, dict) or d.get("kind") == "settings": continue
+    can = d.get("can") or {}
+    # 수정할 수 없는 리소스는 폼이 열리지 않는다 — 이 검사의 대상이 아니다
+    if can.get("update") is False or can.get("create") is False: continue
+    base = f"/api/plugins/{r['plugin']}{d.get('basePath','')}"
+    tag = f"{r['plugin']}/{r['name']}"
+    editable = [f for f in d.get("fields", []) if f.get("name") and not f.get("readOnly")]
+    payload = {}
+    for f in editable:
+        v = sample(f, idx)
+        if v is not None: payload[f["name"]] = v
+    if not payload: continue
+    made = post(base, payload)
+    # 만들 수 없는 리소스(외래키·업무 규칙)는 여기서 판단하지 않는다
+    if not isinstance(made, dict) or made.get("statusCode", 200) >= 400: continue
+    checked += 1
+    idf = d.get("idField") or "id"
+    rid = made.get(idf)
+    one = get(f"{base}/{rid}") if rid is not None else None
+    src = one if isinstance(one, dict) and one.get(idf) is not None else None
+    where = "GET /:id"
+    if src is None:
+        lst = get(base)
+        items = (lst or {}).get("items") if isinstance(lst, dict) else None
+        src = next((x for x in (items or []) if str(x.get(idf)) == str(rid)), None)
+        where = "목록 행"
+    if src is None:
+        bad.append(f"{tag}: 만든 건을 다시 읽을 수 없다")
+        continue
+    missing = [f["name"] for f in editable if f["name"] not in src]
+    if missing:
+        bad.append(f"{tag}: 폼이 채울 수 없는 칸 {missing[:6]} ({where} 에 없다)")
+    # 보낸 값이 실제로 남았는가 — 핸들러가 다른 이름을 읽으면 조용히 사라진다
+    lost = [n for n, v in payload.items()
+            if n in src and src[n] in (None, "") and v not in (None, "", False)]
+    if lost:
+        bad.append(f"{tag}: 보낸 값이 저장되지 않은 칸 {lost[:6]}")
+print(f"CHECKED={checked}")
+for b in bad: print("BAD=" + b)
+PYEOF
+LIST_N="$(sed -n 's/^CHECKED=//p' "$TMP/list.txt")"
+[[ "${LIST_N:-0}" -ge 5 ]] && ok "목록 리소스를 실제로 여럿 만들어 봤다 (${LIST_N}개)" \
+  || bad "만들어 본 리소스가 너무 적다 (${LIST_N:-0}개) — 검사가 헛돌고 있다"
+LBAD="$(grep -c '^BAD=' "$TMP/list.txt" || true)"
+if [[ "${LBAD:-0}" -eq 0 ]]; then
+  ok "모든 목록 리소스에서 폼이 선언한 칸을 불러오고, 보낸 값이 남는다"
+else
+  while IFS= read -r line; do bad "${line#BAD=}"; done < <(grep '^BAD=' "$TMP/list.txt")
 fi
 
 echo "── 설정은 관리자만 바꾼다"

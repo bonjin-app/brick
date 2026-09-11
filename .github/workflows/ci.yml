@@ -214,8 +214,8 @@ jobs:
       - name: E2E 스모크 테스트 (다국어)
         run: bash scripts/smoke-i18n.sh
 
-      - name: E2E 스모크 테스트 (설정 화면 왕복 — 선언한 칸이 실제로 저장되는가)
-        run: bash scripts/smoke-settings.sh
+      - name: E2E 스모크 테스트 (관리 리소스 왕복 — 선언한 칸이 실제로 저장되는가)
+        run: bash scripts/smoke-admin-resources.sh
 
       - name: E2E 스모크 테스트 (방문자·팝업)
         run: bash scripts/smoke-site.sh

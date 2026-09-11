@@ -688,8 +688,14 @@ export default definePlugin(async (ctx) => {
   // ── 분류 ────────────────────────────────────────────
   ctx.registerRoute("GET", "/admin/categories", async (req) => {
     requireAdmin(req);
+    /*
+     * parent_id 까지 준다. 목록 열로는 쓰지 않지만(inList 가 아니다) 이 리소스에는
+     * GET /:id 가 없어서 **수정 폼이 이 행으로 채워진다.** 빠져 있으면 상위 분류
+     * 칸이 빈칸으로 열리고, 이름만 고쳐 저장해도 계층이 끊어진다 — 실제로 끊어졌다.
+     */
     const { rows } = await db.execute(sql`
-      SELECT id, slug, name, sort_order, is_visible FROM shop_categories ORDER BY sort_order, name
+      SELECT id, slug, name, sort_order, is_visible, parent_id
+      FROM shop_categories ORDER BY sort_order, name
     `);
     return { items: rows, total: rows.length };
   });
@@ -1185,7 +1191,24 @@ export default definePlugin(async (ctx) => {
       SELECT grade_id, count(*) AS n FROM shop_user_grades GROUP BY grade_id
     `);
     const byId = new Map(counts.map((r) => [String(r.grade_id), Number(r.n)]));
-    return { items: grades.map((g) => ({ ...g, members: byId.get(g.id) ?? 0 })) };
+    /*
+     * **선언한 이름 그대로 내보낸다.** 이 목록은 listGrades() 의 카멜(minAmount·
+     * discountRate)을 그대로 흘려보내고 있었는데, 관리 리소스 선언의 칸 이름은
+     * min_amount·discount_rate 다. 이 리소스에는 GET /:id 가 없으므로 수정 폼은
+     * 목록 행으로 채워지고, 이름이 다르면 그 칸은 **빈칸으로** 열린다. 그 상태로
+     * 저장하면 기준 금액과 할인율이 0이 된다 — 이름만 고쳤을 뿐인데 전 회원이
+     * 최고 등급 조건(0원)을 충족하게 된다. 실제로 그렇게 지워졌다.
+     */
+    return {
+      items: grades.map((g) => ({
+        id: g.id,
+        name: g.name,
+        min_amount: g.minAmount,
+        discount_rate: g.discountRate,
+        description: g.description,
+        members: byId.get(g.id) ?? 0,
+      })),
+    };
   });
 
   ctx.registerRoute("POST", "/admin/grades", async (req) => {
@@ -1660,9 +1683,16 @@ export default definePlugin(async (ctx) => {
       description: b.description ? String(b.description) : undefined,
       amount: Number(b.amount ?? 0),
       expireDays: b.expireDays === undefined ? undefined : Number(b.expireDays),
-      customerName: b.customerName ? String(b.customerName) : undefined,
-      customerPhone: b.customerPhone ? String(b.customerPhone) : undefined,
-      customerEmail: b.customerEmail ? String(b.customerEmail) : undefined,
+      /*
+       * **선언한 이름(customer_name…)을 먼저 읽는다.** 여기는 카멜만 읽고 있었는데
+       * 관리 화면은 선언한 이름으로 보낸다 — 전화 주문을 받아 적은 "받는 분·연락처·
+       * 이메일"이 저장되지 않고 사라졌다. 받는 분은 목록 열이기도 해서, 관리자는
+       * 방금 적은 이름이 빈칸으로 뜨는 것을 바로 본다. 카멜도 계속 받는다(API 로
+       * 직접 만들던 쪽을 깨지 않는다).
+       */
+      customerName: pick(b.customer_name, b.customerName),
+      customerPhone: pick(b.customer_phone, b.customerPhone),
+      customerEmail: pick(b.customer_email, b.customerEmail),
       memo: b.memo ? String(b.memo) : undefined,
       createdBy: req.user!.id,
     });
@@ -2672,6 +2702,16 @@ export default definePlugin(async (ctx) => {
 });
 
 /* ── 검증 헬퍼 ──────────────────────────────────────── */
+
+/** 선언한 이름을 먼저, 없으면 예전 카멜 이름을 — 둘 다 비면 undefined */
+function pick(...vals: unknown[]): string | undefined {
+  for (const v of vals) {
+    const s = v === undefined || v === null ? "" : String(v).trim();
+    if (s) return s;
+  }
+  return undefined;
+}
+
 
 function validateProduct(b: Record<string, unknown>) {
   const slug = String(b.slug ?? "").trim();

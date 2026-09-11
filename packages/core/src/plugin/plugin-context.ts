@@ -541,11 +541,20 @@ export interface AdminField {
  * 코어 관리자는 다음 규약으로 이 리소스의 REST 엔드포인트를 호출한다
  * (모두 /api/plugins/<plugin>/ 아래, registerRoute로 등록해야 한다):
  *   GET    <basePath>            → { items, total, page, pageSize }
- *   GET    <basePath>/:id        → 단일 레코드
+ *   GET    <basePath>/:id        → 단일 레코드 (선택)
  *   POST   <basePath>            → 생성
  *   PUT    <basePath>/:id        → 수정
  *   DELETE <basePath>/:id        → 삭제
  *   POST   <basePath>/bulk       → { action, ids, params } (bulkActions 를 선언한 경우)
+ *
+ * **수정 폼은 `GET <basePath>/:id` 를 먼저 부르고, 없으면 목록 행으로 채운다.**
+ * 그러므로 선언한 편집 칸(readOnly 가 아닌 것)은 **둘 중 한 곳에 선언한 이름 그대로**
+ * 있어야 한다. 없으면 그 칸은 빈칸으로 열리고, 그 상태로 저장하면 PUT 이 그것을
+ * "비우라"로 읽어 값이 사라진다. 회원 등급이 minAmount(카멜)로 나가는 바람에
+ * 등급 이름만 고쳐도 기준 금액과 할인율이 0이 됐고 — 기준 0원은 전 회원이 최고
+ * 등급이라는 뜻이다 — 상품 분류는 parent_id 가 목록에 없어 계층이 끊어졌다.
+ * 핸들러가 읽는 이름도 같아야 한다(개인결제 청구가 customerName 만 읽어서 받는 분·
+ * 연락처가 저장되지 않았다). smoke-admin-resources.sh 가 이것을 전수로 본다.
  */
 export interface AdminResource {
   /** URL 슬러그. 관리자에서 /admin/x/<plugin>/<name> 으로 접근 */
