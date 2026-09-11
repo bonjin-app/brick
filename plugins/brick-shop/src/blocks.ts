@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { CAPTCHA_WIDGET_CSS, CAPTCHA_WIDGET_JS, captchaFieldHtml,
          type BlockRenderContext, type PluginContext } from "@brick/plugin-sdk";
 import { escapeHtml, won, type Db, type ShopSettings } from "./types.js";
-import { bindI18n, t } from "./i18n.js";
+import { bindI18n, t, moneyFnScript } from "./i18n.js";
 import { reviewSection } from "./reviews-view.js";
 import { RELATED_LIMIT, listRelated, type RelatedProduct } from "./related.js";
 import { activeCollections, viewCollection } from "./collections.js";
@@ -1094,7 +1094,7 @@ const cartScript = (shopBase: string) => `
   var guest = localStorage.getItem('brick_shop_guest');
   var qs = guest ? '?guest=' + encodeURIComponent(guest) : '';
 
-  function fmt(n){ return Number(n).toLocaleString('ko-KR') + '원'; }
+  ${moneyFnScript("fmt")}
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 

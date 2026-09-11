@@ -1,6 +1,7 @@
 /** brick-shop 공통 타입 */
 
 import type { PluginDb } from "@brick/plugin-sdk";
+import { money } from "./i18n.js";
 
 /**
  * 재고·금액을 다루므로 반드시 트랜잭션을 지원하는 핸들을 쓴다.
@@ -113,8 +114,15 @@ export function escapeHtml(s: unknown): string {
   );
 }
 
+/**
+ * 금액 표기.
+ *
+ * 규칙은 i18n 이 들고 있다(숫자 묶음·통화 표시가 모두 언어를 따라간다).
+ * 이름은 그대로 둔다 — 스물한 곳이 이 이름으로 부르고 있고, 바꿔야 할 것은
+ * 이름이 아니라 규칙이었다.
+ */
 export function won(amount: number): string {
-  return `${Number(amount).toLocaleString("ko-KR")}원`;
+  return money(amount);
 }
 
 /**

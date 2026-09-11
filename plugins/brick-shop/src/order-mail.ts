@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { won, type Db, type OrderStatus } from "./types.js";
+import { t } from "./i18n.js";
 
 /**
  * 주문 안내 메일.
@@ -24,14 +25,13 @@ import { won, type Db, type OrderStatus } from "./types.js";
  * 바꾸는 순간 수십 통이 한꺼번에 나간다).
  */
 
-/** 상태별 제목·첫 문장. 여기 없는 상태는 메일을 보내지 않는다 */
-const LINES: Partial<Record<OrderStatus, { subject: string; lead: string }>> = {
-  pending: { subject: "주문이 접수되었습니다", lead: "주문이 접수되었습니다." },
-  paid: { subject: "결제가 확인되었습니다", lead: "결제(입금)가 확인되었습니다. 상품을 준비합니다." },
-  shipped: { subject: "상품이 발송되었습니다", lead: "주문하신 상품이 발송되었습니다." },
-  cancelled: { subject: "주문이 취소되었습니다", lead: "주문이 취소되었습니다." },
-  refunded: { subject: "환불이 완료되었습니다", lead: "환불이 완료되었습니다." },
-};
+/**
+ * 메일을 보내는 상태. 여기 없는 상태는 보내지 않는다.
+ *
+ * 문구는 번역 카탈로그에서 가져온다 — 금액은 언어를 따라가는데 문장은 한국어로
+ * 남으면 반쪽이 되고, 그것은 둘 중 하나로 통일된 것보다 나쁘다.
+ */
+const MAILED: readonly OrderStatus[] = ["pending", "paid", "shipped", "cancelled", "refunded"];
 
 export interface OrderMailPort {
   send: (msg: { to: string; subject: string; text: string }) => Promise<boolean>;
@@ -53,8 +53,9 @@ export async function sendOrderMail(
   port: OrderMailPort,
   params: { orderId: string; status: OrderStatus },
 ): Promise<boolean> {
-  const line = LINES[params.status];
-  if (!line) return false;
+  if (!MAILED.includes(params.status)) return false;
+  const subject = t(`ordermail.${params.status}.subject`);
+  const lead = t(`ordermail.${params.status}.lead`);
 
   const { rows } = await db.execute(sql`
     SELECT o.order_no, o.total, o.status, o.tracking_no, o.guest_token, o.payment_method,
@@ -89,38 +90,38 @@ export async function sendOrderMail(
     : `${base}/shop/orders/${String(order.order_no)}`;
 
   const body = [
-    `${String(order.orderer_name)}님, ${line.lead}`,
+    t("ordermail.greeting", { name: String(order.orderer_name), lead }),
     "",
-    `주문번호: ${String(order.order_no)}`,
+    t("ordermail.orderNo", { orderNo: String(order.order_no) }),
     ...items.map((it) => {
       const name = it.option_name
         ? `${String(it.product_name)} (${String(it.option_name)})`
         : String(it.product_name);
       return `  · ${name} × ${Number(it.quantity)} — ${won(Number(it.line_total))}`;
     }),
-    `결제 금액: ${won(Number(order.total))}`,
+    t("ordermail.total", { amount: won(Number(order.total)) }),
   ];
 
   // 무통장입금은 **입금할 곳**을 알려주는 것이 이 메일의 본체다
   if (params.status === "pending" && order.payment_method === "bank_transfer" && port.bankAccount) {
-    body.push("", `입금 계좌: ${port.bankAccount}`, "입금이 확인되면 다시 알려드립니다.");
+    body.push("", t("ordermail.bankAccount", { account: port.bankAccount }), t("ordermail.bankNotice"));
   }
   if (params.status === "shipped" && order.tracking_no) {
-    body.push("", `송장번호: ${String(order.tracking_no)}`);
+    body.push("", t("ordermail.tracking", { trackingNo: String(order.tracking_no) }));
   }
 
   body.push(
     "",
-    `주문 조회: ${lookup}`,
+    t("ordermail.lookup", { url: lookup }),
     "",
     "─────────────────────────────────────",
-    `이 메일은 ${port.siteName}에 주문하실 때 남기신 주소로 발송됩니다.`,
+    t("ordermail.footer", { site: port.siteName }),
   );
 
   try {
     return await port.send({
       to,
-      subject: `[${port.siteName}] ${line.subject} (${String(order.order_no)})`,
+      subject: `[${port.siteName}] ${subject} (${String(order.order_no)})`,
       text: body.join("\n"),
     });
   } catch (err) {

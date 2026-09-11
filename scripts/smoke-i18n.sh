@@ -173,6 +173,7 @@ contains "빈 목록 안내가 영어" "$LIST_EN" "Be the first to write a post.
 contains "글 수가 영어" "$LIST_EN" "0 posts"
 
 echo "── 플러그인(쇼핑몰)도 언어를 따라간다"
+SHOP_API="$API/api/plugins/brick-shop"
 curl -s -b "$CK" -X POST "$API/api/plugins/brick-shop/activate" >/dev/null
 curl -s -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' \
   -d '{"slug":"shop","title":"쇼핑몰","status":"published","blocks":[{"block":"brick-shop/storefront","props":{}}]}' >/dev/null
@@ -191,6 +192,33 @@ contains "장바구니 경로가 상점 slug 기준" \
   "$(curl -s "$API/api/render/page?path=shop/mug")" "/shop/cart"
 contains "재입고 폼이 영어" "$DETAIL_EN" "Notify me on restock"
 contains "후기 탭이 영어" "$DETAIL_EN" "Reviews"
+
+# 금액 표기도 언어를 따라간다. 날짜는 localeTag() 로 따라갔는데 금액은
+# toLocaleString("ko-KR") + "원" 으로 못박혀 있어서, 영어 사이트의 상품·장바구니·
+# 주문서·주문 메일이 전부 "12,000원" 이었다. 통화는 원화 그대로고 표기만 따라간다.
+MUG_EN="$(curl -s "$API/api/render/page?path=shop/mug")"
+contains "금액이 영어 표기" "$MUG_EN" "12,000 KRW"
+absent   "한국어 표기가 남지 않는다" "$MUG_EN" "12,000원"
+# 클라이언트 스크립트도 서버와 같은 규칙을 쓴다 (한 화면에서 표기가 갈라지면 안 된다)
+contains "장바구니 스크립트의 포맷터도 영어" "$(curl -s "$API/api/render/page?path=shop/cart")" "en-US"
+
+echo "── 주문 안내 메일도 언어를 따라간다"
+# 금액만 영어고 문장은 한국어면 반쪽이다 — 둘 중 하나로 통일된 것보다 나쁘다
+curl -s -b "$CK" -X PUT "$SHOP_API/admin/settings" -H 'content-type: application/json' \
+  -d '{"bankAccount":"KB 123-456","shippingFee":3000,"freeShippingOver":50000,"returnShippingFee":3000,"pageSize":20,"notifyOrderMail":true}' >/dev/null
+MUG_ID="$(curl -s -b "$CK" "$SHOP_API/admin/products" | /usr/bin/python3 -c "
+import sys, json
+for p in json.load(sys.stdin)['items']:
+    if p['slug'] == 'mug': print(p['id'])")"
+printf '{"items":[{"productId":"%s","quantity":1}],"orderer":{"ordererName":"Jane Doe","ordererPhone":"010-1111-2222","ordererEmail":"en@mail.test","postcode":"06236","address1":"Seoul"}}' "$MUG_ID" > "$TMP/en-order.json"
+curl -s -X POST "$SHOP_API/orders" -H 'content-type: application/json' --data-binary "@$TMP/en-order.json" >/dev/null
+sleep 1
+MAIL_EN="$(cat "$TMP/api.log")"
+contains "제목이 영어" "$MAIL_EN" "We received your order"
+contains "본문이 영어" "$MAIL_EN" "Order number:"
+contains "입금 안내도 영어" "$MAIL_EN" "Bank account: KB 123-456"
+contains "메일의 금액도 영어 표기" "$MAIL_EN" "Total: 15,000 KRW"
+absent   "한국어 문구가 남지 않는다" "$MAIL_EN" "결제 금액:"
 
 echo "── 관리 선언 라벨도 언어를 따라간다 (gettext — 원문이 키, 서빙 시점 번역)"
 NAV_EN="$(curl -s -b "$CK" "$API/api/admin/nav")"

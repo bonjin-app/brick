@@ -1,5 +1,6 @@
 import type { PluginContext } from "@brick/plugin-sdk";
 import { escapeHtml } from "@brick/plugin-sdk";
+import { moneyFnScript } from "./i18n.js";
 
 /**
  * 쿠폰함 화면.
@@ -76,7 +77,7 @@ const couponScript = (t: (k: string, p?: Record<string, string | number>) => str
   })};
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
-  function won(n) { return Number(n).toLocaleString('ko-KR') + ${JSON.stringify(t("common.won"))}; }
+  ${moneyFnScript("won")}
 
   fetch('/api/plugins/brick-shop/me/coupons')
     .then(function (r) { return r.ok ? r.json() : { items: [] }; })

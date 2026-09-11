@@ -1,5 +1,6 @@
 import type { PluginContext } from "@brick/plugin-sdk";
 import { escapeHtml } from "@brick/plugin-sdk";
+import { moneyFnScript } from "./i18n.js";
 
 /**
  * 주문서(체크아웃) 화면 — <상점 페이지>/checkout 으로 라우팅된다.
@@ -120,7 +121,7 @@ const checkoutScript = (t: (k: string) => string) => `
   var itemsBox = document.getElementById('brick-co-items');
   var form = document.getElementById('brick-co-form');
   var msg = form.querySelector('.brick-buy-msg');
-  function fmt(n){ return Number(n).toLocaleString('ko-KR') + '원'; }
+  ${moneyFnScript("fmt")}
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 
