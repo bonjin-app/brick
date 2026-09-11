@@ -118,6 +118,14 @@ check "잘못된 날짜 형식 거부" "$(code -b "$CK" "$SHOP/admin/reports/sal
 check "존재하지 않는 날짜 거부" "$(code -b "$CK" "$SHOP/admin/reports/sales?from=2026-02-30&to=2026-03-01")" "400"
 check "from > to 거부" "$(code -b "$CK" "$SHOP/admin/reports/sales?from=2026-08-31&to=2026-08-01")" "400"
 check "잘못된 groupBy 거부" "$(code -b "$CK" "$SHOP/admin/reports/sales?groupBy=hour")" "400"
+# 기본 기간은 **사이트 시간대의 오늘**까지다.
+# UTC 날짜로 만들고 있어서, 한국 시간 오전 9시 전에 리포트를 열면 종료일이
+# 어제가 되어 오늘 매출이 통째로 빠졌다. 집계 SQL 은 이미 SITE_TZ 로 자르고
+# 있었으므로 기본값만 어긋나 있었다 — 같은 화면 안에서 날짜 경계가 두 벌이었다.
+DEF="$(curl -s -b "$CK" "$SHOP/admin/reports/sales")"
+SITE_TODAY="$(TZ=Asia/Seoul date +%Y-%m-%d)"
+contains "기본 종료일이 사이트 기준 오늘" "$DEF" "\"to\":\"$SITE_TODAY\""
+
 check "너무 긴 기간 거부" "$(code -b "$CK" "$SHOP/admin/reports/sales?from=2000-01-01&to=2026-12-31")" "400"
 contains "기간을 안 주면 최근 30일" "$(curl -s -b "$CK" "$SHOP/admin/reports/sales")" '"groupBy":"day"'
 

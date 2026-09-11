@@ -39,7 +39,7 @@
  * 화면에서 클릭으로 바꿀 성질의 값이 아니다.
  */
 import { sql } from "drizzle-orm";
-import { SITE_TZ } from "@brick/plugin-sdk";
+import { SITE_TZ, siteToday } from "@brick/plugin-sdk";
 import type { PluginDb } from "@brick/plugin-sdk";
 import { ShopError } from "./types.js";
 
@@ -63,15 +63,20 @@ export interface Period {
  * 8월 전체를 뜻하는 것이고, 31일이 빠지면 조용히 하루치가 사라진다.
  */
 export function parsePeriod(query: Record<string, unknown>): Period {
-  const today = new Date();
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const now = Date.now();
 
   const rawFrom = String(query.from ?? "").trim();
   const rawTo = String(query.to ?? "").trim();
 
-  // 기본값: 최근 30일
-  const defaultTo = iso(today);
-  const defaultFrom = iso(new Date(today.getTime() - 29 * 86400_000));
+  /*
+   * 기본값: 최근 30일. 날짜는 **사이트 시간대**로 만든다.
+   *
+   * `new Date().toISOString().slice(0, 10)` 은 UTC 날짜다. 한국 시간 오전 9시
+   * 전에 리포트를 열면 기본 종료일이 **어제**가 되어 오늘 매출이 통째로 빠졌다.
+   * 이 파일의 집계 SQL 은 이미 SITE_TZ 로 자르고 있으므로 기본값만 어긋나 있었다.
+   */
+  const defaultTo = siteToday(new Date(now));
+  const defaultFrom = siteToday(new Date(now - 29 * 86400_000));
 
   const from = rawFrom || defaultFrom;
   const to = rawTo || defaultTo;

@@ -1,4 +1,4 @@
-import { definePlugin, isUniqueViolation, isValidBusinessNo, maskEmail, rawResponse, searchExcerpt } from "@brick/plugin-sdk";
+import { definePlugin, isUniqueViolation, isValidBusinessNo, maskEmail, rawResponse, searchExcerpt, siteToday } from "@brick/plugin-sdk";
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import { t } from "./i18n.js";
@@ -1860,7 +1860,8 @@ export default definePlugin(async (ctx) => {
   /** 부가세 신고용 과세기간 목록 — 운영자가 날짜를 계산하지 않게 한다 */
   ctx.registerRoute("GET", "/admin/reports/vat/periods", async (req) => {
     requireAdmin(req);
-    const thisYear = new Date().getFullYear();
+    // 연도도 사이트 시간대 기준 — 새해 첫 아홉 시간 동안 작년이 기본이 되면 안 된다
+    const thisYear = Number(siteToday().slice(0, 4));
     return {
       years: [thisYear, thisYear - 1, thisYear - 2],
       periods: VAT_PERIODS.map((p) => ({ code: p.code, label: p.label })),
@@ -1869,7 +1870,7 @@ export default definePlugin(async (ctx) => {
 
   ctx.registerRoute("GET", "/admin/reports/vat", async (req) => {
     requireAdmin(req);
-    const year = Math.floor(Number(req.query.year ?? new Date().getFullYear()));
+    const year = Math.floor(Number(req.query.year ?? siteToday().slice(0, 4)));
     const period = String(req.query.period ?? "1-full");
     const result = await vatReport(db, { year, period, timezone: SITE_TZ });
     if (String(req.query.format ?? "") === "csv") {
