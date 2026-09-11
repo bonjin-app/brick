@@ -1,4 +1,4 @@
-import { definePlugin } from "@brick/plugin-sdk";
+import { definePlugin, siteToday } from "@brick/plugin-sdk";
 import { bindI18n, t, localeTag } from "./i18n.js";
 import type { PluginDb } from "@brick/plugin-sdk";
 import { sql } from "drizzle-orm";
@@ -151,7 +151,12 @@ export default definePlugin(async (ctx) => {
     if (!userId) return;
     const s = await settings();
     if (s.loginPoint <= 0) return;
-    const today = new Date().toISOString().slice(0, 10);
+    /*
+     * 날짜는 **사이트 시간대**로 만든다. UTC 날짜를 쓰고 있었는데, 한국 시간
+     * 08:00 과 10:00 은 같은 날이지만 UTC 로는 하루 차이다 — 아침 9시 전후로
+     * 한 번씩 로그인하면 멱등 키가 갈라져 출석 포인트를 **하루에 두 번** 받았다.
+     */
+    const today = siteToday();
     await points.grant({
       userId,
       amount: s.loginPoint,

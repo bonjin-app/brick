@@ -35,7 +35,8 @@ export type { RoleBearer } from "@brick/core";
 export { captchaFieldHtml, CAPTCHA_WIDGET_JS, CAPTCHA_WIDGET_CSS } from "@brick/core";
 export type { CaptchaWidgetLabels } from "@brick/core";
 // 검색 발췌·HTML 제거 — 여러 플러그인이 같은 규칙을 써야 한다
-export { stripHtml, searchExcerpt, escapeHtml, maskEmail, SITE_TZ } from "@brick/core";
+// "오늘"의 정의는 한 곳 — JS 쪽(siteToday)도 SQL 쪽과 같은 시간대를 쓴다
+export { stripHtml, searchExcerpt, escapeHtml, maskEmail, SITE_TZ, siteToday } from "@brick/core";
 // DB 오류 판별 — 중복 등록을 409로 돌려줄 때 쓴다.
 // 오류 문자열로 검사하면 드라이버가 메시지 형태를 바꿀 때 조용히 깨진다.
 export {

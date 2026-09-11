@@ -52,9 +52,25 @@ for (const file of files) {
   });
 }
 
+/*
+ * JS 쪽도 본다. `new Date().toISOString().slice(0, 10)` 은 **UTC 날짜**다.
+ * 한국 시간 08:00 과 10:00 은 같은 날이지만 UTC 로는 하루 차이라, 이것을
+ * 멱등 키로 쓰면 아침 9시 전후로 갈라진다 — 출석 포인트가 하루 두 번 지급됐다.
+ * "지금"을 날짜로 바꾸는 경우만 본다(주어진 날짜를 ISO 로 적는 것은 정상이다).
+ */
+for (const file of files) {
+  const src = readFileSync(file, "utf8");
+  src.split("\n").forEach((line, i) => {
+    if (!/new Date\(\s*\)\s*\.toISOString\(\)\s*\.slice\(\s*0\s*,\s*10\s*\)/.test(line)) return;
+    if (/^\s*(\*|\/\/)/.test(line)) return;
+    checked++;
+    bad.push(`${file.slice(ROOT.length)}:${i + 1}  ${line.trim().slice(0, 72)}  — siteToday() 를 쓰세요`);
+  });
+}
+
 if (bad.length) {
   for (const b of bad) console.log(`  ❌ ${b}`);
-  console.log(`\n${bad.length}곳이 UTC 자정으로 자릅니다 — 한국에서는 아침 9시입니다.`);
+  console.log(`\n${bad.length}곳이 UTC 로 자릅니다 — 한국에서 그 경계는 아침 9시입니다.`);
   process.exit(1);
 }
-console.log(`  ✅ date_trunc ${checked}곳이 모두 사이트 시간대를 쓴다`);
+console.log(`  ✅ 날짜 경계 ${checked}곳이 모두 사이트 시간대를 쓴다`);

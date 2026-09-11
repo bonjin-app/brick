@@ -20,3 +20,21 @@
  * 인덱스를 못 타서(non-sargable) 대시보드가 열릴 때마다 풀 스캔이 된다.
  */
 export const SITE_TZ = process.env.BRICK_TIMEZONE?.trim() || "Asia/Seoul";
+
+/**
+ * 사이트 시간대의 오늘 — `YYYY-MM-DD`.
+ *
+ * SQL 쪽 관용구는 위에 적어 두었는데 **JS 쪽 정의가 없어서** 각자
+ * `new Date().toISOString().slice(0, 10)` 을 썼다. 그것은 UTC 날짜다.
+ *
+ * 무엇이 어긋나는지: 한국 시간 08:00 과 10:00 은 같은 날이지만 UTC 로는
+ * 하루 차이다(각각 전날 23:00, 당일 01:00). 그래서 출석 포인트의 멱등 키가
+ * 아침 9시 전후로 갈라졌고, **하루에 두 번** 지급됐다.
+ *
+ * `en-CA` 로 포맷하는 이유는 그 로케일이 `YYYY-MM-DD` 를 주기 때문이다 —
+ * 사람이 읽을 날짜가 아니라 **키로 쓸 날짜**라 표기가 고정이어야 한다.
+ * (`ko-KR` 로 날짜를 포맷하면 Node 의 ICU 에 따라 결과가 달라진다.)
+ */
+export function siteToday(now: Date = new Date()): string {
+  return now.toLocaleDateString("en-CA", { timeZone: SITE_TZ });
+}
