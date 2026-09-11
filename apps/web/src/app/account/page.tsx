@@ -178,13 +178,19 @@ export default function AccountPage() {
       <header style={{ width: "100%", maxWidth: 560, margin: "0 auto 20px", display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
         <h1 style={{ margin: 0, fontSize: 24, letterSpacing: "-0.5px" }}>{t("account.title")}</h1>
         {/*
+          색은 `--color-primary` 가 아니라 `--color-primary-text` 다. 앞의 것은
+          **면을 칠하는 색**이고(버튼 배경), 글자로 쓰면 밝은 테마에서 4.29:1 로
+          AA(4.5)를 넘기지 못한다 — 대비 감사가 이 링크에서 정확히 그것을 짚었다.
+          테마들은 글자용 변종을 따로 정의해 둔다(default #b63a2e, storefront 는
+          아예 먹색). 게시판 플러그인은 이미 그 토큰을 쓰고 있었고 여기만 남았다.
+
           폰에서 이 링크의 실제 높이는 16px 였다 — 손가락으로는 잘 안 눌리고, 바로
           위아래에 제목과 카드가 있어 빗나가면 엉뚱한 곳을 누른다. 가입 화면에서
           같은 것을 이미 고쳤는데(홈 링크 44px) 마이페이지는 남아 있었다.
           글자 크기는 그대로 두고 누를 자리만 넓힌다.
         */}
         <a href="/" style={{
-          fontSize: 13.5, color: "var(--color-primary)", textDecoration: "none",
+          fontSize: 13.5, color: "var(--color-primary-text)", textDecoration: "none",
           display: "inline-flex", alignItems: "center", minHeight: 44, padding: "0 4px",
         }}>
           ← {siteName || t("account.backToSite")}
@@ -227,14 +233,14 @@ export default function AccountPage() {
               ) : (
                 <>
                   <span style={{ color: "var(--color-danger)", fontSize: 12.5 }}>{t("account.emailUnverified")}</span>{" "}
-                  <button style={{ ...small, border: 0, background: "none", color: "var(--color-primary)", cursor: "pointer", padding: 0 }}
+                  <button style={{ ...small, border: 0, background: "none", color: "var(--color-primary-text)", cursor: "pointer", padding: 0 }}
                     onClick={() => call("/api/me/email/verify/send", { method: "POST", body: "{}" }, t("account.verifySent"))}>
                     {t("account.sendVerify")}
                   </button>
                 </>
               )}
               {" · "}
-              <button type="button" style={{ ...small, border: 0, background: "none", color: "var(--color-primary)", cursor: "pointer", padding: 0 }}
+              <button type="button" style={{ ...small, border: 0, background: "none", color: "var(--color-primary-text)", cursor: "pointer", padding: 0 }}
                 aria-expanded={emailOpen} onClick={() => setEmailOpen((v) => !v)}>
                 {t("account.changeEmail")}
               </button>
