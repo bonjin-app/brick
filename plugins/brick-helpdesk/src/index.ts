@@ -399,13 +399,15 @@ export default definePlugin(async (ctx) => {
     const t = rows[0];
     if (!t?.author_email) return;
 
+    // 메일 문구도 사이트 언어를 따른다 — 메일은 사이트 밖에서 혼자 읽힌다
+    const no = String(t.ticket_no);
     await ctx.mail.send({
       to: String(t.author_email),
-      subject: `[문의 ${String(t.ticket_no)}] 답변이 등록되었습니다`,
+      subject: ctx.t("mail.answeredSubject", { no }),
       text:
-        `${String(t.author_name)}님, 문의하신 내용에 답변이 등록되었습니다.\n\n` +
-        `문의번호: ${String(t.ticket_no)}\n제목: ${String(t.title)}\n\n` +
-        `사이트에 접속해 확인해주세요.`,
+        `${ctx.t("mail.answeredBody", { name: String(t.author_name) })}\n\n` +
+        `${ctx.t("mail.answeredNo", { no })}\n${ctx.t("mail.answeredTitle", { title: String(t.title) })}\n\n` +
+        `${ctx.t("mail.answeredVisit")}`,
     });
   });
 

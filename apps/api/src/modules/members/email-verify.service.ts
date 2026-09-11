@@ -1,11 +1,12 @@
 import { BadRequestException, Inject, Injectable, Logger } from "@nestjs/common";
-import { escapeHtml } from "@brick/core";
+import { escapeHtml, CORE_CATALOGS, makeTranslator } from "@brick/core";
 import { createHash, randomBytes } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import type { BrickDb } from "@brick/database";
 import type { MailProvider } from "@brick/core";
 import { DB, MAIL, ENV } from "../../runtime.module.js";
+import { PluginLoaderService } from "../plugins/plugin-loader.service.js";
 import type { loadEnv } from "../../config/env.js";
 
 const TOKEN_TTL_HOURS = 24;
@@ -36,6 +37,7 @@ export class EmailVerifyService {
     @Inject(DB) private readonly db: BrickDb,
     @Inject(MAIL) private readonly mail: MailProvider,
     @Inject(ENV) private readonly env: ReturnType<typeof loadEnv>,
+    private readonly loader: PluginLoaderService,
   ) {}
 
   /**
@@ -89,21 +91,24 @@ export class EmailVerifyService {
     `);
 
     const link = `${this.env.siteUrl.replace(/\/$/, "")}/verify-email?token=${token}`;
+    // 재설정 메일과 같은 이유로 카탈로그를 탄다 — 메일은 사이트 밖에서 읽힌다
+    const t = makeTranslator({ locale: this.loader.siteLocale, catalogs: CORE_CATALOGS });
+    const name = String(user.display_name);
     await this.mail.send({
       to: target,
-      subject: "이메일 주소를 인증해주세요",
+      subject: t("mail.verifySubject"),
       text:
-        `${String(user.display_name)}님, 안녕하세요.\n\n` +
-        `아래 링크를 열면 이메일 인증이 완료됩니다.\n${link}\n\n` +
-        `링크는 ${TOKEN_TTL_HOURS}시간 동안 유효합니다.\n` +
-        `본인이 요청하지 않았다면 이 메일을 무시하세요.`,
+        `${t("mail.greeting", { name })}\n\n` +
+        `${t("mail.verifyBody")}\n${link}\n\n` +
+        `${t("mail.verifyValid", { hours: TOKEN_TTL_HOURS })}\n` +
+        `${t("mail.ignoreNote")}`,
       // 비밀번호 재설정 메일과 같은 모양 — 메일 클라이언트에서 버튼 하나로 끝나게
       html:
-        `<p>${escapeHtml(String(user.display_name))}님, 안녕하세요.</p>` +
-        `<p>아래 버튼을 누르면 이메일 인증이 완료됩니다. 링크는 ${TOKEN_TTL_HOURS}시간 동안 유효합니다.</p>` +
+        `<p>${escapeHtml(t("mail.greeting", { name }))}</p>` +
+        `<p>${escapeHtml(t("mail.verifyBodyHtml", { hours: TOKEN_TTL_HOURS }))}</p>` +
         `<p><a href="${escapeHtml(link)}" style="display:inline-block;padding:12px 24px;` +
-        `background:#d0402c;color:#fff;border-radius:8px;text-decoration:none">이메일 인증</a></p>` +
-        `<p style="color:#666;font-size:13px">본인이 요청하지 않았다면 이 메일을 무시하세요.</p>`,
+        `background:#d0402c;color:#fff;border-radius:8px;text-decoration:none">${escapeHtml(t("mail.verifyButton"))}</a></p>` +
+        `<p style="color:#666;font-size:13px">${escapeHtml(t("mail.ignoreNote"))}</p>`,
     });
 
     this.log.log(`인증 메일 발송 (도메인: ${target.split("@")[1] ?? "?"})`);

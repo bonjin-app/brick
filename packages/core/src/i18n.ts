@@ -129,6 +129,26 @@ const CORE_KO: MessageCatalog = {
   "home.stepThemeBody": "색과 글꼴은 테마 토큰에서 옵니다. 라이트·다크 두 벌이 함께 옵니다.",
   "home.stepPlugins": "플러그인",
   "home.stepPluginsBody": "게시판·쇼핑몰·회원·포인트를 켜고 끄면서 필요한 것만 씁니다.",
+  /*
+   * 코어가 보내는 메일.
+   *
+   * 주문 안내 메일은 이미 카탈로그를 타는데 **비밀번호 재설정과 이메일 인증은
+   * 한국어가 박혀 있었다** — 영어 사이트 회원이 비밀번호를 잃어버리면 한국어
+   * 메일을 받는다. 메일은 사이트 밖에서 읽히므로 화면보다 더 혼자 있다.
+   */
+  "mail.greeting": "{name}님, 안녕하세요.",
+  "mail.ignoreNote": "본인이 요청하지 않았다면 이 메일을 무시하세요.",
+  "mail.resetSubject": "[{site}] 비밀번호 재설정 안내",
+  "mail.resetBody": "비밀번호를 재설정하려면 아래 링크를 열어주세요. 유효 시간은 {minutes}분입니다.",
+  "mail.resetBodyHtml": "비밀번호를 재설정하려면 아래 버튼을 눌러주세요. 유효 시간은 {minutes}분입니다.",
+  "mail.resetButton": "비밀번호 재설정",
+  "mail.resetNotChanged": "비밀번호는 변경되지 않습니다.",
+  "mail.resetOnce": "링크는 한 번만 사용할 수 있습니다.",
+  "mail.verifySubject": "이메일 주소를 인증해주세요",
+  "mail.verifyBody": "아래 링크를 열면 이메일 인증이 완료됩니다.",
+  "mail.verifyBodyHtml": "아래 버튼을 누르면 이메일 인증이 완료됩니다. 링크는 {hours}시간 동안 유효합니다.",
+  "mail.verifyValid": "링크는 {hours}시간 동안 유효합니다.",
+  "mail.verifyButton": "이메일 인증",
   "withdraw.privacyLabel": "개인정보",
   "withdraw.privacyDetail": "이메일·이름·비밀번호는 즉시 파기되며 같은 계정으로 다시 로그인할 수 없습니다.",
 };
@@ -179,6 +199,19 @@ const CORE_EN: MessageCatalog = {
   "home.stepThemeBody": "Colors and fonts come from theme tokens. Light and dark ship together.",
   "home.stepPlugins": "Plugins",
   "home.stepPluginsBody": "Turn boards, shop, members and points on or off as you need them.",
+  "mail.greeting": "Hello {name},",
+  "mail.ignoreNote": "If you did not request this, please ignore this email.",
+  "mail.resetSubject": "[{site}] Reset your password",
+  "mail.resetBody": "Open the link below to reset your password. It is valid for {minutes} minutes.",
+  "mail.resetBodyHtml": "Press the button below to reset your password. It is valid for {minutes} minutes.",
+  "mail.resetButton": "Reset password",
+  "mail.resetNotChanged": "Your password has not been changed.",
+  "mail.resetOnce": "The link can be used only once.",
+  "mail.verifySubject": "Please verify your email address",
+  "mail.verifyBody": "Open the link below to finish verifying your email.",
+  "mail.verifyBodyHtml": "Press the button below to finish verifying your email. The link is valid for {hours} hours.",
+  "mail.verifyValid": "The link is valid for {hours} hours.",
+  "mail.verifyButton": "Verify email",
   "withdraw.privacyLabel": "Personal information",
   "withdraw.privacyDetail": "Your email, name and password are destroyed immediately and you cannot sign in again with this account.",
 };

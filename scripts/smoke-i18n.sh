@@ -225,6 +225,69 @@ contains "입금 안내도 영어" "$MAIL_EN" "Bank account: KB 123-456"
 contains "메일의 금액도 영어 표기" "$MAIL_EN" "Total: 15,000 KRW"
 absent   "한국어 문구가 남지 않는다" "$MAIL_EN" "결제 금액:"
 
+echo "── 코어와 다른 플러그인의 메일도 언어를 따라간다"
+curl -s -b "$CK" -X POST "$API/api/plugins/brick-helpdesk/activate" >/dev/null
+# 주문 메일만 카탈로그를 타고 있었다. 비밀번호 재설정·이메일 인증(코어)과
+# 문의 답변·재입고(플러그인)는 한국어가 박혀 있었다 — 영어 사이트 회원이
+# 비밀번호를 잃어버리면 한국어 메일을 받는다. **메일은 사이트 밖에서 혼자
+# 읽힌다**: 옆에 번역된 화면이 없으므로 화면보다 더 티가 난다.
+# 재입고 메일은 가격 줄만 번역되어 있어 더 나빴다 — 반쪽으로 섞인 메일은
+# 통째로 한 언어인 것보다 나쁘다.
+MAIL_BEFORE="$(wc -c < "$TMP/api.log" | tr -d " ")"
+curl -s -X POST "$API/api/auth/password/forgot" -H 'content-type: application/json' \
+  -d '{"email":"admin@i18n.test"}' >/dev/null
+curl -s -b "$CK" -X POST "$API/api/me/email/verify/send" -H 'content-type: application/json' -d '{}' >/dev/null
+sleep 1
+CORE_MAIL="$(tail -c "+$MAIL_BEFORE" "$TMP/api.log")"
+contains "재설정 메일 제목이 영어" "$CORE_MAIL" "Reset your password"
+contains "재설정 메일 본문이 영어" "$CORE_MAIL" "valid for"
+absent   "재설정 메일에 한국어가 남지 않는다" "$CORE_MAIL" "비밀번호를 재설정하려면"
+contains "인증 메일도 영어" "$CORE_MAIL" "verify your email"
+absent   "인증 메일에 한국어가 남지 않는다" "$CORE_MAIL" "이메일 인증이 완료됩니다"
+
+# 문의 답변 — 비회원 문의를 받고 관리자가 답한다
+curl -s -b "$CK" -X PUT "$API/api/plugins/brick-helpdesk/admin/settings" -H 'content-type: application/json' \
+  -d '{"allowGuest":true,"categoriesText":"General","notifyOnAnswer":true,"pageSize":20}' >/dev/null
+TK="$(curl -s -X POST "$API/api/plugins/brick-helpdesk/tickets" -H 'content-type: application/json' \
+  -d '{"category":"General","title":"Where is my order","content":"Please check my order status","guestName":"Jane","guestEmail":"jane@mail.test","guestPassword":"guestpass123"}' \
+  | /usr/bin/python3 -c "import json,sys
+try: print(json.load(sys.stdin).get('id',''))
+except Exception: print('')")"
+HELP_BEFORE="$(wc -c < "$TMP/api.log" | tr -d " ")"
+if [[ -n "$TK" ]]; then
+  curl -s -b "$CK" -X PUT "$API/api/plugins/brick-helpdesk/admin/tickets/$TK" -H 'content-type: application/json' \
+    -d '{"reply":"We shipped it today."}' >/dev/null
+  sleep 1
+  HELP_MAIL="$(tail -c "+$HELP_BEFORE" "$TMP/api.log")"
+  contains "문의 답변 메일이 영어" "$HELP_MAIL" "has been answered"
+  absent   "문의 답변 메일에 한국어가 남지 않는다" "$HELP_MAIL" "답변이 등록되었습니다"
+else
+  bad "문의를 접수하지 못해 답변 메일을 확인할 수 없다"
+fi
+
+# 재입고 — 품절 상품에 알림을 신청하고 재고를 채운 뒤 스윕
+SHOP_ADM="$API/api/plugins/brick-shop/admin"
+OUT_ID="$(curl -s -b "$CK" -X POST "$SHOP_ADM/products" -H 'content-type: application/json' \
+  -d '{"slug":"soldout-en","name":"Sold Out Tea","price":9000,"stock":0,"status":"soldout","is_visible":true}' \
+  | /usr/bin/python3 -c "import json,sys
+try: print(json.load(sys.stdin).get('id',''))
+except Exception: print('')")"
+if [[ -n "$OUT_ID" ]]; then
+  curl -s -X POST "$API/api/plugins/brick-shop/products/soldout-en/restock-alert" \
+    -H 'content-type: application/json' -d '{"email":"restock@mail.test"}' >/dev/null
+  curl -s -b "$CK" -X PUT "$SHOP_ADM/products/$OUT_ID" -H 'content-type: application/json' \
+    -d '{"slug":"soldout-en","name":"Sold Out Tea","price":9000,"stock":5,"status":"selling","is_visible":true}' >/dev/null
+  RS_BEFORE="$(wc -c < "$TMP/api.log" | tr -d " ")"
+  curl -s -b "$CK" -X POST "$SHOP_ADM/restock-sweep" -H 'content-type: application/json' -d '{}' >/dev/null
+  sleep 1
+  RS_MAIL="$(tail -c "+$RS_BEFORE" "$TMP/api.log")"
+  contains "재입고 메일이 영어" "$RS_MAIL" "back in stock"
+  absent   "재입고 메일에 한국어가 남지 않는다" "$RS_MAIL" "재입고되었습니다"
+  absent   "재입고 메일의 안내문도 한국어가 아니다" "$RS_MAIL" "알림을 해지해주세요"
+else
+  bad "품절 상품을 만들지 못해 재입고 메일을 확인할 수 없다"
+fi
+
 echo "── 관리 선언 라벨도 언어를 따라간다 (gettext — 원문이 키, 서빙 시점 번역)"
 NAV_EN="$(curl -s -b "$CK" "$API/api/admin/nav")"
 contains "리소스 제목이 영어 (주문→Orders)" "$NAV_EN" '"title":"Orders"'

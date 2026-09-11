@@ -251,15 +251,19 @@ export async function sendRestockNotifications(
 
     for (const row of batch) {
       const cancelUrl = `${params.siteUrl.replace(/\/$/, "")}/shop/restock/cancel/${String(row.token)}`;
+      /*
+       * 메일 문구는 **전부** 카탈로그를 탄다. 전에는 가격 줄만 번역되고 나머지는
+       * 한국어로 박혀 있었다 — 반쪽으로 섞인 메일은 통째로 한 언어인 것보다 나쁘다.
+       */
       const text = [
-        `${label} 상품이 재입고되었습니다.`,
+        t("restock.mailHeadline", { label }),
         "",
         t("restock.mailPrice", { amount: won(Number(product.price)) }),
-        `바로 보기: ${productUrl}`,
+        t("restock.mailView", { url: productUrl }),
         "",
         "─────────────────────────────────────",
-        `이 메일은 ${params.siteName}에서 재입고 알림을 신청하신 분께 1회 발송됩니다.`,
-        "신청하지 않으셨다면 아래 링크를 눌러 알림을 해지해주세요:",
+        t("restock.mailOnce", { site: params.siteName }),
+        t("restock.mailCancel"),
         cancelUrl,
       ].join("\n");
 
@@ -269,7 +273,7 @@ export async function sendRestockNotifications(
         // 수신 동의가 필요해진다 (ADR-50 과 같은 판단).
         const ok = await params.send({
           to: String(row.email),
-          subject: `[재입고] ${label}`,
+          subject: t("restock.mailSubject", { label }),
           text,
         });
         if (ok) sent += 1;

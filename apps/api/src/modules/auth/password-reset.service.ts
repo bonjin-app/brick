@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 // 이스케이프는 코어의 것을 쓴다 — null 안전하고, 구현이 갈라지면 안 된다
-import { escapeHtml } from "@brick/core";
+import { escapeHtml, CORE_CATALOGS, makeTranslator } from "@brick/core";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { and, eq, gt, isNull, lt } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
@@ -11,6 +11,7 @@ import type { MailProvider } from "@brick/core";
 import { DB, MAIL, ENV } from "../../runtime.module.js";
 import type { loadEnv } from "../../config/env.js";
 import { AuthService } from "./auth.service.js";
+import { PluginLoaderService } from "../plugins/plugin-loader.service.js";
 
 const TOKEN_TTL_MINUTES = 30;
 
@@ -35,6 +36,7 @@ export class PasswordResetService {
     @Inject(MAIL) private readonly mail: MailProvider,
     @Inject(ENV) private readonly env: ReturnType<typeof loadEnv>,
     private readonly auth: AuthService,
+    private readonly loader: PluginLoaderService,
   ) {}
 
   /**
@@ -70,22 +72,29 @@ export class PasswordResetService {
     });
 
     const link = `${this.env.siteUrl}/reset-password?token=${encodeURIComponent(token)}`;
+    /*
+     * 메일도 사이트 언어를 따른다. 이 문구들은 한국어로 박혀 있었다 — 영어 사이트
+     * 회원이 비밀번호를 잃어버리면 한국어 메일을 받는다. 메일은 사이트 밖에서
+     * 읽히므로 화면보다 더 혼자 있다(옆에 번역된 화면이 없다).
+     */
+    const t = makeTranslator({ locale: this.loader.siteLocale, catalogs: CORE_CATALOGS });
+    const siteName = await this.loader.siteName();
     const sent = await this.mail.send({
       to: user.email,
-      subject: "[Brick] 비밀번호 재설정 안내",
+      subject: t("mail.resetSubject", { site: siteName }),
       text:
-        `${user.displayName}님, 안녕하세요.\n\n` +
-        `비밀번호를 재설정하려면 아래 링크를 열어주세요. 유효 시간은 ${TOKEN_TTL_MINUTES}분입니다.\n\n` +
+        `${t("mail.greeting", { name: user.displayName })}\n\n` +
+        `${t("mail.resetBody", { minutes: TOKEN_TTL_MINUTES })}\n\n` +
         `${link}\n\n` +
-        `본인이 요청하지 않았다면 이 메일을 무시하세요. 비밀번호는 변경되지 않습니다.\n` +
-        `링크는 한 번만 사용할 수 있습니다.\n`,
+        `${t("mail.ignoreNote")} ${t("mail.resetNotChanged")}\n` +
+        `${t("mail.resetOnce")}\n`,
       html:
-        `<p>${escapeHtml(user.displayName)}님, 안녕하세요.</p>` +
-        `<p>비밀번호를 재설정하려면 아래 버튼을 눌러주세요. 유효 시간은 ${TOKEN_TTL_MINUTES}분입니다.</p>` +
+        `<p>${escapeHtml(t("mail.greeting", { name: user.displayName }))}</p>` +
+        `<p>${escapeHtml(t("mail.resetBodyHtml", { minutes: TOKEN_TTL_MINUTES }))}</p>` +
         `<p><a href="${escapeHtml(link)}" style="display:inline-block;padding:12px 24px;` +
-        `background:#d0402c;color:#fff;border-radius:8px;text-decoration:none">비밀번호 재설정</a></p>` +
-        `<p style="color:#666;font-size:13px">본인이 요청하지 않았다면 이 메일을 무시하세요. ` +
-        `비밀번호는 변경되지 않습니다. 링크는 한 번만 사용할 수 있습니다.</p>`,
+        `background:#d0402c;color:#fff;border-radius:8px;text-decoration:none">${escapeHtml(t("mail.resetButton"))}</a></p>` +
+        `<p style="color:#666;font-size:13px">${escapeHtml(t("mail.ignoreNote"))} ` +
+        `${escapeHtml(t("mail.resetNotChanged"))} ${escapeHtml(t("mail.resetOnce"))}</p>`,
     });
 
     if (!sent) {

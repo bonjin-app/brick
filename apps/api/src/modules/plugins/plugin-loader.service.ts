@@ -338,6 +338,21 @@ export class PluginLoaderService implements OnModuleInit {
    */
   private localeCache: { value: Locale; at: number } = { value: DEFAULT_LOCALE, at: 0 };
 
+  /**
+   * 사이트 이름 — 메일 제목처럼 **사이트 밖에서 읽히는 글**에 쓴다.
+   *
+   * 매번 읽는다(플러그인 컨텍스트의 site.name 과 같은 규칙): 운영자가 이름을
+   * 바꾸면 다음 메일부터 반영되어야 한다. 메일은 드물게 나가므로 캐시할 이유가
+   * 없고, 캐시하면 "바꿨는데 예전 이름으로 나간다"가 된다.
+   */
+  async siteName(): Promise<string> {
+    const { rows } = await this.db.execute(
+      sql`SELECT value FROM site_settings WHERE key = 'site.name' LIMIT 1`,
+    );
+    const raw = rows[0]?.value;
+    return typeof raw === "string" && raw.trim() ? raw.trim() : "Brick";
+  }
+
   /** 현재 사이트 언어 (캐시) — 코어 블록이 렌더 시점 번역에 쓴다 */
   get siteLocale(): Locale {
     return this.localeCache.value;
@@ -563,13 +578,7 @@ export class PluginLoaderService implements OnModuleInit {
       site: {
         url: this.env.siteUrl,
         // 매번 읽는다 — 운영자가 사이트 이름을 바꾸면 다음 메일부터 반영되어야 한다
-        name: async () => {
-          const { rows } = await this.db.execute(
-            sql`SELECT value FROM site_settings WHERE key = 'site.name' LIMIT 1`,
-          );
-          const raw = rows[0]?.value;
-          return typeof raw === "string" && raw.trim() ? raw.trim() : "Brick";
-        },
+        name: () => this.siteName(),
       },
       // Drizzle 핸들은 execute/transaction을 모두 제공하므로 PluginDb 계약을 충족한다
       db: this.db as unknown as PluginDb,

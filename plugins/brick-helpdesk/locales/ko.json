@@ -1,0 +1,7 @@
+{
+  "mail.answeredBody": "{name}님, 문의하신 내용에 답변이 등록되었습니다.",
+  "mail.answeredNo": "문의번호: {no}",
+  "mail.answeredSubject": "[문의 {no}] 답변이 등록되었습니다",
+  "mail.answeredTitle": "제목: {title}",
+  "mail.answeredVisit": "사이트에 접속해 확인해주세요."
+}
