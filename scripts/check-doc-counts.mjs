@@ -60,6 +60,16 @@ const claims = [
   ],
 ];
 
+/**
+ * 만들어 둔 검사가 CI 에 연결돼 있는가.
+ *
+ * 검사를 쓰고 워크플로에 넣는 것을 잊으면, 저장소에는 있는데 **아무도 돌리지
+ * 않는** 파일이 된다. 그것은 없는 검사보다 나쁘다 — 있다고 믿게 만든다.
+ * (이 파일들의 개수는 위에서 README 와 이미 대조했다.)
+ */
+const ciYml = readFileSync(join(ROOT, ".github/workflows/ci.yml"), "utf8");
+const unwired = checkFiles.filter((f) => !ciYml.includes(f));
+
 /** 저장소 구조 블록에 플러그인·테마가 모두 적혀 있는가 */
 const missingPlugins = plugins.filter((p) => !readme.includes(`  ${p}/`));
 const missingThemes = themes.filter((t) => !readme.includes(`  ${t}/`));
@@ -81,6 +91,13 @@ for (const [label, missing, all] of [["플러그인", missingPlugins, plugins], 
   } else {
     console.log(`  ✅ 저장소 구조의 ${label} ${all.length}개 모두 적혀 있다`);
   }
+}
+
+if (unwired.length) {
+  console.log(`  ❌ CI 에 연결되지 않은 검사: ${unwired.join(", ")} — 돌지 않는 검사는 없는 것보다 나쁩니다`);
+  fail++;
+} else {
+  console.log(`  ✅ 정적 검사 ${checkFiles.length}개가 모두 CI 에 연결되어 있다`);
 }
 
 if (fail > 0) {
