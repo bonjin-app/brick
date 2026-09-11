@@ -182,6 +182,48 @@ contains "두 번째 부팅은 적용할 것이 없다" "$(cat "$TMP/api-again.l
 check "옛 회원이 그대로" "$(psql_q "SELECT count(*) FROM users WHERE email LIKE 'old%@up.test'")" "2"
 check "설정도 그대로" "$(psql_q "SELECT value->>0 FROM site_settings WHERE key='site.name'")" "업그레이드 전 이름"
 
+echo "── 인스턴스 둘이 동시에 부팅해도 플러그인 마이그레이션이 한 번만 돈다"
+#
+# 코어 러너는 advisory lock 으로 이것을 막는다("다중 인스턴스 동시 부팅에도 한 번만").
+# 플러그인 러너에는 그 잠금이 없었다 — 둘 다 "아직 적용 안 됨" 을 보고 같은 DDL 을
+# 실행하고, 한쪽이 duplicate key / already exists 로 죽는다. 그 인스턴스에서는
+# 플러그인이 켜지지 않는다(docker compose 스케일·롤링 재시작은 지원하는 시나리오다).
+#
+# 재현: 기록과 테이블을 지워 "아직 적용 안 된" 상태로 되돌리고 둘을 같이 띄운다.
+stop_api
+psql_q "DELETE FROM plugin_migrations WHERE plugin_name='brick-shop'" >/dev/null
+psql_q "DROP TABLE IF EXISTS shop_products CASCADE" >/dev/null
+BRICK_MIGRATIONS_DIR="$MIG_ALL" BRICK_API_PORT="$API_PORT" node "$ROOT/apps/api/dist/main.js" > "$TMP/inst-a.log" 2>&1 &
+PA=$!
+BRICK_MIGRATIONS_DIR="$MIG_ALL" BRICK_API_PORT="$((API_PORT+1))" node "$ROOT/apps/api/dist/main.js" > "$TMP/inst-b.log" 2>&1 &
+PB=$!
+# 아직 뜨지 않은 동안 curl 은 실패로 끝난다 — set -e 가 스크립트를 죽이지 않게 감싼다
+ready() { curl -s -o /dev/null -w "%{http_code}" "$1" 2>/dev/null || echo "000"; }
+for i in $(seq 1 60); do
+  a="$(ready "http://127.0.0.1:${API_PORT}/readyz")"
+  b="$(ready "http://127.0.0.1:$((API_PORT+1))/readyz")"
+  [[ "$a" == "200" && "$b" == "200" ]] && break
+  sleep 0.5
+done
+check "둘 다 정상 기동 (A)" "$(ready "http://127.0.0.1:${API_PORT}/readyz")" "200"
+check "둘 다 정상 기동 (B)" "$(ready "http://127.0.0.1:$((API_PORT+1))/readyz")" "200"
+APPLIED_A="$(grep -c 'migration applied: brick-shop' "$TMP/inst-a.log" || true)"
+APPLIED_B="$(grep -c 'migration applied: brick-shop' "$TMP/inst-b.log" || true)"
+[[ $((APPLIED_A + APPLIED_B)) -gt 0 ]] && ok "한쪽이 적용했다 (A ${APPLIED_A} · B ${APPLIED_B})" || bad "아무도 적용하지 않았다"
+[[ "$APPLIED_A" == "0" || "$APPLIED_B" == "0" ]] && ok "다른 쪽은 기다렸다가 건너뛴다" \
+  || bad "둘 다 적용했다 (A ${APPLIED_A} · B ${APPLIED_B}) — 잠금이 없다"
+# grep 은 못 찾으면 1 로 끝난다 — pipefail 이 걸린 스크립트에서는 그것이 곧 중단이다
+CLASH="$( { grep -hciE 'duplicate key|already exists' "$TMP/inst-a.log" "$TMP/inst-b.log" || true; } | awk '{n+=$1} END{print n+0}')"
+check "충돌 오류 없음" "$CLASH" "0"
+# 같은 id 가 두 번 기록됐는지 — 없으면 0 행이므로 count 로 센다
+DUP="$(psql_q "SELECT count(*) FROM (
+         SELECT id FROM plugin_migrations WHERE plugin_name='brick-shop'
+         GROUP BY id HAVING count(*) > 1) d")"
+check "기록이 중복되지 않았다" "$DUP" "0"
+kill "$PA" "$PB" 2>/dev/null || true
+wait "$PA" "$PB" 2>/dev/null || true
+API_PID=""
+
 echo
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 [[ $FAIL -eq 0 ]] || { echo; echo "── 서버 로그 ──"; tail -40 "$TMP/api-new.log"; exit 1; }

@@ -802,20 +802,56 @@ export class PluginLoaderService implements OnModuleInit {
     return thumbKey ? this.storage.publicUrl(String(thumbKey)) : null;
   }
 
+  /**
+   * 플러그인 마이그레이션.
+   *
+   * 코어 러너(`config/migrator.ts`)와 **같은 두 가지 보호**를 쓴다. 그동안 없었다.
+   *
+   * 1. **advisory lock** — 인스턴스 둘이 동시에 부팅하면 둘 다 "아직 적용 안 됨" 을
+   *    보고 같은 DDL 을 실행한다. 한쪽은 "relation already exists" 로 죽고, 그
+   *    인스턴스에서는 플러그인이 활성화되지 않는다. 코어가 이 잠금을 쓰는 이유가
+   *    그대로 여기에도 있다(docker compose 스케일·롤링 재시작은 지원하는 시나리오다).
+   * 2. **파일과 기록을 한 트랜잭션에** — 파일은 적용됐는데 기록이 남지 않으면 다음
+   *    부팅이 같은 파일을 다시 돌린다. `CREATE TABLE` 에 IF NOT EXISTS 가 없으면
+   *    그 플러그인은 영영 켜지지 않는다.
+   *
+   * 잠금 키는 코어와 다르게 둔다 — 부팅 중 코어 마이그레이션이 끝난 뒤에 이것이
+   * 돌지만, 같은 키를 쓰면 앞으로 순서가 바뀔 때 자기 자신을 기다리게 된다.
+   */
   private async runPluginMigrations(pluginName: string, dir: string): Promise<void> {
     const files = (await readdir(dir).catch(() => []) as string[]).filter((f) => f.endsWith(".sql")).sort();
-    for (const file of files) {
-      const id = `${pluginName}:${file}`;
-      const applied = await this.db.execute(
+    if (!files.length) return;
+
+    const { sql } = await import("drizzle-orm");
+    const LOCK_KEY = 74200002; // brick plugin migration advisory lock (코어는 ...01)
+    const deadline = Date.now() + 60_000;
+    for (;;) {
+      const got = await this.db.execute(sql`SELECT pg_try_advisory_lock(${LOCK_KEY}) AS locked`);
+      if ((got as unknown as { rows: Array<{ locked: boolean }> }).rows?.[0]?.locked) break;
+      if (Date.now() >= deadline) {
+        throw new Error(
+          `플러그인 마이그레이션 락을 60초 안에 얻지 못했습니다 (${pluginName}).\n` +
+            `  다른 인스턴스가 마이그레이션 중이거나, 이전 프로세스가 락을 쥔 채 남아 있습니다.`,
+        );
+      }
+      await new Promise((r) => setTimeout(r, 300));
+    }
+
+    try {
+      for (const file of files) {
+        const id = `${pluginName}:${file}`;
         // plugin_migrations 테이블로 멱등 보장
-        (await import("drizzle-orm")).sql`SELECT 1 FROM plugin_migrations WHERE id = ${id} LIMIT 1`,
-      );
-      if ((applied as unknown as { rows: unknown[] }).rows?.length) continue;
-      const sqlText = await readFile(join(dir, file), "utf8");
-      const { sql } = await import("drizzle-orm");
-      await this.db.execute(sql.raw(sqlText));
-      await this.db.execute(sql`INSERT INTO plugin_migrations (id, plugin_name) VALUES (${id}, ${pluginName})`);
-      this.logger.log(`migration applied: ${id}`);
+        const applied = await this.db.execute(sql`SELECT 1 FROM plugin_migrations WHERE id = ${id} LIMIT 1`);
+        if ((applied as unknown as { rows: unknown[] }).rows?.length) continue;
+        const sqlText = await readFile(join(dir, file), "utf8");
+        await this.db.transaction(async (tx) => {
+          await tx.execute(sql.raw(sqlText));
+          await tx.execute(sql`INSERT INTO plugin_migrations (id, plugin_name) VALUES (${id}, ${pluginName})`);
+        });
+        this.logger.log(`migration applied: ${id}`);
+      }
+    } finally {
+      await this.db.execute(sql`SELECT pg_advisory_unlock(${LOCK_KEY})`).catch(() => undefined);
     }
   }
 }
