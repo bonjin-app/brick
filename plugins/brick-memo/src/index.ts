@@ -1,4 +1,4 @@
-import { definePlugin } from "@brick/plugin-sdk";
+import { definePlugin, SITE_TZ } from "@brick/plugin-sdk";
 import type { PluginDb } from "@brick/plugin-sdk";
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
@@ -210,11 +210,19 @@ export default definePlugin(async (ctx) => {
       }
     }
 
-    // 하루 한도 — 계정 탈취 시 대량 발송을 제한한다
+    /*
+     * 하루 한도 — 계정 탈취 시 대량 발송을 제한한다.
+     *
+     * "하루"는 **사이트 시간대의 하루**다. UTC 자정으로 자르고 있었는데, 한국에서
+     * 그것은 오전 9시다 — 한도를 다 쓴 사람은 자정이 아니라 아침 9시에 풀리고,
+     * 아침에 보낸 쪽지는 25시간 전 것과 같은 날로 묶인다. 다른 "오늘"(방문 집계·
+     * 매출·게시글)은 전부 SITE_TZ 를 쓴다.
+     */
     if (s.dailyLimit > 0) {
       const { rows: today } = await db.execute(sql`
         SELECT count(*) AS n FROM memo_messages
-        WHERE sender_id = ${user.id}::uuid AND created_at >= date_trunc('day', now())
+        WHERE sender_id = ${user.id}::uuid
+          AND created_at >= (date_trunc('day', now() AT TIME ZONE ${SITE_TZ}) AT TIME ZONE ${SITE_TZ})
       `);
       if (Number(today[0]?.n ?? 0) >= s.dailyLimit) {
         throw new MemoError(429, `하루 발송 한도(${s.dailyLimit}건)를 초과했습니다.`);

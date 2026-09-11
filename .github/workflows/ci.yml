@@ -119,6 +119,9 @@ jobs:
       - name: 메일 문구가 사이트 언어를 따른다 (메일은 사이트 밖에서 혼자 읽힌다)
         run: node scripts/check-mail-i18n.mjs
 
+      - name: "오늘"을 사이트 시간대로 센다 (UTC 자정은 한국에서 아침 9시다)
+        run: node scripts/check-site-timezone.mjs
+
       - name: 문서가 세는 숫자가 실제와 맞는다 (틀린 숫자는 틀린 설명보다 발견되기 어렵다)
         run: node scripts/check-doc-counts.mjs
 
