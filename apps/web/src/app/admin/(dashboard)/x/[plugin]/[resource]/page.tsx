@@ -6,50 +6,24 @@ import { useAdminT } from "../../../../../../lib/i18n-admin";
 import { useLocaleTag } from "../../../../../../lib/i18n";
 import { useModalFocus } from "../../../../../../lib/use-modal";
 
-/* ── 타입 (packages/core의 AdminResource와 대응) ───────── */
-interface AdminField {
-  name: string;
-  label: string;
-  type: "text" | "textarea" | "number" | "money" | "boolean" | "select" | "date" | "image" | "images" | "richtext";
-  options?: Array<{ value: string; label: string }>;
-  /** 선택지를 이 경로(플러그인 기준)에서 가져온다 */
-  optionsFrom?: string;
-  max?: number;
-  required?: boolean;
-  help?: string;
-  inList?: boolean;
-  readOnly?: boolean;
-  placeholder?: string;
-}
-interface AdminBulkAction {
-  code: string;
-  label: string;
-  confirm?: string;
-  destructive?: boolean;
-  input?: { name: string; label: string; optionsFrom?: string; type?: "select" | "textarea"; placeholder?: string; help?: string };
-}
-interface AdminResource {
-  plugin: string;
-  name: string;
-  /** "settings" 는 행이 하나뿐인 설정 화면 — 목록·페이지·선택 열이 없다 */
-  kind?: "list" | "settings";
-  title: string;
-  itemLabel: string;
-  basePath: string;
-  fields: AdminField[];
-  idField?: string;
-  can?: { create?: boolean; update?: boolean; delete?: boolean };
-  description?: string;
-  bulkActions?: AdminBulkAction[];
-  filters?: AdminFilter[];
-  importFrom?: { path: string; label: string; help?: string; sample?: string };
-}
-interface AdminFilter {
-  name: string;
-  label: string;
-  options?: Array<{ value: string; label: string }>;
-  optionsFrom?: string;
-}
+/* ── 타입 ──────────────────────────────────────────────
+ * 코어의 계약을 **그대로 쓴다**. 예전에는 같은 인터페이스를 여기에 손으로
+ * 베껴 두고 "packages/core의 AdminResource와 대응"이라고 적어 두었는데,
+ * 대응은 저절로 유지되지 않는다 — 코어에 `secret`(가려지는 자격증명 칸)을
+ * 더했을 때 화면 쪽 복사본에는 그 칸이 없어서 타입 오류가 났고, 오류가 나지
+ * 않는 추가(선택 필드)였다면 화면은 새 계약을 **조용히 무시**했을 것이다.
+ * import type 은 빌드에서 지워지므로 서버 코드가 화면에 딸려오지 않는다.
+ */
+import type {
+  AdminBulkAction,
+  AdminField,
+  AdminFilter,
+  AdminResource as CoreAdminResource,
+} from "@brick/core";
+
+/** 목록 화면이 받는 모양 — 코어 선언에 어느 플러그인 것인지가 더해진다 */
+type AdminResource = CoreAdminResource & { plugin: string };
+
 type Row = Record<string, unknown>;
 
 /**
@@ -437,6 +411,7 @@ export default function PluginResourcePage() {
  */
 function ResourceSettings({ resource }: { resource: AdminResource }) {
   const t = useAdminT();
+  const tag = useLocaleTag();
   const api = `/api/plugins/${resource.plugin}${resource.basePath}`;
   const [value, setValue] = useState<Row | null>(null);
   const [message, setMessage] = useState("");
@@ -476,17 +451,31 @@ function ResourceSettings({ resource }: { resource: AdminResource }) {
       {message && <p style={{ color: "var(--color-success)" }}>{message}</p>}
       {error && <p style={{ color: "var(--color-danger)" }}>{error}</p>}
       <div style={{ background: "var(--color-bg)", borderRadius: 8, padding: 24, maxWidth: 680 }}>
-        {resource.fields.filter((f) => !f.readOnly).map((f) => (
+        {/*
+          설정 화면에서는 readOnly 를 **숨기지 않고 보여준다**. 목록의 편집 폼에서는
+          숨기는 것이 맞다(행마다 붙는 id 같은 계산 열을 폼에 늘어놓을 이유가 없다).
+          그런데 설정 화면에는 목록이 없으므로, 숨기면 그 값을 볼 곳이 아예 사라진다.
+          토스페이먼츠의 "시크릿 키 설정됨"이 그랬다 — 키는 저장 뒤 다시 표시되지
+          않는 것이 옳지만, 그래서 운영자는 **키가 이미 들어 있는지조차** 알 수 없었다.
+          결제가 안 될 때 키를 다시 붙여 넣어 볼지 다른 곳을 볼지 판단할 근거가 없다.
+        */}
+        {resource.fields.map((f) => (
           <div key={f.name} style={{ marginBottom: 16 }}>
             <label htmlFor={`x-set-${f.name}`} style={{ display: "block", fontSize: 14, fontWeight: 600 }}>
               {f.label}{f.required && <span style={{ color: "var(--color-danger)" }}> *</span>}
             </label>
-            <FieldInput
-              id={`x-set-${f.name}`}
-              field={f}
-              value={value[f.name]}
-              onChange={(v) => setValue({ ...value, [f.name]: v })}
-            />
+            {f.readOnly ? (
+              <div id={`x-set-${f.name}`} style={{ padding: "9px 0", color: "var(--color-text-soft)" }}>
+                {formatCell(value[f.name], f, tag, t("x.wonSuffix"))}
+              </div>
+            ) : (
+              <FieldInput
+                id={`x-set-${f.name}`}
+                field={f}
+                value={value[f.name]}
+                onChange={(v) => setValue({ ...value, [f.name]: v })}
+              />
+            )}
             {f.help && <div style={{ fontSize: 12.5, color: "var(--color-muted)", marginTop: 4 }}>{f.help}</div>}
           </div>
         ))}
@@ -541,6 +530,15 @@ const inputBase = {
 function FieldInput({ id, field, value, onChange }: { id: string; field: AdminField; value: unknown; onChange: (v: unknown) => void }) {
   const t = useAdminT();
   const base = inputBase;
+
+  // 비밀 값은 타입보다 먼저 본다 — 가려야 하는 것은 가린 채로 두고, 빈칸은 "변경 없음"이다
+  if (field.secret) {
+    return (
+      <input id={id} type="password" autoComplete="new-password" style={base}
+        value={String(value ?? "")} placeholder={field.placeholder ?? t("x.secretPh")}
+        onChange={(e) => onChange(e.target.value)} />
+    );
+  }
 
   switch (field.type) {
     case "boolean":

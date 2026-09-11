@@ -9,6 +9,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@brick/core": "workspace:*",
     "@brick/shared": "workspace:*",
     "next": "^15.5.24",
     "react": "^19.0.0",

@@ -27,7 +27,7 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-3283%20passing-2ea043.svg" alt="스모크 테스트 3282개" />
+  <img src="https://img.shields.io/badge/E2E-3290%20passing-2ea043.svg" alt="스모크 테스트 3282개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
   <a href="https://github.com/bonjin-app/brick/pkgs/container/brick">
     <img src="https://img.shields.io/badge/docker-amd64%20%C2%B7%20arm64-2496ed.svg" alt="Docker image (amd64 · arm64)" />
@@ -367,7 +367,7 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 3,283개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 3,290개 항목):
 
 | 수트 | 항목 | 무엇을 못박는가 |
 |---|---:|---|
@@ -406,6 +406,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `smoke-theme.sh` | 223 | 라이트·다크 두 벌 · 토큰 CSS 주입 차단 · 테마 고치면 캐시 갱신 · 랜딩 블록 · **글 상세의 문서 제목** · **두 번째 테마(editorial) 같은 계약** · **Storefront** · **Boutique** · **미리보기** · **배너 슬라이드** · 퀵메뉴 · **Corporate** · **2단 메뉴** · **띠배너** |
 | `smoke-moderation.sh` | 31 | 금지 단어(우회 포함)·사칭 이름·금지 도메인·차단 IP(자기잠금)·분류 필수 |
 | `smoke-i18n.sh` | 69 | 언어가 실제 렌더를 바꿈 · 즉시 반영 · ko 폴백+로그 · 값은 번역 안 함 · 관리 선언 라벨 · **카드 제목 전수** · **리소스 선언 문자열 전수** · **금액·날짜 표기와 주문 메일도 언어를 따라간다(손님·관리 화면 모두)** · **코어 경로가 쓰는 플러그인 문구도** · 템플릿 잔해 금지 |
+| `smoke-settings.sh` | 7 | 설정 리소스 **전수** 왕복 — 선언한 칸이 저장되는가 · GET/PUT 모양 일치 · 거부하면 아무것도 안 바뀐다 · 비밀 값은 GET 으로 돌아오지 않는다 · 비로그인 403(코어는 401) |
 
 **정적 검사** — 서버는 되는데 화면이 없는(또는 그 반대인) 구멍을 CI 가 잡습니다.
 전부 실제로 겪은 결함에서 나왔습니다.
@@ -420,6 +421,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `check-plugin-cleanup.mjs` | 플러그인을 끄고도 등록한 것이 남는 것 (**꺼진 플러그인의 경로가 매칭되는데 그릴 블록이 없어 깨진 화면이 나온다**) |
 | `check-theme-tokens.mjs` | 어떤 테마도 정의하지 않는 토큰을 참조하는 것 (**폴백만 쓰여 테마가 그 색을 바꿀 수 없다** — 다크 테마에 밝은 선이 박혔다) |
 | `check-doc-counts.mjs` | 문서의 숫자가 실제와 어긋나는 것 (**스모크 표가 아홉 수트만큼 어긋나 있었고, 저장소 구조는 플러그인 여덟 개를 다섯 개로 적고 있었다**) |
+| `check-secret-fields.mjs` | 자격증명처럼 생긴 입력칸이 평문으로 그려지는 것 (**토스 시크릿 키가 보통 텍스트 칸이었다 — 붙여 넣는 동안 화면에 그대로 떠 있었다**) |
 
 그 밖에 CI 가 정적으로 보는 것: 테마 CSS 컴파일 산출물 일치, 모달의 `useModalFocus`,
 메일이 보내는 링크에 화면이 있는지, 마이그레이션 멱등성(2회 실행).
@@ -484,7 +486,7 @@ themes/
   boutique/       부티크 — 여백 위주
   corporate/      회사 홈페이지 — 히어로·특징 카드
 docs-site/        GitHub Pages 랜딩페이지
-scripts/          스모크 테스트 35종 + 정적 검사 8종 + OIDC 스텁 + 배포본 생성(build-release.sh)
+scripts/          스모크 테스트 36종 + 정적 검사 9종 + OIDC 스텁 + 배포본 생성(build-release.sh)
 docker/           Dockerfile, entrypoint
 ```
 

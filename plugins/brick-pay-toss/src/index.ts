@@ -311,7 +311,7 @@ export default definePlugin(async (ctx) => {
       { name: "enabled", label: "결제 사용", type: "boolean" },
       { name: "clientKey", label: "클라이언트 키", type: "text",
         help: "test_ck_ 또는 live_ck_ 로 시작합니다. 공개되어도 되는 값입니다." },
-      { name: "secretKey", label: "시크릿 키", type: "text",
+      { name: "secretKey", label: "시크릿 키", type: "text", secret: true,
         help: "test_sk_ 또는 live_sk_ 로 시작합니다. 절대 외부에 노출하지 마세요." },
       { name: "secretKeyConfigured", label: "시크릿 키 설정됨", type: "boolean", readOnly: true },
     ],

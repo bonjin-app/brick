@@ -108,6 +108,9 @@ jobs:
       - name: 참조하는 테마 토큰이 실제로 정의되어 있다 (폴백만 쓰이면 테마가 통제할 수 없다)
         run: node scripts/check-theme-tokens.mjs
 
+      - name: 자격증명 입력칸은 화면에서 가려진다
+        run: node scripts/check-secret-fields.mjs
+
       - name: 문서가 세는 숫자가 실제와 맞는다 (틀린 숫자는 틀린 설명보다 발견되기 어렵다)
         run: node scripts/check-doc-counts.mjs
 
@@ -210,6 +213,9 @@ jobs:
 
       - name: E2E 스모크 테스트 (다국어)
         run: bash scripts/smoke-i18n.sh
+
+      - name: E2E 스모크 테스트 (설정 화면 왕복 — 선언한 칸이 실제로 저장되는가)
+        run: bash scripts/smoke-settings.sh
 
       - name: E2E 스모크 테스트 (방문자·팝업)
         run: bash scripts/smoke-site.sh
