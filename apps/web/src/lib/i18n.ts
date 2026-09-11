@@ -242,6 +242,25 @@ let cachedLocale: string | null = null;
 let cachedSiteName: string | null = null;
 
 /** 사이트 언어 훅 — 공개·관리 화면이 공유한다 */
+/**
+ * 숫자·날짜·금액 포맷용 BCP-47 태그.
+ *
+ * 화면의 숫자는 **사이트 언어**를 따라야 한다. 그동안 세 갈래였다:
+ *   - `toLocaleString("ko-KR")` 로 못박은 곳 (영어 관리자도 "12,000원")
+ *   - `toLocaleString()` 로 비워 둔 곳 (**브라우저** 언어를 따른다 — 한국어 사이트를
+ *     미국 로케일 브라우저로 열면 날짜가 영어로 나온다)
+ *   - 쇼핑몰 플러그인의 `localeTag()` (사이트 언어를 따른다 — 이것이 맞다)
+ * 셋 중 맞는 하나로 모은다.
+ */
+export function localeTagFor(locale: string): string {
+  return locale === "en" ? "en-US" : "ko-KR";
+}
+
+/** 화면에서 쓰는 포맷 태그 — 사이트 언어를 따라간다 */
+export function useLocaleTag(): string {
+  return localeTagFor(useLocale());
+}
+
 export function useLocale(): string {
   const [locale, setLocale] = useState(cachedLocale ?? "ko");
 

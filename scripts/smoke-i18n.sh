@@ -229,6 +229,12 @@ RES_EN="$(curl -s -b "$CK" "$API/api/admin/resources/brick-shop/orders")"
 contains "필드 라벨이 영어" "$RES_EN" '"label":"Order no."'
 contains "옵션 라벨이 영어" "$RES_EN" '"label":"Paid"'
 contains "설명(help)도 영어" "$RES_EN" "restores stock automatically"
+# 관리 화면의 금액·숫자·날짜도 사이트 언어를 따른다. 손님 화면은 고쳤는데 관리
+# 화면만 ko-KR 로 못박혀 있어서, 영어로 쓰는 운영자가 "12,000원" 과 한국식 날짜를
+# 봤다. 표기는 코어 관리 셸이 하므로 계약(필드 type)과 문구만 서버가 낸다.
+contains "금액 접미사가 영어 (관리 셸이 이 문구로 그린다)" \
+  "$(curl -s -b "$CK" "$API/api/i18n")" '"locale":"en"'
+contains "금액 필드 선언 (type: money → 셸이 접미사를 붙인다)" "$RES_EN" '"type":"money"'
 DASH_EN="$(curl -s -b "$CK" "$API/api/admin/dashboard")"
 contains "대시보드 카드 제목도 영어" "$DASH_EN" '"title":"Orders today"'
 contains "카드 부가문구(ctx.t)도 영어" "$DASH_EN" "Yesterday 0"

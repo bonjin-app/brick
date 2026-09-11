@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { useAdminT } from "../../../../../../lib/i18n-admin";
+import { useLocaleTag } from "../../../../../../lib/i18n";
 import { useModalFocus } from "../../../../../../lib/use-modal";
 
 /* ── 타입 (packages/core의 AdminResource와 대응) ───────── */
@@ -60,6 +61,7 @@ type Row = Record<string, unknown>;
  */
 export default function PluginResourcePage() {
   const t = useAdminT();
+  const localeTag = useLocaleTag();
   const params = useParams<{ plugin: string; resource: string }>();
   const [res, setRes] = useState<AdminResource | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
@@ -393,7 +395,7 @@ export default function PluginResourcePage() {
                     )}
                     {/* data-label 은 좁은 화면에서 열 제목을 대신한다 — thead 가 접히므로 */}
                     {listFields.map((f) => (
-                      <td key={f.name} data-label={f.label} style={{ padding: 12 }}>{formatCell(row[f.name], f)}</td>
+                      <td key={f.name} data-label={f.label} style={{ padding: 12 }}>{formatCell(row[f.name], f, localeTag, t("x.wonSuffix"))}</td>
                     ))}
                     <td className="brick-x-actions" data-label="" style={{ padding: 12, whiteSpace: "nowrap" }}>
                       {can.update && <button onClick={() => void openEdit(row)} style={btnSm}>{t("common.edit")}</button>}
@@ -549,7 +551,8 @@ function FieldInput({ id, field, value, onChange }: { id: string; field: AdminFi
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <input id={id} type="number" style={base} value={String(value ?? "")} placeholder={field.placeholder}
             onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))} />
-          {field.type === "money" && <span style={{ color: "var(--color-text-soft)", whiteSpace: "nowrap" }}>원</span>}
+          {/* 통화 표시도 언어를 따라간다 (ko "원", en " KRW") */}
+          {field.type === "money" && <span style={{ color: "var(--color-text-soft)", whiteSpace: "nowrap" }}>{t("x.wonSuffix")}</span>}
         </div>
       );
     case "select":
@@ -907,17 +910,24 @@ function MediaPicker({ onPick, onPickMany, onClose, multiple }: {
   );
 }
 
-function formatCell(v: unknown, f: AdminField): string {
+/**
+ * 목록 셀 표기.
+ *
+ * 숫자·날짜·금액은 **사이트 언어**를 따른다. ko-KR 로 못박혀 있어서 영어로 쓰는
+ * 운영자도 "12,000원" 과 한국식 날짜를 봤다 (손님 화면은 이미 고쳤다 — 관리
+ * 화면만 남아 있었다).
+ */
+function formatCell(v: unknown, f: AdminField, tag: string, won: string): string {
   if (v === null || v === undefined || v === "") return "-";
-  if (f.type === "money") return `${Number(v).toLocaleString("ko-KR")}원`;
+  if (f.type === "money") return `${Number(v).toLocaleString(tag)}${won}`;
   if (f.type === "boolean") return v ? "✓" : "—";
-  if (f.type === "number") return Number(v).toLocaleString("ko-KR");
+  if (f.type === "number") return Number(v).toLocaleString(tag);
   if (f.type === "select") {
     if (v === null || v === undefined || v === "") return "";
     // 들여쓰기용 공백은 목록에서 떼고 보여준다
     return (f.options?.find((o) => o.value === String(v))?.label ?? String(v)).replace(/^\u00a0+/, "");
   }
-  if (f.type === "date") return new Date(String(v)).toLocaleString("ko-KR");
+  if (f.type === "date") return new Date(String(v)).toLocaleString(tag);
   const s = String(v);
   return s.length > 60 ? `${s.slice(0, 60)}…` : s;
 }

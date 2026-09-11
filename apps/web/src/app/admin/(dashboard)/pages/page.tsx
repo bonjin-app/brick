@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useAdminT } from "../../../../lib/i18n-admin";
+import { useLocaleTag } from "../../../../lib/i18n";
 
 /* ── 타입 ─────────────────────────────────────────── */
 interface PageRow { id: string; slug: string; title: string; status: string; updatedAt: string }
@@ -24,6 +25,7 @@ const EMPTY: PageDraft = { slug: "", title: "", status: "draft", blocks: [], seo
 
 /* ── 페이지 목록 + 빌더 ─────────────────────────────── */
 export default function AdminPagesPage() {
+  const localeTag = useLocaleTag();
   const t = useAdminT();
   const [rows, setRows] = useState<PageRow[]>([]);
   const [catalog, setCatalog] = useState<BlockDef[]>([]);
@@ -98,7 +100,7 @@ export default function AdminPagesPage() {
               <td style={{ padding: 12 }}><strong>{p.title}</strong></td>
               <td><code>/{p.slug}</code></td>
               <td>{p.status === "published" ? t("pages.published") : p.status === "draft" ? t("pages.draft") : t("pages.archived")}</td>
-              <td style={{ color: "var(--color-muted)", fontSize: 13 }}>{new Date(p.updatedAt).toLocaleString("ko-KR")}</td>
+              <td style={{ color: "var(--color-muted)", fontSize: 13 }}>{new Date(p.updatedAt).toLocaleString(localeTag)}</td>
             </tr>
           ))}
           {!rows.length && <tr><td colSpan={4} style={{ padding: 24, color: "var(--color-muted)" }}>{t("pages.empty")}</td></tr>}

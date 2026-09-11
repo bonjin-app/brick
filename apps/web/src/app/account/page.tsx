@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { authButton, authInput, authLabel } from "../../components/AuthShell";
-import { useSiteName, useT } from "../../lib/i18n";
+import { useSiteName, useT, useLocaleTag } from "../../lib/i18n";
 
 interface Profile {
   email: string;
@@ -35,6 +35,7 @@ interface Session {
  * 들어온다. 색은 전부 명시한다 (AuthShell 과 같은 이유 — UA 다크 잠식 방지).
  */
 export default function AccountPage() {
+  const localeTag = useLocaleTag();
   const t = useT();
   const siteName = useSiteName();
   const [me, setMe] = useState<Profile | null>(null);
@@ -333,7 +334,7 @@ export default function AccountPage() {
                   {s.device}{" "}
                   {s.isCurrent && <em style={{ fontStyle: "normal", color: "var(--color-success)", fontSize: 12.5 }}>· {t("account.sessionCurrent")}</em>}
                   <br />
-                  <span style={small}>{t("account.lastSeen")}: {new Date(s.lastSeenAt ?? s.createdAt).toLocaleString()}</span>
+                  <span style={small}>{t("account.lastSeen")}: {new Date(s.lastSeenAt ?? s.createdAt).toLocaleString(localeTag)}</span>
                 </span>
                 {!s.isCurrent && (
                   <button style={{ ...small, border: "1px solid var(--color-line)", background: "var(--color-bg)", borderRadius: 7, padding: "5px 10px", cursor: "pointer" }}

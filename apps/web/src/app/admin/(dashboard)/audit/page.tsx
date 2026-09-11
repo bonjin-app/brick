@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useAdminT } from "../../../../lib/i18n-admin";
+import { useLocaleTag } from "../../../../lib/i18n";
 
 interface AuditRow {
   id: string;
@@ -28,6 +29,7 @@ const KNOWN_ACTIONS = [
 const SENSITIVE = new Set(["user.role_change", "user.status_change", "plugin.install", "theme.install"]);
 
 export default function AdminAuditPage() {
+  const localeTag = useLocaleTag();
   const t = useAdminT();
   const [data, setData] = useState<{ items: AuditRow[]; total: number }>({ items: [], total: 0 });
   const [page, setPage] = useState(1);
@@ -62,7 +64,7 @@ export default function AdminAuditPage() {
             {data.items.map((r) => (
               <tr key={r.id} style={{ borderBottom: "1px solid var(--color-line)" }}>
                 <td style={{ padding: 12, whiteSpace: "nowrap", color: "var(--color-text-soft)" }}>
-                  {new Date(r.createdAt).toLocaleString()}
+                  {new Date(r.createdAt).toLocaleString(localeTag)}
                 </td>
                 <td>{r.actorEmail ?? <span style={{ color: "var(--color-muted)" }}>{t("audit.system")}</span>}</td>
                 <td style={SENSITIVE.has(r.action) ? { color: "var(--color-danger)", fontWeight: 600 } : undefined}>

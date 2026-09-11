@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAdminT } from "../../../lib/i18n-admin";
+import { useLocaleTag } from "../../../lib/i18n";
 
 interface DashCard {
   plugin: string;
@@ -36,6 +37,7 @@ interface AuditRow {
 }
 
 export default function AdminDashboard() {
+  const localeTag = useLocaleTag();
   const t = useAdminT();
   const [dash, setDash] = useState<Dashboard | null>(null);
   const [dashFailed, setDashFailed] = useState(false);
@@ -156,7 +158,7 @@ export default function AdminDashboard() {
           <ul className="brick-activity">
             {recent.map((r) => (
               <li key={r.id}>
-                <time dateTime={r.createdAt} title={new Date(r.createdAt).toLocaleString()}>
+                <time dateTime={r.createdAt} title={new Date(r.createdAt).toLocaleString(localeTag)}>
                   {new Date(r.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                 </time>
                 <span className="brick-activity-actor">{r.actorEmail ?? t("audit.system")}</span>

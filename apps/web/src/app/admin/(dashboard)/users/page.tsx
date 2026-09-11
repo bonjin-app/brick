@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useAdminT } from "../../../../lib/i18n-admin";
+import { useLocaleTag } from "../../../../lib/i18n";
 
 interface UserRow {
   id: string; email: string; displayName: string;
@@ -11,6 +12,7 @@ interface UserRow {
 const ROLES = ["admin", "manager", "member"] as const;
 
 export default function AdminUsersPage() {
+  const localeTag = useLocaleTag();
   const t = useAdminT();
   const [data, setData] = useState<{ items: UserRow[]; total: number }>({ items: [], total: 0 });
   const [message, setMessage] = useState("");
@@ -122,7 +124,7 @@ export default function AdminUsersPage() {
                   style={{ width: "100%", fontSize: 13, resize: "vertical", minHeight: 32 }}
                 />
               </td>
-              <td style={{ color: "var(--color-muted)", fontSize: 13 }}>{new Date(u.createdAt).toLocaleDateString()}</td>
+              <td style={{ color: "var(--color-muted)", fontSize: 13 }}>{new Date(u.createdAt).toLocaleDateString(localeTag)}</td>
             </tr>
           ))}
         </tbody>
