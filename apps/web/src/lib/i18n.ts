@@ -251,12 +251,21 @@ let cachedSiteName: string | null = null;
  *     미국 로케일 브라우저로 열면 날짜가 영어로 나온다)
  *   - 쇼핑몰 플러그인의 `localeTag()` (사이트 언어를 따른다 — 이것이 맞다)
  * 셋 중 맞는 하나로 모은다.
+ *
+ * **날짜는 브라우저에서만 이 태그로 포맷한다.** Node 는 `ko-KR` 의 오전/오후를
+ * "PM" 으로 내는 경우가 있다 — full ICU 에서도 그렇다(확인: Node 22.23 / ICU 78,
+ * `2026. 9. 11. PM 2:06:35`). 게시판 플러그인이 그것을 겪고 서버용 날짜 포맷터를
+ * 직접 들고 있다(`plugins/brick-board/src/types.ts` 의 `fullDate`). 이 파일의
+ * 태그를 쓰는 곳은 전부 `"use client"` 이므로 브라우저 ICU 를 쓴다 — 서버
+ * 컴포넌트나 API 로 날짜 포맷을 옮길 때는 그 포맷터를 쓸 것.
+ *
+ * 숫자·금액의 자리 묶음은 그런 문제가 없다(서버·브라우저 모두 "12,000").
  */
 export function localeTagFor(locale: string): string {
   return locale === "en" ? "en-US" : "ko-KR";
 }
 
-/** 화면에서 쓰는 포맷 태그 — 사이트 언어를 따라간다 */
+/** 화면에서 쓰는 포맷 태그 — 사이트 언어를 따라간다 (브라우저 전용: 위 주석 참고) */
 export function useLocaleTag(): string {
   return localeTagFor(useLocale());
 }

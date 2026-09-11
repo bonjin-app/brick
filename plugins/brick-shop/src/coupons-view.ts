@@ -1,6 +1,6 @@
 import type { PluginContext } from "@brick/plugin-sdk";
 import { escapeHtml } from "@brick/plugin-sdk";
-import { moneyFnScript } from "./i18n.js";
+import { moneyFnScript, localeTag } from "./i18n.js";
 
 /**
  * 쿠폰함 화면.
@@ -78,6 +78,9 @@ const couponScript = (t: (k: string, p?: Record<string, string | number>) => str
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
   ${moneyFnScript("won")}
+  // 날짜도 사이트 언어를 따른다 — 태그를 비우면 **브라우저** 언어를 따라가고,
+  // 같은 화면을 두 사람이 다르게 본다
+  var TAG = ${JSON.stringify(localeTag())};
 
   fetch('/api/plugins/brick-shop/me/coupons')
     .then(function (r) { return r.ok ? r.json() : { items: [] }; })
@@ -95,7 +98,7 @@ const couponScript = (t: (k: string, p?: Record<string, string | number>) => str
         var notes = [];
         if (c.minAmount > 0) notes.push(${JSON.stringify(t("coupons.minAmount", { amount: "__A__" }))}.replace('__A__', won(c.minAmount)));
         if (c.maxDiscount) notes.push(${JSON.stringify(t("coupons.maxDiscount", { amount: "__A__" }))}.replace('__A__', won(c.maxDiscount)));
-        if (c.endsAt) notes.push(${JSON.stringify(t("coupons.until", { date: "__D__" }))}.replace('__D__', new Date(c.endsAt).toLocaleDateString()));
+        if (c.endsAt) notes.push(${JSON.stringify(t("coupons.until", { date: "__D__" }))}.replace('__D__', new Date(c.endsAt).toLocaleDateString(TAG)));
         if (c.status === 'used' && c.usedOrderNo) {
           notes.push(${JSON.stringify(t("coupons.usedOn", { orderNo: "__O__" }))}.replace('__O__', esc(c.usedOrderNo)));
         }

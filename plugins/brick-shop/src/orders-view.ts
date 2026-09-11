@@ -89,6 +89,7 @@ const listScript = (t: (k: string) => string, labels: string) => `
   var base = root.dataset.base;
   var LABEL = ${labels};
   ${moneyFnScript("fmt")}
+  var TAG = ${JSON.stringify(localeTag())};  // 날짜도 사이트 언어를 따른다
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 
@@ -117,7 +118,7 @@ const listScript = (t: (k: string) => string, labels: string) => `
       }
       var rows = d.items.map(function(o){
         return '<tr>' +
-          '<td>' + new Date(o.created_at).toLocaleDateString() + '</td>' +
+          '<td>' + new Date(o.created_at).toLocaleDateString(TAG) + '</td>' +
           '<td><a href="' + base + '/orders/' + encodeURIComponent(o.order_no) + '">' + esc(o.order_no) + '</a><br />' +
           '<small>' + esc(o.items_summary || '') + '</small></td>' +
           '<td class="brick-o-total">' + fmt(o.total) + '</td>' +
@@ -162,6 +163,7 @@ const detailScript = (t: (k: string, p?: Record<string, string | number>) => str
   var no = root.dataset.orderNo;
   var LABEL = ${labels};
   ${moneyFnScript("fmt")}
+  var TAG = ${JSON.stringify(localeTag())};  // 날짜도 사이트 언어를 따른다
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 
@@ -186,7 +188,7 @@ const detailScript = (t: (k: string, p?: Record<string, string | number>) => str
 
         var deadline = v.withdrawalDeadline
           ? '<p class="brick-ret-note">' + ${JSON.stringify(t("ret.withdrawalDeadline", { date: "__D__" }))}
-              .replace('__D__', new Date(v.withdrawalDeadline).toLocaleDateString()) + '</p>'
+              .replace('__D__', new Date(v.withdrawalDeadline).toLocaleDateString(TAG)) + '</p>'
           : '';
         var expired = v.withdrawalExpired
           ? '<p class="brick-ret-note">' + ${JSON.stringify(t("ret.withdrawalExpired"))} + '</p>' : '';

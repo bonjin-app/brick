@@ -19,7 +19,13 @@ export function bindI18n(ctx: Pick<PluginContext, "t" | "locale">): void {
 
 export const t: TFn = (key, params) => boundT(key, params);
 
-/** 날짜 포맷용 BCP-47 태그 — 문자열 카탈로그와 같은 언어 설정을 따른다 */
+/**
+ * 날짜·숫자 포맷용 BCP-47 태그 — 문자열 카탈로그와 같은 언어 설정을 따른다.
+ *
+ * 주의: 이 태그로 **서버에서 날짜를** 포맷하면 `ko-KR` 의 오전/오후가 "PM" 으로
+ * 나올 수 있다(Node 의 ICU. full ICU 에서도 확인됐다). 게시판 플러그인이 그 때문에
+ * 서버용 날짜 포맷터를 직접 들고 있다. 숫자·금액의 자리 묶음은 문제가 없다.
+ */
 export function localeTag(): string {
   return boundLocale() === "en" ? "en-US" : "ko-KR";
 }
