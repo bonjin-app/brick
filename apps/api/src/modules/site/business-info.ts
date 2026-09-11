@@ -46,6 +46,7 @@ export interface BusinessInfo {
 
 // 체크섬은 코어에 있다 — 쇼핑몰 세금계산서 발급도 같은 규칙을 써야 한다
 import { formatBusinessNo, isValidBusinessNo } from "@brick/core";
+import { josa } from "@brick/core";
 export { formatBusinessNo, isValidBusinessNo };
 
 export const BUSINESS_INFO_KEYS = [
@@ -126,7 +127,7 @@ export function validateBusinessInfo(input: Partial<Record<string, unknown>>): V
   for (const key of BUSINESS_INFO_KEYS) {
     const value = String(input?.[key] ?? "").trim();
     if (value.length > 300) {
-      errors.push(`${FIELD_LABEL[key]}이(가) 너무 깁니다. (300자 이내)`);
+      errors.push(`${josa(FIELD_LABEL[key], "이/가")} 너무 깁니다. (300자 이내)`);
       continue;
     }
     info[key] = value;

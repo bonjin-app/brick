@@ -11,6 +11,7 @@
  * 규칙은 코어와 같다: 요청 언어 → ko → 키 자체.
  */
 import { useEffect, useState } from "react";
+import { josa } from "@brick/core";
 
 const KO = {
   "login.title": "로그인",
@@ -318,7 +319,20 @@ export function translatorFor<K extends string>(
   return (key, params) => {
     let message = catalogs[locale]?.[key] ?? koCatalog[key] ?? key;
     for (const [k, v] of Object.entries(params ?? {})) {
-      message = message.replace(`{${k}}`, String(v));
+      const value = String(v);
+      /*
+       * `{label:을/를}` — 값의 받침을 보고 조사를 고른다.
+       *
+       * 이름이 값에서 오기 때문에(리소스마다 "주문"·"FAQ"·"기획전") 문구를 미리
+       * 고정할 수 없어서 카탈로그에 "을(를)"이라고 적어 두고 있었다. 괄호 표기는
+       * 서식이 아니라 **포기**다 — 화면에는 "FAQ을(를) 저장했습니다"가 그대로 뜬다.
+       * 영어 카탈로그는 이 표기를 쓰지 않으므로 아무것도 달라지지 않는다.
+       */
+      message = message.replace(
+        new RegExp(`\\{${k}:([^}]+)\\}`, "g"),
+        (_m, pair: string) => josa(value, pair),
+      );
+      message = message.replace(`{${k}}`, value);
     }
     return message;
   };

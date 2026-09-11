@@ -26,6 +26,8 @@ export type {
 export { rawResponse } from "@brick/core";
 // 한국 전용 검증 — 코어와 플러그인이 같은 규칙을 쓴다 (체크섬을 복제하면 갈라진다)
 export { isValidBusinessNo, formatBusinessNo } from "@brick/core";
+// 조사(을/를·이/가) — 이름이 값에서 오므로 화면마다 "을(를)"을 적어 두게 된다
+export { josa, hasJongseong } from "@brick/core";
 // 권한 등급 — 권한 비교를 베끼면 한쪽만 고쳐지고 그것이 권한 구멍이 된다
 export { ROLE_RANK, rankOf, hasRole } from "@brick/core";
 export type { RoleBearer } from "@brick/core";

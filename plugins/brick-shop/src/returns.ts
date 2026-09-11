@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { josa } from "@brick/plugin-sdk";
 import { uuidv7 } from "uuidv7";
 import type { Db } from "./types.js";
 import { cancelReceiptsForOrder } from "./tax.js";
@@ -299,7 +300,7 @@ export async function requestReturn(
     if (qty > item.availableQty) {
       throw new ShopError(
         400,
-        `${item.productName}은(는) ${item.availableQty}개까지만 신청할 수 있습니다.`,
+        `${josa(item.productName, "은/는")} ${item.availableQty}개까지만 신청할 수 있습니다.`,
       );
     }
     if (lines.some((l) => l.orderItemId === item.orderItemId)) {

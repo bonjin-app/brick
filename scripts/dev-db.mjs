@@ -15,6 +15,7 @@
 import EmbeddedPostgres from "embedded-postgres";
 import { rm } from "node:fs/promises";
 import { resolve } from "node:path";
+import { createConnection } from "node:net";
 
 const PORT = Number(process.env.BRICK_DEV_DB_PORT ?? 55432);
 const DIR = resolve(process.env.BRICK_DEV_DB_DIR ?? ".dev-db");
@@ -24,6 +25,29 @@ const reset = process.argv.includes("--reset");
 if (reset) {
   console.log(`데이터를 지웁니다: ${DIR}`);
   await rm(DIR, { recursive: true, force: true });
+}
+
+/**
+ * 먼저 포트를 확인한다.
+ *
+ * 이미 뭔가 듣고 있는데 그대로 start() 하면 postmaster 가 "lock file
+ * postmaster.pid already exists" 로 죽는데, embedded-postgres 는 그 실패를
+ * **빈 값으로** 거절한다 — 그래서 화면에는 `undefined` 한 줄만 남고 무엇을
+ * 해야 할지 알 수 없었다. 실제로 여러 번 그렇게 막혔다.
+ */
+if (await inUse(PORT)) {
+  console.error(`\n❌ :${PORT} 를 이미 무언가 쓰고 있습니다.`);
+  console.error(`
+전에 띄운 개발 DB 가 아직 살아 있을 가능성이 큽니다. 확인하고 정리하세요:
+
+  lsof -nP -iTCP:${PORT}      무엇이 쓰는지 본다
+  pkill -f postgres            이전 개발 DB 를 멈춘다
+
+이미 쓸 수 있는 DB 라면 그대로 쓰면 됩니다:
+
+  export DATABASE_URL=${URL}
+`);
+  process.exit(1);
 }
 
 const pg = new EmbeddedPostgres({
@@ -40,7 +64,23 @@ try {
 } catch (err) {
   if (!/exists|not empty|initialised|initialized/i.test(String(err?.message ?? err))) throw err;
 }
-await pg.start();
+try {
+  await pg.start();
+} catch (err) {
+  const detail = String(err?.message ?? err ?? "").trim();
+  console.error(`\n❌ PostgreSQL 을 띄우지 못했습니다.${detail && detail !== "undefined" ? ` (${detail})` : ""}`);
+  console.error(`
+데이터 디렉터리(${DIR})가 어중간한 상태일 때 이렇게 됩니다 — 초기화가 중간에
+끊겼거나, 이전 프로세스가 잠금 파일을 남겼거나. **개발용 데이터**이므로 지우고
+다시 만드는 것이 가장 빠릅니다:
+
+  pkill -f postgres
+  node scripts/dev-db.mjs --reset
+
+위에 출력된 initdb·postmaster 메시지에 실제 원인이 적혀 있습니다.
+`);
+  process.exit(1);
+}
 
 console.log(`\n✅ PostgreSQL 준비됨\n`);
 console.log(`   export DATABASE_URL=${URL}\n`);
@@ -57,3 +97,15 @@ const stop = async () => {
 };
 process.on("SIGINT", stop);
 process.on("SIGTERM", stop);
+
+/** 그 포트에 이미 듣고 있는 것이 있는가 */
+function inUse(port) {
+  return new Promise((res) => {
+    const sock = createConnection({ host: "127.0.0.1", port });
+    const done = (v) => { sock.destroy(); res(v); };
+    sock.setTimeout(1000);
+    sock.once("connect", () => done(true));
+    sock.once("timeout", () => done(false));
+    sock.once("error", () => done(false));
+  });
+}
