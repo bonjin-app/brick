@@ -580,6 +580,23 @@ check "비관리자는 목록을 볼 수 없다" "$(code "$SHOP/admin/payment-re
 PAID_ONLY="$(curl -s -b "$CK" "$SHOP/admin/payment-requests?status=paid")"
 check "상태 필터" "$(echo "$PAID_ONLY" | jq_get "['total']")" "1"
 
+echo "── 개인결제 손님도 결제 안내를 받는다 (**맨 끝** — 청구를 하나 더 만들므로)"
+# 앞 절의 리포트·상태 필터가 청구 건수를 세므로 여기서 만든다 — 앞에 두면 그 숫자가
+# 어긋난다(이 세션에서 두 번 겪은 순서 의존성이다).
+# 주문 안내 메일은 changeOrderStatus 의 전이 지점 하나에서 나간다. 개인결제는
+# 주문서를 거치지 않는 별도 경로이므로, 그 경로에서도 실제로 닿는지 확인한다 —
+# 손님이 링크로 결제하고 아무 소식도 못 받으면 "결제가 된 건가" 하고 다시 누른다.
+PR_MAIL="$(curl -s -b "$CK" -X POST "$SHOP/admin/payment-requests" -H 'content-type: application/json' \
+  -d '{"title":"안내메일 청구","amount":30000,"customerName":"메일손님","customerPhone":"010-2222-3333","customerEmail":"pr@mail.test"}')"
+PRM_TOKEN="$(echo "$PR_MAIL" | jq_get "['token']")"
+PRM_ORDER="$(curl -s -X POST "$SHOP/pay/$PRM_TOKEN/prepare" -H 'content-type: application/json' -d '{}' | jq_get "['orderNo']")"
+curl -s -X POST "$SHOP/payments/confirm" -H 'content-type: application/json' \
+  -d "{\"orderNo\":\"$PRM_ORDER\",\"provider\":\"toss\",\"providerTid\":\"pk_prm\",\"amount\":30000}" -o /dev/null
+sleep 1
+PRM_LOG="$(cat "$TMP/api.log")"
+contains "청구서에 적은 주소로 간다" "$PRM_LOG" "to: pr@mail.test"
+contains "결제 확인 안내" "$PRM_LOG" "결제가 확인되었습니다 ($PRM_ORDER)"
+
 echo
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 [[ $FAIL -eq 0 ]] || { echo; echo "── PG 로 나간 요청 ──"; pg_calls; echo "── 서버 로그 ──"; tail -40 "$TMP/api.log"; exit 1; }
