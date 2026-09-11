@@ -424,6 +424,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `check-smoke-counts.mjs` | 스모크 표의 각 행이 실제 실행 결과와 어긋나는 것 (**doc-counts 는 표의 내부 일관성만 본다 — 단언을 더해도 그 줄을 고치는 사람이 없으면 표는 조용히 낡는다**) |
 | `check-secret-fields.mjs` | 자격증명처럼 생긴 입력칸이 평문으로 그려지는 것 (**토스 시크릿 키가 보통 텍스트 칸이었다 — 붙여 넣는 동안 화면에 그대로 떠 있었다**) |
 | `check-admin-field-names.mjs` | 화면이 보내는 칸 이름을 서버가 읽지 않는 것 (**승인번호를 적고 저장하면 "승인번호를 입력해주세요" 가 떴다 — 방금 적은 그 칸을 두고**) |
+| `check-mail-i18n.mjs` | 메일 제목이 한국어로 박히는 것 (**영어 사이트 회원이 비밀번호를 잃어버리면 한국어 메일을 받았다 — 재입고 메일은 가격 줄만 번역돼 있었다**) |
 
 그 밖에 CI 가 정적으로 보는 것: 테마 CSS 컴파일 산출물 일치, 모달의 `useModalFocus`,
 메일이 보내는 링크에 화면이 있는지, 마이그레이션 멱등성(2회 실행).
@@ -488,7 +489,7 @@ themes/
   boutique/       부티크 — 여백 위주
   corporate/      회사 홈페이지 — 히어로·특징 카드
 docs-site/        GitHub Pages 랜딩페이지
-scripts/          스모크 테스트 36종 + 정적 검사 11종 + OIDC 스텁 + 배포본 생성(build-release.sh)
+scripts/          스모크 테스트 36종 + 정적 검사 12종 + OIDC 스텁 + 배포본 생성(build-release.sh)
 docker/           Dockerfile, entrypoint
 ```
 

@@ -20,6 +20,7 @@ import type { Db, ShopSettings } from "./types.js";
 import { ShopError } from "./types.js";
 import { createOrder, changeOrderStatus, type OrdererInput, type PointsPort } from "./orders.js";
 import { gateways, type PaymentGateway } from "./payments.js";
+// 메일 문구도 사이트 언어를 따른다 — 메일은 사이트 밖에서 혼자 읽힌다
 import { t, money } from "./i18n.js";
 
 export const SUBSCRIPTION_QUEUE_JOB = "shop.subscription.charge";
@@ -372,9 +373,9 @@ export async function chargeDueSubscriptions(
         paused += 1;
         await deps.notify({
           email,
-          subject: `[정기배송 중지] ${name}`,
-          text: `정기배송이 중지되었습니다.\n\n상품: ${name}\n사유: ${reason}\n\n` +
-                `마이페이지 > 정기배송에서 확인하실 수 있습니다. 결제된 금액은 없습니다.`,
+          subject: t("subsmail.pausedSubject", { name }),
+          text: `${t("subsmail.pausedBody")}\n\n${t("subsmail.product", { name })}\n` +
+                `${t("subsmail.reason", { reason })}\n\n${t("subsmail.pausedWhere")}`,
         }).catch(() => false);
       };
 
@@ -523,18 +524,18 @@ async function recordFailure(
     `);
     await deps.notify({
       email: params.email,
-      subject: `[정기배송 중지] ${params.name}`,
-      text: `결제가 ${MAX_FAILS}회 연속 실패하여 정기배송이 중지되었습니다.\n\n` +
-            `상품: ${params.name}\n사유: ${params.reason}\n\n` +
-            `카드를 확인하신 뒤 마이페이지 > 정기배송에서 재개할 수 있습니다.`,
+      subject: t("subsmail.pausedSubject", { name: params.name }),
+      text: `${t("subsmail.pausedFailBody", { n: MAX_FAILS })}\n\n` +
+            `${t("subsmail.product", { name: params.name })}\n${t("subsmail.reason", { reason: params.reason })}\n\n` +
+            `${t("subsmail.pausedResume")}`,
     }).catch(() => false);
   } else {
     await deps.notify({
       email: params.email,
-      subject: `[정기배송 결제 실패] ${params.name}`,
-      text: `정기배송 결제에 실패했습니다. ${RETRY_DELAY_HOURS}시간 뒤 다시 시도합니다.\n\n` +
-            `상품: ${params.name}\n사유: ${params.reason}\n` +
-            `(${MAX_FAILS}회 연속 실패하면 정기배송이 중지됩니다)`,
+      subject: t("subsmail.failSubject", { name: params.name }),
+      text: `${t("subsmail.failBody", { hours: RETRY_DELAY_HOURS })}\n\n` +
+            `${t("subsmail.product", { name: params.name })}\n${t("subsmail.reason", { reason: params.reason })}\n` +
+            `${t("subsmail.failNote", { n: MAX_FAILS })}`,
     }).catch(() => false);
   }
 }
