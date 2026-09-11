@@ -31,6 +31,8 @@ jobs:
       DATABASE_URL: postgresql://brick:brick@localhost:5432/brick
       BRICK_SECRET: ci-secret-not-for-production-use
       BRICK_API_PORT: "3001"
+      # 각 수트가 "<파일> <통과> <실패>" 를 여기에 덧붙인다 — 마지막 단계가 README 표와 대조한다
+      BRICK_SMOKE_LOG: /tmp/smoke-counts.log
 
     steps:
       - uses: actions/checkout@v7
@@ -231,6 +233,9 @@ jobs:
 
       - name: E2E 스모크 테스트 (업그레이드 — 데이터가 있는 사이트)
         run: bash scripts/smoke-upgrade.sh
+
+      - name: README 의 스모크 표가 실측과 같다 (단언을 더했으면 그 줄도 고친다)
+        run: node scripts/check-smoke-counts.mjs /tmp/smoke-counts.log
 
       - name: pnpm deploy 번들 검증 (Docker 런타임과 동일 경로)
         run: |

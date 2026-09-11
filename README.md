@@ -421,6 +421,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `check-plugin-cleanup.mjs` | 플러그인을 끄고도 등록한 것이 남는 것 (**꺼진 플러그인의 경로가 매칭되는데 그릴 블록이 없어 깨진 화면이 나온다**) |
 | `check-theme-tokens.mjs` | 어떤 테마도 정의하지 않는 토큰을 참조하는 것 (**폴백만 쓰여 테마가 그 색을 바꿀 수 없다** — 다크 테마에 밝은 선이 박혔다) |
 | `check-doc-counts.mjs` | 문서의 숫자가 실제와 어긋나는 것 (**스모크 표가 아홉 수트만큼 어긋나 있었고, 저장소 구조는 플러그인 여덟 개를 다섯 개로 적고 있었다**) |
+| `check-smoke-counts.mjs` | 스모크 표의 각 행이 실제 실행 결과와 어긋나는 것 (**doc-counts 는 표의 내부 일관성만 본다 — 단언을 더해도 그 줄을 고치는 사람이 없으면 표는 조용히 낡는다**) |
 | `check-secret-fields.mjs` | 자격증명처럼 생긴 입력칸이 평문으로 그려지는 것 (**토스 시크릿 키가 보통 텍스트 칸이었다 — 붙여 넣는 동안 화면에 그대로 떠 있었다**) |
 | `check-admin-field-names.mjs` | 화면이 보내는 칸 이름을 서버가 읽지 않는 것 (**승인번호를 적고 저장하면 "승인번호를 입력해주세요" 가 떴다 — 방금 적은 그 칸을 두고**) |
 
@@ -487,7 +488,7 @@ themes/
   boutique/       부티크 — 여백 위주
   corporate/      회사 홈페이지 — 히어로·특징 카드
 docs-site/        GitHub Pages 랜딩페이지
-scripts/          스모크 테스트 36종 + 정적 검사 10종 + OIDC 스텁 + 배포본 생성(build-release.sh)
+scripts/          스모크 테스트 36종 + 정적 검사 11종 + OIDC 스텁 + 배포본 생성(build-release.sh)
 docker/           Dockerfile, entrypoint
 ```
 

@@ -270,4 +270,7 @@ check "범위 밖 설정 거부" "$(code -b "$ADMIN" -X PUT "$MM/admin/settings"
 
 echo
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
+# 실측을 남긴다(설정됐을 때만) — README 의 표가 실제와 같은지 CI 가 대조한다.
+# 표의 숫자는 조용히 썩는다: 단언을 더해도 아무도 그 줄을 고치지 않는다.
+[[ -n "${BRICK_SMOKE_LOG:-}" ]] && echo "$(basename "${BASH_SOURCE[0]}") ${PASS} ${FAIL}" >> "$BRICK_SMOKE_LOG"
 [[ $FAIL -eq 0 ]] || { echo; echo "── 서버 로그 ──"; tail -40 "$TMP/api.log"; exit 1; }
