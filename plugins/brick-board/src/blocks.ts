@@ -1,3 +1,4 @@
+import { dateScript } from "@brick/plugin-sdk";
 import { sql } from "drizzle-orm";
 import type { PluginContext } from "@brick/plugin-sdk";
 import { effectiveReadRole, escapeHtml, hasRole, shortDate, type BoardRow, type Db } from "./types.js";
@@ -407,6 +408,7 @@ const SCRAPS_CSS = `
 /** 스크랩 목록 클라이언트 — 목록 조회와 해제 */
 const scrapsScript = () => `
 <script>
+${dateScript()}
 (function(){
   var root = document.getElementById('brick-scraps');
   if (!root) return;
@@ -414,12 +416,8 @@ const scrapsScript = () => `
   var API = '/api/plugins/brick-board';
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
-  function d2(v){
-    var d = new Date(v);
-    if (isNaN(d.getTime())) return '';
-    var p = function(n){ return String(n).padStart(2,'0'); };
-    return d.getFullYear() + '.' + p(d.getMonth()+1) + '.' + p(d.getDate());
-  }
+  // 날짜는 사이트 시간대로 — 서버가 그리는 목록과 같은 날짜를 보여야 한다
+  var d2 = window.brickDate.day;
 
   function load(){
     fetch(API + '/my/scraps').then(function(r){ return r.ok ? r.json() : null; }).then(function(d){

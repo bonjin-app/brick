@@ -64,3 +64,57 @@ export function siteDateParts(value: Date): {
   const hour = get("hour") === "24" ? "00" : get("hour");
   return { year: get("year"), month: get("month"), day: get("day"), hour, minute: get("minute") };
 }
+
+/**
+ * 브라우저에서 쓸 날짜 포맷터 — 사이트 시간대로 찍는다.
+ *
+ * 클라이언트가 그리는 목록(쪽지함·내 스크랩·포인트 내역)은 `d.getFullYear()` 로
+ * 시각을 찍고 있었다. 그것은 **보는 사람의 시간대**다. 서버가 그리는 목록은
+ * 사이트 시간대이므로, 해외에서 접속한 회원은 같은 화면 위아래에서 **다른
+ * 날짜**를 본다(게시판 목록은 09.12, 그 아래 쪽지함은 09.11).
+ *
+ * 무엇을 고르든 한쪽으로 통일되어야 하고, 이 저장소는 "오늘"을 사이트
+ * 시간대로 정의했다(SITE_TZ). 그래서 브라우저도 그것을 따른다.
+ *
+ * 플러그인마다 베끼면 한 곳만 고쳐진다 — 캡차 위젯과 같은 이유로 여기에 둔다.
+ * 브라우저는 ICU 가 온전하므로 timeZone 옵션을 믿을 수 있다.
+ */
+export function dateScript(tz: string = SITE_TZ): string {
+  return `
+(function () {
+  if (window.brickDate) return;
+  var TZ = ${JSON.stringify(tz)};
+  function parts(v) {
+    var d = new Date(v);
+    if (isNaN(d.getTime())) return null;
+    var out = {};
+    try {
+      new Intl.DateTimeFormat("en-CA", {
+        timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", hour12: false,
+      }).formatToParts(d).forEach(function (p) { out[p.type] = p.value; });
+    } catch (e) {
+      // 시간대를 모르는 브라우저 — 그때는 보는 사람의 시간대로 둔다(빈칸보다 낫다)
+      var p2 = function (n) { return String(n).padStart(2, "0"); };
+      out = { year: String(d.getFullYear()), month: p2(d.getMonth() + 1), day: p2(d.getDate()),
+              hour: p2(d.getHours()), minute: p2(d.getMinutes()) };
+    }
+    if (out.hour === "24") out.hour = "00";
+    return out;
+  }
+  window.brickDate = {
+    /** YYYY.MM.DD */
+    day: function (v) { var p = parts(v); return p ? p.year + "." + p.month + "." + p.day : ""; },
+    /** YYYY.MM.DD HH:mm */
+    full: function (v) { var p = parts(v); return p ? p.year + "." + p.month + "." + p.day + " " + p.hour + ":" + p.minute : ""; },
+    /** 오늘이면 HH:mm, 아니면 MM.DD */
+    short: function (v) {
+      var p = parts(v); if (!p) return "";
+      var n = parts(new Date());
+      return (n && p.year === n.year && p.month === n.month && p.day === n.day)
+        ? p.hour + ":" + p.minute : p.month + "." + p.day;
+    },
+  };
+})();
+`;
+}

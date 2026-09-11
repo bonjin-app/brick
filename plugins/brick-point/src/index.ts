@@ -1,4 +1,4 @@
-import { definePlugin, siteToday } from "@brick/plugin-sdk";
+import { definePlugin, siteToday, dateScript } from "@brick/plugin-sdk";
 import { bindI18n, t, localeTag } from "./i18n.js";
 import type { PluginDb } from "@brick/plugin-sdk";
 import { sql } from "drizzle-orm";
@@ -524,6 +524,7 @@ const HISTORY_CSS = `
 /** 내 포인트 내역 클라이언트 — 페이지 누적 로드 */
 const historyScript = () => `
 <script>
+${dateScript()}
 (function(){
   var root = document.getElementById('brick-ph');
   if (!root) return;
@@ -533,13 +534,8 @@ const historyScript = () => `
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
   function num(n){ return Number(n).toLocaleString(${JSON.stringify(localeTag())}); }
-  function d2(v){
-    if (!v) return '';
-    var d = new Date(v);
-    if (isNaN(d.getTime())) return '';
-    var p = function(n){ return String(n).padStart(2,'0'); };
-    return d.getFullYear() + '.' + p(d.getMonth()+1) + '.' + p(d.getDate());
-  }
+  // 날짜는 사이트 시간대로 — 서버가 그리는 화면과 같은 날짜를 보여야 한다
+  var d2 = window.brickDate.day;
 
   function paint(d){
     var head =

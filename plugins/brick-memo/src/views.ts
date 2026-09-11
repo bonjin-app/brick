@@ -11,6 +11,7 @@
  * 목록·본문은 로그인 사용자별 내용이므로 서버 렌더 캐시가 적용되지 않는다
  * (코어가 로그인 요청을 캐시하지 않는다 — ADR-24).
  */
+import { dateScript } from "@brick/plugin-sdk";
 import { t, localeTag } from "./i18n.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -120,6 +121,7 @@ export const MEMO_CSS = `
  */
 export const memoScript = () => `
 <script>
+${dateScript()}
 (function () {
   var root = document.querySelector('.brick-memo[data-memo-view]');
   if (!root) return;
@@ -148,21 +150,9 @@ export const memoScript = () => `
       body: bodyObj ? JSON.stringify(bodyObj) : undefined
     });
   }
-  function fmtDate(v) {
-    var d = new Date(v);
-    if (isNaN(d.getTime())) return '';
-    var now = new Date();
-    var sameDay = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
-    var p = function (n) { return String(n).padStart(2, '0'); };
-    return sameDay ? p(d.getHours()) + ':' + p(d.getMinutes())
-                   : (d.getMonth() + 1) + '.' + d.getDate();
-  }
-  function fullDate(v) {
-    var d = new Date(v);
-    if (isNaN(d.getTime())) return '';
-    var p = function (n) { return String(n).padStart(2, '0'); };
-    return d.getFullYear() + '.' + p(d.getMonth() + 1) + '.' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
-  }
+  // 날짜는 사이트 시간대로 — 서버가 그리는 화면과 같은 날짜를 보여야 한다
+  var fmtDate = window.brickDate.short;
+  var fullDate = window.brickDate.full;
   function fail(msg) { body.innerHTML = '<p class="brick-memo-empty">' + esc(msg) + '</p>'; }
 
   /* ── 목록 (받은/보낸) ─────────────────────────────── */
