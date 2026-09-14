@@ -1,4 +1,4 @@
-import { NestFactory } from "@nestjs/core";
+import { NestFactory, HttpAdapterHost } from "@nestjs/core";
 import { FastifyAdapter, NestFastifyApplication } from "@nestjs/platform-fastify";
 import { Logger } from "@nestjs/common";
 import cookie from "@fastify/cookie";
@@ -8,6 +8,7 @@ import { AppModule } from "./app.module.js";
 import { SetupAppModule } from "./setup.module.js";
 import { loadEnv } from "./config/env.js";
 import { noteProxyHeaders } from "./config/proxy-hint.js";
+import { UploadErrorFilter } from "./common/upload-error.filter.js";
 import { runMigrations } from "./config/migrator.js";
 import { CspService } from "./modules/security/csp.service.js";
 
@@ -72,6 +73,13 @@ async function bootstrap() {
       done();
     });
   }
+
+  /*
+   * 업로드 한도 오류를 한국어로 바꾼다 (자세한 이유는 upload-error.filter.ts).
+   * 전역 필터라 미디어·게시판 첨부·플러그인 업로드가 모두 같은 안내를 받는다.
+   */
+  const httpAdapterHost = app.get(HttpAdapterHost);
+  app.useGlobalFilters(new UploadErrorFilter(httpAdapterHost.httpAdapter));
 
   // 응답 압축 — 테마 CSS(30KB+)·서버 렌더 HTML 이 Next 프록시를 그대로 통과하므로 여기서 눌러야 한다.
   // (Next 는 자기 페이지만 압축한다.) 이미지·zip 은 threshold 와 MIME 판정으로 건너뛴다.

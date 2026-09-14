@@ -11,7 +11,8 @@ interface MediaRow {
 export default function AdminMediaPage() {
   const t = useAdminT();
   const [data, setData] = useState<{ items: MediaRow[]; total: number }>({ items: [], total: 0 });
-  const [message, setMessage] = useState("");
+  // 성공/실패를 함께 들고 다닌다 — 전에는 색이 하나뿐이어서 실패도 초록으로 떴다
+  const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const reload = useCallback(() => {
@@ -31,7 +32,9 @@ export default function AdminMediaPage() {
     const saved = res.ok && body.originalSize && body.size && body.originalSize > body.size * 1.05
       ? ` (${humanSize(body.originalSize)} → ${humanSize(body.size)}${body.width ? `, ${body.width}×${body.height}` : ""})`
       : "";
-    setMessage(res.ok ? `${t("media.done")}${saved}` : `${t("common.failPrefix")}${body.message ?? res.status}`);
+    setMessage(res.ok
+      ? { text: `${t("media.done")}${saved}`, ok: true }
+      : { text: `${t("common.failPrefix")}${body.message ?? res.status}`, ok: false });
     if (fileRef.current) fileRef.current.value = "";
     reload();
   }
@@ -54,7 +57,10 @@ export default function AdminMediaPage() {
           {t("media.hint")}
         </span>
       </form>
-      {message && <p style={{ color: "var(--color-success)" }}>{message}</p>}
+      {message && (
+        <p role={message.ok ? undefined : "alert"}
+           style={{ color: message.ok ? "var(--color-success)" : "var(--color-danger)" }}>{message.text}</p>
+      )}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(160px,1fr))", gap: 16 }}>
         {data.items.map((f) => (
           <div key={f.id} style={{ background: "var(--color-bg)", borderRadius: 8, padding: 12, fontSize: 13 }}>

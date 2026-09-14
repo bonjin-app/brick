@@ -804,6 +804,7 @@ function MediaPicker({ onPick, onPickMany, onClose, multiple }: {
   const [data, setData] = useState<{ items: PickerRow[]; total: number; pageSize: number }>({ items: [], total: 0, pageSize: 40 });
   const [page, setPage] = useState(1);
   const [busy, setBusy] = useState("");
+  const [failed, setFailed] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback((p: number) => {
@@ -815,6 +816,7 @@ function MediaPicker({ onPick, onPickMany, onClose, multiple }: {
   async function upload() {
     const file = fileRef.current?.files?.[0];
     if (!file) return;
+    setFailed(false);
     setBusy(t("x.uploading"));
     const fd = new FormData();
     fd.append("file", file);
@@ -822,7 +824,8 @@ function MediaPicker({ onPick, onPickMany, onClose, multiple }: {
     const body = await res.json().catch(() => ({}));
     setBusy("");
     if (fileRef.current) fileRef.current.value = "";
-    if (!res.ok || !body.url) { setBusy(`${t("common.failPrefix")}${body.message ?? res.status}`); return; }
+    // 실패는 "올리는 중" 과 같은 회색 안내로 묻히면 안 된다
+    if (!res.ok || !body.url) { setFailed(true); setBusy(`${t("common.failPrefix")}${body.message ?? res.status}`); return; }
     // 올리자마자 쓰려고 올린 것이다 — 고르는 손을 한 번 더 요구하지 않는다
     if (multiple) { setChosen((c) => [...c, String(body.url)]); load(page); }
     else onPick?.(String(body.url));
@@ -846,7 +849,10 @@ function MediaPicker({ onPick, onPickMany, onClose, multiple }: {
                        background: "var(--color-bg)", cursor: "pointer" }}>{t("common.close")}</button>
           </span>
         </div>
-        {busy && <p style={{ fontSize: 13, color: "var(--color-muted)" }}>{busy}</p>}
+        {busy && (
+          <p role={failed ? "alert" : undefined}
+             style={{ fontSize: 13, color: failed ? "var(--color-danger)" : "var(--color-muted)" }}>{busy}</p>
+        )}
         {images.length === 0
           ? <p style={{ color: "var(--color-muted)", fontSize: 13, padding: "24px 0" }}>{t("x.noImages")}</p>
           : (

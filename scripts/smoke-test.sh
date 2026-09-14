@@ -320,6 +320,41 @@ done
 check "readiness 가 스스로 회복된다" "$READY" "200"
 check "DB 를 읽는 요청도 된다" "$(code "$API/api/render/page?path=")" "200"
 
+# ── 업로드 한도를 넘으면 한국어로, 숫자로 말한다 ─────────────
+#
+# 그 전에는 @fastify/multipart 의 원문이 그대로 나갔다:
+#   {"statusCode":413,"message":"request file too large"}
+# 관리 화면은 이 message 를 그대로 보여주므로 한국어 화면에 "실패: request file
+# too large" 가 떴다. 무엇이 문제인지도, **한도가 얼마인지도** 알 수 없다.
+# 휴대폰 사진 한 장이 12MB 인 시대에 상품 사진을 올리는 사람이 가장 자주 만나는
+# 오류가 이것이다.
+#
+# 한도를 낮춰 띄운 두 번째 서버로 확인한다 — 50MB 짜리 파일을 만들지 않기 위해서다.
+echo "── 업로드 한도 안내"
+PORT_LIM=$((${BRICK_API_PORT:-3001} + 60))
+LIM="http://127.0.0.1:${PORT_LIM}"
+BRICK_API_PORT="$PORT_LIM" BRICK_MAX_UPLOAD_MB=1 node "$ROOT/apps/api/dist/main.js" > "$TMP/api-limit.log" 2>&1 &
+LIM_PID=$!
+for i in $(seq 1 60); do curl -fsS "$LIM/readyz" >/dev/null 2>&1 && break; sleep 1; done
+# 포트가 이미 잡혀 있으면 새 서버는 죽고 **남의 서버가 대답한다** — 그러면 이 절은
+# 한도가 다른 서버를 검사하게 된다(실제로 그렇게 통과할 뻔했다). 우리 것인지 못박는다.
+kill -0 "$LIM_PID" 2>/dev/null && ok "한도 낮춘 서버가 우리 것이다 (:$PORT_LIM)" \
+  || bad "한도 낮춘 서버가 뜨지 않았다 — 포트 $PORT_LIM 가 이미 쓰이는 중일 수 있다 ($(tail -2 "$TMP/api-limit.log"))"
+curl -s -c "$TMP/limck" -X POST "$LIM/api/auth/login" -H 'content-type: application/json' \
+  -d '{"email":"admin@smoke.test","password":"smokepass123"}' >/dev/null
+# 1MB 한도를 넘는 2MB 파일 (내용은 중요하지 않다 — 크기에서 먼저 걸린다)
+head -c 2097152 /dev/zero > "$TMP/toobig.png"
+TOOBIG="$(curl -s -b "$TMP/limck" -X POST "$LIM/api/media/upload" -F "file=@$TMP/toobig.png;type=image/png")"
+contains "한도 초과를 한국어로 알린다" "$TOOBIG" "파일이 너무 큽니다"
+contains "한도를 숫자로 알려준다 (설정한 값 그대로)" "$TOOBIG" "최대 1MB"
+absent  "원문이 새어 나오지 않는다" "$TOOBIG" "request file too large"
+# 다른 오류까지 삼키면 안 된다 — 전역 필터이므로 이것을 함께 본다
+contains "다른 오류는 그대로 둔다" \
+  "$(curl -s -b "$TMP/limck" -X POST "$LIM/api/media/upload" -F "file=@$TMP/evil.php")" \
+  "허용되지 않는 파일 형식"
+check "없는 경로는 404 그대로" "$(code "$LIM/api/no-such-route")" "404"
+kill "$LIM_PID" 2>/dev/null || true; wait "$LIM_PID" 2>/dev/null || true
+
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 # 실측을 남긴다(설정됐을 때만) — README 의 표가 실제와 같은지 CI 가 대조한다.
 # 표의 숫자는 조용히 썩는다: 단언을 더해도 아무도 그 줄을 고치지 않는다.
