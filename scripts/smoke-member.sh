@@ -179,6 +179,22 @@ grep -q "api/email/verify" "$ROOT/apps/web/src/app/verify-email/page.tsx" 2>/dev
   && ok "그 화면이 확인 API 를 부른다" || bad "그 화면이 확인 API 를 부르지 않는다"
 
 echo "── 이메일 변경은 새 주소를 인증한 뒤에 반영된다"
+# 주소를 바꾸는 것은 계정을 넘기는 것과 같다 — 훔친 세션만으로는 안 된다.
+# 재현했던 경로다: 세션 쿠키만 있으면 주소를 공격자의 것으로 바꿀 수 있었고,
+# 확인 링크는 그 새 주소로 갔으며, 원래 주인에게는 아무것도 가지 않았다.
+# 그 뒤 원래 주소로는 로그인이 401 이 된다 — 계정을 잃은 것이다.
+check "재인증 없이는 주소를 바꿀 수 없다" \
+  "$(code -b "$CK1" -X POST "$API/api/me/email/verify/send" -H 'content-type: application/json' \
+      -d '{"email":"taken@mem.test"}')" "403"
+contains "무엇을 해야 하는지 알려준다" \
+  "$(curl -s -b "$CK1" -X POST "$API/api/me/email/verify/send" -H 'content-type: application/json' \
+      -d '{"email":"taken@mem.test"}')" "비밀번호를 다시 확인"
+# 같은 주소를 다시 인증하는 것은 위험한 작업이 아니다 — 막으면 인증 메일을 다시 받을 길이 없다
+check "같은 주소 재인증은 재인증을 요구하지 않는다" \
+  "$(code -b "$CK1" -X POST "$API/api/me/email/verify/send" -H 'content-type: application/json' -d '{}')" "400"
+
+curl -s -b "$CK1" -c "$CK1" -X POST "$API/api/me/security/reauth" -H 'content-type: application/json' \
+  -d '{"password":"password123"}' -o /dev/null
 check "이미 쓰는 주소로 변경 차단" \
   "$(code -b "$CK1" -X POST "$API/api/me/email/verify/send" -H 'content-type: application/json' \
       -d '{"email":"user2@mem.test"}')" "400"
@@ -412,6 +428,8 @@ curl -s -b "$CK" -X PUT "$API/api/users/$UA" -H 'content-type: application/json'
 contains "빈 메모는 null 로 지운다" "$(curl -s -b "$CK" "$API/api/users")" '"adminMemo":null'
 
 # 이메일 변경 — 새 주소로 인증 메일을 보내고, 링크를 열어야 바뀐다. 보내기만으로는 주소가 그대로다
+curl -s -b "$CKA" -c "$CKA" -X POST "$API/api/me/security/reauth" -H 'content-type: application/json' \
+  -d '{"password":"password123"}' -o /dev/null
 check "형식이 틀린 새 주소는 400" "$(code -b "$CKA" -X POST "$API/api/me/email/verify/send" -H 'content-type: application/json' -d '{"email":"not-an-email"}')" "400"
 # 가입 때 보낸 인증 메일의 도배 방지 쿨다운 안이다 — 시간을 되감는다(상태 변경이 아니라 시계 조작)
 psql_q "UPDATE email_verifications SET created_at = created_at - interval '1 day' WHERE user_id='$UA'" > /dev/null
@@ -419,6 +437,22 @@ check "새 주소로 인증 메일 발송" "$(code -b "$CKA" -X POST "$API/api/m
 PENDING="$(psql_q "SELECT count(*) FROM email_verifications WHERE user_id='$UA' AND email='avatar-new@mem.test' AND used_at IS NULL")"
 check "새 주소가 대기 토큰에 기록됨" "$PENDING" "1"
 check "인증 전에는 기존 주소 유지" "$(psql_q "SELECT email FROM users WHERE id='$UA'")" "avatar@mem.test"
+
+# 확정되면 **옛 주소**에 알리고 모든 세션을 끊는다.
+# 그 주소의 주인만이 "내가 한 것이 아니다" 를 안다 — 훔친 세션으로 바뀌었다면
+# 이 메일이 유일한 신호다. 세션을 끊는 것은 비밀번호 변경과 같은 처리다.
+CHANGE_TOKEN="$(psql_q "SELECT token_hash FROM email_verifications WHERE user_id='$UA' AND email='avatar-new@mem.test' AND used_at IS NULL")"
+[[ -n "$CHANGE_TOKEN" ]] && ok "대기 토큰 확인" || bad "대기 토큰 확인"
+# 토큰 원문은 메일에만 있다 — 로그에서 꺼낸다(발송 경로를 그대로 지난다는 뜻이기도 하다)
+RAW_TOKEN="$(grep -A 6 "to: avatar-new@mem.test" "$TMP/api.log" | grep -o 'token=[A-Za-z0-9_-]*' | tail -1 | cut -d= -f2)"
+check "새 주소 링크로 확정" \
+  "$(code -X POST "$API/api/email/verify" -H 'content-type: application/json' -d "{\"token\":\"$RAW_TOKEN\"}")" "201"
+check "주소가 바뀌었다" "$(psql_q "SELECT email FROM users WHERE id='$UA'")" "avatar-new@mem.test"
+OLD_NOTICE="$(grep -A 6 "to: avatar@mem.test" "$TMP/api.log" | grep -c "변경되었습니다" || true)"
+[[ "$OLD_NOTICE" -ge 1 ]] && ok "옛 주소로 변경 사실을 알린다" || bad "옛 주소로 아무것도 가지 않는다 (탈취를 알 길이 없다)"
+contains "본인이 아니면 무엇을 하라고 알려준다" \
+  "$(grep -A 8 "to: avatar@mem.test" "$TMP/api.log" | tail -20)" "비밀번호 찾기"
+check "변경 뒤 기존 세션은 끊긴다" "$(code -b "$CKA" "$API/api/auth/me")" "401"
 
 # 탈퇴 익명화는 메모도 지운다 — 개인정보 파기 대상이다
 curl -s -b "$CK" -X PUT "$API/api/users/$UA" -H 'content-type: application/json' -d '{"adminMemo":"파기 대상 메모"}' -o /dev/null

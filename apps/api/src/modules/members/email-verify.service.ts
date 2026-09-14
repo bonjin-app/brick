@@ -6,6 +6,7 @@ import { uuidv7 } from "uuidv7";
 import type { BrickDb } from "@brick/database";
 import type { MailProvider } from "@brick/core";
 import { DB, MAIL, ENV } from "../../runtime.module.js";
+import { AuthService } from "../auth/auth.service.js";
 import { PluginLoaderService } from "../plugins/plugin-loader.service.js";
 import type { loadEnv } from "../../config/env.js";
 
@@ -38,6 +39,8 @@ export class EmailVerifyService {
     @Inject(MAIL) private readonly mail: MailProvider,
     @Inject(ENV) private readonly env: ReturnType<typeof loadEnv>,
     private readonly loader: PluginLoaderService,
+    // 주소가 바뀌면 세션을 모두 끊는다 — 비밀번호 변경과 같은 처리
+    private readonly auth: AuthService,
   ) {}
 
   /**
@@ -138,6 +141,14 @@ export class EmailVerifyService {
     const userId = String(row.user_id);
     const email = String(row.email);
 
+    // 바꾸기 **전** 주소를 잡아 둔다 — 바뀐 뒤에는 알릴 곳을 알 수 없다
+    const { rows: before } = await this.db.execute(sql`
+      SELECT email, display_name FROM users WHERE id = ${userId}::uuid LIMIT 1
+    `);
+    const oldEmail = String(before[0]?.email ?? "");
+    const name = String(before[0]?.display_name ?? "");
+    const changed = oldEmail !== "" && oldEmail !== email;
+
     try {
       await this.db.execute(sql`
         UPDATE users SET email = ${email}, email_verified_at = now(), updated_at = now()
@@ -146,6 +157,37 @@ export class EmailVerifyService {
     } catch (err) {
       // 인증 대기 중에 그 주소로 다른 사람이 가입한 경우
       throw new BadRequestException("이미 사용 중인 이메일 주소입니다.");
+    }
+
+    if (changed) {
+      /*
+       * 주소가 **바뀌었으면** 옛 주소에 알리고 모든 세션을 끊는다.
+       *
+       * 훔친 세션 하나로 계정이 통째로 넘어가는 경로였다. 재현했다: 세션 쿠키만
+       * 있으면 주소를 공격자의 것으로 바꿀 수 있었고(현재 비밀번호를 묻지 않았다),
+       * 확인 링크는 그 새 주소로 가고, 원래 주인에게는 **아무것도 가지 않았다.**
+       * 그 뒤 원래 주소로는 로그인이 401 이 된다 — 계정을 잃은 것이다.
+       *
+       * 알림은 옛 주소로 간다. 그 주소의 주인만이 "내가 한 것이 아니다" 를 안다.
+       * 메일이 실패해도 변경은 되돌리지 않는다 — 이미 확정된 사실이고, 여기서
+       * 예외를 던지면 정상적으로 주소를 바꾼 사람이 오류 화면을 본다.
+       *
+       * 세션을 모두 끊는 것은 비밀번호 변경과 같은 처리다. 공격자가 들고 있던
+       * 세션도 함께 끊긴다.
+       */
+      const t = makeTranslator({ locale: this.loader.siteLocale, catalogs: CORE_CATALOGS });
+      const site = await this.loader.siteName();
+      await this.mail
+        .send({
+          to: oldEmail,
+          subject: t("mail.emailChangedSubject", { site }),
+          text:
+            `${t("mail.greeting", { name })}\n\n` +
+            `${t("mail.emailChangedBody", { newEmail: email })}\n\n` +
+            `${t("mail.emailChangedNotYou")}`,
+        })
+        .catch(() => false);
+      await this.auth.revokeAllSessions(userId);
     }
 
     this.log.log(`이메일 인증 완료: ${userId}`);

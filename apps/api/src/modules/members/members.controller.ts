@@ -6,6 +6,7 @@ import type { FastifyRequest } from "fastify";
 import type { BrickDb } from "@brick/database";
 import { AdminGuard, AuthGuard } from "../auth/auth.guard.js";
 import { AuthService } from "../auth/auth.service.js";
+import { ReauthService } from "../auth/reauth.service.js";
 import { AuditService } from "../audit/audit.service.js";
 import { DB } from "../../runtime.module.js";
 import { AgreementsService, KIND_LABEL, type AgreementKind } from "./agreements.service.js";
@@ -23,6 +24,7 @@ type AuthedRequest = FastifyRequest & { user: { id: string; role: string } };
 @Controller("api")
 export class MembersController {
   constructor(
+    private readonly reauth: ReauthService,
     @Inject(DB) private readonly db: BrickDb,
     private readonly agreements: AgreementsService,
     private readonly emailVerify: EmailVerifyService,
@@ -99,6 +101,21 @@ export class MembersController {
   ) {
     // 주소를 바꾸면서 인증하는 경우 — 새 주소를 검증한다
     if (body?.email) {
+      /*
+       * 주소를 **바꾸는** 것은 계정을 넘기는 것과 같다. 최근 10분 내 비밀번호
+       * 재확인을 요구한다(POST /api/me/security/reauth).
+       *
+       * 재현했다: 세션 쿠키만 있으면 주소를 공격자의 것으로 바꿀 수 있었고,
+       * 확인 링크는 그 새 주소로 갔으며, 원래 주인에게는 아무것도 가지 않았다.
+       * 그 뒤 원래 주소로는 로그인이 401 이 된다 — 훔친 세션 하나로 계정이
+       * 통째로 넘어갔다. 회원 목록 열람과 대량 발송에만 걸려 있던 보호가
+       * 정작 계정 자체를 넘기는 자리에는 없었다.
+       *
+       * 같은 주소를 다시 인증하는 경우(body.email 없음)는 그대로 둔다 — 그것은
+       * 위험한 작업이 아니고, 막으면 인증 메일을 다시 받을 방법이 사라진다.
+       */
+      this.reauth.assertRequest(req as never);
+
       const email = String(body.email).toLowerCase().trim();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         throw new BadRequestException("이메일 주소 형식이 올바르지 않습니다.");

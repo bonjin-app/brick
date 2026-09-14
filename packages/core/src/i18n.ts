@@ -149,6 +149,10 @@ const CORE_KO: MessageCatalog = {
   "mail.verifyBodyHtml": "아래 버튼을 누르면 이메일 인증이 완료됩니다. 링크는 {hours}시간 동안 유효합니다.",
   "mail.verifyValid": "링크는 {hours}시간 동안 유효합니다.",
   "mail.verifyButton": "이메일 인증",
+  // 주소가 바뀐 사실은 **옛 주소**에 알려야 한다 — 그 주소의 주인만이 "내가 안 했다"를 안다
+  "mail.emailChangedSubject": "[{site}] 계정 이메일 주소가 변경되었습니다",
+  "mail.emailChangedBody": "이 계정의 이메일 주소가 {newEmail} (으)로 변경되었습니다.",
+  "mail.emailChangedNotYou": "본인이 한 것이 아니라면 계정이 도용된 것입니다. 지금 바로 비밀번호 찾기로 비밀번호를 바꾸고 사이트 운영자에게 알려주세요.",
   "withdraw.privacyLabel": "개인정보",
   "withdraw.privacyDetail": "이메일·이름·비밀번호는 즉시 파기되며 같은 계정으로 다시 로그인할 수 없습니다.",
 };
@@ -212,6 +216,9 @@ const CORE_EN: MessageCatalog = {
   "mail.verifyBodyHtml": "Press the button below to finish verifying your email. The link is valid for {hours} hours.",
   "mail.verifyValid": "The link is valid for {hours} hours.",
   "mail.verifyButton": "Verify email",
+  "mail.emailChangedSubject": "[{site}] The email address on your account was changed",
+  "mail.emailChangedBody": "The email address on this account was changed to {newEmail}.",
+  "mail.emailChangedNotYou": "If this was not you, your account has been taken over. Reset your password right now and tell the site operator.",
   "withdraw.privacyLabel": "Personal information",
   "withdraw.privacyDetail": "Your email, name and password are destroyed immediately and you cannot sign in again with this account.",
 };
