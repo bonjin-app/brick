@@ -371,6 +371,16 @@ count_cards() { /usr/bin/python3 -c "
 import sys, re
 print(len(re.findall(r'brick-product-name\">', sys.stdin.read())))
 "; }
+# 운영자가 적은 글자는 어디서든 줄바꿈될 수 있어야 한다.
+#
+# 한국어는 띄어쓰기 없이 길게 이어 쓰는 이름이 흔한데("무료배송빠른발송국내산
+# 프리미엄원두1kg") 브라우저는 그것을 한 낱말로 보고 자르지 않는다. 그래서
+# 폰에서 상품 하나가 격자를 통째로 밀어냈다 — 375px 화면의 문서가 953px(목록)·
+# 1349px(상세)로 벌어지는 것을 실측했다. 가로 스크롤이 생기면 그 화면의 다른
+# 것도 전부 어긋난다. 게시판은 이미 같은 처리를 하고 있었고 쇼핑몰만 없었다.
+contains "긴 이름이 줄바꿈될 수 있다 (목록)" "$(sf_render "shop")" "overflow-wrap: anywhere"
+contains "긴 이름이 줄바꿈될 수 있다 (상세)" "$(sf_render "shop/wish-item")" ".brick-detail-info h1"
+
 PAGE1="$(sf_render "shop")"
 check "1쪽은 limit(24)만큼" "$(echo "$PAGE1" | count_cards)" "24"
 contains "총 개수를 알려준다" "$PAGE1" 'class="brick-shop-total">'

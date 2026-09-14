@@ -825,6 +825,27 @@ const COLLECTION_CSS = `
    CSS 변수는 테마 토큰을 우선 사용해 테마 디자인과 어울리게 한다. */
 const STOREFRONT_CSS = `
 <style>
+/*
+ * 운영자가 적은 글자는 **어디서든 줄바꿈될 수 있어야 한다.**
+ *
+ * 한국어는 띄어쓰기 없이 길게 이어 쓰는 이름이 흔하다("무료배송빠른발송
+ * 국내산프리미엄원두1kg"). 브라우저는 그것을 한 낱말로 보고 자르지 않으므로
+ * 폰에서 상품 하나가 격자를 통째로 밀어낸다 — 375px 화면의 문서가 953px
+ * (목록)·1349px(상세)로 벌어지는 것을 실측했다. 가로 스크롤이 생기면 그
+ * 화면의 다른 것도 전부 어긋난다.
+ *
+ * keep-all 은 한국어 조판의 기본이고(낱말 중간에서 자르지 않는다), 한 낱말이
+ * 줄보다 길 때만 anywhere 가 강제로 끊는다. 게시판은 이미 같은 처리를 하고
+ * 있었고 쇼핑몰만 없었다.
+ */
+.brick-product-name,
+.brick-detail-info h1,
+.brick-detail-summary,
+.brick-collection h1,
+.brick-collection-desc,
+.brick-shop-heading,
+.brick-cart-name,
+.brick-buybar-info { word-break: keep-all; overflow-wrap: anywhere; }
 .brick-partial-soldout{margin-top:28px;padding:16px;background:var(--color-bg-soft,#f6f6f9);border-radius:10px}
 .brick-partial-soldout>p{margin:0 0 4px;font-weight:600}
 .brick-restock-form{margin-top:12px;display:flex;flex-direction:column;gap:8px;max-width:360px}
