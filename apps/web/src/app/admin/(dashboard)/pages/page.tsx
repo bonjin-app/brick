@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useUnsavedGuard } from "@/lib/unsaved-guard";
 import { useAdminT } from "../../../../lib/i18n-admin";
 import { useLocaleTag } from "../../../../lib/i18n";
 
@@ -30,7 +31,20 @@ export default function AdminPagesPage() {
   const [rows, setRows] = useState<PageRow[]>([]);
   const [catalog, setCatalog] = useState<BlockDef[]>([]);
   const [draft, setDraft] = useState<PageDraft | null>(null);
+  // 연 시점의 모습 — 이것과 다르면 저장하지 않은 편집이 있다
+  const [pristine, setPristine] = useState<string>("");
   const [message, setMessage] = useState("");
+  const dirty = draft !== null && JSON.stringify(draft) !== pristine;
+  useUnsavedGuard(dirty);
+  /*
+   * "닫기" 는 화면 안에서만 움직이므로 브라우저 경고가 뜨지 않는다 — 오히려 이쪽이
+   * 더 흔한 손실 경로다. 블록을 열몇 개 쌓아 둔 채 닫으면 그대로 사라졌다.
+   */
+  function closeEditor() {
+    if (dirty && !confirm(t("common.discardChanges"))) return;
+    setDraft(null);
+    setMessage("");
+  }
 
   const reload = useCallback(() => {
     fetch("/api/pages").then((r) => r.json()).then(setRows);
@@ -42,7 +56,9 @@ export default function AdminPagesPage() {
 
   async function open(id: string) {
     const page = await fetch(`/api/pages/${id}`).then((r) => r.json());
-    setDraft({ ...page, blocks: page.blocks ?? [], seo: page.seo ?? {} });
+    const opened = { ...page, blocks: page.blocks ?? [], seo: page.seo ?? {} };
+    setDraft(opened);
+    setPristine(JSON.stringify(opened));
   }
 
   async function save() {
@@ -56,6 +72,7 @@ export default function AdminPagesPage() {
     if (res.ok) {
       setMessage(t("pages.saveDone"));
       if (isNew) setDraft(null);
+      else setPristine(JSON.stringify(draft));
       reload();
     } else setMessage(`${t("common.saveFailPrefix")}${(await res.json()).message ?? res.status}`);
   }
@@ -76,7 +93,7 @@ export default function AdminPagesPage() {
         onChange={setDraft}
         onSave={save}
         onDelete={draft.id ? () => remove(draft.id!) : undefined}
-        onClose={() => { setDraft(null); setMessage(""); }}
+        onClose={closeEditor}
       />
     );
   }
@@ -84,7 +101,7 @@ export default function AdminPagesPage() {
   return (
     <div>
       <h1>{t("pages.title")}</h1>
-      <button onClick={() => setDraft({ ...EMPTY })} style={{ cursor: "pointer", padding: "8px 16px", marginBottom: 16 }}>
+      <button onClick={() => { setDraft({ ...EMPTY }); setPristine(JSON.stringify(EMPTY)); }} style={{ cursor: "pointer", padding: "8px 16px", marginBottom: 16 }}>
         {t("pages.new")}
       </button>
       {message && <p style={{ color: "var(--color-success)" }}>{message}</p>}

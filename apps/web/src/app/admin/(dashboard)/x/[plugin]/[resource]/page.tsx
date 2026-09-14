@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useUnsavedGuard } from "@/lib/unsaved-guard";
 import { useParams } from "next/navigation";
 import { useAdminT } from "../../../../../../lib/i18n-admin";
 import { useLocaleTag } from "../../../../../../lib/i18n";
@@ -42,6 +43,21 @@ export default function PluginResourcePage() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [editing, setEditing] = useState<Row | null>(null);
+  /*
+   * 연 시점의 모습 — 이것과 다르면 저장하지 않은 편집이 있다.
+   *
+   * 게시판은 손님이 쓰던 글을 초안으로 지켜 주는데, 운영자가 상품 설명을 한참
+   * 고치다 실수로 닫으면 그대로 사라졌다. 같은 원칙이 한쪽에만 있었다.
+   */
+  const [pristine, setPristine] = useState<string>("");
+  const openEditing = (row: Row | null) => { setEditing(row); setPristine(JSON.stringify(row)); };
+  const dirty = editing !== null && JSON.stringify(editing) !== pristine;
+  useUnsavedGuard(dirty);
+  function cancelEdit() {
+    // "닫기" 는 화면 안에서만 움직이므로 브라우저 경고가 뜨지 않는다 — 여기서 묻는다
+    if (dirty && !confirm(t("common.discardChanges"))) return;
+    setEditing(null);
+  }
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   // 일괄 작업 — 선택된 행, 고른 작업, 작업에 딸린 값(예: 이동 대상)
@@ -141,15 +157,15 @@ export default function PluginResourcePage() {
    */
   async function openEdit(row: Row) {
     const id = row[idField];
-    if (!api || !id) { setEditing({ ...row }); return; }
+    if (!api || !id) { openEditing({ ...row }); return; }
     try {
       const r = await fetch(`${api}/${encodeURIComponent(String(id))}`);
-      if (!r.ok) { setEditing({ ...row }); return; }
+      if (!r.ok) { openEditing({ ...row }); return; }
       const d = await r.json();
       const full = d && typeof d === "object" && !Array.isArray(d) ? (d.item ?? d) : null;
-      setEditing(full && full[idField] ? { ...row, ...full } : { ...row });
+      openEditing(full && full[idField] ? { ...row, ...full } : { ...row });
     } catch {
-      setEditing({ ...row });
+      openEditing({ ...row });
     }
   }
 
@@ -260,7 +276,7 @@ export default function PluginResourcePage() {
           <button onClick={() => setImporting(true)} style={btn}>{res.importFrom.label}</button>
         )}
         {can.create && !editing && (
-          <button onClick={() => setEditing(blank())} style={btn}>{t("x.addItem", { label: res.itemLabel })}</button>
+          <button onClick={() => openEditing(blank())} style={btn}>{t("x.addItem", { label: res.itemLabel })}</button>
         )}
       </div>
       {importing && res.importFrom && api && (
@@ -276,7 +292,7 @@ export default function PluginResourcePage() {
           value={editing}
           onChange={setEditing}
           onSave={save}
-          onCancel={() => setEditing(null)}
+          onCancel={cancelEdit}
         />
       ) : (
         <>
