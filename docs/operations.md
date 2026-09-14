@@ -15,6 +15,15 @@ docker compose exec brick node /app/api/dist/backup.js dump /app/uploads/db-$(da
 docker compose exec brick node /app/api/dist/backup.js restore /app/uploads/db-2026-08-25.dump
 ```
 
+복원은 **덤프를 뜬 그 시점으로 되돌립니다** — 그 뒤에 들어온 주문·가입·글은 사라집니다.
+복원하는 동안 손님이 사이트에 글을 쓰고 있으면 그 글도 대상입니다. 가능하면 점검 모드로
+돌리거나 한산한 시간에 하세요. (앱을 켠 채로 복원해도 동작하는 것은 스모크가
+`smoke-backup.sh` 에서 매번 확인합니다 — 문서가 시키는 방식 그대로 시험합니다.)
+
+`pg_dump: server version mismatch` 가 나오면 컨테이너 안의 클라이언트가 DB 서버보다
+낮은 것입니다. 이미지에는 PostgreSQL 17 클라이언트가 들어 있으니, 더 높은 버전의
+PostgreSQL 을 쓰고 있다면 이미지를 올리거나 DB 서버 쪽에서 직접 덤프를 뜨세요.
+
 ### 파일
 
 ```bash

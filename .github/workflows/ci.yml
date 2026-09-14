@@ -261,6 +261,21 @@ jobs:
       - name: E2E 스모크 테스트 (업그레이드 — 데이터가 있는 사이트)
         run: bash scripts/smoke-upgrade.sh
 
+      # pg_dump/pg_restore. 러너에 기본으로 깔린 클라이언트는 서비스 컨테이너(17)보다
+      # 낮아서 "server version mismatch" 로 거부한다 — 17 을 받아 PATH 앞에 둔다.
+      - name: PostgreSQL 17 클라이언트 (백업 수트에 필요)
+        run: |
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
+          echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17
+          echo /usr/lib/postgresql/17/bin >> "$GITHUB_PATH"
+
+      - name: E2E 스모크 테스트 (백업·복원 왕복)
+        run: bash scripts/smoke-backup.sh
+
       - name: README 의 스모크 표가 실측과 같다 (단언을 더했으면 그 줄도 고친다)
         run: node scripts/check-smoke-counts.mjs /tmp/smoke-counts.log
 
