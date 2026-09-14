@@ -18,7 +18,12 @@ interface Dashboard {
   core: { members: number; membersToday: number; pages: number } | null;
   cards: DashCard[];
   /** 메일을 보낼 수 있는 상태인가 — SMTP 가 없으면 모든 메일이 콘솔로만 나간다 */
-  mail?: { enabled: boolean };
+  /*
+   * 운영자가 모르는 채로 잘못 설정한 것들 (판정은 API 가 한다 — 환경변수·SMTP·
+   * 프록시는 서버만 안다). id 를 열거형으로 묶어 두면 `dash.<id>` / `dash.<id>Detail`
+   * 번역이 없는 경고를 **빌드가 막는다** — 배너가 키 이름을 그대로 보여주는 일이 없다.
+   */
+  setup?: Array<{ id: "mailOff" | "siteUrlLocal" | "trustProxyOff"; docs: string }>;
 }
 
 interface VersionInfo {
@@ -130,13 +135,17 @@ export default function AdminDashboard() {
         "주문 안내 메일" 스위치가 켜져 있으니 되는 줄 안다. 뉴스레터만 큰 소리로
         거부하고 있었다 — 거래 메일은 말없이 버려졌다.
       */}
-      {dash?.mail && !dash.mail.enabled ? (
-        <div className="brick-card" role="alert" style={{ marginTop: 0, marginBottom: 16, borderColor: "var(--color-warning)", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12 }}>
-          <strong>{t("dash.mailOff")}</strong>
-          <span style={{ color: "var(--color-muted)", fontSize: 13.5 }}>{t("dash.mailOffDetail")}</span>
-          <a className="btn-link" href="https://github.com/bonjin-app/brick/blob/main/docs/mailing.md" target="_blank" rel="noopener" style={{ marginLeft: "auto" }}>{t("dash.mailOffHow")} ↗</a>
+      {/*
+        * 설정 경고 — 틀려도 조용한 것들만 모아 여기서 한 번 말한다.
+        * 무엇을 경고할지는 API 가 정한다(환경변수·SMTP·프록시는 서버만 안다).
+        */}
+      {(dash?.setup ?? []).map((w) => (
+        <div key={w.id} className="brick-card" role="alert" style={{ marginTop: 0, marginBottom: 16, borderColor: "var(--color-warning)", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12 }}>
+          <strong>{t(`dash.${w.id}`)}</strong>
+          <span style={{ color: "var(--color-muted)", fontSize: 13.5 }}>{t(`dash.${w.id}Detail`)}</span>
+          <a className="btn-link" href={w.docs} target="_blank" rel="noopener" style={{ marginLeft: "auto" }}>{t("dash.setupHow")} ↗</a>
         </div>
-      ) : null}
+      ))}
 
       {/* 오늘의 사이트 — 코어(회원·페이지) + 플러그인 카드(오늘 방문자·주문·글·문의) */}
       <div className="brick-stat-grid">

@@ -21,7 +21,7 @@ TMP="$(mktemp -d)"
 CK="$TMP/ck.txt"
 PASS=0; FAIL=0
 
-cleanup() { [[ -n "${API_PID:-}" ]] && kill "$API_PID" 2>/dev/null || true; rm -rf "$TMP"; }
+cleanup() { for p in "${API_PID:-}" "${API2_PID:-}"; do [[ -n "$p" ]] && kill "$p" 2>/dev/null; done; rm -rf "$TMP"; true; }
 trap cleanup EXIT
 
 ok()  { PASS=$((PASS+1)); echo "  ✅ $1"; }
@@ -326,6 +326,67 @@ done
 printf '{"items":[{"productId":"%s","quantity":1}],"orderer":{"ordererName":"관리자","ordererPhone":"010-1111-2222","ordererEmail":"admin@sec.test","postcode":"06236","address1":"서울"}}' "$SPAM_PID" > "$TMP/mem-order.json"
 check "회원 주문은 그 한도에 걸리지 않는다" \
   "$(code -b "$CK" -X POST "$SHOP/orders" -H 'content-type: application/json' --data-binary "@$TMP/mem-order.json")" "200"
+
+# ── 운영자가 모르는 채로 잘못 설정한 것 ────────────────────
+#
+# 여기 모은 둘은 "**틀려도 아무 일도 일어나지 않는다**"는 공통점이 있다.
+# 예외도, 빨간 로그도 없다. 손님 쪽에서만 조용히 망가진다:
+#
+#   BRICK_SITE_URL 을 안 바꾸면 메일 안의 링크가 전부 localhost 다.
+#   비밀번호 재설정·이메일 인증·비회원 주문 조회 메일은 정상적으로 나가는데,
+#   받는 사람이 누르면 **자기 컴퓨터**로 간다. 재현했다: 프로덕션으로 띄우고
+#   변수를 비웠더니 경고 0건에 재설정 링크가 http://localhost:3000/... 였다.
+#   기존 http/https 검사는 localhost 를 **일부러 제외**하고 있었다.
+#
+#   BRICK_TRUST_PROXY 를 안 켜면 req.ip 가 손님이 아니라 프록시 주소다.
+#   Nginx/Caddy 뒤의 보통 배포에서는 모든 요청이 127.0.0.1 로 보이므로
+#   IP 기준 제한(로그인·가입·재입고·바로 위의 비회원 주문 한도)이 전부
+#   한 바구니로 합쳐진다 — 손님 하나가 채우면 나머지가 막히고, 공격자는
+#   한 대로 사이트 전체를 잠근다. IP 차단도 프록시만 본다.
+#
+# 부팅 시점에는 프록시가 있는지 알 수 없으므로 요청 헤더로 판단한다.
+echo "── 설정 실수를 대시보드가 알린다"
+PORT2=$((API_PORT + 40))
+API2="http://127.0.0.1:${PORT2}"
+setup_ids() {  # 대시보드가 알리는 경고 id 들 (정렬해서 한 줄로)
+  curl -s -b "$CK" "$API2/api/admin/dashboard" | python3 -c '
+import json, sys
+try: print(",".join(sorted(w["id"] for w in json.load(sys.stdin).get("setup", []))))
+except Exception: print("파싱실패")'
+}
+# boot2 <로그파일> <env 설정...> — 두 번째 서버를 그 설정으로 띄운다.
+# env 를 서브셸이 아니라 `env` 명령으로 넘긴다 — 서브셸에서 띄우면 PID 가
+# 부모로 돌아오지 않아 프로세스가 남는다.
+boot2() {
+  local log="$1"; shift
+  [[ -n "${API2_PID:-}" ]] && { kill "$API2_PID" 2>/dev/null; wait "$API2_PID" 2>/dev/null; }
+  env "$@" BRICK_API_PORT="$PORT2" node "$ROOT/apps/api/dist/main.js" > "$log" 2>&1 &
+  API2_PID=$!
+  for _ in $(seq 1 60); do curl -fsS "$API2/readyz" >/dev/null 2>&1 && return 0; sleep 1; done
+  return 1
+}
+
+# (1) 잊은 상태 — 프로덕션인데 주소가 기본값 그대로다
+# BRICK_CAPTCHA=test 는 프로덕션이 거부한다(정답을 응답에 실어주므로) — 여기서는 벗긴다
+boot2 "$TMP/api2.log" -u BRICK_SITE_URL -u BRICK_TRUST_PROXY -u BRICK_CAPTCHA NODE_ENV=production \
+  || bad "설정 경고용 서버 기동 ($(grep -m1 -i "error" "$TMP/api2.log" | head -c 160))"
+contains "부팅 로그가 BRICK_SITE_URL 을 경고한다" "$(cat "$TMP/api2.log")" "BRICK_SITE_URL 이"
+IDS="$(setup_ids)"
+contains "대시보드도 알린다 — 메일 링크가 localhost" "$IDS" "siteUrlLocal"
+# 프록시 헤더를 아직 못 봤으므로 프록시 경고는 없어야 한다 (추측으로 겁주지 않는다)
+absent "프록시 헤더를 본 적 없으면 조용하다" "$IDS" "trustProxyOff"
+curl -s -H 'x-forwarded-for: 203.0.113.7' "$API2/healthz" >/dev/null
+contains "프록시 뒤인데 신뢰 안 함을 알아챈다" "$(setup_ids)" "trustProxyOff"
+
+# (2) 제대로 설정한 상태 — 경고가 사라져야 한다. (이게 없으면 "항상 참"이어도 통과한다)
+boot2 "$TMP/api3.log" -u BRICK_CAPTCHA NODE_ENV=production BRICK_SITE_URL=https://shop.example.com BRICK_TRUST_PROXY=true \
+  || bad "설정 경고용 서버 재기동 ($(grep -m1 -i "error" "$TMP/api3.log" | head -c 160))"
+curl -s -H 'x-forwarded-for: 203.0.113.7' "$API2/healthz" >/dev/null
+IDS2="$(setup_ids)"
+absent "공개 주소를 넣으면 그 경고가 사라진다" "$IDS2" "siteUrlLocal"
+absent "프록시를 신뢰하면 그 경고도 사라진다" "$IDS2" "trustProxyOff"
+absent "부팅 로그도 조용하다" "$(cat "$TMP/api3.log")" "BRICK_SITE_URL 이"
+kill "${API2_PID:-0}" 2>/dev/null || true
 
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 # 실측을 남긴다(설정됐을 때만) — README 의 표가 실제와 같은지 CI 가 대조한다.

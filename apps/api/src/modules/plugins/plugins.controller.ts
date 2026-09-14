@@ -14,6 +14,8 @@ import { ExtensionInstallerService } from "../extensions/extension-installer.ser
 import { ExtensionUpdaterService } from "../extensions/extension-updater.service.js";
 import { AuditService } from "../audit/audit.service.js";
 import { DB, MAIL } from "../../runtime.module.js";
+import { isLocalUrl, loadEnv } from "../../config/env.js";
+import { sawProxyHeaders } from "../../config/proxy-hint.js";
 
 @Controller("api")
 export class PluginsController {
@@ -218,18 +220,39 @@ export class PluginsController {
   @UseGuards(AdminGuard)
   async adminDashboard() {
     const [core, cards] = await Promise.all([this.coreStats(), this.loader.collectDashboardCards()]);
+    return { core, cards, setup: this.setupWarnings() };
+  }
+
+  /*
+   * 운영자가 모르는 채로 잘못 설정한 것들.
+   *
+   * 공통점: **틀려도 아무 일도 일어나지 않는다**. 예외도, 빨간 로그도 없다.
+   * 메일은 보냈다고 나오고, 링크는 멀쩡해 보이고, 요청 제한은 걸려 있다.
+   * 손님 쪽에서만 조용히 망가진다. 그래서 운영자가 매일 보는 화면에서
+   * 한 번 말해 준다 — 이 목록이 비어 있는 것이 정상이다.
+   */
+  private setupWarnings(): Array<{ id: string; docs: string }> {
+    const env = loadEnv();
+    const out: Array<{ id: string; docs: string }> = [];
+    const doc = (f: string) => `https://github.com/bonjin-app/brick/blob/main/docs/${f}`;
     /*
-     * 메일을 보낼 수 있는 상태인가.
-     *
      * SMTP 가 없으면 모든 메일이 콘솔로만 나간다 — 주문 안내(무통장 계좌!),
      * 비밀번호 재설정, 이메일 인증이 **조용히** 사라진다. 손님은 계좌를 못 받아
      * 입금하지 못하고, 운영자는 "주문 안내 메일" 스위치가 켜져 있으니 되는 줄 안다.
-     *
-     * MailProvider 계약에는 처음부터 `enabled` 가 있었다("설정 여부 확인용").
-     * 그런데 그것을 묻는 화면이 없어서, 뉴스레터만 큰 소리로 거부하고 거래
-     * 메일은 말없이 버려지고 있었다. 대시보드가 한 번 알려 준다.
      */
-    return { core, cards, mail: { enabled: this.mail.enabled } };
+    if (!this.mail.enabled) out.push({ id: "mailOff", docs: doc("mailing.md") });
+    /*
+     * 주소를 안 바꿨으면 메일 안의 링크가 전부 localhost 다 — 메일은 나가는데
+     * 받는 사람은 아무것도 못 연다. 부팅 로그에도 경고를 찍지만, 로그는
+     * 아무도 안 본다.
+     */
+    if (env.isProduction && isLocalUrl(env.siteUrl)) out.push({ id: "siteUrlLocal", docs: doc("installation.md") });
+    /*
+     * 프록시 뒤인데 신뢰하지 않으면 모든 손님이 같은 IP 로 보인다 — IP 제한이
+     * 한 바구니로 합쳐지고 IP 차단이 무력해진다. 요청 헤더를 보고 판단한다.
+     */
+    if (!env.trustProxy && sawProxyHeaders()) out.push({ id: "trustProxyOff", docs: doc("security.md") });
+    return out;
   }
 
   /**

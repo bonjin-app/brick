@@ -34,6 +34,11 @@ export interface BrickEnv {
   } | null;
 }
 
+/** 바깥에서 닿을 수 없는 주소인가 (프로덕션 설정 누락 판정용) */
+export function isLocalUrl(url: string): boolean {
+  return /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:|\/|$)/i.test(url);
+}
+
 /**
  * 환경변수 검증 — 부팅 시 1회.
  * 프로덕션에서 위험한 설정(기본 시크릿 등)은 조용히 넘기지 않고 즉시 실패시킨다.
@@ -108,8 +113,23 @@ function loadEnvUncached(): BrickEnv {
   // 메일 안의 링크는 상대경로일 수 없다 — 공개 주소가 필요하다
   const siteUrl = (process.env.BRICK_SITE_URL ?? configFile?.siteUrl ?? "http://localhost:3000").replace(/\/+$/, "");
   if (!/^https?:\/\//.test(siteUrl)) errors.push("BRICK_SITE_URL must start with http:// or https://");
-  if (isProduction && siteUrl.startsWith("http://") && !siteUrl.includes("localhost")) {
+  if (isProduction && siteUrl.startsWith("http://") && !isLocalUrl(siteUrl)) {
     console.warn("[brick] BRICK_SITE_URL이 http:// 입니다 — 프로덕션에서는 https를 사용하세요");
+  }
+  /*
+   * 프로덕션인데 주소가 localhost 라면 **설정을 잊은 것**이다.
+   *
+   * 이 값은 메일 안의 링크를 만든다 — 비밀번호 재설정, 이메일 인증, 비회원
+   * 주문 조회(토큰 포함), 재입고 해지. 잊으면 메일은 정상적으로 나가는데
+   * 링크가 전부 http://localhost:3000 을 가리켜 받는 사람에게는 아무 쓸모가
+   * 없다. 실제로 이 경고가 없어서 조용히 그렇게 나갔다 — 위의 http/https
+   * 검사는 localhost 를 **일부러 빼고** 있었다.
+   */
+  if (isProduction && isLocalUrl(siteUrl)) {
+    console.warn(
+      `[brick] BRICK_SITE_URL 이 ${siteUrl} 입니다 — 메일 안의 링크(비밀번호 재설정·이메일 인증·` +
+        `주문 조회)가 전부 이 주소를 가리킵니다. 사이트의 공개 주소로 바꾸세요.`,
+    );
   }
 
   // SMTP는 선택. 설정하면 전부 있어야 한다 (일부만 있으면 조용히 실패하므로 즉시 알린다)

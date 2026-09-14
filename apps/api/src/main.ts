@@ -7,6 +7,7 @@ import multipart from "@fastify/multipart";
 import { AppModule } from "./app.module.js";
 import { SetupAppModule } from "./setup.module.js";
 import { loadEnv } from "./config/env.js";
+import { noteProxyHeaders } from "./config/proxy-hint.js";
 import { runMigrations } from "./config/migrator.js";
 import { CspService } from "./modules/security/csp.service.js";
 
@@ -60,6 +61,17 @@ async function bootstrap() {
       bodyLimit: 2 * 1024 * 1024,
     }),
   );
+
+  /*
+   * 프록시 뒤인데 신뢰하지 않는 상태인지 지켜본다 (자세한 이유는 proxy-hint.ts).
+   * 켜져 있으면 볼 필요가 없으므로 훅 자체를 달지 않는다.
+   */
+  if (!env.trustProxy) {
+    app.getHttpAdapter().getInstance().addHook("onRequest", (req, _reply, done) => {
+      noteProxyHeaders(req.headers as Record<string, unknown>);
+      done();
+    });
+  }
 
   // 응답 압축 — 테마 CSS(30KB+)·서버 렌더 HTML 이 Next 프록시를 그대로 통과하므로 여기서 눌러야 한다.
   // (Next 는 자기 페이지만 압축한다.) 이미지·zip 은 threshold 와 MIME 판정으로 건너뛴다.
