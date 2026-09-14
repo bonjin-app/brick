@@ -65,7 +65,7 @@ export default function AdminLoginPage() {
           {busy ? t("adminLogin.busy") : t("adminLogin.submit")}
         </button>
       </form>
-      {error && <p style={{ color: "var(--color-danger)", fontSize: 14 }}>{error}</p>}
+      {error && <p role="alert" style={{ color: "var(--color-danger)", fontSize: 14 }}>{error}</p>}
       <p style={{ textAlign: "center", marginTop: 16, fontSize: 14 }}>
         <a href="/forgot-password">{t("adminLogin.forgot")}</a>
       </p>

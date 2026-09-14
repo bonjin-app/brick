@@ -662,6 +662,11 @@ STARS="$(curl -s "$API/api/render/page?path=shop/opt-item")"
 contains "별점 선택기가 실려 나간다" "$STARS" "brick-rating-pick"
 contains "별점이 지금 고른 값을 알린다" "$STARS" "aria-pressed"
 absent   "별점에 <b> 를 쓰지 않는다" "$STARS" ">★</b>"
+# 후기·문의 폼의 실패 안내도 **읽혀야** 한다. 색만 바꾸면 스크린리더에는 버튼을
+# 눌렀는데 아무 일도 일어나지 않은 화면이다 — 로그인 화면이 그랬고, 여기 둘이
+# 같은 상태였다(색은 danger 로 고정인데 role 이 없었다).
+contains "후기 폼의 실패 안내가 읽힌다" "$STARS" 'brick-write-msg\" role=\"alert\"'
+
 
 REVIEWS="$(curl -s "$SHOP/products/$OPID/reviews")"
 contains "후기 목록 공개" "$REVIEWS" "배송이 빠르고"

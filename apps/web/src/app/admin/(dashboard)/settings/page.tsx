@@ -65,7 +65,10 @@ export default function AdminSettingsPage() {
         {props.children}
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 20 }}>
           <button className="btn-primary" onClick={() => save(props.id, props.keys)}>{t("common.save")}</button>
-          {msg ? <span style={{ fontSize: 13.5, color: msg.ok ? "var(--color-success)" : "var(--color-danger)" }}>{msg.text}</span> : null}
+          {msg ? (
+            <span role={msg.ok ? "status" : "alert"}
+                  style={{ fontSize: 13.5, color: msg.ok ? "var(--color-success)" : "var(--color-danger)" }}>{msg.text}</span>
+          ) : null}
         </div>
       </section>
     );
@@ -108,7 +111,10 @@ export default function AdminSettingsPage() {
           <span style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8, flexWrap: "wrap" }}>
             <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={uploadOgImage} aria-label={t("settings.ogImageUpload")} />
             <span style={{ fontSize: 12.5, color: "var(--color-muted)" }}>{t("settings.ogImageUploadHint")}</span>
-            {ogMsg ? <span style={{ fontSize: 12.5, color: ogMsg.ok ? "var(--color-success)" : "var(--color-danger)" }}>{ogMsg.text}</span> : null}
+            {ogMsg ? (
+            <span role={ogMsg.ok ? "status" : "alert"}
+                  style={{ fontSize: 12.5, color: ogMsg.ok ? "var(--color-success)" : "var(--color-danger)" }}>{ogMsg.text}</span>
+          ) : null}
           </span>
           {str("site.og_image") ? (
             <img src={str("site.og_image")} alt="" width={240} height={126}

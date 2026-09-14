@@ -49,7 +49,8 @@ export default function LoginPage() {
           {busy ? t("login.busy") : t("login.title")}
         </button>
       </form>
-      {error && <p style={{ color: "var(--color-danger)", fontSize: 14 }}>{error}</p>}
+      {/* role="alert" 가 없으면 스크린리더에는 아무 일도 안 일어난 화면이다 */}
+      {error && <p role="alert" style={{ color: "var(--color-danger)", fontSize: 14 }}>{error}</p>}
       <SocialButtons next={safeNext()} />
       <p style={{ textAlign: "center", marginTop: 18, fontSize: 14, color: "var(--color-muted)" }}>
         {t("login.noAccount")} <a href="/register" style={authLink}>{t("login.register")}</a>

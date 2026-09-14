@@ -87,7 +87,7 @@ export default function ResetPasswordPage() {
           <button disabled={busy} style={authButton}>
             {busy ? t("reset.busy") : t("reset.submit")}
           </button>
-          {error && <p style={{ color: "var(--color-danger)", fontSize: 14 }}>{error}</p>}
+          {error && <p role="alert" style={{ color: "var(--color-danger)", fontSize: 14 }}>{error}</p>}
         </form>
       )}
     </AuthShell>

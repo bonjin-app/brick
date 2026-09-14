@@ -448,8 +448,8 @@ function ResourceSettings({ resource }: { resource: AdminResource }) {
     <div>
       <h1 style={{ margin: 0 }}>{resource.title}</h1>
       {resource.description && <p style={{ color: "var(--color-text-soft)", fontSize: 14 }}>{resource.description}</p>}
-      {message && <p style={{ color: "var(--color-success)" }}>{message}</p>}
-      {error && <p style={{ color: "var(--color-danger)" }}>{error}</p>}
+      {message && <p role="status" style={{ color: "var(--color-success)" }}>{message}</p>}
+      {error && <p role="alert" style={{ color: "var(--color-danger)" }}>{error}</p>}
       <div style={{ background: "var(--color-bg)", borderRadius: 8, padding: 24, maxWidth: 680 }}>
         {/*
           설정 화면에서는 readOnly 를 **숨기지 않고 보여준다**. 목록의 편집 폼에서는
@@ -762,7 +762,7 @@ function ImportDialog({ spec, api, onClose, onDone }: {
               {t("x.importResult", { c: result.created, u: result.updated, f: result.failed.length })}
             </span>
           )}
-          {error && <span style={{ fontSize: 13.5, color: "var(--color-danger)" }}>{error}</span>}
+          {error && <span role="alert" style={{ fontSize: 13.5, color: "var(--color-danger)" }}>{error}</span>}
         </div>
         {/* 실패한 줄은 번호와 이유를 함께 — 그것 없이는 이백 줄에서 무엇을 고칠지 모른다 */}
         {result && result.failed.length > 0 && (

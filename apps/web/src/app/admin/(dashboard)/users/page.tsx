@@ -70,7 +70,7 @@ export default function AdminUsersPage() {
             />
             <button type="submit" style={{ padding: "8px 16px", cursor: "pointer" }}>{t("common.confirm")}</button>
           </form>
-          {reauthError && <p style={{ color: "var(--color-danger)" }}>{reauthError}</p>}
+          {reauthError && <p role="alert" style={{ color: "var(--color-danger)" }}>{reauthError}</p>}
         </div>
       </div>
     );

@@ -35,7 +35,8 @@ const btn: React.CSSProperties = {
 export default function AdminMenusPage() {
   const t = useAdminT();
   const [items, setItems] = useState<MenuItem[]>([]);
-  const [message, setMessage] = useState("");
+  // 성공/실패를 함께 들고 다닌다 — 전에는 문구 앞 두 글자로 판별해서, 번역을 고치면 색이 뒤집혔다
+  const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
   /** 어느 항목의 선택기를 열었나 (null 이면 닫힘) */
   const [pickerFor, setPickerFor] = useState<number | null>(null);
   /** 하위 항목 선택기 — "부모:자식" 인덱스 (null 이면 닫힘) */
@@ -110,8 +111,8 @@ export default function AdminMenusPage() {
     const data = await res.json().catch(() => ({}));
     setMessage(
       res.ok
-        ? t("menus.saved")
-        : `${t("common.failPrefix")}${data.message ?? res.status}`,
+        ? { text: t("menus.saved"), ok: true }
+        : { text: `${t("common.failPrefix")}${data.message ?? res.status}`, ok: false },
     );
     if (res.ok) reload();
   }
@@ -183,7 +184,10 @@ export default function AdminMenusPage() {
           style={{ ...btn, padding: "10px 24px", fontWeight: 700, background: "var(--color-primary)", color: "var(--color-on-primary)", borderColor: "var(--color-primary)" }}>
           {t("common.save")}
         </button>
-        {message && <p style={{ color: message.startsWith(t("common.failPrefix").slice(0, 2)) ? "var(--color-danger)" : "var(--color-success)" }}>{message}</p>}
+        {message && (
+          <p role={message.ok ? "status" : "alert"}
+             style={{ color: message.ok ? "var(--color-success)" : "var(--color-danger)" }}>{message.text}</p>
+        )}
       </div>
 
       <p style={{ color: "var(--color-muted)", fontSize: 13, marginTop: 12 }}>
@@ -241,7 +245,7 @@ function TargetPicker(props: { onPick: (t: LinkTarget) => void; onClose: () => v
           value={query} onChange={(e) => setQuery(e.target.value)} />
       </div>
 
-      {error && <p style={{ padding: 12, color: "var(--color-danger)", margin: 0 }}>{error}</p>}
+      {error && <p role="alert" style={{ padding: 12, color: "var(--color-danger)", margin: 0 }}>{error}</p>}
       {!error && loading && total === 0 && <p style={{ padding: 12, color: "var(--color-muted)", margin: 0 }}>{t("common.loading")}</p>}
       {!error && !loading && total === 0 && (
         <p style={{ padding: 12, color: "var(--color-muted)", margin: 0 }}>

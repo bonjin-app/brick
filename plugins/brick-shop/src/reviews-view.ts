@@ -341,7 +341,7 @@ const reviewScript = () => `
         '<div class="brick-photo-preview" data-preview></div>' +
       '</div>' +
       '<div class="brick-write-actions"><button data-submit>' + ${JSON.stringify(t("common.submit"))} + '</button>' +
-      '<span class="brick-write-msg" data-msg></span></div></div>';
+      '<span class="brick-write-msg" role="alert" data-msg></span></div></div>';
   }
 
   function bindWrite(box){
@@ -474,7 +474,7 @@ const reviewScript = () => `
         '<label class="brick-secret-label"><input type="checkbox" data-secret />' +
         ${JSON.stringify(t("inquiries.secretLabel"))} + '</label>' +
         '<div class="brick-write-actions"><button data-submit>' + ${JSON.stringify(t("common.submit"))} + '</button>' +
-        '<span class="brick-write-msg" data-msg></span></div></div>';
+        '<span class="brick-write-msg" role="alert" data-msg></span></div></div>';
 
       get(box, '[data-submit]').addEventListener('click', function(){
         var msg = get(box, '[data-msg]');
