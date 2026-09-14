@@ -238,6 +238,7 @@
   "reviews.sortHigh": "별점 높은순",
   "reviews.sortLow": "별점 낮은순",
   "reviews.sortRecent": "최신순",
+  "reviews.starAria": "별 {n}점",
   "reviews.tooManyImages": "사진은 3장까지 올릴 수 있습니다.",
   "reviews.uploading": "사진 올리는 중…",
   "reviews.verified": "구매확인",

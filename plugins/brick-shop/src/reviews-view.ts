@@ -111,8 +111,9 @@ const REVIEW_CSS = `
 .brick-photo-item img{width:100%;height:100%;object-fit:cover;border-radius:var(--radius, 6px);border:1px solid var(--color-line, #e4e4ea)}
 .brick-photo-item button{position:absolute;top:-6px;right:-6px;width:22px;height:22px;padding:0;border:0;border-radius:50%;background:var(--color-text, #17171c);color:#fff;font-size:11px;line-height:1;cursor:pointer}
 .brick-rating-pick{display:flex;gap:4px;margin-bottom:12px;font-size:28px;line-height:1;cursor:pointer;color:var(--color-line, #e4e4ea)}
-.brick-rating-pick b{cursor:pointer;font-weight:400}
-.brick-rating-pick b.is-on{color:var(--color-warning, #96610a)}
+.brick-rating-pick button{cursor:pointer;font:inherit;color:inherit;background:none;border:0;padding:0 2px;line-height:1}
+.brick-rating-pick button.is-on{color:var(--color-warning, #96610a)}
+.brick-rating-pick button:focus-visible{outline:2px solid var(--color-primary, #cf4437);outline-offset:2px;border-radius:4px}
 .brick-write-actions{display:flex;gap:10px;align-items:center;margin-top:12px}
 .brick-write-actions button{padding:11px 22px;border:0;border-radius:8px;background:var(--color-primary,#d0402c);color:var(--color-on-primary, #ffffff);font-size:14px;font-weight:700;cursor:pointer}
 .brick-write-msg{font-size:13px;color:var(--color-danger, #c9342f)}
@@ -319,7 +320,16 @@ const reviewScript = () => `
 
   function writeForm(){
     var picks = '';
-    for (var i = 1; i <= 5; i++) picks += '<b data-star="' + i + '">★</b>';
+    /*
+     * 별점은 **진짜 버튼**이어야 한다. <b> 에 클릭만 붙여 두면 Tab 으로 닿지 않아
+     * 키보드만 쓰는 손님은 별점을 매길 수 없고, 스크린리더에는 "★" 다섯 개가
+     * 뜻 없이 읽힌다. aria-label 로 몇 점인지 말하고, aria-pressed 로 지금 고른
+     * 값을 알린다.
+     */
+    for (var i = 1; i <= 5; i++) {
+      picks += '<button type="button" data-star="' + i + '" aria-pressed="false" aria-label="' +
+        ${JSON.stringify(t("reviews.starAria", { n: "__N__" }))}.replace('__N__', i) + '">★</button>';
+    }
     return '<div class="brick-write-box"><h3>' + ${JSON.stringify(t("reviews.writeTitle"))} + '</h3>' +
       '<div class="brick-rating-pick" data-rating>' + picks + '</div>' +
       '<textarea data-content placeholder="' + ${JSON.stringify(t("reviews.placeholder"))}.replace(/"/g, '&quot;') + '"></textarea>' +
@@ -337,11 +347,13 @@ const reviewScript = () => `
   function bindWrite(box){
     var pick = get(box, '[data-rating]');
     function paint(){
-      pick.querySelectorAll('b').forEach(function(b){
-        b.classList.toggle('is-on', Number(b.dataset.star) <= state.myRating);
+      pick.querySelectorAll('button').forEach(function(b){
+        var on = Number(b.dataset.star) <= state.myRating;
+        b.classList.toggle('is-on', on);
+        b.setAttribute('aria-pressed', Number(b.dataset.star) === state.myRating ? 'true' : 'false');
       });
     }
-    pick.querySelectorAll('b').forEach(function(b){
+    pick.querySelectorAll('button').forEach(function(b){
       b.addEventListener('click', function(){ state.myRating = Number(b.dataset.star); paint(); });
     });
     paint();

@@ -653,6 +653,16 @@ check "같은 상품 재작성 차단" \
 contains "이미 작성 상태 안내" \
   "$(curl -s -b "$BCK" "$SHOP/products/$OPID/reviews/eligibility")" '"reason":"already_written"'
 
+# 별점은 **키보드로도 매길 수 있어야 한다.**
+#
+# <b> 다섯 개에 클릭만 붙여 두었더니 Tab 으로 닿지 않았고, 스크린리더에는
+# "★"가 뜻 없이 다섯 번 읽혔다. 버튼이어야 하고, 몇 점인지(aria-label)와
+# 지금 고른 값(aria-pressed)을 말해야 한다.
+STARS="$(curl -s "$API/api/render/page?path=shop/opt-item")"
+contains "별점 선택기가 실려 나간다" "$STARS" "brick-rating-pick"
+contains "별점이 지금 고른 값을 알린다" "$STARS" "aria-pressed"
+absent   "별점에 <b> 를 쓰지 않는다" "$STARS" ">★</b>"
+
 REVIEWS="$(curl -s "$SHOP/products/$OPID/reviews")"
 contains "후기 목록 공개" "$REVIEWS" "배송이 빠르고"
 contains "구매확인 배지" "$REVIEWS" '"verified":true'
