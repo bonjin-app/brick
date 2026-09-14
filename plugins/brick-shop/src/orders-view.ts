@@ -1,6 +1,6 @@
 import type { PluginContext } from "@brick/plugin-sdk";
 import { escapeHtml } from "@brick/plugin-sdk";
-import { moneyFnScript, localeTag } from "./i18n.js";
+import { moneyFnScript, localeTag, dateOptsScript } from "./i18n.js";
 
 /**
  * 주문 조회 화면 — <상점>/orders (목록) · <상점>/orders/<주문번호> (상세).
@@ -90,6 +90,7 @@ const listScript = (t: (k: string) => string, labels: string) => `
   var LABEL = ${labels};
   ${moneyFnScript("fmt")}
   var TAG = ${JSON.stringify(localeTag())};  // 날짜도 사이트 언어를 따른다
+  ${dateOptsScript()}  // …그리고 사이트 시간대를 따른다
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 
@@ -118,7 +119,7 @@ const listScript = (t: (k: string) => string, labels: string) => `
       }
       var rows = d.items.map(function(o){
         return '<tr>' +
-          '<td>' + new Date(o.created_at).toLocaleDateString(TAG) + '</td>' +
+          '<td>' + new Date(o.created_at).toLocaleDateString(TAG, DATE_OPTS) + '</td>' +
           '<td><a href="' + base + '/orders/' + encodeURIComponent(o.order_no) + '">' + esc(o.order_no) + '</a><br />' +
           '<small>' + esc(o.items_summary || '') + '</small></td>' +
           '<td class="brick-o-total">' + fmt(o.total) + '</td>' +
@@ -164,6 +165,7 @@ const detailScript = (t: (k: string, p?: Record<string, string | number>) => str
   var LABEL = ${labels};
   ${moneyFnScript("fmt")}
   var TAG = ${JSON.stringify(localeTag())};  // 날짜도 사이트 언어를 따른다
+  ${dateOptsScript()}  // …그리고 사이트 시간대를 따른다
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 
@@ -188,7 +190,7 @@ const detailScript = (t: (k: string, p?: Record<string, string | number>) => str
 
         var deadline = v.withdrawalDeadline
           ? '<p class="brick-ret-note">' + ${JSON.stringify(t("ret.withdrawalDeadline", { date: "__D__" }))}
-              .replace('__D__', new Date(v.withdrawalDeadline).toLocaleDateString(TAG)) + '</p>'
+              .replace('__D__', new Date(v.withdrawalDeadline).toLocaleDateString(TAG, DATE_OPTS)) + '</p>'
           : '';
         var expired = v.withdrawalExpired
           ? '<p class="brick-ret-note">' + ${JSON.stringify(t("ret.withdrawalExpired"))} + '</p>' : '';
@@ -293,7 +295,7 @@ const detailScript = (t: (k: string, p?: Record<string, string | number>) => str
         ' × ' + it.quantity + '</td><td class="brick-o-total">' + fmt(it.line_total) + '</td></tr>';
     }).join('');
     var history = (d.events || []).map(function(ev){
-      return '<li>' + new Date(ev.created_at).toLocaleString() + ' — ' +
+      return '<li>' + new Date(ev.created_at).toLocaleString(TAG, DATE_OPTS) + ' — ' +
         esc(LABEL[ev.to_status] || ev.to_status) + (ev.note ? ' (' + esc(ev.note) + ')' : '') + '</li>';
     }).join('');
     body.innerHTML =

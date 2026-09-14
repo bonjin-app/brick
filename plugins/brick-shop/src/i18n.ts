@@ -6,6 +6,7 @@
  * 함수 시그니처에 t 를 꿰는 기계적 소음을 없앤다. 활성화 때 bindI18n(ctx).
  */
 import type { PluginContext } from "@brick/plugin-sdk";
+import { SITE_TZ } from "@brick/plugin-sdk";
 
 type TFn = PluginContext["t"];
 
@@ -53,4 +54,20 @@ export function money(amount: number): string {
  */
 export function moneyFnScript(name = "fmt"): string {
   return `function ${name}(n){ return Number(n).toLocaleString(${JSON.stringify(localeTag())}) + ${JSON.stringify(t("common.won"))}; }`;
+}
+
+/**
+ * 브라우저에서 날짜를 찍을 때 쓸 옵션 — **사이트 시간대**를 함께 넘긴다.
+ *
+ * 여기 문자열들은 이미 `localeTag()` 로 사이트 언어를 따라가고 있었는데
+ * 시간대는 보는 사람의 것이었다(주문 이력은 로케일마저 없었다). 서버가 그리는
+ * 화면은 사이트 시간대이므로, 같은 주문을 목록에서 보는 것과 상세에서 보는 것이
+ * 달라질 수 있다 — 해외에서 접속한 손님에게는 날짜가 하루 어긋난다.
+ *
+ * 코어의 window.brickDate 는 `YYYY.MM.DD` 로 고정이라 여기서는 쓰지 않는다.
+ * 쇼핑몰의 날짜는 언어별 표기를 따르는 편이 자연스럽고(영어 사이트의 "Sep 14,
+ * 2026"), 고쳐야 할 것은 **시간대**다.
+ */
+export function dateOptsScript(name = "DATE_OPTS"): string {
+  return `var ${name} = { timeZone: ${JSON.stringify(SITE_TZ)} };`;
 }

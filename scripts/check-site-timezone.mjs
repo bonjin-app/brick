@@ -68,6 +68,26 @@ for (const file of files) {
   });
 }
 
+/*
+ * 브라우저에 찍는 날짜도 사이트 시간대를 지정해야 한다.
+ *
+ * `new Date(v).toLocaleDateString(TAG)` 는 언어만 따르고 시간대는 **보는 사람의
+ * 것**이다. 서버가 그리는 화면은 사이트 시간대이므로, 해외에서 접속한 손님은
+ * 같은 주문을 목록과 상세에서 다른 날짜로 본다. 주문 이력은 로케일마저 없이
+ * `toLocaleString()` 이었다.
+ */
+for (const file of files) {
+  const src = readFileSync(file, "utf8");
+  const re = /new Date\([^)]*\)\.toLocale(?:Date|Time)?String\(([^)]*)\)/g;
+  let m;
+  while ((m = re.exec(src))) {
+    if (/timeZone|DATE_OPTS/.test(m[1])) continue;
+    checked++;
+    const line = src.slice(0, m.index).split("\n").length;
+    bad.push(`${file.slice(ROOT.length)}:${line}  ${m[0].slice(0, 62)}  — 시간대를 함께 주세요`);
+  }
+}
+
 if (bad.length) {
   for (const b of bad) console.log(`  ❌ ${b}`);
   console.log(`\n${bad.length}곳이 UTC 로 자릅니다 — 한국에서 그 경계는 아침 9시입니다.`);
