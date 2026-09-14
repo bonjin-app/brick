@@ -98,7 +98,17 @@ export default function AdminPagesPage() {
         <tbody>
           {rows.map((p) => (
             <tr key={p.id} style={{ borderBottom: "1px solid var(--color-line)", cursor: "pointer" }} onClick={() => open(p.id)}>
-              <td data-label={t("common.title")} style={{ padding: 12 }}><strong>{p.title}</strong></td>
+              {/*
+                행 클릭만으로는 키보드로 페이지를 열 수 없었다 — 이 표에는 수정
+                버튼이 따로 없어서 **여는 길이 마우스뿐**이었다. 제목을 버튼으로
+                두어 Tab 으로 닿게 한다(행 클릭은 마우스 편의로 그대로 둔다).
+              */}
+              <td data-label={t("common.title")} style={{ padding: 12 }}>
+                <button type="button" onClick={(e) => { e.stopPropagation(); open(p.id); }}
+                  style={{ font: "inherit", color: "inherit", background: "none", border: 0, padding: 0, cursor: "pointer", textAlign: "left" }}>
+                  <strong>{p.title}</strong>
+                </button>
+              </td>
               <td data-label={t("pages.colSlug")}><code>/{p.slug}</code></td>
               <td data-label={t("common.status")}>{p.status === "published" ? t("pages.published") : p.status === "draft" ? t("pages.draft") : t("pages.archived")}</td>
               <td data-label={t("pages.colUpdated")} style={{ color: "var(--color-muted)", fontSize: 13 }}>{new Date(p.updatedAt).toLocaleString(localeTag)}</td>
@@ -185,11 +195,20 @@ function PageEditor(props: {
             </button>
             {picker && (
               <div style={{ background: "var(--color-bg)", border: "1px solid var(--color-line-strong)", borderRadius: 8, marginTop: 4, boxShadow: "0 4px 12px rgba(0,0,0,.1)" }}>
+                {/*
+                  진짜 버튼이어야 한다. div + onClick 은 마우스로만 눌린다 —
+                  Tab 으로 닿지 않고 스크린리더도 "그냥 글"로 읽는다.
+                  블록을 고르는 것은 이 CMS 의 중심 동작이라 특히 그렇다.
+                */}
                 {catalog.map((b) => (
-                  <div key={b.name} onClick={() => addBlock(b.name)}
-                    style={{ padding: "10px 16px", cursor: "pointer", borderBottom: "1px solid var(--color-line)" }}>
+                  <button key={b.name} type="button" onClick={() => addBlock(b.name)}
+                    style={{
+                      display: "block", width: "100%", textAlign: "left", font: "inherit", color: "inherit",
+                      background: "none", border: 0, borderBottom: "1px solid var(--color-line)",
+                      padding: "10px 16px", cursor: "pointer",
+                    }}>
                     <strong>{b.displayName}</strong> <span style={{ color: "var(--color-muted)", fontSize: 12 }}>{b.name}</span>
-                  </div>
+                  </button>
                 ))}
               </div>
             )}

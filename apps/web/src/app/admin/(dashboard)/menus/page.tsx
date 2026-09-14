@@ -255,8 +255,13 @@ function TargetPicker(props: { onPick: (t: LinkTarget) => void; onClose: () => v
             padding: "6px 12px", background: "var(--color-bg-soft)", fontSize: 12, color: "var(--color-text-soft)", fontWeight: 600,
           }}>{g.label}</div>
           {g.items.map((tg) => (
-            <div key={tg.path} onClick={() => props.onPick(tg)}
-              style={{ padding: "9px 12px", cursor: "pointer", borderBottom: "1px solid var(--color-line)" }}
+            /* 진짜 버튼이어야 한다 — div + onClick 은 Tab 으로 닿지 않는다 */
+            <button key={tg.path} type="button" onClick={() => props.onPick(tg)}
+              style={{
+                display: "block", width: "100%", textAlign: "left", font: "inherit", color: "inherit",
+                background: "var(--color-bg)", border: 0, borderBottom: "1px solid var(--color-line)",
+                padding: "9px 12px", cursor: "pointer",
+              }}
               onMouseEnter={(e) => { e.currentTarget.style.background = "var(--color-bg-soft)"; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = "var(--color-bg)"; }}>
               <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
@@ -264,7 +269,7 @@ function TargetPicker(props: { onPick: (t: LinkTarget) => void; onClose: () => v
                 <code style={{ fontSize: 12, color: "var(--color-muted)" }}>{tg.path}</code>
               </div>
               {tg.hint && <div style={{ fontSize: 12, color: "var(--color-warning)", marginTop: 2 }}>{tg.hint}</div>}
-            </div>
+            </button>
           ))}
         </div>
       ))}
