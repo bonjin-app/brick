@@ -9,6 +9,16 @@ const nextConfig = {
   // (src/lib/proxy.ts 참고). rewrites를 쓰지 않는 이유:
   // standalone 빌드에서 rewrites의 destination은 빌드 시점에 고정되므로,
   // 배포본을 다른 포트로 띄우면 깨진다 — FTP 배포 환경에서 치명적이다.
+  /*
+   * 빌드 산출물 디렉터리.
+   *
+   * 개발 서버는 `.next-dev` 를 쓴다(`pnpm dev` 가 BRICK_WEB_DIST 를 넘긴다).
+   * 같은 `.next` 를 쓰면 다른 터미널에서 `pnpm build` 를 한 번 돌리는 순간
+   * 개발 서버의 청크가 통째로 갈려서 모든 요청이 500 이 된다 —
+   * "Cannot find module './777.js'" 라는 메시지만 남아 원인을 짐작하기 어렵다.
+   * 프로덕션 빌드를 확인하는 것은 개발 중에 흔히 하는 일이다.
+   */
+  distDir: process.env.BRICK_WEB_DIST || ".next",
   output: "standalone",
   outputFileTracingRoot: path.join(__dirname, "../../"),
   // Brick 은 next/image 를 쓰지 않는다 — 이미지 처리는 API(sharp)가 업로드 시점에 한다.
