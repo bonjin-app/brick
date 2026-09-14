@@ -317,6 +317,34 @@ export default definePlugin(async (ctx) => {
     const items = body.items?.length ? body.items : await getCartItems(db, own);
     if (!items.length) throw new ShopError(400, "장바구니가 비어 있습니다.");
 
+    /*
+     * 비회원 주문은 한 IP 가 시간당 20건까지.
+     *
+     * 주문서는 **아무 이메일이나** 받고, 접수 즉시 그 주소로 안내 메일이 나간다.
+     * 즉 확인 절차 없는 발송 수단이다 — 남의 주소를 적어 열 번 주문하면 열 통이
+     * 그 사람에게 간다(재현했다: 10/10). 받는 사람에게는 괴롭힘이고, 보내는
+     * 도메인에는 평판 손상이다. 게다가 가짜 주문이 운영자의 주문 목록을 덮는다.
+     *
+     * 재입고 알림이 똑같은 구멍이었고(60번 시도해 60건) 거기서는 캡차 + IP
+     * 제한으로 막았다. 여기서는 **캡차를 쓰지 않는다** — 주문서는 손님이 돈을
+     * 내려는 자리이고, 그 앞에 퍼즐을 놓으면 진짜 손님을 잃는다. 발사대를
+     * 멈추는 데는 IP 제한이면 충분하다.
+     *
+     * 숫자는 재입고·회원가입과 같게 뒀다. 5회 같은 좁은 값은 사무실·학교처럼
+     * NAT 뒤에 여러 사람이 있는 곳에서 정상 손님을 막는다.
+     *
+     * **성공한 주문만 센다.** 재고가 없거나 금액이 안 맞아 실패한 요청은 메일을
+     * 보내지 않으므로 스팸이 아니다. 회원은 세지 않는다 — 로그인한 사람은
+     * 이미 식별돼 있고, 그 주소는 자기 것이다.
+     */
+    const guestKey = req.user ? null : `order-ip:${req.ip}`;
+    if (guestKey) {
+      const used = (await ctx.cache.get<number>(guestKey)) ?? 0;
+      if (used >= 20) {
+        throw new ShopError(429, "주문이 너무 많습니다. 잠시 후 다시 시도해주세요.");
+      }
+    }
+
     const result = await createOrder(db, {
       items,
       orderer: body.orderer,
@@ -330,6 +358,12 @@ export default definePlugin(async (ctx) => {
       pointsPort: pointsPort(),
       grade: await gradeOf(db, req.user?.id ?? null),
     });
+
+    // 성공한 주문만 센다 (위의 IP 제한)
+    if (guestKey) {
+      const used = (await ctx.cache.get<number>(guestKey)) ?? 0;
+      await ctx.cache.set(guestKey, used + 1, 60 * 60);
+    }
 
     // 주문한 상품을 장바구니에서 비운다 (직접 구매가 아니라 장바구니 주문일 때만)
     if (!body.items?.length) await clearCart(db, own);

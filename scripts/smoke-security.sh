@@ -296,6 +296,37 @@ IFS='|' read -r CTK CAN <<< "$(captcha_issue)"
 printf '{"title":"문의합니다","content":"내용입니다","category":"일반","guestName":"손님","guestEmail":"g@x.test","guestPassword":"1234","captchaToken":"%s","captchaAnswer":"%s"}' "$CTK" "$CAN" > "$TMP/tk1.json"
 contains "1:1 문의 — 캡차를 풀면 접수" "$(post "$HELP/tickets" "$TMP/tk1.json")" '"ticketNo"'
 
+# ── 비회원 주문이 메일 발사대가 되지 않는다 ──────────────────
+#
+# 주문서는 **아무 이메일이나** 받고 접수 즉시 그 주소로 안내 메일이 나간다.
+# 즉 확인 절차 없는 발송 수단이다 — 남의 주소를 적어 열 번 주문하면 열 통이
+# 그 사람에게 간다(재현했다: 10/10, 캡차가 켜진 기본 설정에서). 받는 사람에게는
+# 괴롭힘이고 보내는 도메인에는 평판 손상이며, 가짜 주문이 운영자의 주문 목록을
+# 덮는다. 재입고 알림이 똑같은 구멍이었다.
+#
+# 여기서는 **캡차를 쓰지 않는다** — 주문서는 손님이 돈을 내려는 자리이고 그 앞에
+# 퍼즐을 놓으면 진짜 손님을 잃는다. IP 한도(시간당 20건)면 발사대는 멈춘다.
+# 이 절도 한도를 소진하므로 맨 끝에 둔다.
+SPAM_PID="$(curl -s -b "$CK" -X POST "$SHOP/admin/products" -H 'content-type: application/json' \
+  -d '{"slug":"spam-target","name":"재고 넉넉한 상품","price":1000,"stock":9999,"status":"selling"}' \
+  | python3 -c "import json,sys;print(json.load(sys.stdin).get('id',''))")"
+order_once() {
+  printf '{"items":[{"productId":"%s","quantity":1}],"orderer":{"ordererName":"손님","ordererPhone":"010-0000-0000","ordererEmail":"%s","postcode":"06236","address1":"서울"}}' \
+    "$SPAM_PID" "$1" > "$TMP/spam-order.json"
+  code -X POST "$SHOP/orders" -H 'content-type: application/json' --data-binary "@$TMP/spam-order.json"
+}
+ORDER_LIMITED=""
+for i in $(seq 1 25); do
+  RC="$(order_once "victim@x.test")"
+  [[ "$RC" == "429" ]] && { ORDER_LIMITED="$i"; break; }
+done
+[[ -n "$ORDER_LIMITED" ]] && ok "비회원 주문 — IP 한도로 막힌다 (${ORDER_LIMITED}번째)" \
+  || bad "비회원 주문 — IP 한도가 걸리지 않는다 (임의 주소로 메일을 무한히 보낼 수 있다)"
+# 회원은 이미 식별돼 있고 그 주소는 자기 것이다 — 같은 한도에 걸리면 안 된다
+printf '{"items":[{"productId":"%s","quantity":1}],"orderer":{"ordererName":"관리자","ordererPhone":"010-1111-2222","ordererEmail":"admin@sec.test","postcode":"06236","address1":"서울"}}' "$SPAM_PID" > "$TMP/mem-order.json"
+check "회원 주문은 그 한도에 걸리지 않는다" \
+  "$(code -b "$CK" -X POST "$SHOP/orders" -H 'content-type: application/json' --data-binary "@$TMP/mem-order.json")" "200"
+
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 # 실측을 남긴다(설정됐을 때만) — README 의 표가 실제와 같은지 CI 가 대조한다.
 # 표의 숫자는 조용히 썩는다: 단언을 더해도 아무도 그 줄을 고치지 않는다.
