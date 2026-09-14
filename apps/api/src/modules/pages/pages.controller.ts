@@ -122,7 +122,7 @@ export class PagesController {
         publishedAt: dto.status === "published" ? new Date() : null,
       });
     } catch (err) {
-      if (isUniqueViolation(err, "pages_slug")) throw new ConflictException(`slug "${dto.slug}" already exists`);
+      if (isUniqueViolation(err, "pages_slug")) throw new ConflictException(`주소 "${dto.slug}" 는 이미 쓰이고 있습니다.`);
       throw err;
     }
     await this.renderer.invalidate();
@@ -155,7 +155,7 @@ export class PagesController {
         })
         .where(eq(pages.id, id));
     } catch (err) {
-      if (isUniqueViolation(err, "pages_slug")) throw new ConflictException(`slug "${dto.slug}" already exists`);
+      if (isUniqueViolation(err, "pages_slug")) throw new ConflictException(`주소 "${dto.slug}" 는 이미 쓰이고 있습니다.`);
       throw err;
     }
     // 전체 무효화: slug 변경, 다른 페이지에 포함된 블록 갱신 등을 안전하게 커버
@@ -192,8 +192,8 @@ export class PagesController {
     if (!SLUG_RE.test(dto?.slug ?? "")) {
       throw new BadRequestException("slug: 소문자/숫자/하이픈/슬래시만 허용");
     }
-    if (dto.slug.includes("//") || dto.slug.endsWith("/")) throw new BadRequestException("invalid slug");
-    if (!dto.title?.trim()) throw new BadRequestException("title required");
+    if (dto.slug.includes("//") || dto.slug.endsWith("/")) throw new BadRequestException("주소는 영문 소문자·숫자·하이픈만 쓸 수 있습니다.");
+    if (!dto.title?.trim()) throw new BadRequestException("제목을 입력해주세요.");
   }
 
   /** FTS 색인용 텍스트 — 블록을 렌더한 뒤 태그를 벗겨 저장 */

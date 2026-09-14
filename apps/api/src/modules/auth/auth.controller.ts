@@ -333,7 +333,7 @@ export class AuthController {
   @Get("oauth/my/identities")
   async myIdentities(@Req() req: FastifyRequest) {
     const me = await this.auth.resolveFromRequest(req);
-    if (!me) throw new UnauthorizedException();
+    if (!me) throw new UnauthorizedException("로그인이 필요합니다.");
     return { items: await this.oauth.identitiesOf(me.id) };
   }
 
@@ -341,7 +341,7 @@ export class AuthController {
   @Delete("oauth/my/identities/:provider")
   async unlinkIdentity(@Param("provider") provider: string, @Req() req: FastifyRequest) {
     const me = await this.auth.resolveFromRequest(req);
-    if (!me) throw new UnauthorizedException();
+    if (!me) throw new UnauthorizedException("로그인이 필요합니다.");
     await this.oauth.unlink(me.id, provider);
     await this.audit.record({
       action: "auth.oauth_unlink", targetType: "user", targetId: me.id,

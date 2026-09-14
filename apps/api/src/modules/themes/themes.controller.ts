@@ -52,7 +52,7 @@ export class ThemesController {
   @UseGuards(AdminGuard)
   async upload(@Req() req: FastifyRequest) {
     const file = await req.file();
-    if (!file) throw new BadRequestException("multipart file required");
+    if (!file) throw new BadRequestException("테마 zip 파일을 선택해주세요.");
     const result = await this.installer.installTheme(await file.toBuffer());
     await this.audit.fromRequest(req as never, {
       action: "theme.install", targetType: "theme", targetId: result.name,
@@ -66,7 +66,7 @@ export class ThemesController {
   async activate(@Param("name") name: string, @Req() req: FastifyRequest) {
     const themes = await this.themes.discover();
     const target = themes.find((t) => t.name === name);
-    if (!target) throw new NotFoundException(`theme "${name}" not found`);
+    if (!target) throw new NotFoundException(`테마 "${name}" 을 찾을 수 없습니다.`);
     await this.db
       .insert(siteSettings)
       .values({ key: "theme.active", value: name as never })

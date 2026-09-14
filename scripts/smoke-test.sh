@@ -85,6 +85,20 @@ check "미인증 관리자 작업 차단" "$(code -X POST "$API/api/plugins/bric
 check "잘못된 비밀번호 차단" \
   "$(code -X POST "$API/api/auth/login" -H 'content-type: application/json' \
       -d '{"email":"admin@smoke.test","password":"wrong-password"}')" "401"
+# 손님이 가장 자주 보는 오류 화면이다. 로그인 화면은 서버가 준 message 를 그대로
+# 보여주므로(한국어 대체 문구는 message 가 아예 없을 때만 쓰인다) 여기에 영어를
+# 적으면 한국어 사이트에 "invalid credentials" 가 뜬다 — 실제로 그렇게 떴다.
+WRONGPW="$(curl -s -X POST "$API/api/auth/login" -H 'content-type: application/json' \
+  -d '{"email":"admin@smoke.test","password":"wrong-password"}')"
+absent "거절 문구가 영어가 아니다" "$WRONGPW" "invalid credentials"
+contains "무엇이 틀렸는지 한국어로 말한다" "$WRONGPW" "올바르지 않습니다"
+# 없는 계정과 틀린 비밀번호가 다른 말을 하면 그 차이로 가입 여부가 샌다
+contains "없는 계정도 같은 문구" \
+  "$(curl -s -X POST "$API/api/auth/login" -H 'content-type: application/json' \
+      -d '{"email":"nobody-here@smoke.test","password":"wrong-password"}')" "올바르지 않습니다"
+# 관리 저장이 401 로 막히면 "Unauthorized" 가 아니라 무엇을 해야 하는지 말한다
+contains "세션이 풀렸을 때도 한국어로" \
+  "$(curl -s -X POST "$API/api/pages" -H 'content-type: application/json' -d '{}')" "다시 로그인"
 contains "로그인" \
   "$(curl -s -c "$COOKIES" -X POST "$API/api/auth/login" -H 'content-type: application/json' \
       -d '{"email":"admin@smoke.test","password":"smokepass123"}')" '"role":"admin"'

@@ -18,6 +18,9 @@ const SESSION_TTL_DAYS = 30;
  * 토큰 원문은 쿠키에만 존재하고 DB에는 sha256 해시만 저장한다.
  * (DB가 유출되어도 세션 탈취 불가)
  */
+/** 로그인 거절 문구 — 어느 갈래로 막히든 같은 말을 해야 가입 여부가 새지 않는다 */
+const BAD_CREDENTIALS = "이메일 또는 비밀번호가 올바르지 않습니다.";
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger("Auth");
@@ -52,7 +55,8 @@ export class AuthService {
     // 소셜 전용 계정(passwordLoginEnabled=false)도 같은 응답으로 거절한다 —
     // "이 이메일은 소셜 계정입니다"라고 알려주면 가입 여부가 새어 나간다.
     if (!row || !row.isActive || row.passwordLoginEnabled === false) {
-      throw new UnauthorizedException("invalid credentials");
+      // 문구를 한 곳에 둔다 — 두 갈래가 다른 말을 하면 그 차이로 가입 여부가 샌다
+      throw new UnauthorizedException(BAD_CREDENTIALS);
     }
 
     // 비밀번호 검증 — 옮겨온 계정은 원본 해시로 검증한다.
@@ -67,7 +71,7 @@ export class AuthService {
     } else {
       ok = await argon2.verify(row.passwordHash, password).catch(() => false);
     }
-    if (!ok) throw new UnauthorizedException("invalid credentials");
+    if (!ok) throw new UnauthorizedException(BAD_CREDENTIALS);
 
     // 자동 승급 — 로그인 시점이 평문 비밀번호를 손에 쥔 유일한 순간이다.
     // 그누보드의 MD5 는 유출되면 사실상 평문이므로 그대로 두면 이전한 사이트는

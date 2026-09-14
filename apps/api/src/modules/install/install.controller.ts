@@ -59,14 +59,14 @@ export class InstallController {
   @Post()
   async install(@Body() dto: InstallDto) {
     const { state } = await this.status();
-    if (state === "installed") throw new BadRequestException("already installed");
+    if (state === "installed") throw new BadRequestException("이미 설치된 사이트입니다.");
     if (!dto?.siteName || !dto?.adminEmail || (dto?.adminPassword ?? "").length < 8) {
-      throw new BadRequestException("siteName, adminEmail, adminPassword(8+) required");
+      throw new BadRequestException("사이트 이름 · 관리자 이메일 · 비밀번호(8자 이상)를 모두 입력해주세요.");
     }
     // 모르는 유형은 조용히 빈 사이트로 만들지 않는다 — 오타를 알려줘야 한다
     const starterCode = String(dto.starter ?? "blank");
     if (!findStarter(starterCode)) {
-      throw new BadRequestException(`unknown starter: ${starterCode}`);
+      throw new BadRequestException(`알 수 없는 사이트 유형입니다: ${starterCode}`);
     }
 
     await this.db.insert(users).values({

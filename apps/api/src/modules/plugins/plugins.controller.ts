@@ -41,7 +41,7 @@ export class PluginsController {
   @UseGuards(AdminGuard)
   async upload(@Req() req: FastifyRequest) {
     const file = await req.file();
-    if (!file) throw new BadRequestException("multipart file required");
+    if (!file) throw new BadRequestException("zip 파일을 선택해주세요.");
     const result = await this.installer.installPlugin(await file.toBuffer());
     // 업데이트인 경우(이미 활성) 새 버전으로 자동 재적재 — 새 마이그레이션이 여기서 적용된다
     await this.loader.reload(result.name);
@@ -294,7 +294,7 @@ export class PluginsController {
   @UseGuards(AdminGuard)
   async adminResource(@Param("plugin") plugin: string, @Param("name") name: string) {
     const found = this.loader.adminResources.find((r) => r.plugin === plugin && r.name === name);
-    if (!found) throw new NotFoundException(`unknown admin resource: ${plugin}/${name}`);
+    if (!found) throw new NotFoundException(`알 수 없는 관리 화면입니다: ${plugin}/${name}`);
     await this.loader.refreshLocale();
     return this.loader.localizeAdminResource(plugin, found);
   }
@@ -407,7 +407,7 @@ export class PluginsController {
     @Req() req: FastifyRequest,
   ) {
     const block = this.loader.blocks.get(body?.name ?? "");
-    if (!block) throw new NotFoundException(`unknown block: ${body?.name}`);
+    if (!block) throw new NotFoundException(`알 수 없는 블록입니다: ${body?.name}`);
     const user = await this.auth.resolveFromRequest(req);
     const html = await block.render(body?.props ?? {}, {
       children: [],

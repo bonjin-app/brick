@@ -14,7 +14,14 @@ export class AuthGuard implements CanActivate {
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
     const req = ctx.switchToHttp().getRequest<FastifyRequest & { user?: unknown }>();
     const user = await this.auth.resolveFromRequest(req);
-    if (!user) throw new UnauthorizedException();
+    /*
+     * 메시지를 비워 두면 Nest 가 "Unauthorized" 를 넣는다. 화면은 서버가 준
+     * message 를 그대로 보여주므로, 관리자가 상품 설명을 한참 쓰고 저장을
+     * 눌렀을 때 "저장 실패: Unauthorized" 가 떴다 — 무슨 일인지도, 무엇을
+     * 해야 하는지도 알 수 없다(내용은 폼에 남아 있는데 그것조차 모른다).
+     * 이 파일의 다른 예외는 전부 한국어였다.
+     */
+    if (!user) throw new UnauthorizedException("로그인이 풀렸습니다. 다시 로그인한 뒤 시도해주세요.");
     req.user = user;
     return true;
   }
@@ -42,7 +49,7 @@ export class AdminGuard extends AuthGuard {
   override async canActivate(ctx: ExecutionContext): Promise<boolean> {
     await super.canActivate(ctx);
     const req = ctx.switchToHttp().getRequest<FastifyRequest & { user?: { id: string; role: string } }>();
-    if (req.user?.role !== "admin") throw new ForbiddenException("admin only");
+    if (req.user?.role !== "admin") throw new ForbiddenException("관리자만 할 수 있는 작업입니다.");
 
     const { rows } = await this.db.execute(sql`
       SELECT
