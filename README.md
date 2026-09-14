@@ -27,7 +27,7 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-3368%20passing-2ea043.svg" alt="스모크 테스트 3282개" />
+  <img src="https://img.shields.io/badge/E2E-3369%20passing-2ea043.svg" alt="스모크 테스트 3282개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
   <a href="https://github.com/bonjin-app/brick/pkgs/container/brick">
     <img src="https://img.shields.io/badge/docker-amd64%20%C2%B7%20arm64-2496ed.svg" alt="Docker image (amd64 · arm64)" />
@@ -367,7 +367,7 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 3,368개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 3,369개 항목):
 
 | 수트 | 항목 | 무엇을 못박는가 |
 |---|---:|---|
@@ -399,7 +399,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `smoke-social.sh` | 76 | state 쿠키 결속 · 코드 1회성 · 계정 탈취 경로 |
 | `smoke-security.sh` | 82 | 캡차 · 레이트리밋 · 결제 위조 · 권한 우회 · **CSP** · **캡차 칸 안내** · **비회원 스팸 방어(재입고·문의 캡차·IP 한도)** · **비회원 주문이 메일 발사대가 되지 않는다** | · **설정 실수를 대시보드가 알린다(메일 링크 localhost · 프록시 뒤 IP)** |
 | `smoke-upgrade.sh` | 27 | **데이터가 있는 사이트에 새 마이그레이션이 올라가는가** — 회원·동의·설정 보존 · 데이터 이관형 마이그레이션 적용 · 올린 뒤 가입·로그인·플러그인 활성화·주문 · 두 번 올려도 안전 · **인스턴스 둘이 동시에 부팅해도 플러그인 마이그레이션은 한 번만** |
-| `smoke-backup.sh` | 24 | **덤프를 뜨고 실제로 되돌린다** — 지운 회원·페이지가 돌아오는가 · 덤프 뒤에 만든 것은 사라지는가 · **앱이 돌고 있는 채로 복원**(문서가 시키는 그대로) · 복원 뒤 로그인·목록이 되는가 |
+| `smoke-backup.sh` | 25 | **덤프를 뜨고 실제로 되돌린다** — 지운 회원·페이지가 돌아오는가 · 덤프 뒤에 만든 것은 사라지는가 · **앱이 돌고 있는 채로 복원**(문서가 시키는 그대로) · 복원 뒤 로그인·목록이 되는가 |
 | `smoke-release.sh` | 78 | FTP 설치 경로 · 동봉 플러그인 · **동봉 테마 전부** · 고아 프로세스 정리 · **update.mjs 교체·롤백 왕복** · **HOSTNAME 바인딩** · **공개 화면 보안 헤더** · **로그인·가입 칸을 비밀번호 관리자가 알아본다** |
 | `smoke-create-plugin.sh` | 45 | 템플릿 생성→빌드→ZIP 설치→계약 전부 실사용 · escapeHtml · 실제 탈퇴로 파기 검증 |
 | `smoke-openapi.sh` | 24 | 실제 라우트에서 생성 · 플러그인 켜고 끄면 문서도 변함 · 자체 완결 문서 페이지 |
