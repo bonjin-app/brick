@@ -152,7 +152,7 @@ export class EmailVerifyService {
     return { email };
   }
 
-  /** 만료된 토큰 청소 (스케줄러가 부른다) */
+  /** 만료된 토큰 청소 — MaintenanceService 가 1시간마다 부른다 */
   async purgeExpired(): Promise<number> {
     const { rows } = await this.db.execute(sql`
       DELETE FROM email_verifications

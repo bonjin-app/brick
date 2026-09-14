@@ -122,6 +122,9 @@ jobs:
       - name: 날짜 경계를 사이트 시간대로 센다 (UTC 자정은 한국에서 아침 9시다)
         run: node scripts/check-site-timezone.mjs
 
+      - name: 치우겠다고 써 놓은 것을 실제로 치운다 (안 부르는 정리 함수는 없는 것과 같다)
+        run: node scripts/check-retention.mjs
+
       - name: 관리 화면의 표가 폰에서 카드로 접힌다 (밀려난 버튼은 닿을 수 없다)
         run: node scripts/check-admin-tables.mjs
 

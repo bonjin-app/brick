@@ -136,7 +136,7 @@ export class PasswordResetService {
     return true;
   }
 
-  /** 만료·사용된 토큰 정리 */
+  /** 만료·사용된 토큰 정리 — MaintenanceService 가 1시간마다 부른다 */
   async prune(): Promise<void> {
     await this.db.delete(passwordResets).where(lt(passwordResets.expiresAt, new Date()));
   }

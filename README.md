@@ -27,7 +27,7 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-3325%20passing-2ea043.svg" alt="스모크 테스트 3282개" />
+  <img src="https://img.shields.io/badge/E2E-3330%20passing-2ea043.svg" alt="스모크 테스트 3282개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
   <a href="https://github.com/bonjin-app/brick/pkgs/container/brick">
     <img src="https://img.shields.io/badge/docker-amd64%20%C2%B7%20arm64-2496ed.svg" alt="Docker image (amd64 · arm64)" />
@@ -367,12 +367,12 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 3,325개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 3,330개 항목):
 
 | 수트 | 항목 | 무엇을 못박는가 |
 |---|---:|---|
 | `smoke-test.sh` | 76 | 설치 · 인증 · 페이지 · 미디어 · 플러그인 로드 · **공유 이미지·immutable 캐시·압축** · **이미지 최적화·EXIF 제거** · **썸네일 백필** · **og 1200×630 자동 변형** · **업로드 immutable·ETag·304** · **DB 순단 회복** | · **압축 폭탄** |
-| `smoke-member.sh` | 132 | 약관 강제 · 동의 이력 · 개인정보 파기 · 주문 보존 · 프로필 이미지·공개 카드·닉네임 변경 주기 · **관리자 메모·이메일 변경** · **가입 오류 칸 안내** · **인증 링크 화면** |
+| `smoke-member.sh` | 137 | 약관 강제 · 동의 이력 · 개인정보 파기 · 주문 보존 · 프로필 이미지·공개 카드·닉네임 변경 주기 · **관리자 메모·이메일 변경** · **가입 오류 칸 안내** · **인증 링크 화면** · **보관 기간이 지난 기록이 실제로 지워진다(검색어·인증 토큰·감사)** |
 | `smoke-helpdesk.sh` | 113 | 문의 열거 방지 · 비회원 조회 · 사이트맵 유출 · **설정 화면(비회원 문의 스위치 · GET/PUT 모양 일치)** |
 | `smoke-migrate.sh` | 155 | 덤프 파싱 · 레벨 매핑 · **비밀번호 보존** · 영카트 상품·주문 · 멱등성 |
 | `smoke-returns.sh` | 105 | 할인 안분 · 이중 재고 복원 방어 · 청약철회 기간 · 비회원 청약철회 |
@@ -425,6 +425,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `check-secret-fields.mjs` | 자격증명처럼 생긴 입력칸이 평문으로 그려지는 것 (**토스 시크릿 키가 보통 텍스트 칸이었다 — 붙여 넣는 동안 화면에 그대로 떠 있었다**) |
 | `check-admin-field-names.mjs` | 화면이 보내는 칸 이름을 서버가 읽지 않는 것 (**승인번호를 적고 저장하면 "승인번호를 입력해주세요" 가 떴다 — 방금 적은 그 칸을 두고**) |
 | `check-mail-i18n.mjs` | 메일 제목이 한국어로 박히는 것 (**영어 사이트 회원이 비밀번호를 잃어버리면 한국어 메일을 받았다 — 재입고 메일은 가격 줄만 번역돼 있었다**) |
+| `check-retention.mjs` | 치우겠다고 써 놓고 아무도 부르지 않는 정리 함수 (**넷 중 둘은 주기 정리가 빠뜨렸고 — 검색어·이메일 인증 토큰이 400일 뒤에도 남아 있었다 — 나머지 둘은 같은 정책이 두 곳에 적혀 있었다**) |
 | `check-site-timezone.mjs` | 날짜 경계를 UTC 로 자르는 것 (**쪽지 하루 한도가 자정이 아니라 아침 9시에 풀렸다 — 같은 사이트 안에 날짜 경계가 두 벌이었다**) |
 | `check-admin-tables.mjs` | 관리 화면의 표가 폰에서 가로로 밀리는 것 (**375px 에서 플러그인 표가 982px 로 벌어져 켜기·끄기 버튼 여덟 개가 화면 밖에 있었다**) |
 | `check-admin-keyboard.mjs` | 클릭이 달렸는데 키보드로 닿지 않는 요소 (**페이지 편집기의 블록 고르기 열여덟 개가 전부 div 였고, 페이지 목록은 행 클릭이 유일한 진입로였다**) |
@@ -493,7 +494,7 @@ themes/
   boutique/       부티크 — 여백 위주
   corporate/      회사 홈페이지 — 히어로·특징 카드
 docs-site/        GitHub Pages 랜딩페이지
-scripts/          스모크 테스트 36종 + 정적 검사 16종 + OIDC 스텁 + 배포본 생성(build-release.sh)
+scripts/          스모크 테스트 36종 + 정적 검사 17종 + OIDC 스텁 + 배포본 생성(build-release.sh)
 docker/           Dockerfile, entrypoint
 ```
 

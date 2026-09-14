@@ -41,8 +41,4 @@ export class PostgresCacheProvider implements CacheProvider {
     await this.db.delete(cacheEntries).where(sql`${cacheEntries.tags} @> ${JSON.stringify([tag])}::jsonb`);
   }
 
-  /** 주기 정리 작업에서 호출 */
-  async sweepExpired(): Promise<void> {
-    await this.db.delete(cacheEntries).where(lt(cacheEntries.expiresAt, new Date()));
-  }
 }

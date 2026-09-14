@@ -140,7 +140,7 @@ export class AuditService {
     }));
   }
 
-  /** 보관 기간이 지난 기록 정리 (MaintenanceService가 호출) */
+  /** 보관 기간이 지난 기록 정리 — MaintenanceService 가 1시간마다 부른다 */
   async prune(): Promise<void> {
     const cutoff = new Date(Date.now() - RETENTION_DAYS * 86400_000);
     await this.db.delete(auditLogs).where(lt(auditLogs.createdAt, cutoff));

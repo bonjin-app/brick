@@ -439,6 +439,44 @@ check "빈 본문 거부" \
   "$(code -b "$CK" -X POST "$API/api/admin/agreements" -H 'content-type: application/json' \
       -d '{"kind":"terms","title":"제목","body":"  "}')" "400"
 
+echo "── 보관 기간이 지난 기록은 실제로 지워진다"
+#
+# 문서에만 있는 보관 기간은 지켜지지 않는다. 각 서비스에 정리 함수가 있었고
+# 주석에는 "유지보수 작업이 부른다"고 적혀 있었는데 **부르는 곳이 없었다**.
+# 400일 된 행을 심고 띄워 봤더니 검색어("희귀질환 치료")와 이메일 인증 토큰이
+# 그대로 남아 있었다. 검색어는 스키마가 스스로 "질병·법률 문의라 민감하다"고
+# 적어 둔 데이터다. 정리는 부팅 직후 1회 + 1시간 주기로 돈다.
+UID1="$(psql_q "SELECT id FROM users LIMIT 1")"
+psql_q "INSERT INTO search_logs (id, query, raw_query, result_count, created_at)
+        VALUES (gen_random_uuid(), '희귀질환 치료', '희귀질환 치료', 0, now() - interval '400 days')" >/dev/null
+psql_q "INSERT INTO email_verifications (id, user_id, email, token_hash, expires_at, created_at)
+        VALUES (gen_random_uuid(), '$UID1', 'stale@ret.test', md5(random()::text)||md5(random()::text),
+                now() - interval '400 days', now() - interval '400 days')" >/dev/null
+psql_q "INSERT INTO audit_logs (id, action, created_at)
+        VALUES (gen_random_uuid(), 'retention.old', now() - interval '400 days')" >/dev/null
+# 오늘 것도 하나 심는다 — 무차별 삭제라면 이것까지 사라진다
+psql_q "INSERT INTO search_logs (id, query, raw_query, result_count, created_at)
+        VALUES (gen_random_uuid(), '오늘 검색어', '오늘 검색어', 3, now())" >/dev/null
+check "심은 직후 오래된 행 3건" \
+  "$(psql_q "SELECT (SELECT count(*) FROM search_logs WHERE created_at < now() - interval '365 days')
+                  + (SELECT count(*) FROM email_verifications WHERE created_at < now() - interval '365 days')
+                  + (SELECT count(*) FROM audit_logs WHERE created_at < now() - interval '365 days')")" "3"
+
+kill "$API_PID" 2>/dev/null || true; wait "$API_PID" 2>/dev/null || true
+node "$ROOT/apps/api/dist/main.js" > "$TMP/api-retention.log" 2>&1 &
+API_PID=$!
+for i in $(seq 1 60); do curl -fsS "$API/readyz" >/dev/null 2>&1 && break; sleep 1; done
+sleep 2  # 정리는 부팅 직후 비동기로 돈다
+
+check "오래된 검색어가 지워졌다" \
+  "$(psql_q "SELECT count(*) FROM search_logs WHERE created_at < now() - interval '365 days'")" "0"
+check "오래된 이메일 인증 토큰이 지워졌다" \
+  "$(psql_q "SELECT count(*) FROM email_verifications WHERE created_at < now() - interval '365 days'")" "0"
+check "보관 기간이 지난 감사 기록이 지워졌다" \
+  "$(psql_q "SELECT count(*) FROM audit_logs WHERE created_at < now() - interval '365 days'")" "0"
+check "오늘 검색어는 남아 있다" \
+  "$(psql_q "SELECT count(*) FROM search_logs WHERE query = '오늘 검색어'")" "1"
+
 echo
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 # 실측을 남긴다(설정됐을 때만) — README 의 표가 실제와 같은지 CI 가 대조한다.
