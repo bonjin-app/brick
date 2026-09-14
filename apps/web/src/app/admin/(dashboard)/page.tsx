@@ -17,6 +17,8 @@ interface Dashboard {
   // 코어 통계는 서버에서 격리되어 실패하면 null 로 온다
   core: { members: number; membersToday: number; pages: number } | null;
   cards: DashCard[];
+  /** 메일을 보낼 수 있는 상태인가 — SMTP 가 없으면 모든 메일이 콘솔로만 나간다 */
+  mail?: { enabled: boolean };
 }
 
 interface VersionInfo {
@@ -118,6 +120,21 @@ export default function AdminDashboard() {
           <span style={{ color: "var(--color-muted)", fontSize: 13.5 }}>{t("dash.updateCurrent", { v: ver.version })}</span>
           <a className="btn-link" href={ver.latest.url} target="_blank" rel="noopener" style={{ marginLeft: "auto" }}>{t("dash.releaseNotes")} ↗</a>
           <a className="btn-link" href="https://github.com/bonjin-app/brick/blob/main/docs/upgrade.md" target="_blank" rel="noopener">{t("dash.howToUpdate")} ↗</a>
+        </div>
+      ) : null}
+
+      {/*
+        메일이 나가지 않는 상태를 알린다.
+        SMTP 가 없으면 주문 안내(무통장 계좌!)·비밀번호 재설정·이메일 인증이
+        **조용히** 사라진다. 손님은 계좌를 못 받아 입금하지 못하고, 운영자는
+        "주문 안내 메일" 스위치가 켜져 있으니 되는 줄 안다. 뉴스레터만 큰 소리로
+        거부하고 있었다 — 거래 메일은 말없이 버려졌다.
+      */}
+      {dash?.mail && !dash.mail.enabled ? (
+        <div className="brick-card" role="alert" style={{ marginTop: 0, marginBottom: 16, borderColor: "var(--color-warning)", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12 }}>
+          <strong>{t("dash.mailOff")}</strong>
+          <span style={{ color: "var(--color-muted)", fontSize: 13.5 }}>{t("dash.mailOffDetail")}</span>
+          <a className="btn-link" href="https://github.com/bonjin-app/brick/blob/main/docs/mailing.md" target="_blank" rel="noopener" style={{ marginLeft: "auto" }}>{t("dash.mailOffHow")} ↗</a>
         </div>
       ) : null}
 

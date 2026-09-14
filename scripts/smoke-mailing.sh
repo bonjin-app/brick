@@ -207,6 +207,17 @@ check "시작되지 않고 작성중 유지" "$STATUS_AFTER" "draft"
 SENT_NONE="$(psql_q "SELECT count(*) FROM mail_recipients WHERE campaign_id='$NID' AND status <> 'pending'")"
 check "아무에게도 보내지 않음" "$SENT_NONE" "0"
 
+# 뉴스레터는 이렇게 큰 소리로 거부하는데, **거래 메일**(주문 안내·비밀번호
+# 재설정·이메일 인증)은 말없이 콘솔로만 갔다. 손님은 무통장 계좌를 못 받아
+# 입금하지 못하고, 운영자는 "주문 안내 메일" 스위치가 켜져 있으니 되는 줄 안다.
+# MailProvider 계약에는 처음부터 enabled 가 있었는데(설정 여부 확인용) 묻는
+# 화면이 없었다 — 대시보드가 한 번 알려 준다.
+check "대시보드가 메일 미설정을 알린다" \
+  "$(curl -s -b "$CK" "$API/api/admin/dashboard" | /usr/bin/python3 -c "
+import json,sys
+try: print(json.load(sys.stdin).get('mail', {}).get('enabled'))
+except Exception: print('파싱실패')")" "False"
+
 echo "── 대상 없는 캠페인은 시작할 수 없다"
 EMPTY="$(curl -s -b "$CK" -X POST "$API/api/admin/mail" -H 'content-type: application/json' \
   -d '{"kind":"notice","subject":"아무도 없음","body":"본문","filters":{"inactiveDays":9999}}')"
@@ -326,6 +337,11 @@ curl -fsS "$API/readyz" >/dev/null 2>&1 && ok "SMTP 설정으로 서버 재시�
   || bad "SMTP 설정으로 서버 재시작 ($(tail -3 "$TMP/api2.log" 2>/dev/null))"
 curl -s -c "$CK" -X POST "$API/api/auth/login" -H 'content-type: application/json' \
   -d '{"email":"admin@ml.test","password":"adminpass123"}' >/dev/null
+check "SMTP 를 설정하면 그 경고가 사라진다" \
+  "$(curl -s -b "$CK" "$API/api/admin/dashboard" | /usr/bin/python3 -c "
+import json,sys
+try: print(json.load(sys.stdin).get('mail', {}).get('enabled'))
+except Exception: print('파싱실패')")" "True"
 # 대량 발송은 위험 작업 재인증(10분 승격)을 요구한다 — 세션마다 한 번
 curl -s -b "$CK" -X POST "$API/api/me/security/reauth" -H 'content-type: application/json' \
   -d '{"password":"adminpass123"}' >/dev/null

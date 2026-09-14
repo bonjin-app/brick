@@ -5,6 +5,7 @@ import {
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { sql } from "drizzle-orm";
 import type { BrickDb } from "@brick/database";
+import type { MailProvider } from "@brick/core";
 import { SITE_TZ, isRawResponse, rankOf, type PluginUploadedFile } from "@brick/core";
 import { PluginLoaderService } from "./plugin-loader.service.js";
 import { AdminGuard } from "../auth/auth.guard.js";
@@ -12,7 +13,7 @@ import { AuthService } from "../auth/auth.service.js";
 import { ExtensionInstallerService } from "../extensions/extension-installer.service.js";
 import { ExtensionUpdaterService } from "../extensions/extension-updater.service.js";
 import { AuditService } from "../audit/audit.service.js";
-import { DB } from "../../runtime.module.js";
+import { DB, MAIL } from "../../runtime.module.js";
 
 @Controller("api")
 export class PluginsController {
@@ -24,6 +25,7 @@ export class PluginsController {
     private readonly updater: ExtensionUpdaterService,
     private readonly audit: AuditService,
     @Inject(DB) private readonly db: BrickDb,
+    @Inject(MAIL) private readonly mail: MailProvider,
   ) {}
 
   @Get("plugins")
@@ -216,7 +218,18 @@ export class PluginsController {
   @UseGuards(AdminGuard)
   async adminDashboard() {
     const [core, cards] = await Promise.all([this.coreStats(), this.loader.collectDashboardCards()]);
-    return { core, cards };
+    /*
+     * 메일을 보낼 수 있는 상태인가.
+     *
+     * SMTP 가 없으면 모든 메일이 콘솔로만 나간다 — 주문 안내(무통장 계좌!),
+     * 비밀번호 재설정, 이메일 인증이 **조용히** 사라진다. 손님은 계좌를 못 받아
+     * 입금하지 못하고, 운영자는 "주문 안내 메일" 스위치가 켜져 있으니 되는 줄 안다.
+     *
+     * MailProvider 계약에는 처음부터 `enabled` 가 있었다("설정 여부 확인용").
+     * 그런데 그것을 묻는 화면이 없어서, 뉴스레터만 큰 소리로 거부하고 거래
+     * 메일은 말없이 버려지고 있었다. 대시보드가 한 번 알려 준다.
+     */
+    return { core, cards, mail: { enabled: this.mail.enabled } };
   }
 
   /**
