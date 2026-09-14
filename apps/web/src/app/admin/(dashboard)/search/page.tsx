@@ -9,6 +9,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { useAdminT } from "../../../../lib/i18n-admin";
+import { useLocaleTag } from "../../../../lib/i18n";
 
 interface Popular { query: string; count: number; emptyRatio: number }
 interface NoResult { query: string; count: number; lastAt: string }
@@ -25,6 +26,7 @@ const input: React.CSSProperties = { padding: 8, border: "1px solid var(--color-
 
 export default function SearchAnalyticsPage() {
   const t = useAdminT();
+  const localeTag = useLocaleTag();
   const [days, setDays] = useState(30);
   const [popular, setPopular] = useState<Popular[]>([]);
   const [empty, setEmpty] = useState<NoResult[]>([]);
@@ -90,15 +92,17 @@ export default function SearchAnalyticsPage() {
         {empty.length === 0 ? (
           <p style={{ color: "var(--color-muted)" }}>{t("search.emptyNone")}</p>
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          /* 좁은 화면에서는 카드로 접힌다 (관리 셸의 .brick-x-table) */
+          <table className="brick-x-table" style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead><tr><th style={th}>{t("search.colQuery")}</th><th style={th}>{t("search.colCount")}</th><th style={th}>{t("search.colLast")}</th><th style={th}></th></tr></thead>
             <tbody>
               {empty.map((r) => (
                 <tr key={r.query}>
-                  <td style={{ ...td, fontWeight: 500 }}>{r.query}</td>
-                  <td style={td}>{r.count}</td>
-                  <td style={{ ...td, color: "var(--color-muted)" }}>{new Date(r.lastAt).toLocaleDateString("ko-KR")}</td>
-                  <td style={td}>
+                  <td data-label={t("search.colQuery")} style={{ ...td, fontWeight: 500 }}>{r.query}</td>
+                  <td data-label={t("search.colCount")} style={td}>{r.count}</td>
+                  {/* 날짜 표기도 사이트 언어를 따른다 — 여기만 "ko-KR" 로 못박혀 있었다 */}
+                  <td data-label={t("search.colLast")} style={{ ...td, color: "var(--color-muted)" }}>{new Date(r.lastAt).toLocaleDateString(localeTag)}</td>
+                  <td data-label="" className="brick-x-actions" style={td}>
                     <button style={btn} onClick={() => fillFrom(r.query)}>{t("search.link")}</button>
                   </td>
                 </tr>
@@ -116,15 +120,15 @@ export default function SearchAnalyticsPage() {
         {popular.length === 0 ? (
           <p style={{ color: "var(--color-muted)" }}>{t("search.none")}</p>
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <table className="brick-x-table" style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead><tr><th style={th}>{t("search.colRank")}</th><th style={th}>{t("search.colQuery")}</th><th style={th}>{t("search.colCount")}</th><th style={th}>{t("search.colEmptyRate")}</th></tr></thead>
             <tbody>
               {popular.map((r, i) => (
                 <tr key={r.query}>
-                  <td style={{ ...td, color: "var(--color-muted)" }}>{i + 1}</td>
-                  <td style={{ ...td, fontWeight: 500 }}>{r.query}</td>
-                  <td style={td}>{r.count}</td>
-                  <td style={{ ...td, color: r.emptyRatio > 50 ? "var(--color-danger)" : "var(--color-text-soft)" }}>
+                  <td data-label={t("search.colRank")} style={{ ...td, color: "var(--color-muted)" }}>{i + 1}</td>
+                  <td data-label={t("search.colQuery")} style={{ ...td, fontWeight: 500 }}>{r.query}</td>
+                  <td data-label={t("search.colCount")} style={td}>{r.count}</td>
+                  <td data-label={t("search.colEmptyRate")} style={{ ...td, color: r.emptyRatio > 50 ? "var(--color-danger)" : "var(--color-text-soft)" }}>
                     {r.emptyRatio}%
                   </td>
                 </tr>
@@ -140,20 +144,20 @@ export default function SearchAnalyticsPage() {
           {t("search.ruleReplaceDesc")}<br />
           {t("search.ruleBlockDesc")}
         </p>
-        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 16 }}>
+        <table className="brick-x-table" style={{ width: "100%", borderCollapse: "collapse", marginBottom: 16 }}>
           <thead><tr><th style={th}>{t("search.colQuery")}</th><th style={th}>{t("search.colKind")}</th><th style={th}>{t("search.colReplacement")}</th><th style={th}>{t("search.colNote")}</th><th style={th}></th></tr></thead>
           <tbody>
             {rules.map((r) => (
               <tr key={r.id}>
-                <td style={{ ...td, fontWeight: 500 }}>{r.term}</td>
-                <td style={td}>{r.kind === "replace" ? t("search.replace") : t("search.block")}</td>
-                <td style={td}>{r.replacement ?? "-"}</td>
-                <td style={{ ...td, color: "var(--color-muted)" }}>{r.note ?? ""}</td>
-                <td style={td}><button style={btn} onClick={() => void removeRule(r.id)}>{t("common.delete")}</button></td>
+                <td data-label={t("search.colQuery")} style={{ ...td, fontWeight: 500 }}>{r.term}</td>
+                <td data-label={t("search.colKind")} style={td}>{r.kind === "replace" ? t("search.replace") : t("search.block")}</td>
+                <td data-label={t("search.colReplacement")} style={td}>{r.replacement ?? "-"}</td>
+                <td data-label={t("search.colNote")} style={{ ...td, color: "var(--color-muted)" }}>{r.note ?? ""}</td>
+                <td data-label="" className="brick-x-actions" style={td}><button style={btn} onClick={() => void removeRule(r.id)}>{t("common.delete")}</button></td>
               </tr>
             ))}
             {rules.length === 0 && (
-              <tr><td style={{ ...td, color: "var(--color-muted)" }} colSpan={5}>{t("search.noRules")}</td></tr>
+              <tr className="brick-x-empty"><td data-label="" style={{ ...td, color: "var(--color-muted)" }} colSpan={5}>{t("search.noRules")}</td></tr>
             )}
           </tbody>
         </table>

@@ -90,7 +90,12 @@ export default function AdminUsersPage() {
     <div>
       <h1>{t("users.title")} <span style={{ color: "var(--color-muted)", fontSize: 16 }}>{t("users.countN", { n: data.total })}</span></h1>
       {message && <p style={{ color: "var(--color-success)" }}>{message}</p>}
-      <table style={{ width: "100%", background: "var(--color-bg)", borderRadius: 8, borderCollapse: "collapse" }}>
+      {/*
+        좁은 화면에서는 카드로 접힌다 (관리 셸의 .brick-x-table).
+        이 표에는 역할 선택·정지 버튼·운영 메모가 있고 메모 칸만 200px 을 쓴다 —
+        접지 않으면 폰에서 이름 말고는 아무것도 닿지 않는다.
+      */}
+      <table className="brick-x-table" style={{ width: "100%", background: "var(--color-bg)", borderRadius: 8, borderCollapse: "collapse" }}>
         <thead>
           <tr style={{ textAlign: "left", borderBottom: "1px solid var(--color-line)" }}>
             <th style={{ padding: 12 }}>{t("common.name")}</th><th>{t("common.email")}</th><th>{t("users.role")}</th><th>{t("common.status")}</th><th>{t("users.memo")}</th><th>{t("users.colJoined")}</th>
@@ -99,19 +104,19 @@ export default function AdminUsersPage() {
         <tbody>
           {data.items.map((u) => (
             <tr key={u.id} style={{ borderBottom: "1px solid var(--color-line)" }}>
-              <td style={{ padding: 12 }}><strong>{u.displayName}</strong></td>
-              <td>{u.email}</td>
-              <td>
+              <td data-label={t("common.name")} style={{ padding: 12 }}><strong>{u.displayName}</strong></td>
+              <td data-label={t("common.email")}>{u.email}</td>
+              <td data-label={t("users.role")}>
                 <select value={u.role} onChange={(e) => patch(u.id, { role: e.target.value })}>
                   {ROLES.map((v) => <option key={v} value={v}>{t(v === "admin" ? "users.roleAdmin" : v === "manager" ? "users.roleManager" : "users.roleMember")}</option>)}
                 </select>
               </td>
-              <td>
+              <td data-label={t("common.status")}>
                 <button onClick={() => patch(u.id, { isActive: !u.isActive })} style={{ cursor: "pointer" }}>
                   {u.isActive ? t("users.active") : t("users.suspended")}
                 </button>
               </td>
-              <td style={{ padding: "6px 8px 6px 0", minWidth: 200 }}>
+              <td data-label={t("users.memo")} style={{ padding: "6px 8px 6px 0", minWidth: 200 }}>
                 {/* 회원에게 보이지 않는 운영 메모 — 포커스를 벗어나면 저장한다 */}
                 <textarea
                   key={u.id + (u.adminMemo ?? "")}
@@ -124,7 +129,7 @@ export default function AdminUsersPage() {
                   style={{ width: "100%", fontSize: 13, resize: "vertical", minHeight: 32 }}
                 />
               </td>
-              <td style={{ color: "var(--color-muted)", fontSize: 13 }}>{new Date(u.createdAt).toLocaleDateString(localeTag)}</td>
+              <td data-label={t("users.colJoined")} style={{ color: "var(--color-muted)", fontSize: 13 }}>{new Date(u.createdAt).toLocaleDateString(localeTag)}</td>
             </tr>
           ))}
         </tbody>
