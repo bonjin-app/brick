@@ -428,6 +428,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `check-site-timezone.mjs` | 날짜 경계를 UTC 로 자르는 것 (**쪽지 하루 한도가 자정이 아니라 아침 9시에 풀렸다 — 같은 사이트 안에 날짜 경계가 두 벌이었다**) |
 | `check-admin-tables.mjs` | 관리 화면의 표가 폰에서 가로로 밀리는 것 (**375px 에서 플러그인 표가 982px 로 벌어져 켜기·끄기 버튼 여덟 개가 화면 밖에 있었다**) |
 | `check-admin-keyboard.mjs` | 클릭이 달렸는데 키보드로 닿지 않는 요소 (**페이지 편집기의 블록 고르기 열여덟 개가 전부 div 였고, 페이지 목록은 행 클릭이 유일한 진입로였다**) |
+| `check-mail-abuse.mjs` | 확인 절차 없이 메일을 보내는 공개 경로 (**비회원 주문으로 임의 주소에 10/10 발송됐다 — 재입고·1:1 문의에 이어 세 번째**) |
 
 그 밖에 CI 가 정적으로 보는 것: 테마 CSS 컴파일 산출물 일치, 모달의 `useModalFocus`,
 메일이 보내는 링크에 화면이 있는지, 마이그레이션 멱등성(2회 실행).
@@ -492,7 +493,7 @@ themes/
   boutique/       부티크 — 여백 위주
   corporate/      회사 홈페이지 — 히어로·특징 카드
 docs-site/        GitHub Pages 랜딩페이지
-scripts/          스모크 테스트 36종 + 정적 검사 15종 + OIDC 스텁 + 배포본 생성(build-release.sh)
+scripts/          스모크 테스트 36종 + 정적 검사 16종 + OIDC 스텁 + 배포본 생성(build-release.sh)
 docker/           Dockerfile, entrypoint
 ```
 

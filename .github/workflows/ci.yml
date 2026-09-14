@@ -128,6 +128,9 @@ jobs:
       - name: 누를 수 있는 것은 키보드로도 닿는다 (div + onClick 은 마우스로만 눌린다)
         run: node scripts/check-admin-keyboard.mjs
 
+      - name: 메일을 유발하는 공개 경로는 스스로를 지킨다 (확인 없는 발송은 발사대가 된다)
+        run: node scripts/check-mail-abuse.mjs
+
       - name: 문서가 세는 숫자가 실제와 맞는다 (틀린 숫자는 틀린 설명보다 발견되기 어렵다)
         run: node scripts/check-doc-counts.mjs
 
