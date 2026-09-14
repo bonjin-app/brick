@@ -127,9 +127,12 @@ export class MailingController {
    * 메일을 받은 사람이 그 자리에서 끊을 수 있어야 하고, 그게 정보통신망법이
    * 요구하는 "쉬운 방법"이다. 로그인 화면으로 보내면 대부분 포기한다.
    *
-   * GET 으로 받는다 — 메일 본문의 링크를 클릭하는 것이므로 POST 를 만들 수 없다.
-   * 부작용이 있는 GET 이지만, 토큰을 아는 사람만 자기 수신 설정을 끄는 것이라
-   * CSRF 로 악용될 여지가 실질적으로 없다(공격자가 얻는 것이 없다).
+   * GET 으로 받는다 — 메일 본문의 링크를 **사람이 클릭**하는 경로다. 부작용이
+   * 있는 GET 이지만, 토큰을 아는 사람만 자기 수신 설정을 끄는 것이라 CSRF 로
+   * 악용될 여지가 실질적으로 없다(공격자가 얻는 것이 없다).
+   *
+   * 같은 주소를 POST 로도 받는다 — 그쪽은 사람이 아니라 **메일 앱**이 부른다
+   * (아래 unsubscribeOneClick).
    */
   @Get("mail/unsubscribe")
   async unsubscribe(@Query("token") token: string, @Res() reply: FastifyReply): Promise<void> {
@@ -151,5 +154,30 @@ export class MailingController {
     // 텍스트로 응답한다. 메일 클라이언트에서 브라우저로 열리는 화면이므로
     // 테마 렌더를 거칠 필요가 없고, 실패해도 이 화면은 떠야 한다.
     await reply.code(status).type("text/plain; charset=utf-8").send(`${message}\n`);
+  }
+
+  /**
+   * 원클릭 수신거부 (RFC 8058) — 메일 앱이 사람 대신 부른다.
+   *
+   * Gmail·Apple Mail·네이버는 `List-Unsubscribe` 헤더가 있으면 메일 위에
+   * **"수신거부" 버튼**을 띄우고, 누르면 사람을 사이트로 보내지 않고 이 주소로
+   * POST 한다. 헤더만 붙이고 POST 를 받지 않으면 그 버튼이 실패한다 —
+   * 없느니만 못하다.
+   *
+   * 이 경로가 필요한 이유는 규격을 맞추는 것이 아니다. 버튼이 없으면 사람들은
+   * 대신 **"스팸 신고"** 를 누른다. 그것이 쌓이면 발신 도메인의 평판이 떨어지고,
+   * 그러면 광고 메일만이 아니라 **입금 계좌가 담긴 주문 안내**까지 스팸함으로
+   * 간다. 작은 쇼핑몰에게는 그쪽이 훨씬 큰 피해다.
+   *
+   * 메일 앱이 부르는 자리이므로 화면이 아니라 상태코드로만 답한다.
+   */
+  @Post("mail/unsubscribe")
+  async unsubscribeOneClick(@Query("token") token: string, @Res() reply: FastifyReply): Promise<void> {
+    try {
+      await this.mailing.unsubscribe(String(token ?? ""));
+      await reply.code(200).type("text/plain; charset=utf-8").send("unsubscribed\n");
+    } catch {
+      await reply.code(400).type("text/plain; charset=utf-8").send("invalid token\n");
+    }
   }
 }

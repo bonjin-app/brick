@@ -347,13 +347,16 @@ curl -s -b "$CK" -X POST "$API/api/me/security/reauth" -H 'content-type: applica
   -d '{"password":"adminpass123"}' >/dev/null
 
 mail_count() { [[ -s "$MAILBOX" ]] && wc -l < "$MAILBOX" | tr -d ' ' || echo 0; }
-mail_field() {  # mail_field <필드> <주소일부>
+mail_field() {  # mail_field <필드> <주소일부>   (필드는 headers.list-unsubscribe 처럼 점으로 내려간다)
   python3 -c "
 import json, sys
 for line in open(sys.argv[1], encoding='utf-8'):
     m = json.loads(line)
     if sys.argv[3] in ' '.join(m['envelopeTo']):
-        print(m[sys.argv[2]])
+        v = m
+        for part in sys.argv[2].split('.'):
+            v = (v or {}).get(part, '')
+        print(v)
         break
 " "$MAILBOX" "$1" "$2"
 }
@@ -391,6 +394,24 @@ contains "수신거부 링크가 본문에 (정보통신망법 제50조 제4항)
 contains "수신거부 방법 안내 문구" "$BODY" "수신을 원하지 않으시면"
 contains "로그인 불필요 안내" "$BODY" "로그인 불필요"
 contains "광고임을 본문에도 밝힌다" "$BODY" "광고성 정보 수신에 동의"
+
+# 본문에 링크를 넣는 것은 정보통신망법이 요구하는 최소다. 그것과 별개로 메일 앱이
+# **"수신거부" 버튼**을 띄우려면 List-Unsubscribe 헤더가 있어야 한다. 버튼이 없으면
+# 사람들은 대신 "스팸 신고" 를 누르고, 그것이 쌓이면 발신 도메인의 평판이 떨어져
+# 광고만이 아니라 **입금 계좌가 담긴 주문 안내**까지 스팸함으로 간다.
+UNSUB_H="$(mail_field headers.list-unsubscribe yes2@ml.test)"
+contains "메일 앱이 띄울 수신거부 헤더가 있다" "$UNSUB_H" "/api/mail/unsubscribe?token="
+contains "헤더가 꺾쇠로 감싼 주소다 (RFC 2369)" "$UNSUB_H" "<http"
+check "원클릭을 선언한다 (RFC 8058)" \
+  "$(mail_field headers.list-unsubscribe-post yes2@ml.test)" "List-Unsubscribe=One-Click"
+# 선언한 주소가 실제로 POST 를 받아야 한다 — 받지 않으면 버튼이 실패해서 없느니만 못하다.
+# 헤더의 host 는 사이트의 공개 주소(BRICK_SITE_URL)라 이 시험 환경에서는 닿지 않는다 —
+# 광고한 **토큰 그대로** 로컬 API 에 POST 해서 그 주소가 정말 열려 있는지 본다.
+UNSUB_TOKEN="$(echo "$UNSUB_H" | sed 's/.*token=//; s/>$//')"
+[[ -n "$UNSUB_TOKEN" ]] && ok "헤더에서 토큰 추출" || bad "헤더에서 토큰 추출 ($UNSUB_H)"
+check "그 주소가 정말 POST 를 받는다" "$(code -X POST "$API/api/mail/unsubscribe?token=$UNSUB_TOKEN")" "200"
+check "다시 눌러도 200 (메일 앱은 재시도한다)" "$(code -X POST "$API/api/mail/unsubscribe?token=$UNSUB_TOKEN")" "200"
+check "토큰이 틀리면 400" "$(code -X POST "$API/api/mail/unsubscribe?token=nope")" "400"
 RECIPIENTS="$(python3 -c "
 import json
 for line in open('$MAILBOX', encoding='utf-8'):
@@ -476,6 +497,18 @@ for line in lines[$BEFORE_N2:]:
     if 'no2@ml.test' in ' '.join(m['envelopeTo']): print(m['text']); break
 ")"
 absent "공지에는 수신거부 링크를 붙이지 않는다 (광고로 오인된다)" "$NOTICE_BODY" "unsubscribe?token="
+# 헤더도 마찬가지다. 공지·거래 메일에 수신거부 헤더를 붙이면 메일 앱이 "수신거부"
+# 버튼을 띄우는데, 그것을 누른 손님은 **비밀번호 재설정과 주문 안내까지** 못 받게
+# 된다고 오해한다(실제로 끊기지도 않는다). 광고에만 붙어야 한다.
+NOTICE_UNSUB="$(python3 -c "
+import json
+lines = open('$MAILBOX', encoding='utf-8').read().splitlines()
+for line in lines[$BEFORE_N2:]:
+    m = json.loads(line)
+    if 'no2@ml.test' in ' '.join(m['envelopeTo']):
+        print(m.get('headers', {}).get('list-unsubscribe', '(없음)')); break
+")"
+check "공지에는 수신거부 헤더도 붙이지 않는다" "$NOTICE_UNSUB" "(없음)"
 contains "공지 본문 전달" "$NOTICE_BODY" "오늘 밤 점검이 있습니다."
 
 echo "── HTML 메일에는 텍스트 대안이 함께 간다 (HTML만 보내면 스팸 판정)"

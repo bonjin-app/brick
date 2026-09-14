@@ -134,6 +134,9 @@ jobs:
       - name: 저장된 비밀번호가 채워진다 (name·autocomplete 가 없으면 폰에서 손으로 친다)
         run: node scripts/check-autocomplete.mjs
 
+      - name: 광고 메일이 메일 앱에게 수신거부 방법을 말한다 (버튼이 없으면 스팸 신고를 누른다)
+        run: node scripts/check-unsubscribe-header.mjs
+
       - name: 관리 화면의 표가 폰에서 카드로 접힌다 (밀려난 버튼은 닿을 수 없다)
         run: node scripts/check-admin-tables.mjs
 

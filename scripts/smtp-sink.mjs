@@ -149,6 +149,9 @@ function parseMessage(data) {
     from: decodeHeader(headers.from ?? ""),
     text: text.trim(),
     html: html.trim(),
+    // 헤더를 파싱해 놓고 버리고 있었다. 메일이 "무엇을 말하는지" 만 보고
+    // "어떻게 취급되는지" 는 아무도 보지 못했다 — List-Unsubscribe 가 그렇다.
+    headers,
   };
 }
 

@@ -336,6 +336,7 @@ export class MailingService {
             subject: String(c.subject),
             text: c.is_html ? stripHtml(text) : text,
             html: c.is_html ? text : undefined,
+            headers: await this.unsubscribeHeaders({ kind, userId }),
           });
         } catch (err) {
           this.log.warn(`발송 실패 (${maskEmail(email)}): ${String(err)}`);
@@ -394,9 +395,7 @@ export class MailingService {
   ): Promise<string> {
     if (ctx.kind !== "ad" || !ctx.userId) return body;
 
-    const token = await this.unsubscribeToken(ctx.userId);
-    const base = this.env.siteUrl.replace(/\/+$/, "");
-    const link = `${base}/api/mail/unsubscribe?token=${token}`;
+    const link = await this.unsubscribeLink(ctx.userId);
 
     return (
       `${body}\n\n` +
@@ -404,6 +403,38 @@ export class MailingService {
       `이 메일은 광고성 정보 수신에 동의하신 분께 발송되었습니다.\n` +
       `수신을 원하지 않으시면 아래 주소를 열어주세요 (로그인 불필요):\n${link}\n`
     );
+  }
+
+  /** 수신거부 주소 — 본문과 List-Unsubscribe 헤더가 같은 것을 가리켜야 한다 */
+  private async unsubscribeLink(userId: string): Promise<string> {
+    const token = await this.unsubscribeToken(userId);
+    return `${this.env.siteUrl.replace(/\/+$/, "")}/api/mail/unsubscribe?token=${token}`;
+  }
+
+  /**
+   * 광고 메일의 수신거부 헤더 (RFC 2369 · RFC 8058).
+   *
+   * 본문에 링크를 넣는 것은 정보통신망법이 요구하는 최소다. 그것과 별개로
+   * **메일 앱이 "수신거부" 버튼을 띄우려면 이 헤더가 있어야 한다.** 버튼이
+   * 없으면 사람들은 대신 "스팸 신고" 를 누르고, 그것이 쌓이면 발신 도메인의
+   * 평판이 떨어진다 — 그러면 광고만이 아니라 **입금 계좌가 담긴 주문 안내**까지
+   * 스팸함으로 간다. 작은 쇼핑몰에게는 그쪽이 훨씬 큰 피해다.
+   *
+   * One-Click 을 선언하는 이상 그 주소는 POST 를 받아야 한다
+   * (mailing.controller 의 unsubscribeOneClick). 선언만 하고 받지 않으면
+   * 버튼이 실패해서 없느니만 못하다.
+   *
+   * 공지에는 붙이지 않는다 — 수신 거부의 대상이 아니고, 붙이면 광고로 오인된다.
+   */
+  private async unsubscribeHeaders(
+    ctx: { kind: CampaignKind; userId: string | null },
+  ): Promise<Record<string, string> | undefined> {
+    if (ctx.kind !== "ad" || !ctx.userId) return undefined;
+    const link = await this.unsubscribeLink(ctx.userId);
+    return {
+      "List-Unsubscribe": `<${link}>`,
+      "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    };
   }
 
   /**

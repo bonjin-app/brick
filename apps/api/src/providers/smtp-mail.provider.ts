@@ -46,6 +46,8 @@ export class SmtpMailProvider implements MailProvider {
         text: message.text,
         ...(message.html ? { html: message.html } : {}),
         ...(message.replyTo ? { replyTo: message.replyTo } : {}),
+        // List-Unsubscribe 등 — 메일 앱이 "수신거부" 버튼을 띄우는 근거다
+        ...(message.headers ? { headers: message.headers } : {}),
       });
       return true;
     } catch (err) {

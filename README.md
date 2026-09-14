@@ -27,7 +27,7 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-3369%20passing-2ea043.svg" alt="스모크 테스트 3282개" />
+  <img src="https://img.shields.io/badge/E2E-3377%20passing-2ea043.svg" alt="스모크 테스트 3282개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
   <a href="https://github.com/bonjin-app/brick/pkgs/container/brick">
     <img src="https://img.shields.io/badge/docker-amd64%20%C2%B7%20arm64-2496ed.svg" alt="Docker image (amd64 · arm64)" />
@@ -367,7 +367,7 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 3,369개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 3,377개 항목):
 
 | 수트 | 항목 | 무엇을 못박는가 |
 |---|---:|---|
@@ -378,7 +378,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `smoke-returns.sh` | 105 | 할인 안분 · 이중 재고 복원 방어 · 청약철회 기간 · 비회원 청약철회 |
 | `smoke-storefront.sh` | 176 | 사업자번호 체크섬 · 위시리스트 격리 · 지역비 실수령 · **샘플 상품** · **NEW·BEST 뱃지** · **정렬** · **쪽나눔** · **가격대·품절 필터** | · **띄어쓰기 없는 긴 이름** |
 | `smoke-poll.sh` | 103 | 중복 투표 · IP 해시 · 결과 공개 시점 · 집계 오염 · 목록→개별 라우팅 |
-| `smoke-mailing.sh` | 98 | (광고) 강제 표기 · 동의자만 발송 · 발송 직전 동의 재확인 · 실제 발송 내용 | · **메일 미설정을 대시보드가 알린다** |
+| `smoke-mailing.sh` | 106 | (광고) 강제 표기 · 동의자만 발송 · 발송 직전 동의 재확인 · 실제 발송 내용 · **수신거부 헤더(One-Click)와 그 주소가 정말 POST 를 받는가** | · **메일 미설정을 대시보드가 알린다** |
 | `smoke-reports.sh` | 138 | 부분 환불 차감 · KST 날짜 경계 · 상품별·주문별 합 일치 · 추천에서 반품·미공개 제외 |
 | `smoke-tax.sh` | 112 | 카드 이중 발급 거부 · 금액 분해 합 일치 · 면세 스냅샷 · 반품 시 증빙 취소 |
 | `smoke-account-security.sh` | 116 | RFC 6238 벡터 · 코드 재사용 차단 · 위험 작업 재인증(세션 단위) · IP 제한 자기잠금 방지 |
@@ -426,6 +426,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `check-secret-fields.mjs` | 자격증명처럼 생긴 입력칸이 평문으로 그려지는 것 (**토스 시크릿 키가 보통 텍스트 칸이었다 — 붙여 넣는 동안 화면에 그대로 떠 있었다**) |
 | `check-admin-field-names.mjs` | 화면이 보내는 칸 이름을 서버가 읽지 않는 것 (**승인번호를 적고 저장하면 "승인번호를 입력해주세요" 가 떴다 — 방금 적은 그 칸을 두고**) |
 | `check-mail-i18n.mjs` | 메일 제목이 한국어로 박히는 것 (**영어 사이트 회원이 비밀번호를 잃어버리면 한국어 메일을 받았다 — 재입고 메일은 가격 줄만 번역돼 있었다**) |
+| `check-unsubscribe-header.mjs` | 광고 메일에 **`List-Unsubscribe` 헤더**가 없는 것 (**메일 앱이 수신거부 버튼을 못 띄우면 손님은 스팸 신고를 누르고, 그러면 입금 계좌가 담긴 주문 안내까지 스팸함으로 간다**) · One-Click 을 선언했는데 그 주소가 POST 를 안 받는 것 |
 | `check-autocomplete.mjs` | 손님이 폰에서 **손으로 다 쳐야 하는 칸** (**로그인·가입의 이메일·비밀번호에 `name` 도 `autocomplete` 도 없어 저장된 비밀번호가 채워지지 않았다 — 주문서에는 이미 있었다**) |
 | `check-error-announce.mjs` | 오류를 **눈으로만** 알려주는 것 (**로그인 실패에 라이브 영역이 하나도 없어, 스크린리더에는 버튼을 눌러도 아무 일이 없었다 — 가입 화면만 `role="alert"` 를 갖고 있었다**) |
 | `check-error-messages.mjs` | 손님·운영자에게 가는 **영어 오류 메시지** (**비밀번호를 틀리면 로그인 화면에 `invalid credentials` 가 떴다 — 화면은 서버가 준 message 를 그대로 보여준다**) |
@@ -498,7 +499,7 @@ themes/
   boutique/       부티크 — 여백 위주
   corporate/      회사 홈페이지 — 히어로·특징 카드
 docs-site/        GitHub Pages 랜딩페이지
-scripts/          스모크 테스트 37종 + 정적 검사 20종 + OIDC 스텁 + 배포본 생성(build-release.sh)
+scripts/          스모크 테스트 37종 + 정적 검사 21종 + OIDC 스텁 + 배포본 생성(build-release.sh)
 docker/           Dockerfile, entrypoint
 ```
 

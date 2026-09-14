@@ -12,6 +12,16 @@ export interface MailMessage {
   text: string;
   html?: string;
   replyTo?: string;
+  /**
+   * 추가 헤더.
+   *
+   * 광고 메일의 `List-Unsubscribe` 가 이것을 쓴다. 본문에 수신거부 링크를 넣는
+   * 것은 법이 요구하는 최소이고, **메일 앱이 "수신거부" 버튼을 띄우려면 헤더가
+   * 있어야 한다.** 버튼이 없으면 사람들은 대신 "스팸 신고" 를 누르고, 그것이
+   * 발신 도메인의 평판을 깎는다 — 그러면 입금 계좌가 담긴 주문 안내 메일까지
+   * 스팸함으로 간다. 작은 쇼핑몰에게는 그쪽이 더 큰 피해다.
+   */
+  headers?: Record<string, string>;
 }
 
 export interface MailProvider {
@@ -30,9 +40,13 @@ export class LogMailProvider implements MailProvider {
   readonly enabled = false;
 
   async send(message: MailMessage): Promise<boolean> {
+    const headers = Object.entries(message.headers ?? {})
+      .map(([k, v]) => `  ${k}: ${v}\n`)
+      .join("");
     console.warn(
       `[brick:mail] SMTP가 설정되지 않아 메일을 발송하지 않았습니다.\n` +
         `  to: ${message.to}\n  subject: ${message.subject}\n` +
+        headers +
         `  ${message.text.split("\n").join("\n  ")}`,
     );
     return false;
