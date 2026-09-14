@@ -88,7 +88,8 @@ export default function AdminPagesPage() {
         {t("pages.new")}
       </button>
       {message && <p style={{ color: "var(--color-success)" }}>{message}</p>}
-      <table style={{ width: "100%", background: "var(--color-bg)", borderRadius: 8, borderCollapse: "collapse" }}>
+      {/* 좁은 화면에서는 카드로 접힌다 (관리 셸의 .brick-x-table) */}
+      <table className="brick-x-table" style={{ width: "100%", background: "var(--color-bg)", borderRadius: 8, borderCollapse: "collapse" }}>
         <thead>
           <tr style={{ textAlign: "left", borderBottom: "1px solid var(--color-line)" }}>
             <th style={{ padding: 12 }}>{t("common.title")}</th><th>{t("pages.colSlug")}</th><th>{t("common.status")}</th><th>{t("pages.colUpdated")}</th>
@@ -97,13 +98,13 @@ export default function AdminPagesPage() {
         <tbody>
           {rows.map((p) => (
             <tr key={p.id} style={{ borderBottom: "1px solid var(--color-line)", cursor: "pointer" }} onClick={() => open(p.id)}>
-              <td style={{ padding: 12 }}><strong>{p.title}</strong></td>
-              <td><code>/{p.slug}</code></td>
-              <td>{p.status === "published" ? t("pages.published") : p.status === "draft" ? t("pages.draft") : t("pages.archived")}</td>
-              <td style={{ color: "var(--color-muted)", fontSize: 13 }}>{new Date(p.updatedAt).toLocaleString(localeTag)}</td>
+              <td data-label={t("common.title")} style={{ padding: 12 }}><strong>{p.title}</strong></td>
+              <td data-label={t("pages.colSlug")}><code>/{p.slug}</code></td>
+              <td data-label={t("common.status")}>{p.status === "published" ? t("pages.published") : p.status === "draft" ? t("pages.draft") : t("pages.archived")}</td>
+              <td data-label={t("pages.colUpdated")} style={{ color: "var(--color-muted)", fontSize: 13 }}>{new Date(p.updatedAt).toLocaleString(localeTag)}</td>
             </tr>
           ))}
-          {!rows.length && <tr><td colSpan={4} style={{ padding: 24, color: "var(--color-muted)" }}>{t("pages.empty")}</td></tr>}
+          {!rows.length && <tr className="brick-x-empty"><td data-label="" colSpan={4} style={{ padding: 24, color: "var(--color-muted)" }}>{t("pages.empty")}</td></tr>}
         </tbody>
       </table>
     </div>

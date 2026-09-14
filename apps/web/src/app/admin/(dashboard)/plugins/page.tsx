@@ -107,7 +107,14 @@ export default function AdminPluginsPage() {
         <span style={{ marginLeft: 8, color: "var(--color-muted)", fontSize: 13 }}>{t("plugins.uploadHint")}</span>
       </form>
       {message && <p style={{ color: "var(--color-success)" }}>{message}</p>}
-      <table style={{ width: "100%", background: "var(--color-bg)", borderRadius: 8, borderCollapse: "collapse" }}>
+      {/*
+        좁은 화면에서는 카드로 접힌다 (관리 셸의 .brick-x-table).
+        이 표는 375px 에서 982px 로 벌어져 **켜기·끄기 버튼 여덟 개가 전부
+        화면 밖**에 있었다 — 보이지 않는 버튼은 없는 버튼이다. 플러그인 관리는
+        폰에서도 하는 일이다(장애 때 하나 꺼 보는 것이 첫 조치다).
+        선언형 리소스 표는 이미 같은 CSS 를 쓰고 있었고 코어 화면만 남아 있었다.
+      */}
+      <table className="brick-x-table" style={{ width: "100%", background: "var(--color-bg)", borderRadius: 8, borderCollapse: "collapse" }}>
         <thead>
           <tr style={{ textAlign: "left", borderBottom: "1px solid var(--color-line)" }}>
             <th style={{ padding: 12 }}>{t("common.name")}</th><th>{t("common.version")}</th><th>{t("common.description")}</th><th>{t("common.status")}</th><th></th>
@@ -116,11 +123,11 @@ export default function AdminPluginsPage() {
         <tbody>
           {plugins.map((p) => (
             <tr key={p.name} style={{ borderBottom: "1px solid var(--color-line)" }}>
-              <td style={{ padding: 12 }}><strong>{p.displayName}</strong><br /><span style={{ color: "var(--color-muted)", fontSize: 12 }}>{p.name}</span></td>
-              <td>{p.version}</td>
-              <td style={{ color: "var(--color-text-soft)" }}>{p.description}</td>
-              <td>{p.isActive ? t("plugins.active") : t("plugins.inactive")}</td>
-              <td><button onClick={() => toggle(p)} style={{ cursor: "pointer" }}>{p.isActive ? t("plugins.deactivate") : t("plugins.activate")}</button></td>
+              <td data-label={t("common.name")} style={{ padding: 12 }}><strong>{p.displayName}</strong><br /><span style={{ color: "var(--color-muted)", fontSize: 12 }}>{p.name}</span></td>
+              <td data-label={t("common.version")}>{p.version}</td>
+              <td data-label={t("common.description")} style={{ color: "var(--color-text-soft)" }}>{p.description}</td>
+              <td data-label={t("common.status")}>{p.isActive ? t("plugins.active") : t("plugins.inactive")}</td>
+              <td data-label="" className="brick-x-actions"><button onClick={() => toggle(p)} style={{ cursor: "pointer" }}>{p.isActive ? t("plugins.deactivate") : t("plugins.activate")}</button></td>
             </tr>
           ))}
         </tbody>

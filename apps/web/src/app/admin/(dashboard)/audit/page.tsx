@@ -54,7 +54,8 @@ export default function AdminAuditPage() {
       </select>
 
       <div style={{ overflowX: "auto", background: "var(--color-bg)", borderRadius: 8 }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+        {/* 좁은 화면에서는 카드로 접힌다 (관리 셸의 .brick-x-table) */}
+        <table className="brick-x-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
           <thead>
             <tr style={{ textAlign: "left", borderBottom: "1px solid var(--color-line)" }}>
               <th style={{ padding: 12 }}>{t("audit.colTime")}</th><th>{t("audit.colActor")}</th><th>{t("audit.colAction")}</th><th>{t("audit.colTarget")}</th><th>IP</th>
@@ -63,19 +64,19 @@ export default function AdminAuditPage() {
           <tbody>
             {data.items.map((r) => (
               <tr key={r.id} style={{ borderBottom: "1px solid var(--color-line)" }}>
-                <td style={{ padding: 12, whiteSpace: "nowrap", color: "var(--color-text-soft)" }}>
+                <td data-label={t("audit.colTime")} style={{ padding: 12, whiteSpace: "nowrap", color: "var(--color-text-soft)" }}>
                   {new Date(r.createdAt).toLocaleString(localeTag)}
                 </td>
-                <td>{r.actorEmail ?? <span style={{ color: "var(--color-muted)" }}>{t("audit.system")}</span>}</td>
-                <td style={SENSITIVE.has(r.action) ? { color: "var(--color-danger)", fontWeight: 600 } : undefined}>
+                <td data-label={t("audit.colActor")}>{r.actorEmail ?? <span style={{ color: "var(--color-muted)" }}>{t("audit.system")}</span>}</td>
+                <td data-label={t("audit.colAction")} style={SENSITIVE.has(r.action) ? { color: "var(--color-danger)", fontWeight: 600 } : undefined}>
                   {(KNOWN_ACTIONS as readonly string[]).includes(r.action) ? t(`audit.a.${r.action}` as never) : r.action}
                 </td>
-                <td style={{ color: "var(--color-text-soft)" }}>{r.summary ?? r.targetId ?? "-"}</td>
-                <td style={{ color: "var(--color-muted)", fontSize: 13 }}>{r.ip ?? "-"}</td>
+                <td data-label={t("audit.colTarget")} style={{ color: "var(--color-text-soft)" }}>{r.summary ?? r.targetId ?? "-"}</td>
+                <td data-label="IP" style={{ color: "var(--color-muted)", fontSize: 13 }}>{r.ip ?? "-"}</td>
               </tr>
             ))}
             {!data.items.length && (
-              <tr><td colSpan={5} style={{ padding: 24, color: "var(--color-muted)" }}>{t("audit.empty")}</td></tr>
+              <tr className="brick-x-empty"><td data-label="" colSpan={5} style={{ padding: 24, color: "var(--color-muted)" }}>{t("audit.empty")}</td></tr>
             )}
           </tbody>
         </table>
