@@ -102,8 +102,12 @@ contains "관리자 로그인" "$(curl -s -b "$CK" "$API/api/auth/me")" "admin@b
 
 curl -s -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' \
   -d '{"slug":"backup-page","title":"백업 전에 만든 페이지","status":"published","blocks":[]}' >/dev/null
-curl -s -X POST "$API/api/auth/register" -H 'content-type: application/json' \
-  -d '{"email":"before@bak.test","password":"beforepass123","name":"백업 전 회원"}' >/dev/null
+# 가입은 필수 동의를 요구한다(그것이 이 사이트의 계약이다) — 화면이 보내는 그대로 보낸다
+register() {  # register <이메일> <비밀번호> <이름>
+  curl -s -o /dev/null -w "%{http_code}" -X POST "$API/api/register" -H 'content-type: application/json' \
+    -d "{\"email\":\"$1\",\"password\":\"$2\",\"displayName\":\"$3\",\"agreements\":{\"terms\":true,\"privacy\":true}}"
+}
+check "백업 전 회원 가입" "$(register before@bak.test beforepass123 "백업 전 회원")" "201"
 check "백업 전 페이지 1개" "$(psql_q "SELECT count(*) FROM pages WHERE slug='backup-page'")" "1"
 check "백업 전 회원 있음" "$(psql_q "SELECT count(*) FROM users WHERE email='before@bak.test'")" "1"
 
@@ -120,9 +124,10 @@ contains "업로드 파일도 함께 보관하라고 알린다" "$(cat "$TMP/dum
 echo "── 사고를 낸다 (지우고, 덤프 뒤에 새 것을 만든다)"
 psql_q "DELETE FROM pages WHERE slug='backup-page'" >/dev/null
 psql_q "DELETE FROM users WHERE email='before@bak.test'" >/dev/null
-curl -s -X POST "$API/api/auth/register" -H 'content-type: application/json' \
-  -d '{"email":"after@bak.test","password":"afterpass123","name":"백업 후 회원"}' >/dev/null
+check "덤프 뒤 새 회원 가입" "$(register after@bak.test afterpass123 "백업 후 회원")" "201"
 check "지운 페이지가 없다" "$(psql_q "SELECT count(*) FROM pages WHERE slug='backup-page'")" "0"
+# 지운 것이 정말 지워졌는지도 본다 — 삭제가 실패하면 뒤의 "돌아왔다" 가 거짓으로 통과한다
+check "지운 회원이 없다" "$(psql_q "SELECT count(*) FROM users WHERE email='before@bak.test'")" "0"
 check "덤프 뒤 만든 회원이 있다" "$(psql_q "SELECT count(*) FROM users WHERE email='after@bak.test'")" "1"
 
 # ── 복원 ───────────────────────────────────────────
