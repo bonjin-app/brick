@@ -254,7 +254,8 @@ export default function AccountPage() {
                     setNewEmail(""); setEmailOpen(false);
                   }
                 }}>
-                <input type="email" required value={newEmail} onChange={(e) => setNewEmail(e.target.value)}
+                <input type="email" required name="email" autoComplete="email"
+                  value={newEmail} onChange={(e) => setNewEmail(e.target.value)}
                   placeholder={t("account.newEmail")} aria-label={t("account.newEmail")} style={{ fontSize: 14, padding: "6px 8px", minWidth: 240 }} />
                 <button type="submit" style={{ ...small, cursor: "pointer" }}>{t("account.sendVerify")}</button>
                 <span style={{ color: "var(--color-muted)", fontSize: 12.5, flexBasis: "100%" }}>{t("account.changeEmailHint")}</span>
@@ -324,15 +325,18 @@ export default function AccountPage() {
               <h2 style={h2}>{t("account.password")}</h2>
               <form onSubmit={changePassword}>
                 <label style={{ ...authLabel, marginTop: 0 }}>{t("account.currentPassword")}
-                  <input style={authInput} type="password" required value={pw.current}
+                  <input style={authInput} type="password" required
+                    name="current-password" autoComplete="current-password" value={pw.current}
                     onChange={(e) => setPw({ ...pw, current: e.target.value })} />
                 </label>
                 <label style={authLabel}>{t("account.newPassword")}
-                  <input style={authInput} type="password" required minLength={8} value={pw.next}
+                  <input style={authInput} type="password" required minLength={8}
+                    name="new-password" autoComplete="new-password" value={pw.next}
                     onChange={(e) => setPw({ ...pw, next: e.target.value })} />
                 </label>
                 <label style={authLabel}>{t("account.confirmPassword")}
-                  <input style={authInput} type="password" required value={pw.confirm}
+                  <input style={authInput} type="password" required
+                    name="confirm-password" autoComplete="new-password" value={pw.confirm}
                     onChange={(e) => setPw({ ...pw, confirm: e.target.value })} />
                 </label>
                 <button style={saveBtn}>{t("account.change")}</button>
@@ -387,7 +391,8 @@ export default function AccountPage() {
               </label>
               {me.password_login_enabled ? (
                 <label style={authLabel}>{t("account.withdrawPassword")}
-                  <input style={authInput} type="password" required value={withdraw.password}
+                  <input style={authInput} type="password" required
+                    name="current-password" autoComplete="current-password" value={withdraw.password}
                     onChange={(e) => setWithdraw({ ...withdraw, password: e.target.value })} />
                 </label>
               ) : (

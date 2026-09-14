@@ -152,7 +152,7 @@ export default function InstallPage() {
             <input style={input} value={db.user} onChange={(e) => setDb({ ...db, user: e.target.value })} />
           </label>
           <label style={{ display: "block", fontSize: 14, marginTop: 12 }}>비밀번호
-            <input style={input} type="password" value={db.password}
+            <input style={input} type="password" autoComplete="off" value={db.password}
               onChange={(e) => setDb({ ...db, password: e.target.value })} />
           </label>
           <label style={{ display: "block", fontSize: 14, marginTop: 12 }}>
@@ -203,11 +203,13 @@ export default function InstallPage() {
               onChange={(e) => setSite({ ...site, siteName: e.target.value })} />
           </label>
           <label style={{ display: "block", fontSize: 14, marginTop: 12 }}>관리자 이메일
-            <input style={input} type="email" required value={site.adminEmail}
+            <input style={input} type="email" required name="email" autoComplete="username"
+              value={site.adminEmail}
               onChange={(e) => setSite({ ...site, adminEmail: e.target.value })} />
           </label>
           <label style={{ display: "block", fontSize: 14, marginTop: 12 }}>관리자 비밀번호 (8자 이상)
-            <input style={input} type="password" required minLength={8} value={site.adminPassword}
+            <input style={input} type="password" required minLength={8}
+              name="new-password" autoComplete="new-password" value={site.adminPassword}
               onChange={(e) => setSite({ ...site, adminPassword: e.target.value })} />
           </label>
 

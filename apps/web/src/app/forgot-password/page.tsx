@@ -47,7 +47,8 @@ export default function ForgotPasswordPage() {
           <form onSubmit={submit}>
             <label style={{ ...authLabel, marginTop: 0 }}>
               {t("login.email")}
-              <input style={authInput} type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+              <input style={authInput} type="email" required name="email" autoComplete="username"
+                value={email} onChange={(e) => setEmail(e.target.value)} />
             </label>
             <button disabled={busy} style={authButton}>
               {busy ? t("forgot.busy") : t("forgot.submit")}

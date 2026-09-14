@@ -92,6 +92,7 @@ WRONGPW="$(curl -s -X POST "$API/api/auth/login" -H 'content-type: application/j
   -d '{"email":"admin@smoke.test","password":"wrong-password"}')"
 absent "거절 문구가 영어가 아니다" "$WRONGPW" "invalid credentials"
 contains "무엇이 틀렸는지 한국어로 말한다" "$WRONGPW" "올바르지 않습니다"
+
 # 없는 계정과 틀린 비밀번호가 다른 말을 하면 그 차이로 가입 여부가 샌다
 contains "없는 계정도 같은 문구" \
   "$(curl -s -X POST "$API/api/auth/login" -H 'content-type: application/json' \

@@ -27,7 +27,7 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-3341%20passing-2ea043.svg" alt="스모크 테스트 3282개" />
+  <img src="https://img.shields.io/badge/E2E-3344%20passing-2ea043.svg" alt="스모크 테스트 3282개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
   <a href="https://github.com/bonjin-app/brick/pkgs/container/brick">
     <img src="https://img.shields.io/badge/docker-amd64%20%C2%B7%20arm64-2496ed.svg" alt="Docker image (amd64 · arm64)" />
@@ -367,7 +367,7 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 3,341개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 3,344개 항목):
 
 | 수트 | 항목 | 무엇을 못박는가 |
 |---|---:|---|
@@ -399,7 +399,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `smoke-social.sh` | 76 | state 쿠키 결속 · 코드 1회성 · 계정 탈취 경로 |
 | `smoke-security.sh` | 82 | 캡차 · 레이트리밋 · 결제 위조 · 권한 우회 · **CSP** · **캡차 칸 안내** · **비회원 스팸 방어(재입고·문의 캡차·IP 한도)** · **비회원 주문이 메일 발사대가 되지 않는다** | · **설정 실수를 대시보드가 알린다(메일 링크 localhost · 프록시 뒤 IP)** |
 | `smoke-upgrade.sh` | 27 | **데이터가 있는 사이트에 새 마이그레이션이 올라가는가** — 회원·동의·설정 보존 · 데이터 이관형 마이그레이션 적용 · 올린 뒤 가입·로그인·플러그인 활성화·주문 · 두 번 올려도 안전 · **인스턴스 둘이 동시에 부팅해도 플러그인 마이그레이션은 한 번만** |
-| `smoke-release.sh` | 75 | FTP 설치 경로 · 동봉 플러그인 · **동봉 테마 전부** · 고아 프로세스 정리 · **update.mjs 교체·롤백 왕복** · **HOSTNAME 바인딩** · **공개 화면 보안 헤더** |
+| `smoke-release.sh` | 78 | FTP 설치 경로 · 동봉 플러그인 · **동봉 테마 전부** · 고아 프로세스 정리 · **update.mjs 교체·롤백 왕복** · **HOSTNAME 바인딩** · **공개 화면 보안 헤더** · **로그인·가입 칸을 비밀번호 관리자가 알아본다** |
 | `smoke-create-plugin.sh` | 45 | 템플릿 생성→빌드→ZIP 설치→계약 전부 실사용 · escapeHtml · 실제 탈퇴로 파기 검증 |
 | `smoke-openapi.sh` | 24 | 실제 라우트에서 생성 · 플러그인 켜고 끄면 문서도 변함 · 자체 완결 문서 페이지 |
 | `smoke-registry.sh` | 23 | 서명 통과해야 설치 · 키·주소 고정(TOFU) · 레지스트리 키 바꿔치기 방어 |
@@ -425,6 +425,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `check-secret-fields.mjs` | 자격증명처럼 생긴 입력칸이 평문으로 그려지는 것 (**토스 시크릿 키가 보통 텍스트 칸이었다 — 붙여 넣는 동안 화면에 그대로 떠 있었다**) |
 | `check-admin-field-names.mjs` | 화면이 보내는 칸 이름을 서버가 읽지 않는 것 (**승인번호를 적고 저장하면 "승인번호를 입력해주세요" 가 떴다 — 방금 적은 그 칸을 두고**) |
 | `check-mail-i18n.mjs` | 메일 제목이 한국어로 박히는 것 (**영어 사이트 회원이 비밀번호를 잃어버리면 한국어 메일을 받았다 — 재입고 메일은 가격 줄만 번역돼 있었다**) |
+| `check-autocomplete.mjs` | 손님이 폰에서 **손으로 다 쳐야 하는 칸** (**로그인·가입의 이메일·비밀번호에 `name` 도 `autocomplete` 도 없어 저장된 비밀번호가 채워지지 않았다 — 주문서에는 이미 있었다**) |
 | `check-error-announce.mjs` | 오류를 **눈으로만** 알려주는 것 (**로그인 실패에 라이브 영역이 하나도 없어, 스크린리더에는 버튼을 눌러도 아무 일이 없었다 — 가입 화면만 `role="alert"` 를 갖고 있었다**) |
 | `check-error-messages.mjs` | 손님·운영자에게 가는 **영어 오류 메시지** (**비밀번호를 틀리면 로그인 화면에 `invalid credentials` 가 떴다 — 화면은 서버가 준 message 를 그대로 보여준다**) |
 | `check-retention.mjs` | 치우겠다고 써 놓고 아무도 부르지 않는 정리 함수 (**넷 중 둘은 주기 정리가 빠뜨렸고 — 검색어·이메일 인증 토큰이 400일 뒤에도 남아 있었다 — 나머지 둘은 같은 정책이 두 곳에 적혀 있었다**) |
@@ -496,7 +497,7 @@ themes/
   boutique/       부티크 — 여백 위주
   corporate/      회사 홈페이지 — 히어로·특징 카드
 docs-site/        GitHub Pages 랜딩페이지
-scripts/          스모크 테스트 36종 + 정적 검사 19종 + OIDC 스텁 + 배포본 생성(build-release.sh)
+scripts/          스모크 테스트 36종 + 정적 검사 20종 + OIDC 스텁 + 배포본 생성(build-release.sh)
 docker/           Dockerfile, entrypoint
 ```
 

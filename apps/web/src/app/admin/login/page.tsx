@@ -49,12 +49,14 @@ export default function AdminLoginPage() {
       <form onSubmit={submit}>
         <label>
           {t("common.email")}
-          <input style={input} type="email" required value={form.email}
+          <input style={input} type="email" required name="email" autoComplete="username"
+            value={form.email}
             onChange={(e) => setForm({ ...form, email: e.target.value })} />
         </label>
         <label style={{ display: "block", marginTop: 16 }}>
           {t("common.password")}
-          <input style={input} type="password" required value={form.password}
+          <input style={input} type="password" required name="password" autoComplete="current-password"
+            value={form.password}
             onChange={(e) => setForm({ ...form, password: e.target.value })} />
         </label>
         <button disabled={busy} style={{

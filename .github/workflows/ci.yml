@@ -131,6 +131,9 @@ jobs:
       - name: 오류를 눈으로만 알려주지 않는다 (스크린리더에는 아무 일도 없는 화면이 된다)
         run: node scripts/check-error-announce.mjs
 
+      - name: 저장된 비밀번호가 채워진다 (name·autocomplete 가 없으면 폰에서 손으로 친다)
+        run: node scripts/check-autocomplete.mjs
+
       - name: 관리 화면의 표가 폰에서 카드로 접힌다 (밀려난 버튼은 닿을 수 없다)
         run: node scripts/check-admin-tables.mjs
 

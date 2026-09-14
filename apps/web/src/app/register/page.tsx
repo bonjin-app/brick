@@ -121,16 +121,19 @@ export default function RegisterPage() {
         <form onSubmit={submit}>
           <label style={{ ...authLabel, marginTop: 0 }}>{t("register.name")}
             <input id="register-displayName" style={authInput} required minLength={2} maxLength={30}
+              name="name" autoComplete="name"
               aria-invalid={badField === "displayName" || undefined} value={form.displayName}
               onChange={(e) => setForm({ ...form, displayName: e.target.value })} />
           </label>
           <label style={authLabel}>{t("login.email")}
             <input id="register-email" style={authInput} type="email" required
+              name="email" autoComplete="username"
               aria-invalid={badField === "email" || undefined} value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })} />
           </label>
           <label style={authLabel}>{t("register.password8")}
             <input id="register-password" style={authInput} type="password" required minLength={8}
+              name="new-password" autoComplete="new-password"
               aria-invalid={badField === "password" || undefined} value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })} />
           </label>

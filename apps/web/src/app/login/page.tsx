@@ -37,12 +37,19 @@ export default function LoginPage() {
   return (
     <AuthShell title={t("login.title")}>
       <form onSubmit={submit}>
+        {/*
+          * name·autocomplete 가 없으면 비밀번호 관리자가 이 칸을 알아보지 못한다 —
+          * 저장해 둔 비밀번호가 채워지지 않아 손님이 폰에서 손으로 친다.
+          * 주문서에는 이미 넣어 두었는데 로그인·가입만 빠져 있었다.
+          */}
         <label style={{ ...authLabel, marginTop: 0 }}>{t("login.email")}
-          <input style={authInput} type="email" required value={form.email}
+          <input style={authInput} type="email" required name="email" autoComplete="username"
+            value={form.email}
             onChange={(e) => setForm({ ...form, email: e.target.value })} />
         </label>
         <label style={authLabel}>{t("login.password")}
-          <input style={authInput} type="password" required value={form.password}
+          <input style={authInput} type="password" required name="password" autoComplete="current-password"
+            value={form.password}
             onChange={(e) => setForm({ ...form, password: e.target.value })} />
         </label>
         <button disabled={busy} style={authButton}>

@@ -288,6 +288,19 @@ contains "테마가 선언한 출처가 살아 있다" "$HDRS" "https://cdn.jsde
 contains "nosniff" "$HDRS" "x-content-type-options: nosniff"
 contains "클릭재킹 차단" "$HDRS" "x-frame-options: SAMEORIGIN"
 
+# 로그인 칸을 비밀번호 관리자가 알아보는가 — 배포본이 실제로 내보내는 HTML 로 본다.
+#
+# name 도 autocomplete 도 없으면 저장해 둔 비밀번호가 채워지지 않고 iOS 키체인은
+# 제안조차 하지 않는다. 손님은 폰에서 매번 손으로 친다. 주문서에는 이미 넣어
+# 두었는데(name·tel·postal-code·street-address) **모든 손님이 지나는 로그인·가입만**
+# 빠져 있었다.
+LOGIN_HTML="$(curl -s "$BASE/login")"
+contains "로그인 비밀번호 칸을 관리자가 알아본다" "$LOGIN_HTML" '="current-password"'
+contains "계정 칸도 알아본다" "$LOGIN_HTML" '="username"'
+REG_HTML="$(curl -s "$BASE/register")"
+contains "가입은 새 비밀번호로 알린다" "$REG_HTML" '="new-password"'
+
+
 echo "── HOSTNAME 이 설정된 환경 (컨테이너·리눅스 로그인 셸)"
 # Next standalone 은 `process.env.HOSTNAME || "0.0.0.0"` 를 바인딩 주소로 쓴다. 그대로 두면 그 이름이
 # 가리키는 주소에만 리스닝해 127.0.0.1 로 오는 요청(프록시·헬스체크)이 닿지 않는다 — Docker 이미지의

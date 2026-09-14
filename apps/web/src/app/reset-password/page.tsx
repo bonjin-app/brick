@@ -76,12 +76,14 @@ export default function ResetPasswordPage() {
         <form onSubmit={submit}>
           <label style={{ ...authLabel, marginTop: 0 }}>
             {t("reset.newPassword")}
-            <input style={authInput} type="password" required minLength={8} value={form.password}
+            <input style={authInput} type="password" required minLength={8}
+              name="new-password" autoComplete="new-password" value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })} />
           </label>
           <label style={authLabel}>
             {t("reset.confirm")}
-            <input style={authInput} type="password" required value={form.confirm}
+            <input style={authInput} type="password" required
+              name="confirm-password" autoComplete="new-password" value={form.confirm}
               onChange={(e) => setForm({ ...form, confirm: e.target.value })} />
           </label>
           <button disabled={busy} style={authButton}>
