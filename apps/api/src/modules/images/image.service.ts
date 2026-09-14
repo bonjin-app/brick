@@ -57,6 +57,21 @@ export class ImageService {
     return (await this.load()) !== null;
   }
 
+  /**
+   * 디코딩을 허용할 최대 픽셀 수.
+   *
+   * 파일 **용량**만 막으면 부족하다. 단색 PNG 는 압축이 잘 되어 0.74MB 로
+   * 16000×16000(256메가픽셀)이 된다 — 업로드 상한 8MB 를 가볍게 통과한다.
+   * 그 한 장을 처리하는 데 778ms 와 150MB 가 들었다(실측). 몇 장이면 작은
+   * 서버는 넘어간다. 설치형 CMS 의 주 무대가 바로 그런 서버다.
+   *
+   * sharp 의 기본값은 268메가픽셀이라 사실상 열려 있다. 5천만 픽셀은
+   * 7000×7000 으로, 요즘 휴대폰 카메라(1200만~5천만)와 상품 사진을 넉넉히
+   * 담는다. 넘으면 sharp 가 던지고, 아래 catch 가 **원본을 그대로 저장**한다
+   * (처리하지 못한 이미지를 버리지 않는다는 기존 약속 그대로다).
+   */
+  private static readonly MAX_INPUT_PIXELS = 50_000_000;
+
   /** 처리 가능한 이미지인가 (GIF·SVG 는 원본 유지) */
   canProcess(contentType: string): boolean {
     return contentType.startsWith("image/") && !SKIP_MIME.has(contentType);
@@ -77,7 +92,7 @@ export class ImageService {
     const quality = opts.quality ?? 82;
     try {
       // rotate() 를 인자 없이 부르면 EXIF Orientation 을 픽셀에 적용한 뒤 태그를 지운다
-      const pipeline = sharp(buffer, { failOn: "none" }).rotate();
+      const pipeline = sharp(buffer, { failOn: "none", limitInputPixels: ImageService.MAX_INPUT_PIXELS }).rotate();
       const meta = await pipeline.metadata();
       const needsResize = (meta.width ?? 0) > maxWidth || (meta.height ?? 0) > maxHeight;
       let work = pipeline;
@@ -120,7 +135,7 @@ export class ImageService {
     const width = opts.width ?? 400;
     const height = opts.height ?? width;
     try {
-      const base = sharp(buffer, { failOn: "none" })
+      const base = sharp(buffer, { failOn: "none", limitInputPixels: ImageService.MAX_INPUT_PIXELS })
         .rotate()
         // 공유 이미지는 소비자가 정확한 크기를 기대하므로 작은 원본이면 키운다(정사각 썸네일은 키우지 않는다)
         .resize({ width, height, fit: "cover", position: "attention", withoutEnlargement: opts.format !== "jpeg" });

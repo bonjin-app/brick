@@ -211,6 +211,29 @@ if [[ -f "$TMP/photo.jpg" ]]; then
   EXIF="$(node -e 'require("'"$ROOT"'/apps/api/node_modules/sharp")(process.argv[1]).metadata().then(m=>console.log(m.exif?"있음":"없음"))' "$TMP/saved.jpg" 2>/dev/null)"
   check "EXIF(GPS 등)를 지운다" "$EXIF" "없음"
   contains "목록 응답에 치수와 썸네일" "$(curl -s -b "$COOKIES" "$API/api/media")" '"thumbUrl":'
+
+  # ── 압축 폭탄 ────────────────────────────────────────────
+  #
+  # 파일 **용량**만 막으면 부족하다. 단색 PNG 는 압축이 잘 되어 0.74MB 로
+  # 16000×16000(256메가픽셀)이 된다 — 업로드 상한 8MB 를 가볍게 통과한다.
+  # 예전에는 그 한 장을 처리하는 데 778ms 와 150MB 가 들었다(실측). 몇 장이면
+  # 작은 서버는 넘어가고, 설치형 CMS 의 주 무대가 바로 그런 서버다.
+  # 지금은 sharp 가 픽셀 상한(5천만)에서 거부하고, 원본을 그대로 저장한다
+  # — 처리하지 못한 이미지를 버리지 않는다는 기존 약속 그대로다.
+  node -e '
+  const sharp = require("'"$ROOT"'/apps/api/node_modules/sharp");
+  sharp({ create: { width: 16000, height: 16000, channels: 3, background: "#ffffff" } })
+    .png({ compressionLevel: 9 }).toFile(process.argv[1]);
+  ' "$TMP/bomb.png" 2>/dev/null
+  if [[ -f "$TMP/bomb.png" ]]; then
+    BOMB_JSON="$(curl -s -b "$COOKIES" -X POST "$API/api/media/upload" -F "file=@$TMP/bomb.png;type=image/png")"
+    contains "압축 폭탄도 접수는 된다 (버리지 않는다)" "$BOMB_JSON" '"url"'
+    # 시간으로 재지 않는다 — 기계 속도에 흔들려서, 상한을 풀어도 통과해 버린다.
+    # 서버가 **무엇 때문에** 거부했는지가 결정적인 신호다.
+    contains "픽셀 상한에서 디코딩을 거부한다" "$(cat "$TMP/api.log")" "exceeds pixel limit"
+    # 가공하지 못했으므로 치수를 모른다 — 줄였다고 거짓말하지 않는다
+    check "줄이지 못한 것을 줄였다고 하지 않는다" "$(echo "$BOMB_JSON" | jq_get "['width']")" "None"
+  fi
   # 키가 UUID 라 덮어쓰이지 않는다 — 1년 immutable, 조건부 요청은 304
   check "업로드 파일은 1년 immutable" "$(curl -s -o /dev/null -w '%header{cache-control}' "$API$MEDIA_URL")" "public, max-age=31536000, immutable"
   ET="$(curl -s -o /dev/null -w '%header{etag}' "$API$MEDIA_URL")"
