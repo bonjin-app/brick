@@ -68,12 +68,35 @@ export default function LoginPage() {
   );
 }
 
+/** 로그인·가입 계열 — 여기로 돌려보내면 제자리를 맴돈다 */
+const AUTH_PATHS = /^\/(login|register|forgot-password|reset-password|admin\/login)(\/|$)/;
+
 /**
- * 로그인 뒤 돌아갈 곳 — 게시판·문의 화면이 "로그인" 버튼에 ?next= 로 자기 주소를 담아 보낸다.
- * 같은 사이트의 경로만 받는다: "//evil.example" 같은 프로토콜 상대 주소는 오픈 리다이렉트가 된다.
+ * 로그인 뒤 돌아갈 곳.
+ *
+ * 먼저 ?next= 를 본다. 그런데 **그것을 보내는 화면이 하나뿐이었다**(1:1 문의).
+ * 게시판의 비밀글·답글, 쿠폰함, 마이페이지는 전부 맨 `/login` 으로 보내고 있어서,
+ * 읽던 글에서 로그인을 누른 손님이 홈으로 떨어졌다 — 글을 다시 찾아 들어가야 한다.
+ * 테마가 직접 넣은 로그인 링크까지 생각하면 진입로를 하나씩 고쳐서는 끝이 없다.
+ *
+ * 그래서 ?next= 가 없으면 **같은 사이트에서 온 경우** 그 자리로 돌려보낸다.
+ * referrer-policy 가 strict-origin-when-cross-origin 이라 같은 출처의 이동에는
+ * 전체 주소가 실려 온다(바깥에서 왔으면 출처만 오므로 여기서 걸러진다).
+ *
+ * 어느 쪽이든 **같은 사이트의 경로만** 받는다: "//evil.example" 같은 프로토콜
+ * 상대 주소는 오픈 리다이렉트가 된다.
  */
 function safeNext(): string {
   if (typeof window === "undefined") return "/";
   const next = new URLSearchParams(window.location.search).get("next") ?? "";
-  return /^\/(?!\/)/.test(next) ? next : "/";
+  if (/^\/(?!\/)/.test(next) && !AUTH_PATHS.test(next)) return next;
+  try {
+    const ref = document.referrer ? new URL(document.referrer) : null;
+    if (ref && ref.origin === window.location.origin && !AUTH_PATHS.test(ref.pathname)) {
+      return ref.pathname + ref.search;
+    }
+  } catch {
+    // 주소가 이상하면 홈으로
+  }
+  return "/";
 }
