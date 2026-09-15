@@ -48,6 +48,7 @@ const MUST_REACH = [
   ["/api/plugins/brick-shop/returns/", "신청한 청약철회를 물릴 수 없습니다 — 잘못 누른 손님은 판매자에게 연락하는 수밖에 없습니다"],
   ["/tickets/by-no/", "비회원이 자기 문의를 볼 수 없습니다 — 조회용 비밀번호까지 받아 놓고 번호와 비밀번호를 넣을 칸이 없습니다"],
   ["/api/plugins/brick-shop/restock-alerts/cancel/", "재입고 알림을 끊을 수 없습니다 — 메일이 보내는 해지 링크가 화면 없이 떨어집니다"],
+  ["/api/plugins/brick-shop/wishlist/merge", "비회원으로 담아 둔 위시리스트가 로그인하면 사라진 것처럼 보입니다"],
 ];
 
 function walk(dir, out = []) {

@@ -586,5 +586,10 @@
   "restock.cancelTitle": "Stop back-in-stock alert",
   "restock.cancelBusy": "Stopping…",
   "restock.loginRequired": "Log in to see your alerts.",
-  "restock.backToShop": "Back to the shop"
+  "restock.backToShop": "Back to the shop",
+  "wish.add": "Add to wishlist",
+  "wish.added": "Added to your wishlist.",
+  "wish.inList": "In your wishlist",
+  "wish.removed": "Removed from your wishlist.",
+  "wish.addFail": "Could not add it."
 }

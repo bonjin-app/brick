@@ -184,6 +184,7 @@ contains "장바구니에도 화면 제목이 있다" "$CART_PAGE" "<h1>장바�
 absent "라우터 페이지 제목이 새지 않는다" "$CART_PAGE" "<h1>쇼핑몰</h1>"
 WISH_PAGE="$(sf_render "shop/wishlist")"
 contains "위시리스트 문서 제목" "$WISH_PAGE" "<title>위시리스트 —"
+contains "비회원으로 담은 것을 로그인 계정으로 옮긴다" "$WISH_PAGE" "'/api/plugins/brick-shop/wishlist/merge'"
 ORDERS_PAGE="$(sf_render "shop/orders")"
 contains "주문 내역 문서 제목" "$ORDERS_PAGE" "<title>주문 내역 —"
 
@@ -252,6 +253,19 @@ check "비회원 위시리스트 2건" "$BEFORE" "2"
 printf '{"guestToken":"%s"}' "$GT" > "$TMP/merge.json"
 MERGE="$(curl -s -b "$C1" -X POST "$SHOP/wishlist/merge" -H 'content-type: application/json' --data-binary "@$TMP/merge.json")"
 contains "2건 이어받음" "$MERGE" '"merged":2'
+
+# 담을 수 있어야 목록이 의미가 있다.
+#
+# 목록·삭제 화면과 회원 메뉴 링크는 있는데 **담는 버튼이 어느 화면에도 없었다** —
+# POST /wishlist 를 부르는 곳이 0곳이라, 위시리스트는 영원히 "담아둔 상품이
+# 없습니다" 였다. 비회원으로 담은 것을 로그인 계정으로 옮기는 /wishlist/merge 도
+# 마찬가지였다.
+DETAIL_PAGE="$(sf_render "shop/wish-item")"
+contains "상품 화면에 담기 버튼이 있다" "$DETAIL_PAGE" 'class="brick-wish-btn"'
+contains "지금 담겨 있는지 먼저 물어본다" "$DETAIL_PAGE" "API + '/check'"
+contains "그 상품에 묶여 있다" "$DETAIL_PAGE" "data-wish=\"$PID\""
+# 담긴 상태를 눈으로만 알리면 스크린리더에는 아무 일도 안 일어난 버튼이다
+contains "담긴 상태를 스크린리더에도 알린다" "$DETAIL_PAGE" "aria-pressed"
 AFTER="$(psql_q "SELECT count(*) FROM shop_wishlist WHERE guest_token='$GT'")"
 check "비회원 기록은 정리됨" "$AFTER" "0"
 contains "회원 목록에 이어짐" "$(curl -s -b "$C1" "$SHOP/wishlist")" '"total":2'

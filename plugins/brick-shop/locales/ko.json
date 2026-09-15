@@ -316,5 +316,10 @@
   "restock.cancelTitle": "재입고 알림 해지",
   "restock.cancelBusy": "해지하는 중…",
   "restock.loginRequired": "신청 내역을 보려면 로그인해주세요.",
-  "restock.backToShop": "쇼핑몰로"
+  "restock.backToShop": "쇼핑몰로",
+  "wish.add": "위시리스트에 담기",
+  "wish.added": "위시리스트에 담았습니다.",
+  "wish.inList": "위시리스트에 담김",
+  "wish.removed": "위시리스트에서 뺐습니다.",
+  "wish.addFail": "담지 못했습니다."
 }

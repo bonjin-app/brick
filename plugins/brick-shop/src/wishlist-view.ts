@@ -28,7 +28,7 @@ export function registerWishlistView(
     name: "wishlist",
     displayName: "위시리스트",
     render: async (_props, blockCtx) => `
-<div class="brick-wish" id="brick-wish" data-base="${escapeHtml(shopBase(blockCtx))}">
+<div class="brick-wish" id="brick-wish" data-base="${escapeHtml(shopBase(blockCtx))}" data-user="${blockCtx?.user ? "1" : "0"}">
   <div id="brick-wish-body"><p class="brick-shop-empty">${escapeHtml(t("orders.loading"))}</p></div>
 </div>
 ${wishScript(t)}${WISH_CSS}`,
@@ -110,6 +110,24 @@ const wishScript = (t: (k: string, p?: Record<string, string | number>) => strin
   var q = guest ? ('?guest=' + encodeURIComponent(guest)) : '';
 ${cardHelpers(t)}
 
+  /*
+   * 비회원으로 담아 둔 것을 로그인한 계정으로 옮긴다.
+   *
+   * 서버에는 처음부터 /wishlist/merge 가 있었는데 **부르는 화면이 없었다.**
+   * 그래서 비회원으로 담고 로그인하면 목록이 빈 채로 보인다 — 담은 기억은 있는데
+   * 사라진 것으로 보이는 쪽이 아예 못 담는 것보다 나쁘다.
+   *
+   * 토큰은 지우지 않는다 — 같은 값을 비회원 주문 조회에도 쓴다. 두 번 합쳐도
+   * 이미 옮겨진 것은 그대로다.
+   */
+  function mergeThenLoad(){
+    if (root.dataset.user !== '1' || !guest) { load(); return; }
+    fetch('/api/plugins/brick-shop/wishlist/merge', {
+      method: 'POST', headers: {'content-type':'application/json'},
+      body: JSON.stringify({ guestToken: guest }),
+    }).then(function(){ q = ''; load(); }).catch(function(){ load(); });
+  }
+
   function load(){
     fetch('/api/plugins/brick-shop/wishlist' + q)
       .then(function(r){ return r.ok ? r.json() : null; })
@@ -120,7 +138,8 @@ ${cardHelpers(t)}
         }
         body.innerHTML = '<div class="brick-wish-grid">' +
           d.items.map(function(p){ return card(p, base, true); }).join('') + '</div>' +
-          (guest ? '<p class="brick-wish-hint">' + ${JSON.stringify(t("wish.loginHint"))} + '</p>' : '');
+          (root.dataset.user === '1' ? ''
+            : '<p class="brick-wish-hint">' + ${JSON.stringify(t("wish.loginHint"))} + '</p>');
         body.querySelectorAll('[data-del]').forEach(function(btn){
           btn.addEventListener('click', function(e){
             e.preventDefault();
@@ -131,7 +150,7 @@ ${cardHelpers(t)}
       })
       .catch(function(){ body.innerHTML = '<p class="brick-shop-empty">' + ${JSON.stringify(t("orders.notFound"))} + '</p>'; });
   }
-  load();
+  mergeThenLoad();
 })();
 </script>`;
 

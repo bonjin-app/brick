@@ -422,6 +422,19 @@ export function registerStorefrontBlocks(
       <dt>${escapeHtml(t("detail.stock"))}</dt>
       <dd>${p.stock === null ? escapeHtml(t("detail.canBuy")) : soldout ? escapeHtml(t("common.soldout")) : escapeHtml(t("detail.stockLeft", { n: Number(p.stock) }))}</dd>
     </dl>
+    ${/*
+       위시리스트 담기.
+       **화면이 없어서 아무도 담을 수 없었다** — 목록·삭제 화면과 회원 메뉴 링크는
+       있는데 담는 버튼이 어디에도 없어서, 위시리스트는 영원히 "담아둔 상품이
+       없습니다" 였다. 품절 상품에도 둔다 — 지금 못 사는 물건이야말로 담아 둔다.
+     */ ""}
+    <div class="brick-wish-line">
+      <button type="button" class="brick-wish-btn" data-wish="${escapeHtml(p.id)}" aria-pressed="false">
+        <span class="brick-wish-icon" aria-hidden="true">♡</span>
+        <span class="brick-wish-label">${escapeHtml(t("wish.add"))}</span>
+      </button>
+      <span class="brick-wish-msg" role="status"></span>
+    </div>
     ${soldout ? `<div class="brick-soldout-notice">
       <p>${escapeHtml(t("detail.soldoutNotice"))}</p>
       ${restockForm(String(p.slug), soldoutOptions, !blockCtx.user)}
@@ -467,7 +480,7 @@ ${relatedHtml}
 <a id="brick-reviews"></a>
 ${reviewSection({ id: String(p.id), reviewCount, ratingAvg, inquiryCount: Number(p.inquiry_count ?? 0) })}
 <script type="application/ld+json">${jsonLd}</script>
-${buyScript(`${shopBaseOf(blockCtx)}/cart`)}${GALLERY_SCRIPT}${restockScript()}${STOREFRONT_CSS}`;
+${buyScript(`${shopBaseOf(blockCtx)}/cart`)}${GALLERY_SCRIPT}${restockScript()}${wishButtonScript()}${STOREFRONT_CSS}`;
     },
   };
   ctx.registerBlock(productDetailBlock);
@@ -841,6 +854,15 @@ const COLLECTION_CSS = `
    CSS 변수는 테마 토큰을 우선 사용해 테마 디자인과 어울리게 한다. */
 const STOREFRONT_CSS = `
 <style>
+.brick-wish-line{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0}
+/* 44px — 폰에서 누르는 자리다 */
+.brick-wish-btn{display:inline-flex;align-items:center;gap:7px;min-height:44px;padding:0 16px;cursor:pointer;
+  font:inherit;font-size:14px;border:1px solid var(--color-line-strong, #d5d5dd);border-radius:999px;
+  background:var(--color-bg, #fff);color:var(--color-text, #17171c)}
+.brick-wish-btn[aria-pressed="true"]{border-color:var(--color-danger, #c9342f);color:var(--color-danger, #c9342f)}
+.brick-wish-icon{font-size:16px;line-height:1}
+.brick-wish-msg{font-size:13px;color:var(--color-muted, #71717d)}
+
 /*
  * 운영자가 적은 글자는 **어디서든 줄바꿈될 수 있어야 한다.**
  *
@@ -1067,6 +1089,69 @@ function shopBaseOf(blockCtx?: { path?: string; pathTail?: string }): string {
     : path;
   return `/${base || "shop"}`;
 }
+
+/**
+ * 위시리스트 담기 버튼.
+ *
+ * `POST /wishlist` 도 `GET /wishlist/check` 도 처음부터 있었다 — check 의 주석은
+ * "목록 화면이 여러 상품을 한 번에 물어본다" 고까지 적고 있다. 그런데 **담는 버튼이
+ * 어느 화면에도 없었다.** 위시리스트 화면과 회원 메뉴 링크는 있었으므로, 손님은
+ * 들어가서 "담아둔 상품이 없습니다" 만 보게 된다.
+ *
+ * 비회원도 담을 수 있다(서버가 게스트 토큰을 발급한다) — 로그인부터 요구하면
+ * 대부분 거기서 끝난다. 서버가 새 토큰을 주면 보관해서 다음에도 같은 목록을 본다.
+ */
+const wishButtonScript = () => `
+<script>
+(function(){
+  var btn = document.currentScript.parentNode.querySelector('.brick-wish-btn');
+  if (!btn) return;
+  var msg = btn.parentNode.querySelector('.brick-wish-msg');
+  var icon = btn.querySelector('.brick-wish-icon');
+  var label = btn.querySelector('.brick-wish-label');
+  var id = btn.dataset.wish;
+  var API = '/api/plugins/brick-shop/wishlist';
+  function guestQs(){
+    var g = null;
+    try { g = localStorage.getItem('brick_shop_guest'); } catch (e) { /* 사생활 보호 모드 */ }
+    return g ? ('?guest=' + encodeURIComponent(g)) : '';
+  }
+  function paint(on){
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    icon.textContent = on ? '\u2665' : '\u2661';
+    label.textContent = on ? ${JSON.stringify(t("wish.inList"))} : ${JSON.stringify(t("wish.add"))};
+  }
+
+  // 지금 담겨 있는지 먼저 본다 — 담아 둔 것을 또 담으라고 하면 목록이 어디 있는지 모른다
+  fetch(API + '/check' + (guestQs() ? guestQs() + '&' : '?') + 'ids=' + encodeURIComponent(id))
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(d){ if (d && d.ids) paint(d.ids.indexOf(id) >= 0); })
+    .catch(function(){ /* 모르면 담기로 둔다 */ });
+
+  btn.addEventListener('click', function(){
+    var on = btn.getAttribute('aria-pressed') === 'true';
+    btn.disabled = true;
+    var req = on
+      ? fetch(API + '/' + encodeURIComponent(id) + guestQs(), { method: 'DELETE' })
+      : fetch(API, {
+          method: 'POST', headers: {'content-type':'application/json'},
+          body: JSON.stringify({ productId: id, guestToken: (function(){
+            try { return localStorage.getItem('brick_shop_guest'); } catch (e) { return null; }
+          })() }),
+        });
+    req.then(function(r){ return r.ok ? r.json().catch(function(){ return {}; }) : null; })
+      .then(function(d){
+        btn.disabled = false;
+        if (!d) { msg.textContent = ${JSON.stringify(t("wish.addFail"))}; return; }
+        // 서버가 비회원에게 새 토큰을 주면 보관한다 — 안 하면 다음 화면에서 남의 목록처럼 빈다
+        if (d.guestToken) { try { localStorage.setItem('brick_shop_guest', d.guestToken); } catch (e) {} }
+        paint(!on);
+        msg.textContent = on ? ${JSON.stringify(t("wish.removed"))} : ${JSON.stringify(t("wish.added"))};
+      })
+      .catch(function(){ btn.disabled = false; msg.textContent = ${JSON.stringify(t("wish.addFail"))}; });
+  });
+})();
+</script>`;
 
 const buyScript = (cartPath: string) => `
 <script>
