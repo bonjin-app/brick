@@ -571,5 +571,20 @@
   "ret.colDate": "Requested",
   "ret.colOrder": "Order no.",
   "checkout.zoneFee": "Remote-area surcharge",
-  "checkout.zoneHint": "Enter a postcode and any remote-area surcharge is added to the total."
+  "checkout.zoneHint": "Enter a postcode and any remote-area surcharge is added to the total.",
+  "restock.myTitle": "Your back-in-stock alerts",
+  "restock.empty": "You have no back-in-stock alerts.",
+  "restock.colProduct": "Product",
+  "restock.colDate": "Requested",
+  "restock.colStatus": "Status",
+  "restock.statusWaiting": "Waiting",
+  "restock.statusNotified": "Notified",
+  "restock.cancel": "Stop",
+  "restock.cancelConfirm": "Stop this alert?",
+  "restock.cancelled": "The alert was stopped.",
+  "restock.cancelFail": "Could not stop it. The link may already be used or expired.",
+  "restock.cancelTitle": "Stop back-in-stock alert",
+  "restock.cancelBusy": "Stopping…",
+  "restock.loginRequired": "Log in to see your alerts.",
+  "restock.backToShop": "Back to the shop"
 }

@@ -10,6 +10,7 @@ import { registerCheckoutView } from "./checkout-view.js";
 import { registerOrdersView } from "./orders-view.js";
 import { registerWishlistView } from "./wishlist-view.js";
 import { registerCouponsView } from "./coupons-view.js";
+import { registerRestockView } from "./restock-view.js";
 
 /**
  * 스토어프론트 블록.
@@ -540,6 +541,19 @@ ${buyScript(`${shopBaseOf(blockCtx)}/cart`)}${GALLERY_SCRIPT}${restockScript()}$
         blockCtx.setSeo?.({ title: t("coupons.title") });
         return couponsBlock.render({}, blockCtx);
       }
+      /*
+       * 재입고 알림 — 목록과 **해지**.
+       *
+       * 재입고 메일이 보내는 해지 링크가 `/shop/restock/cancel/<토큰>` 인데 이
+       * 분기가 없어서 "상품을 찾을 수 없습니다" 로 떨어졌다. 한 번 신청하면
+       * 끊을 수 없는 알림이었다.
+       */
+      if (seg[0] === "restock") {
+        return restockBlock.render(
+          seg[1] === "cancel" ? { token: seg[2] ?? "" } : { mode: "list" },
+          blockCtx,
+        );
+      }
       if (seg[0] === "event") {
         if (!seg[1]) blockCtx.setSeo?.({ title: t("collection.index") });
         return seg[1] ? renderCollectionPage(seg[1], blockCtx) : renderCollectionIndex();
@@ -661,6 +675,7 @@ ${cartScript(shopBaseOf(blockCtx))}${STOREFRONT_CSS}`,
   const ordersBlock = registerOrdersView(ctx, t);
   const { wishlistBlock } = registerWishlistView(ctx, t);
   const { couponsBlock } = registerCouponsView(ctx, t);
+  const { restockBlock } = registerRestockView(ctx, t);
 
   /*
    * 화면 선언 — 쇼핑몰과 그 안의 회원 화면들.
@@ -676,6 +691,7 @@ ${cartScript(shopBaseOf(blockCtx))}${STOREFRONT_CSS}`,
   ctx.registerScreen({ path: "shop/orders", title: "주문 내역", block: "orders", memberMenu: true, order: 10 });
   ctx.registerScreen({ path: "shop/coupons", title: "쿠폰함", block: "my-coupons", memberMenu: true, order: 15 });
   ctx.registerScreen({ path: "shop/wishlist", title: "위시리스트", block: "wishlist", memberMenu: true, order: 25 });
+  ctx.registerScreen({ path: "shop/restock", title: "재입고 알림", block: "restock-alerts", memberMenu: true, order: 30 });
 }
 
 /**

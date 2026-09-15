@@ -344,6 +344,21 @@ check "상태가 cancelled" "$(psql_q "SELECT status FROM shop_restock_alerts WH
 # 링크를 두 번 눌러도 오류를 보여주지 않는다 (해지가 안 된 줄 알고 다시 시도한다)
 contains "두 번 눌러도 성공" "$(curl -s -X POST "$SHOP/restock-alerts/cancel/$TOKEN")" '"ok":true'
 check "없는 토큰은 404" "$(code -X POST "$SHOP/restock-alerts/cancel/no-such-token")" "404"
+
+# **그 링크를 누르면 실제로 화면이 나와야 한다.**
+#
+# 메일은 "신청하지 않으셨다면 아래 링크를 눌러 알림을 해지해주세요" 라며
+# /shop/restock/cancel/<토큰> 을 보내는데, 스토어프론트에 그 경로를 받는 자리가
+# 없어서 "상품을 찾을 수 없습니다" 가 떴다. 끊을 수 없는 알림이었다.
+CANCEL_PAGE="$(curl -s "$API/api/render/page?path=shop/restock/cancel/$TOKEN")"
+# 클래스 이름은 CSS 에도 있다 — 분기에서만 나오는 속성을 본다(첫 판은 그래서 헐거웠다)
+contains "해지 링크가 해지 화면을 연다" "$CANCEL_PAGE" "data-token="
+absent   "상품 화면으로 떨어지지 않는다" "$CANCEL_PAGE" "상품을 찾을 수 없습니다"
+contains "그 토큰으로 연다" "$CANCEL_PAGE" "$TOKEN"
+contains "비회원에게는 로그인을 안내한다" \
+  "$(curl -s "$API/api/render/page?path=shop/restock")" "신청 내역을 보려면 로그인"
+MINE_PAGE="$(curl -s -b "$CK" "$API/api/render/page?path=shop/restock")"
+contains "회원 신청 내역 화면도 있다" "$MINE_PAGE" "brick-restock-body"
 # 해지했으면 재입고돼도 안 간다
 psql_q "UPDATE shop_products SET stock = 4, status='selling' WHERE id='$P_OUT'" >/dev/null
 sweep >/dev/null

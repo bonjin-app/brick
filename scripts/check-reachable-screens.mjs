@@ -47,6 +47,7 @@ const MUST_REACH = [
   ["/api/plugins/brick-shop/tax/info", "손님이 현금영수증을 신청할 자리가 없습니다 — 부가가치세법 제32조의2 는 최종소비자가 요청하면 발급하라고 정하는데, 요청할 곳이 없으면 그 권리가 없는 것과 같습니다"],
   ["/api/plugins/brick-shop/returns/", "신청한 청약철회를 물릴 수 없습니다 — 잘못 누른 손님은 판매자에게 연락하는 수밖에 없습니다"],
   ["/tickets/by-no/", "비회원이 자기 문의를 볼 수 없습니다 — 조회용 비밀번호까지 받아 놓고 번호와 비밀번호를 넣을 칸이 없습니다"],
+  ["/api/plugins/brick-shop/restock-alerts/cancel/", "재입고 알림을 끊을 수 없습니다 — 메일이 보내는 해지 링크가 화면 없이 떨어집니다"],
 ];
 
 function walk(dir, out = []) {
