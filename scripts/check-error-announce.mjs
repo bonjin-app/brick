@@ -22,8 +22,15 @@ import { join } from "node:path";
 const ROOT = new URL("..", import.meta.url).pathname;
 const WEB = join(ROOT, "apps/web/src");
 
-// {error && …} · {msg ? …} 처럼 **상태를 조건으로** 그리는 자리
-const STATEFUL = /\{\s*\w*(?:rror|essage|sg|ail)\w*\s*(?:\?|&&)/;
+/*
+ * {error && …} · {msg ? …} 처럼 **상태를 조건으로** 그리는 자리.
+ *
+ * 처음에는 여는 중괄호 **바로 뒤**의 변수만 봤다. 그래서 `{(notice || error) && …}`
+ * 를 놓쳤고, 마이페이지의 알림 배너가 검사에 걸리지 않은 채 남아 있었다 —
+ * 비밀번호를 틀렸다는 안내가 화면에는 뜨는데 스크린리더에는 아무것도 가지
+ * 않았다. 괄호와 앞선 조건을 건너뛰고 본다.
+ */
+const STATEFUL = /\{[^{}]{0,60}\b\w*(?:rror|essage|[Mm]sg|[Ff]ail)\w*\b[^{}]{0,20}(?:\?|&&)/;
 
 function walk(dir, out = []) {
   for (const name of readdirSync(dir)) {
@@ -41,11 +48,21 @@ for (const file of walk(WEB)) {
   const lines = readFileSync(file, "utf8").split("\n");
   for (let i = 0; i < lines.length; i++) {
     if (!STATEFUL.test(lines[i])) continue;
-    // 한 줄로 끝나지 않는 JSX 가 많다 — 뒤 세 줄까지 함께 본다
-    const blob = lines.slice(i, i + 4).join("\n");
+    /*
+     * 한 줄로 끝나지 않는 JSX 가 많다. 뒤 세 줄만 보면 **여는 태그가 위에 있는**
+     * 경우를 놓친다(role 은 태그에 붙고 색은 다음 줄 style 에 있다) — 앞 두 줄도
+     * 함께 본다.
+     */
+    const blob = lines.slice(Math.max(0, i - 2), i + 4).join("\n");
     if (!blob.includes("color-danger")) continue;
     checked++;
-    if (/role="alert"|aria-live|role=\{/.test(blob)) continue;
+    /*
+     * 이유를 적어 둔 제외는 인정한다 — "읽어주지 않음: …". 빠뜨린 것과 정한 것을
+     * 구별하는 것이 이 검사의 요지다(autocomplete 검사의 off 와 같은 원칙).
+     */
+    if (/role="alert"|role="status"|aria-live|role=\{/.test(blob)) continue;
+    // 이유를 적어 둔 제외는 바로 위 주석 블록에 있을 수 있다 — 조금 더 위까지 본다
+    if (/읽어주지 않음/.test(lines.slice(Math.max(0, i - 8), i + 1).join("\n"))) continue;
     bad.push([`${file.slice(ROOT.length)}:${i + 1}`, lines[i].trim().slice(0, 80)]);
   }
 }

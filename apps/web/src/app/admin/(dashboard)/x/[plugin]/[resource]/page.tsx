@@ -774,13 +774,17 @@ function ImportDialog({ spec, api, onClose, onDone }: {
             {busy ? t("x.importRunning") : t("x.importRun")}
           </button>
           {result && (
-            <span style={{ fontSize: 13.5 }}>
+            <span role="status" style={{ fontSize: 13.5 }}>
               {t("x.importResult", { c: result.created, u: result.updated, f: result.failed.length })}
             </span>
           )}
           {error && <span role="alert" style={{ fontSize: 13.5, color: "var(--color-danger)" }}>{error}</span>}
         </div>
-        {/* 실패한 줄은 번호와 이유를 함께 — 그것 없이는 이백 줄에서 무엇을 고칠지 모른다 */}
+        {/*
+          * 실패한 줄은 번호와 이유를 함께 — 그것 없이는 이백 줄에서 무엇을 고칠지 모른다.
+          * 읽어주지 않음: 위의 결과 요약(role="status")이 "몇 건 실패"까지 말한다.
+          * 여기까지 라이브 영역으로 두면 스무 줄을 통째로 읽어 버린다.
+          */}
         {result && result.failed.length > 0 && (
           <ul style={{ margin: "10px 0 0", padding: "0 0 0 18px", fontSize: 13, color: "var(--color-danger)" }}>
             {result.failed.slice(0, 20).map((f, i) => <li key={i}>{t("x.importLine", { n: f.line })}: {f.message}</li>)}

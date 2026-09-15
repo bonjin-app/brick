@@ -246,7 +246,9 @@ export default function AccountPage() {
       </header>
 
       {(notice || error) && (
-        <div style={{ ...card, padding: "12px 18px", color: error ? "var(--color-danger)" : "var(--color-success)", fontSize: 14 }}>
+        // 실패는 눈으로만 알려주면 안 된다 — 스크린리더에는 아무 일도 없는 화면이 된다
+        <div role={error ? "alert" : "status"}
+          style={{ ...card, padding: "12px 18px", color: error ? "var(--color-danger)" : "var(--color-success)", fontSize: 14 }}>
           {error || notice}
         </div>
       )}
