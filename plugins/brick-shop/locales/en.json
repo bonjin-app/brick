@@ -591,5 +591,12 @@
   "wish.added": "Added to your wishlist.",
   "wish.inList": "In your wishlist",
   "wish.removed": "Removed from your wishlist.",
-  "wish.addFail": "Could not add it."
+  "wish.addFail": "Could not add it.",
+  "재입고 대기": "Back-in-stock waitlist",
+  "대기": "waiting",
+  "품절 상품을 기다리는 사람 수입니다. 많이 기다리는 순으로 보여줍니다 — 재입고하면 신청한 사람에게 1회 자동으로 알림이 갑니다.": "How many people are waiting for each sold-out product, most-waited first. Restocking sends each of them one notification automatically.",
+  "대기 인원": "Waiting",
+  "첫 신청": "First request",
+  "재입고 알림": "Back-in-stock alerts",
+  "무통장입금": "Bank transfer"
 }

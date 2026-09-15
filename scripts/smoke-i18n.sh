@@ -376,6 +376,26 @@ KO_RES="$(sed -n '2p' <<<"$KO_RES")"
 [[ "${RES_N:-0}" -ge 20 ]] && ok "전수 대상이 실제로 넓다 (리소스 ${RES_N}개)" || bad "리소스가 너무 적다 — 플러그인이 안 켜졌다 (${RES_N:-0}개)"
 [[ -z "$KO_RES" ]] && ok "모든 리소스의 모든 선언 문자열이 번역되어 있다" || bad "번역 안 된 리소스 문자열: $KO_RES"
 
+# 선언 문자열은 **관리 리소스만이 아니다.**
+#
+# 회원 메뉴(registerScreen 의 title)와 결제수단 이름은 **손님이 읽는다.** 리소스만
+# 보고 있던 동안 영어 사이트의 마이페이지에는 "재입고 알림 · 내 포인트 · 내 스크랩"
+# 이 한국어로 떴고, 주문서의 결제수단은 "무통장입금" 이었다 — 그쪽은 번역을
+# 거치지도 않고 원문을 그대로 내보내고 있었다.
+KO_MENU="$(curl -s -b "$CK" "$API/api/member/menu" | /usr/bin/python3 -c "
+import sys, json, re
+d = json.load(sys.stdin)
+print(','.join(i['label'] for i in d.get('items', []) if re.search(r'[가-힣]', i.get('label') or '')))
+")"
+[[ -z "$KO_MENU" ]] && ok "회원 메뉴의 화면 제목이 모두 번역되어 있다" || bad "번역 안 된 회원 메뉴: $KO_MENU"
+
+KO_PAY="$(curl -s "$API/api/plugins/brick-shop/payment-methods" | /usr/bin/python3 -c "
+import sys, json, re
+d = json.load(sys.stdin)
+print(','.join(m['displayName'] for m in d.get('methods', []) if re.search(r'[가-힣]', m.get('displayName') or '')))
+")"
+[[ -z "$KO_PAY" ]] && ok "결제수단 이름이 번역되어 있다 (손님이 주문서에서 읽는다)" || bad "번역 안 된 결제수단: $KO_PAY"
+
 echo "── 코어 경로가 쓰는 플러그인 문구도 언어를 따라간다"
 # 탈퇴 화면의 "무엇을 잃는가" 는 플러그인이 describe 로 만들고 코어가 모은다.
 # 그 경로는 언어 캐시를 갱신하지 않아서 옛 언어로 남았고(설정 변경 훅이 무효화만

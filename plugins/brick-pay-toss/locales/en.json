@@ -7,5 +7,6 @@
   "시크릿 키 설정됨": "Secret key is set",
   "클라이언트 키": "Client key",
   "토스페이먼츠": "Toss Payments",
-  "토스페이먼츠 개발자센터에서 발급한 키를 입력하세요. 시크릿 키는 저장 후 다시 표시되지 않으며, 비워두고 저장하면 기존 값이 유지됩니다.": "Enter the keys issued by the Toss Payments developer center. The secret key is never shown again after saving; saving with the field empty keeps the existing value."
+  "토스페이먼츠 개발자센터에서 발급한 키를 입력하세요. 시크릿 키는 저장 후 다시 표시되지 않으며, 비워두고 저장하면 기존 값이 유지됩니다.": "Enter the keys issued by the Toss Payments developer center. The secret key is never shown again after saving; saving with the field empty keeps the existing value.",
+  "카드·간편결제": "Card · easy pay"
 }

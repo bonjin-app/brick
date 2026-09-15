@@ -45,5 +45,6 @@
   "poll.notStarted": "This poll has not started yet.",
   "poll.closed": "This poll is closed.",
   "poll.loginRequired": "Log in to vote.",
-  "poll.notFound": "Poll not found."
+  "poll.notFound": "Poll not found.",
+  "설문 참여": "Poll"
 }

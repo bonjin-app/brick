@@ -524,7 +524,9 @@ export default definePlugin(async (ctx) => {
         await Promise.all(
           [...gateways.values()].map(async (g) => {
             const ready = g.isReady ? await g.isReady().catch(() => false) : true;
-            return ready ? { provider: g.provider, displayName: g.displayName } : null;
+            // 결제수단 이름은 **손님이 주문서에서 읽는다** — 사이트 언어를 따라야 한다.
+            // 선언 문자열의 규약대로 원문이 곧 키다(locales/en.json 의 "무통장입금").
+            return ready ? { provider: g.provider, displayName: t(g.displayName) } : null;
           }),
         )
       ).filter((m): m is { provider: string; displayName: string } => m !== null),
