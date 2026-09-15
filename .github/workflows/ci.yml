@@ -143,6 +143,9 @@ jobs:
       - name: 서버가 만들어 둔 기능에 손님이 닿는다 (화면이 없으면 기능도 없다)
         run: node scripts/check-reachable-screens.mjs
 
+      - name: primary 면 위의 글자색은 테마가 정한다 (밝은 팔레트에서 흰 글자는 사라진다)
+        run: node scripts/check-on-primary.mjs
+
       - name: 관리 화면의 표가 폰에서 카드로 접힌다 (밀려난 버튼은 닿을 수 없다)
         run: node scripts/check-admin-tables.mjs
 

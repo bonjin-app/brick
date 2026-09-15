@@ -100,7 +100,7 @@ export function BusinessInfoSettings() {
           ))}
         </div>
         <p style={{ fontSize: 12.5, color: "var(--color-muted)" }}>{t("business.requiredNote")}</p>
-        <button className="brick-btn brick-btn-primary" style={{ marginTop: 4 }}>{t("common.save")}</button>
+        <button className="btn-primary" style={{ marginTop: 4 }}>{t("common.save")}</button>
       </form>
 
       {message && (

@@ -172,7 +172,15 @@ const ADMIN_CSS = `
 .brick-admin th, .brick-admin td { padding: 10px 12px; vertical-align: middle; }
 .brick-admin tbody tr:hover { background: var(--color-bg-soft); }
 .brick-admin h1 { font-size: 26px; letter-spacing: -0.01em; margin: 0 0 20px; }
-.brick-admin .btn-primary { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
+/*
+ * 기본 버튼의 글자색은 **테마가 정한다**(--color-on-primary).
+ *
+ * #fff 로 박아 두었더니, primary 가 밝은 색인 팔레트에서 흰 글자가 사라졌다 —
+ * storefront 테마의 다크 팔레트가 정확히 그렇다(primary #f2f3f6). 다크로 보는
+ * 운영자에게는 관리 화면의 **모든 저장 버튼**이 빈 칸이었다. 테마는 그 경우를
+ * 대비해 --color-on-primary(#14161b)를 같이 선언해 두는데 아무도 읽지 않았다.
+ */
+.brick-admin .btn-primary { background: var(--color-primary); border-color: var(--color-primary); color: var(--color-on-primary, #fff); }
 .brick-admin .btn-primary:hover { filter: brightness(.94); background: var(--color-primary); border-color: var(--color-primary); }
 .brick-admin .btn-link {
   display: inline-block; padding: 8px 14px; border-radius: 8px; font-size: 14px; font-weight: 600;
