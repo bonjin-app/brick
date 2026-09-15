@@ -320,14 +320,18 @@ echo "── 할인이 있어도 정합성이 유지된다"
 curl -s -b "$CK" -X POST "$SHOP/admin/coupons" -H 'content-type: application/json' \
   -d '{"code":"rep3000","name":"3천원","discount_type":"fixed","discount_value":3000}' >/dev/null
 # 10,000 × 2 = 20,000 − 3,000 = 17,000 + 3,000 배송 = 20,000
+#
+# 날짜는 **지난 날**이어야 한다. 처음에는 2026-09-15 로 적혀 있었는데, 그날이
+# 오자 수트가 그날 만든 다른 주문들과 같은 버킷에 섞여 순매출이 어긋났다
+# (기대 20000, 실제 56000). 하루짜리 창을 미래 날짜로 못박으면 그날이 온다.
 DISC="$(mkorder "$P1" 2 rep3000)"
-psql_q "UPDATE shop_orders SET payment_status='paid', status='paid', paid_at='2026-09-15 05:00:00+00' WHERE order_no='$DISC'" >/dev/null
+psql_q "UPDATE shop_orders SET payment_status='paid', status='paid', paid_at='2026-06-10 05:00:00+00' WHERE order_no='$DISC'" >/dev/null
 DAMT="$(psql_q "SELECT subtotal, discount, total FROM shop_orders WHERE order_no='$DISC'")"
 check "할인 주문 금액" "$DAMT" "20000|3000|20000"
-RD="$(curl -s -b "$CK" "$SHOP/admin/reports/sales?from=2026-09-15&to=2026-09-15")"
+RD="$(curl -s -b "$CK" "$SHOP/admin/reports/sales?from=2026-06-10&to=2026-06-10")"
 contains "할인이 집계된다" "$RD" '"discount":3000'
 contains "순매출은 받은 돈 20000" "$RD" '"net":20000'
-PD="$(curl -s -b "$CK" "$SHOP/admin/reports/products?from=2026-09-15&to=2026-09-15")"
+PD="$(curl -s -b "$CK" "$SHOP/admin/reports/products?from=2026-06-10&to=2026-06-10")"
 # 상품 순매출 = 20,000 − 안분할인 3,000 = 17,000 (배송비 3,000은 주문 쪽)
 check "상품 순매출은 할인 뺀 17000" "$(echo "$PD" | jq_get "['products'][0]['net']")" "17000"
 check "안분 할인 표시" "$(echo "$PD" | jq_get "['products'][0]['discount']")" "3000"

@@ -426,6 +426,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `check-secret-fields.mjs` | 자격증명처럼 생긴 입력칸이 평문으로 그려지는 것 (**토스 시크릿 키가 보통 텍스트 칸이었다 — 붙여 넣는 동안 화면에 그대로 떠 있었다**) |
 | `check-admin-field-names.mjs` | 화면이 보내는 칸 이름을 서버가 읽지 않는 것 (**승인번호를 적고 저장하면 "승인번호를 입력해주세요" 가 떴다 — 방금 적은 그 칸을 두고**) |
 | `check-mail-i18n.mjs` | 메일 제목이 한국어로 박히는 것 (**영어 사이트 회원이 비밀번호를 잃어버리면 한국어 메일을 받았다 — 재입고 메일은 가격 줄만 번역돼 있었다**) |
+| `check-smoke-dates.mjs` | 스모크에 못박힌 **미래 날짜** (**리포트 수트가 결제 시각을 `2026-09-15` 로 적어 뒀는데 그날이 오자, 코드는 그대로인데 CI 가 빨개졌다**) |
 | `check-unsubscribe-header.mjs` | 광고 메일에 **`List-Unsubscribe` 헤더**가 없는 것 (**메일 앱이 수신거부 버튼을 못 띄우면 손님은 스팸 신고를 누르고, 그러면 입금 계좌가 담긴 주문 안내까지 스팸함으로 간다**) · One-Click 을 선언했는데 그 주소가 POST 를 안 받는 것 |
 | `check-autocomplete.mjs` | 손님이 폰에서 **손으로 다 쳐야 하는 칸** (**로그인·가입의 이메일·비밀번호에 `name` 도 `autocomplete` 도 없어 저장된 비밀번호가 채워지지 않았다 — 주문서에는 이미 있었다**) |
 | `check-error-announce.mjs` | 오류를 **눈으로만** 알려주는 것 (**로그인 실패에 라이브 영역이 하나도 없어, 스크린리더에는 버튼을 눌러도 아무 일이 없었다 — 가입 화면만 `role="alert"` 를 갖고 있었다**) |
@@ -499,7 +500,7 @@ themes/
   boutique/       부티크 — 여백 위주
   corporate/      회사 홈페이지 — 히어로·특징 카드
 docs-site/        GitHub Pages 랜딩페이지
-scripts/          스모크 테스트 37종 + 정적 검사 21종 + OIDC 스텁 + 배포본 생성(build-release.sh)
+scripts/          스모크 테스트 37종 + 정적 검사 22종 + OIDC 스텁 + 배포본 생성(build-release.sh)
 docker/           Dockerfile, entrypoint
 ```
 

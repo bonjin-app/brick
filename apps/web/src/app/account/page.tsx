@@ -16,6 +16,13 @@ interface Profile {
   display_name_changed_at?: string | null;
 }
 
+interface Identity {
+  provider: string;
+  label: string;
+  email: string | null;
+  created_at: string;
+}
+
 interface Session {
   id: string;
   device: string;
@@ -43,6 +50,18 @@ export default function AccountPage() {
   const [emailOpen, setEmailOpen] = useState(false);
   const [needLogin, setNeedLogin] = useState(false);
   const [sessions, setSessions] = useState<Session[]>([]);
+  /*
+   * 연결된 로그인 수단.
+   *
+   * API 는 처음부터 있었는데(연결·해제·목록) 보여 주는 화면이 없었다. 그래서
+   * 소셜 계정이 자기 계정에 붙어 있어도 회원은 볼 수도 뗄 수도 없었다 — 훔친
+   * 세션으로 심어진 뒷문이라면 더더욱 그렇다. 연결 알림 메일이 "내 정보에서
+   * 해제하세요" 라고 안내하는데 정작 그 화면이 없었다.
+   */
+  const [identities, setIdentities] = useState<Identity[]>([]);
+  const [providers, setProviders] = useState<Array<{ name: string; label: string }>>([]);
+  const [linkPw, setLinkPw] = useState("");
+  const [linking, setLinking] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
@@ -81,8 +100,37 @@ export default function AccountPage() {
     fetch("/api/member/menu").then((s) => (s.ok ? s.json() : { items: [] }))
       .then((d) => setMemberMenu(d.items ?? []))
       .catch(() => {});
+    fetch("/api/auth/oauth/my/identities").then((s) => (s.ok ? s.json() : []))
+      .then((d) => setIdentities(Array.isArray(d) ? d : (d.items ?? [])))
+      .catch(() => {});
+    fetch("/api/auth/oauth/providers").then((s) => (s.ok ? s.json() : { items: [] }))
+      .then((d) => setProviders(d.items ?? []))
+      .catch(() => {});
   }
   useEffect(() => { load().catch(() => oops()); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function unlinkIdentity(it: Identity) {
+    if (!confirm(t("account.identityUnlinkConfirm", { label: it.label }))) return;
+    const r = await fetch(`/api/auth/oauth/my/identities/${encodeURIComponent(it.provider)}`, { method: "DELETE" });
+    if (!r.ok) { oops((await r.json().catch(() => ({}))).message); return; }
+    say(t("account.identityUnlinked"));
+    setIdentities((list) => list.filter((x) => x.provider !== it.provider));
+  }
+
+  /*
+   * 연결은 비밀번호를 다시 확인한 뒤에만 시작한다(서버가 재인증을 요구한다).
+   * 승격이 끝나면 공급자로 넘어가는 것이라, 그 이동은 링크가 아니라 여기서 한다.
+   */
+  async function startLink(provider: string) {
+    const r = await fetch("/api/me/security/reauth", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ password: linkPw }),
+    });
+    if (!r.ok) { setLinking(null); oops(t("account.identityPasswordWrong")); return; }
+    setLinkPw("");
+    window.location.href = `/api/auth/oauth/${encodeURIComponent(provider)}?link=1&next=/account`;
+  }
 
   async function call(input: RequestInfo, init: RequestInit, done: string) {
     const r = await fetch(input, { headers: { "content-type": "application/json" }, ...init });
@@ -343,6 +391,49 @@ export default function AccountPage() {
               </form>
             </section>
           )}
+
+          {/* ── 연결된 로그인 수단 ── */}
+          <section style={card}>
+            <h2 style={h2}>{t("account.identities")}</h2>
+            <p style={{ ...small, marginTop: 0 }}>{t("account.identitiesDesc")}</p>
+            {identities.length === 0 ? (
+              <p style={small}>{t("account.identitiesEmpty")}</p>
+            ) : (
+              identities.map((it) => (
+                <div key={it.provider} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--color-line)", fontSize: 14, flexWrap: "wrap" }}>
+                  <span style={{ flex: 1, minWidth: 140 }}>
+                    <strong>{it.label}</strong>
+                    {it.email ? <span style={{ color: "var(--color-muted)" }}> · {it.email}</span> : null}
+                    <span style={{ ...small, display: "block" }}>
+                      {t("account.identityLinked", { date: new Date(it.created_at).toLocaleDateString(localeTag) })}
+                    </span>
+                  </span>
+                  <button onClick={() => void unlinkIdentity(it)}
+                    style={{ ...small, cursor: "pointer", minHeight: 36, padding: "0 12px", color: "var(--color-danger)" }}>
+                    {t("account.identityUnlink")}
+                  </button>
+                </div>
+              ))
+            )}
+            {me.password_login_enabled && providers.some((p) => !identities.some((i) => i.provider === p.name)) && (
+              <div style={{ marginTop: 14 }}>
+                <p style={{ ...small, marginTop: 0 }}>{t("account.identityAddNote")}</p>
+                <label style={{ ...authLabel, marginTop: 0 }}>{t("account.identityPassword")}
+                  <input style={authInput} type="password" name="current-password" autoComplete="current-password"
+                    value={linkPw} onChange={(e) => setLinkPw(e.target.value)} />
+                </label>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+                  {providers.filter((p) => !identities.some((i) => i.provider === p.name)).map((p) => (
+                    <button key={p.name} disabled={!linkPw || linking === p.name}
+                      onClick={() => { setLinking(p.name); void startLink(p.name); }}
+                      style={{ ...small, cursor: "pointer", minHeight: 40, padding: "0 14px" }}>
+                      {t("account.identityAdd", { label: p.label })}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </section>
 
           {/* ── 접속 중인 기기 ── */}
           <section style={card}>
