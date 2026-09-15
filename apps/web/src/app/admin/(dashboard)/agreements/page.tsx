@@ -104,7 +104,7 @@ export default function AgreementsPage() {
       <section style={card}>
         <h2 className="brick-card-title">{t("agreements.current")}</h2>
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <table className="brick-x-table" style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead><tr>
               <th style={th}>{t("agreements.colKind")}</th>
               <th style={th}>{t("agreements.colVersion")}</th>
@@ -117,11 +117,11 @@ export default function AgreementsPage() {
                 const r = latestOf(k);
                 return (
                   <tr key={k}>
-                    <td style={td}>{KIND_LABEL[k]}</td>
-                    <td style={td}>{r ? t("agreements.version", { n: String(r.version) }) : "—"}</td>
-                    <td style={td}>{r ? (r.is_required ? t("agreements.required") : t("agreements.optional")) : "—"}</td>
-                    <td style={td}>{r ? Number(r.agreed_count).toLocaleString(localeTag) : "—"}</td>
-                    <td style={td}>{r?.effective_at ? new Date(r.effective_at).toLocaleDateString(localeTag) : "—"}</td>
+                    <td style={td} data-label={t("agreements.colKind")}>{KIND_LABEL[k]}</td>
+                    <td style={td} data-label={t("agreements.colVersion")}>{r ? t("agreements.version", { n: String(r.version) }) : "—"}</td>
+                    <td style={td} data-label={t("agreements.colRequired")}>{r ? (r.is_required ? t("agreements.required") : t("agreements.optional")) : "—"}</td>
+                    <td style={td} data-label={t("agreements.colAgreed")}>{r ? Number(r.agreed_count).toLocaleString(localeTag) : "—"}</td>
+                    <td style={td} data-label={t("agreements.colEffective")}>{r?.effective_at ? new Date(r.effective_at).toLocaleDateString(localeTag) : "—"}</td>
                   </tr>
                 );
               })}
