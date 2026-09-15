@@ -59,6 +59,11 @@ const KO = {
   "adminLogin.fail": "이메일 또는 비밀번호가 올바르지 않습니다.",
   "adminLogin.busy": "로그인 중...",
   "adminLogin.submit": "로그인",
+  "adminLogin.twoFactor": "2단계 인증",
+  "adminLogin.twoFactorDesc": "인증 앱의 6자리 코드를 입력해주세요. 휴대폰이 없다면 복구 코드를 입력해도 됩니다.",
+  "adminLogin.twoFactorCode": "코드",
+  "adminLogin.twoFactorSubmit": "확인",
+  "adminLogin.twoFactorFail": "코드가 맞지 않습니다.",
   "adminLogin.forgot": "비밀번호를 잊으셨나요?",
 
   "dash.activeTheme": "활성 테마",
@@ -398,6 +403,11 @@ const EN: Record<keyof typeof KO, string> = {
   "adminLogin.fail": "Invalid email or password.",
   "adminLogin.busy": "Signing in...",
   "adminLogin.submit": "Log in",
+  "adminLogin.twoFactor": "Two-factor authentication",
+  "adminLogin.twoFactorDesc": "Enter the 6-digit code from your authenticator app. Without your phone, a recovery code works too.",
+  "adminLogin.twoFactorCode": "Code",
+  "adminLogin.twoFactorSubmit": "Verify",
+  "adminLogin.twoFactorFail": "That code is not correct.",
   "adminLogin.forgot": "Forgot your password?",
 
   "dash.activeTheme": "Active theme",

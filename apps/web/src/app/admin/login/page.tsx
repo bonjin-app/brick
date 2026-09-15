@@ -8,6 +8,9 @@ export default function AdminLoginPage() {
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  // 2FA 가 켜진 계정은 세션 없이 200 + challengeToken 이 온다 (공개 로그인과 같다)
+  const [challengeToken, setChallengeToken] = useState("");
+  const [code, setCode] = useState("");
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -18,11 +21,31 @@ export default function AdminLoginPage() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(form),
     });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.twoFactorRequired) {
+      setChallengeToken(String(data.challengeToken ?? ""));
+      setBusy(false);
+      return;
+    }
     if (res.ok) window.location.href = "/admin";
     else {
       setError(t("adminLogin.fail"));
       setBusy(false);
     }
+  }
+
+  async function submitCode(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    const res = await fetch("/api/auth/login/2fa", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ challengeToken, code }),
+    });
+    if (res.ok) { window.location.href = "/admin"; return; }
+    setError((await res.json().catch(() => ({}))).message ?? t("adminLogin.twoFactorFail"));
+    setBusy(false);
   }
 
   /**
@@ -46,6 +69,28 @@ export default function AdminLoginPage() {
       <p style={{ textAlign: "center", color: "var(--color-muted)", fontSize: 14, marginTop: 8 }}>
         {t("adminLogin.subtitle")}
       </p>
+      {challengeToken ? (
+        <form onSubmit={submitCode}>
+          <p style={{ color: "var(--color-muted)", fontSize: 14, marginTop: 20 }}>
+            {t("adminLogin.twoFactorDesc")}
+          </p>
+          <label style={{ display: "block", marginTop: 16 }}>
+            {t("adminLogin.twoFactorCode")}
+            {/* 복구 코드도 같은 칸으로 받는다 — 6자리로 막으면 휴대폰을 잃었을 때 못 들어온다 */}
+            <input style={input} required autoFocus name="one-time-code"
+              autoComplete="one-time-code" inputMode="text"
+              value={code} onChange={(e) => setCode(e.target.value)} />
+          </label>
+          <button disabled={busy} style={{
+            width: "100%", padding: 13, marginTop: 24, cursor: "pointer",
+            border: 0, borderRadius: "var(--radius)", font: "inherit", fontSize: 15, fontWeight: 700,
+            background: "var(--color-primary)", color: "var(--color-on-primary)",
+          }}>
+            {busy ? t("adminLogin.busy") : t("adminLogin.twoFactorSubmit")}
+          </button>
+          {error && <p role="alert" style={{ color: "var(--color-danger)", fontSize: 14 }}>{error}</p>}
+        </form>
+      ) : (
       <form onSubmit={submit}>
         <label>
           {t("common.email")}
@@ -67,7 +112,8 @@ export default function AdminLoginPage() {
           {busy ? t("adminLogin.busy") : t("adminLogin.submit")}
         </button>
       </form>
-      {error && <p role="alert" style={{ color: "var(--color-danger)", fontSize: 14 }}>{error}</p>}
+      )}
+      {!challengeToken && error && <p role="alert" style={{ color: "var(--color-danger)", fontSize: 14 }}>{error}</p>}
       <p style={{ textAlign: "center", marginTop: 16, fontSize: 14 }}>
         <a href="/forgot-password">{t("adminLogin.forgot")}</a>
       </p>

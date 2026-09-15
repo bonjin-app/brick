@@ -11,6 +11,17 @@ export default function LoginPage() {
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  /*
+   * 2단계 인증 도전.
+   *
+   * 서버는 2FA 가 켜진 계정에 **세션 쿠키 없이** 200 과 함께
+   * `{ twoFactorRequired, challengeToken }` 을 준다. 이 화면은 res.ok 만 보고
+   * 홈으로 보내고 있었다 — 로그인한 줄 알고 갔더니 로그아웃 상태라서, 켠
+   * 사람은 영영 들어올 수 없었다. 코드를 받는 자리가 없으면 2FA 는 계정을
+   * 지키는 것이 아니라 잠그는 기능이다.
+   */
+  const [challengeToken, setChallengeToken] = useState("");
+  const [code, setCode] = useState("");
 
   // 소셜 로그인이 실패하면 콜백이 /login?error=... 로 되돌린다
   useEffect(() => {
@@ -27,11 +38,57 @@ export default function LoginPage() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(form),
     });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.twoFactorRequired) {
+      setChallengeToken(String(data.challengeToken ?? ""));
+      setBusy(false);
+      return;
+    }
     if (res.ok) window.location.href = safeNext();
     else {
-      setError((await res.json()).message ?? t("login.fail"));
+      setError(data.message ?? t("login.fail"));
       setBusy(false);
     }
+  }
+
+  /** 코드 확인 — 세션은 여기서 발급된다. 복구 코드도 같은 칸으로 받는다 */
+  async function submitCode(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    const res = await fetch("/api/auth/login/2fa", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ challengeToken, code }),
+    });
+    if (res.ok) { window.location.href = safeNext(); return; }
+    setError((await res.json().catch(() => ({}))).message ?? t("login.fail"));
+    setBusy(false);
+  }
+
+  if (challengeToken) {
+    return (
+      <AuthShell title={t("login.twoFactor")}>
+        <p style={{ margin: "0 0 14px", fontSize: 14, color: "var(--color-muted)" }}>
+          {t("login.twoFactorDesc")}
+        </p>
+        <form onSubmit={submitCode}>
+          <label style={{ ...authLabel, marginTop: 0 }}>{t("login.twoFactorCode")}
+            {/* 복구 코드도 받으므로 6자리로 막지 않는다 */}
+            <input style={authInput} required autoFocus name="one-time-code"
+              autoComplete="one-time-code" inputMode="text" value={code}
+              onChange={(e) => setCode(e.target.value)} />
+          </label>
+          <button disabled={busy} style={authButton}>
+            {busy ? t("login.busy") : t("login.twoFactorSubmit")}
+          </button>
+        </form>
+        {error && <p role="alert" style={{ color: "var(--color-danger)", fontSize: 14 }}>{error}</p>}
+        <p style={{ textAlign: "center", marginTop: 18, fontSize: 14 }}>
+          <a href="/login" style={authLink}>{t("login.twoFactorBack")}</a>
+        </p>
+      </AuthShell>
+    );
   }
 
   return (

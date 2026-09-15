@@ -227,6 +227,27 @@ export class SiteController {
           );
         }
       }
+      /*
+       * 2단계 인증 강제 — IP 제한과 **똑같은 자기잠금**이다.
+       *
+       * 켜는 순간 AdminGuard 가 2FA 없는 관리자의 관리 작업을 전부 막는다.
+       * 그 "관리 작업"에는 이 설정을 되돌리는 것도 들어가므로, 본인이 등록하지
+       * 않은 채 켜면 DB 를 직접 만지지 않는 한 빠져나올 수 없다.
+       */
+      if (key === "security.require_2fa_for_staff" && value === true) {
+        const userId = (req as unknown as { user?: { id?: string } }).user?.id;
+        const { rows } = await this.db.execute(sql`
+          SELECT 1 FROM user_totp
+          WHERE user_id = ${userId}::uuid AND is_enabled = true LIMIT 1
+        `);
+        if (rows.length === 0) {
+          throw new BadRequestException(
+            "지금 로그인한 관리자 계정에 2단계 인증이 없습니다 — 저장하면 스스로 잠깁니다. " +
+              "내 정보 화면의 2단계 인증에서 먼저 등록한 뒤 켜주세요.",
+          );
+        }
+      }
+
       // 접속 차단 IP — 형식과 **자기잠금**을 저장 시점에 막는다. 지금 접속한 IP 를 차단하면
       // 저장하는 순간 관리자 자신이 403 을 본다.
       if (key === "security.blocked_ips" && String(value).trim() !== "") {

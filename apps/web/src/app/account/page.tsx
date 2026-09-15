@@ -30,6 +30,12 @@ interface Identity {
   created_at: string;
 }
 
+interface TotpStatus {
+  enabled: boolean;
+  recoveryCodesLeft: number;
+  enabledAt: string | null;
+}
+
 interface Session {
   id: string;
   device: string;
@@ -77,6 +83,24 @@ export default function AccountPage() {
   const [pending, setPending] = useState<PendingAgreement[]>([]);
   const [agreed, setAgreed] = useState<Record<string, boolean>>({});
   const [identities, setIdentities] = useState<Identity[]>([]);
+  /*
+   * 2단계 인증.
+   *
+   * TOTP·복구 코드·도전 토큰·감사 로그까지 서버는 전부 갖춰 두었는데
+   * `2fa/begin` 을 부르는 화면이 한 곳도 없었다 — 아무도 켤 수 없었다는 뜻이다.
+   * 그런데 관리 설정에는 "관리자에게 2단계 인증 요구" 체크박스가 있어서, 그것을
+   * 켜면 **등록할 방법이 없는 채로** 관리 화면 전체에서 잠겼다. 서비스 주석이
+   * "강제 설정이 켜져 있어도 등록 경로는 열어 둔다" 며 대비한 잠금을, 화면이
+   * 없다는 이유로 그대로 맞고 있었던 것이다.
+   */
+  const [totp, setTotp] = useState<TotpStatus | null>(null);
+  const [staff2fa, setStaff2fa] = useState(false);
+  const [enroll, setEnroll] = useState<{ secret: string; otpauthUri: string } | null>(null);
+  const [totpPw, setTotpPw] = useState("");
+  const [totpCode, setTotpCode] = useState("");
+  // 한 번만 보여 주는 값이라 화면을 떠나면 사라진다 — 그래서 저장을 강하게 안내한다
+  const [recovery, setRecovery] = useState<string[]>([]);
+  const [recoveryNote, setRecoveryNote] = useState("");
   const [providers, setProviders] = useState<Array<{ name: string; label: string }>>([]);
   const [linkPw, setLinkPw] = useState("");
   const [linking, setLinking] = useState<string | null>(null);
@@ -109,8 +133,14 @@ export default function AccountPage() {
     setMe(p);
     setName(p.display_name);
     setBirth({ month: p.birth_month ? String(p.birth_month) : "", day: p.birth_day ? String(p.birth_day) : "" });
-    fetch("/api/me/security/sessions").then((s) => (s.ok ? s.json() : { items: [] }))
-      .then((d) => setSessions(d.items ?? []))
+    // 세션·2단계 인증 상태·강제 여부가 한 응답에 같이 온다
+    fetch("/api/me/security").then((r2) => (r2.ok ? r2.json() : null))
+      .then((d) => {
+        if (!d) return;
+        setSessions(d.sessions ?? []);
+        setTotp(d.twoFactor ?? null);
+        setStaff2fa(Boolean(d.requiredForStaff));
+      })
       .catch(() => {});
     fetch("/api/me/withdraw/preview").then((s) => (s.ok ? s.json() : { items: [] }))
       .then((d) => setLosses(d.items ?? []))
@@ -140,6 +170,77 @@ export default function AccountPage() {
     say(t("account.pendingDone"));
     setPending([]);
     setAgreed({});
+  }
+
+  /** 등록 시작 — 비밀을 받아 온다. 아직 켜지지 않는다 */
+  async function beginTotp(e: React.FormEvent) {
+    e.preventDefault();
+    const r = await fetch("/api/me/security/2fa/begin", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ password: totpPw }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { oops(d.message); return; }
+    setTotpPw("");
+    setEnroll({ secret: String(d.secret ?? ""), otpauthUri: String(d.otpauthUri ?? "") });
+    setNotice("");
+    setError("");
+  }
+
+  /** 코드를 확인해야 켜진다 — 여기서 복구 코드가 한 번 나온다 */
+  async function completeTotp(e: React.FormEvent) {
+    e.preventDefault();
+    const r = await fetch("/api/me/security/2fa/complete", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ code: totpCode }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { oops(d.message); return; }
+    setEnroll(null);
+    setTotpCode("");
+    setRecovery(d.recoveryCodes ?? []);
+    setRecoveryNote(String(d.warning ?? ""));
+    say(t("account.totpOn"));
+    load();
+  }
+
+  async function regenRecovery() {
+    const r = await fetch("/api/me/security/2fa/recovery-codes", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ password: totpPw }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { oops(d.message); return; }
+    setTotpPw("");
+    setRecovery(d.recoveryCodes ?? []);
+    setRecoveryNote(String(d.warning ?? ""));
+    load();
+  }
+
+  async function disableTotp() {
+    const r = await fetch("/api/me/security/2fa/disable", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ password: totpPw }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { oops(d.message); return; }
+    setTotpPw("");
+    say(t("account.totpDisabled"));
+    load();
+  }
+
+  /** 복사가 막힌 브라우저(비 HTTPS·권한 거부)에서도 키는 눈으로 옮겨 적을 수 있다 */
+  async function copy(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      say(t("account.totpCopied"));
+    } catch {
+      // 조용히 넘어간다 — 화면의 값은 그대로 선택할 수 있다
+    }
   }
 
   async function unlinkIdentity(it: Identity) {
@@ -498,6 +599,135 @@ export default function AccountPage() {
                   ))}
                 </div>
               </div>
+            )}
+          </section>
+
+          {/* ── 2단계 인증 ── */}
+          <section style={card}>
+            <h2 style={h2}>{t("account.totp")}</h2>
+            <p style={{ ...small, marginTop: 0 }}>{t("account.totpDesc")}</p>
+
+            {/* 강제 설정이 켜졌는데 아직 등록하지 않았다면, 관리 화면이 막혀 있다 */}
+            {staff2fa && !totp?.enabled && (
+              <p role="alert" data-testid="brick-totp-required" style={{
+                margin: "0 0 12px", padding: "10px 12px", fontSize: 13.5, borderRadius: 10,
+                background: "color-mix(in srgb, var(--color-danger) 8%, transparent)",
+                border: "1px solid color-mix(in srgb, var(--color-danger) 34%, transparent)",
+              }}>{t("account.totpRequired")}</p>
+            )}
+
+            {/* 복구 코드 — 지금 한 번만 보인다 */}
+            {recovery.length > 0 && (
+              <div role="alert" data-testid="brick-totp-codes" style={{
+                margin: "0 0 14px", padding: "12px 14px", borderRadius: 10,
+                background: "var(--color-bg-soft)", border: "1px solid var(--color-line-strong)",
+              }}>
+                <strong style={{ fontSize: 14 }}>{t("account.totpCodesTitle")}</strong>
+                <p style={{ ...small, margin: "6px 0 10px" }}>{recoveryNote || t("account.totpCodesWarn")}</p>
+                <ul style={{
+                  display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))",
+                  gap: 6, margin: 0, padding: 0, listStyle: "none",
+                  fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 14,
+                }}>
+                  {recovery.map((c) => <li key={c}>{c}</li>)}
+                </ul>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+                  <button type="button" onClick={() => void copy(recovery.join("\n"))}
+                    style={{ ...small, cursor: "pointer", minHeight: 36, padding: "0 14px" }}>
+                    {t("account.totpCopy")}
+                  </button>
+                  <button type="button" onClick={() => setRecovery([])}
+                    style={{ ...small, cursor: "pointer", minHeight: 36, padding: "0 14px" }}>
+                    {t("account.totpCodesKept")}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {totp?.enabled ? (
+              <>
+                <p style={{ margin: "0 0 4px", fontSize: 14, color: "var(--color-success)" }}>
+                  {totp.enabledAt
+                    ? t("account.totpOnSince", { date: new Date(totp.enabledAt).toLocaleDateString(localeTag) })
+                    : t("account.totpOn")}
+                </p>
+                <p style={{ ...small, margin: "0 0 10px" }}>
+                  {t("account.totpCodesLeft", { count: String(totp.recoveryCodesLeft) })}
+                </p>
+                {/* 다 쓰고 나서 알면 늦는다 — 휴대폰을 잃었을 때 쓸 것이 없다 */}
+                {totp.recoveryCodesLeft <= 2 && (
+                  <p role="alert" style={{ ...small, color: "var(--color-danger)", marginTop: 0 }}>
+                    {t("account.totpCodesLow")}
+                  </p>
+                )}
+                <label style={{ ...authLabel, marginTop: 0 }}>{t("account.currentPassword")}
+                  <input style={authInput} type="password" name="current-password" autoComplete="current-password"
+                    value={totpPw} onChange={(e) => setTotpPw(e.target.value)} />
+                </label>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+                  <button type="button" disabled={!totpPw} onClick={() => void regenRecovery()}
+                    style={{ ...small, cursor: "pointer", minHeight: 40, padding: "0 14px" }}>
+                    {t("account.totpRegen")}
+                  </button>
+                  {/* 강제 설정이 켜져 있으면 서버가 거절한다 — 누를 수 있게 두면 거짓말이다 */}
+                  <button type="button" disabled={!totpPw || staff2fa} onClick={() => void disableTotp()}
+                    style={{ ...small, cursor: "pointer", minHeight: 40, padding: "0 14px", color: "var(--color-danger)" }}>
+                    {t("account.totpDisable")}
+                  </button>
+                </div>
+                {staff2fa && <p style={{ ...small, marginBottom: 0 }}>{t("account.totpCannotDisable")}</p>}
+              </>
+            ) : enroll ? (
+              <form onSubmit={completeTotp}>
+                <ol style={{ margin: "0 0 14px", paddingLeft: 20, fontSize: 14, lineHeight: 1.7 }}>
+                  <li>{t("account.totpStep1")}</li>
+                  <li>
+                    {t("account.totpStep2")}
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", margin: "8px 0" }}>
+                      {/* 손으로 옮겨 적는 값이라 4자씩 끊어 준다 */}
+                      <code data-testid="brick-totp-secret" style={{
+                        flex: "1 1 220px", padding: "8px 10px", borderRadius: 8, wordBreak: "break-all",
+                        background: "var(--color-bg-soft)", border: "1px solid var(--color-line)",
+                        fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 14,
+                      }}>{enroll.secret.replace(/(.{4})/g, "$1 ").trim()}</code>
+                      <button type="button" onClick={() => void copy(enroll.secret)}
+                        style={{ ...small, cursor: "pointer", minHeight: 36, padding: "0 14px" }}>
+                        {t("account.totpCopy")}
+                      </button>
+                    </div>
+                    {/* 휴대폰에서는 이 링크가 인증 앱을 바로 연다 */}
+                    <a href={enroll.otpauthUri} style={{ ...small, textDecoration: "underline" }}>
+                      {t("account.totpOpenApp")}
+                    </a>
+                  </li>
+                  <li>{t("account.totpStep3")}</li>
+                </ol>
+                <label style={{ ...authLabel, marginTop: 0 }}>{t("account.totpCode")}
+                  <input style={authInput} required inputMode="numeric" autoComplete="one-time-code"
+                    pattern="[0-9]*" maxLength={6} value={totpCode}
+                    onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, ""))} />
+                </label>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button style={saveBtn}>{t("account.totpTurnOn")}</button>
+                  <button type="button" onClick={() => { setEnroll(null); setTotpCode(""); }}
+                    style={{ ...saveBtn, background: "var(--color-bg)", color: "var(--color-text)", border: "1px solid var(--color-line-strong)" }}>
+                    {t("account.totpCancel")}
+                  </button>
+                </div>
+              </form>
+            ) : me.password_login_enabled ? (
+              <form onSubmit={beginTotp}>
+                <p style={{ ...small, marginTop: 0 }}>{t("account.totpOff")}</p>
+                <label style={{ ...authLabel, marginTop: 0 }}>{t("account.currentPassword")}
+                  <input style={authInput} type="password" required name="current-password"
+                    autoComplete="current-password" value={totpPw}
+                    onChange={(e) => setTotpPw(e.target.value)} />
+                </label>
+                <button style={saveBtn}>{t("account.totpStart")}</button>
+              </form>
+            ) : (
+              /* 등록은 비밀번호 재확인을 요구한다 — 소셜 전용 계정은 켤 수 없다 */
+              <p style={small}>{t("account.totpNeedPassword")}</p>
             )}
           </section>
 

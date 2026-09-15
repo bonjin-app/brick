@@ -181,6 +181,16 @@ ST="$(curl -s -b "$CK" "$API/api/me/security")"
 contains "상태도 꺼짐" "$ST" '"enabled":false'
 check "여전히 관리 작업 가능 (강제가 아니므로)" "$(code -b "$CK" "$API/api/audit")" "200"
 
+echo "── 강제 설정은 켜는 사람 자신부터 잠근다 (IP 제한과 같은 자기잠금)"
+# AdminGuard 는 2FA 없는 관리자의 **관리 작업을 전부** 막는다. 그 안에는 이 설정을
+# 되돌리는 것도 들어 있다 — 등록하지 않은 채 켜면 DB 를 직접 만지지 않는 한 못 푼다.
+LOCK="$(curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' \
+  -d '{"security.require_2fa_for_staff":true}')"
+contains "2FA 없는 관리자가 켜려 하면 거절" "$LOCK" "스스로 잠깁니다"
+check "설정이 저장되지 않았다" \
+  "$(psql_q "SELECT count(*) FROM site_settings WHERE key='security.require_2fa_for_staff' AND value::text='true'")" "0"
+check "그래서 관리 화면은 그대로 열려 있다" "$(code -b "$CK" "$API/api/audit")" "200"
+
 echo "── 틀린 코드로는 켜지지 않는다"
 check "000000 은 400" \
   "$(code -b "$CK" -X POST "$API/api/me/security/2fa/complete" -H 'content-type: application/json' \
