@@ -410,6 +410,27 @@ echo "── 감사 로그"
 AUDIT="$(psql_q "SELECT count(*) FROM audit_logs WHERE action = 'migrate.gnuboard'")"
 [[ "$AUDIT" -ge 1 ]] && ok "이전 작업이 감사 로그에 남음" || bad "이전 작업이 감사 로그에 남음"
 
+echo "── 문서가 말하는 크기의 덤프를 실제로 받는가"
+# 컨트롤러와 문서는 64MB 까지 받는다고 하는데 파서가 2MB 에서 끊고 있었다 —
+# 3.43MB 덤프가 영어로 "Request body is too large" 를 뱉었다. 실제 그누보드
+# 덤프는 거의 이보다 크므로, 문서가 안내하는 화면 업로드는 되는 일이 없었다.
+python3 -c "
+import json, io, sys
+body = open('$TMP/body.json', encoding='utf-8')
+d = json.load(body)['dump']
+# 주석 줄로 3MB 넘게 부풀린다 — 내용은 그대로라 분석 결과가 달라지지 않는다
+d = d + '\n' + ('-- filler\n' * 320000)
+io.open('$TMP/big.json','w',encoding='utf-8').write(json.dumps({'dump': d}))
+print('덤프 %.2fMB' % (len(d)/1024/1024))"
+BIG="$(curl -s -b "$CK" -X POST "$MG/analyze" -H 'content-type: application/json' --data-binary "@$TMP/big.json")"
+contains "2MB 를 넘는 덤프도 분석한다" "$BIG" '"prefix"'
+absent   "본문 크기로 막히지 않는다" "$BIG" "too large"
+# 그 예외는 이전 경로에만 준다 — 다른 API 까지 64MB 를 받으면 그냥 넓어진 구멍이다
+OTHER="$(curl -s -o "$TMP/other.json" -w '%{http_code}' -b "$CK" -X PUT "$API/api/settings" \
+  -H 'content-type: application/json' --data-binary "@$TMP/big.json")"
+check "다른 API 는 여전히 2MB 에서 막는다" "$OTHER" "413"
+contains "그 거절을 한국어로 말한다" "$(cat "$TMP/other.json")" "요청 본문이 너무 큽니다"
+
 echo
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 # 실측을 남긴다(설정됐을 때만) — README 의 표가 실제와 같은지 CI 가 대조한다.

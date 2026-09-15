@@ -12,6 +12,11 @@ import { UploadErrorFilter } from "./common/upload-error.filter.js";
 import { runMigrations } from "./config/migrator.js";
 import { CspService } from "./modules/security/csp.service.js";
 
+/** 보통 JSON 본문의 한도 — API 는 파일을 멀티파트로 받으므로 이 이상이 필요 없다 */
+const DEFAULT_BODY_LIMIT = 2 * 1024 * 1024;
+/** 그누보드 이전 덤프만 예외다 — migrate.controller 의 MAX_DUMP_BYTES 와 같은 값 */
+const MIGRATE_BODY_LIMIT = 64 * 1024 * 1024;
+
 /**
  * Brick API (내부 프로세스).
  * 외부에는 노출하지 않는다 — Next.js가 유일한 공개 진입점이고 /api/* 를 이 서버로 rewrite 한다.
@@ -59,9 +64,42 @@ async function bootstrap() {
     new FastifyAdapter({
       // 리버스 프록시 뒤에 있을 때 X-Forwarded-* 를 신뢰 (rate limit의 클라이언트 IP 판별에 필요)
       trustProxy: env.trustProxy,
-      bodyLimit: 2 * 1024 * 1024,
+      // 아래 onRequest 훅이 경로별로 다시 줄인다 — 여기 값은 그 중 가장 큰 것이다
+      bodyLimit: MIGRATE_BODY_LIMIT,
     }),
   );
+
+  /*
+   * 본문 크기는 **경로마다 다르다.**
+   *
+   * API 가 받는 JSON 은 2MB 면 충분하다. 예외가 하나 있다: **그누보드 이전**은
+   * 덤프(SQL 텍스트)를 JSON 으로 받는다 — 공유 호스팅에서 사용자가 손에 넣을 수
+   * 있는 것이 phpMyAdmin 내보내기 파일이기 때문이다(migrate.controller 의 주석).
+   *
+   * 컨트롤러와 문서는 **64MB 까지 받는다**고 말하는데 파서가 2MB 에서 끊고 있었다.
+   * 3.43MB 덤프가 영어로 "Request body is too large" 를 뱉었고, 실제 그누보드
+   * 덤프는 거의 이보다 크다 — 문서가 안내하는 화면 업로드는 되는 일이 없었다.
+   *
+   * Fastify 의 기본 JSON 파서를 갈아끼우지 않는다(그것이 프로토타입 오염을
+   * 막아 준다). 대신 본문을 읽기 **전에** Content-Length 로 거른다. 길이를 안
+   * 보내는 chunked 요청은 서버 한도(64MB)까지 열려 있지만, 그 값은 멀티파트
+   * 업로드 한도(기본 50MB)와 같은 자릿수라 새로 생기는 노출이 아니다.
+   */
+  const fastify = app.getHttpAdapter().getInstance();
+  fastify.addHook("onRequest", (req, reply, done) => {
+    const limit = String(req.url ?? "").startsWith("/api/admin/migrate/")
+      ? MIGRATE_BODY_LIMIT
+      : DEFAULT_BODY_LIMIT;
+    const length = Number(req.headers["content-length"] ?? 0);
+    if (Number.isFinite(length) && length > limit) {
+      void reply.code(413).send({
+        statusCode: 413,
+        message: `요청 본문이 너무 큽니다. 최대 ${Math.floor(limit / 1024 / 1024)}MB 까지 받습니다.`,
+      });
+      return;
+    }
+    done();
+  });
 
   /*
    * 프록시 뒤인데 신뢰하지 않는 상태인지 지켜본다 (자세한 이유는 proxy-hint.ts).
