@@ -46,6 +46,7 @@ const MUST_REACH = [
   ["/api/business-info", "사업자정보를 입력할 관리 화면이 없습니다 — 전자상거래법 제13조 표시 의무를 지킬 방법이 없고, 테마 푸터는 빈 채로 남습니다"],
   ["/api/plugins/brick-shop/tax/info", "손님이 현금영수증을 신청할 자리가 없습니다 — 부가가치세법 제32조의2 는 최종소비자가 요청하면 발급하라고 정하는데, 요청할 곳이 없으면 그 권리가 없는 것과 같습니다"],
   ["/api/plugins/brick-shop/returns/", "신청한 청약철회를 물릴 수 없습니다 — 잘못 누른 손님은 판매자에게 연락하는 수밖에 없습니다"],
+  ["/tickets/by-no/", "비회원이 자기 문의를 볼 수 없습니다 — 조회용 비밀번호까지 받아 놓고 번호와 비밀번호를 넣을 칸이 없습니다"],
 ];
 
 function walk(dir, out = []) {
@@ -67,9 +68,10 @@ function walk(dir, out = []) {
  * 화면을 그리는 파일(`*-view.ts` · `views.ts` · `blocks.ts`)만 보면 그 구멍이 닫힌다.
  *
  * 대신 화면을 다른 이름의 파일에서 그리기 시작하면 여기가 먼저 빨개진다.
- * 그때는 이 목록에 그 이름을 더한다 — 조용히 통과하는 것보다 낫다.
+ * 그때는 이 목록에 그 이름을 더한다 — 조용히 통과하는 것보다 낫다
+ * (게시판은 `client-script.ts` 에서 댓글·첨부를 그린다).
  */
-const SCREEN_FILE = /(-view|views|blocks)\.tsx?$/;
+const SCREEN_FILE = /(-view|views|blocks|client-script)\.tsx?$/;
 const screens = walk(join(ROOT, "apps/web/src"));
 for (const p of readdirSync(join(ROOT, "plugins"))) {
   const dir = join(ROOT, "plugins", p, "src");

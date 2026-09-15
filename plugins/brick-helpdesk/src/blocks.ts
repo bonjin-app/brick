@@ -142,6 +142,11 @@ const HELP_CSS = `
 .brick-help{margin:24px 0}
 .brick-help-title{font-size:22px;margin:0 0 16px}
 .brick-help-guest p{margin:0 0 14px}.brick-help-guest .brick-actions-row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.brick-help-lookup{max-width:340px;margin:0 auto 22px;text-align:left}
+.brick-help-lookup label{display:block;margin-bottom:10px;font-size:13.5px}
+.brick-help-lookup input{width:100%;box-sizing:border-box;margin-top:4px;padding:9px 11px;font:inherit}
+/* 44px — 폰에서 누르는 자리다 */
+.brick-help-lookup button{width:100%;min-height:44px;cursor:pointer}
 .brick-help-toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px}
 .brick-help-toolbar button{padding:10px 18px;border:0;border-radius:8px;background:var(--color-primary,#d0402c);color:var(--color-on-primary, #ffffff);font-weight:700;cursor:pointer}
 .brick-help table{width:100%;border-collapse:collapse;font-size:14px}
@@ -230,13 +235,46 @@ ${CAPTCHA_WIDGET_JS}
     });
   }
 
+  /*
+   * 비회원에게는 **조회 폼**이 있어야 한다.
+   *
+   * 문의를 남길 때 이름·이메일과 함께 "조회용 비밀번호" 를 받아 놓고, 접수 뒤에는
+   * 문의번호를 알려 준 다음 이 화면이 "문의 내역을 보려면 로그인해주세요" 라고만
+   * 했다. 조회 경로(by-no + pw)는 서버에 처음부터 있었는데 그것을 쓰는 자리가
+   * 없어서, 비회원은 받아 적은 번호와 비밀번호를 쓸 곳이 없었다.
+   */
   function guestView(){
     var next = encodeURIComponent(location.pathname + location.search);
-    body.innerHTML = '<div class="brick-empty brick-help-guest"><p>문의 내역을 보려면 로그인해주세요.' +
+    body.innerHTML = '<div class="brick-empty brick-help-guest">' +
+      (allowGuest
+        ? '<form class="brick-help-lookup"><p>문의번호와 조회용 비밀번호로 내 문의를 볼 수 있습니다.</p>' +
+          '<label>문의번호<input type="text" data-look-no required placeholder="H20260101-00001" /></label>' +
+          '<label>조회용 비밀번호<input type="password" data-look-pw required /></label>' +
+          '<button class="brick-btn brick-btn-primary" type="submit">조회</button>' +
+          '<span class="brick-help-msg" role="alert" data-look-msg></span></form>'
+        : '') +
+      '<p>로그인하면 내 문의 내역을 모두 볼 수 있습니다.' +
       (allowGuest ? ' 로그인 없이도 문의를 남길 수 있습니다.' : '') + '</p>' +
       '<div class="brick-actions-row"><a class="brick-btn brick-btn-primary" href="/login?next=' + next + '">로그인</a>' +
       (allowGuest ? '<button type="button" class="brick-btn" data-new>문의하기</button>' : '') + '</div></div>';
     bindNew();
+
+    var form = body.querySelector('.brick-help-lookup');
+    if (!form) return;
+    form.addEventListener('submit', function(e){
+      e.preventDefault();
+      var msg = form.querySelector('[data-look-msg]');
+      var no = form.querySelector('[data-look-no]').value.trim();
+      var pw = form.querySelector('[data-look-pw]').value;
+      msg.textContent = '';
+      json(API + '/tickets/by-no/' + encodeURIComponent(no) + '?pw=' + encodeURIComponent(pw))
+        .then(function(res){
+          // 있는 번호인지 알려주지 않는다 — 번호는 순차적이다
+          if (!res.ok) { msg.textContent = res.d.message || '문의번호 또는 비밀번호가 맞지 않습니다.'; return; }
+          guestPw = pw;
+          showDetail(res.d.ticket.id);
+        });
+    });
   }
 
   function showList(){
@@ -320,8 +358,11 @@ ${CAPTCHA_WIDGET_JS}
     });
   }
 
+  /** 비회원이 방금 입력한 조회 비밀번호 — 상세·답변에 함께 보낸다 */
+  var guestPw = '';
+
   function showDetail(id){
-    json(API + '/tickets/' + id).then(function(res){
+    json(API + '/tickets/' + id + (guestPw ? '?pw=' + encodeURIComponent(guestPw) : '')).then(function(res){
       if (!res.ok) { body.innerHTML = '<p class="brick-faq-empty">문의를 찾을 수 없습니다.</p>'; return; }
       var t = res.d.ticket;
       var thread = (res.d.replies || []).map(function(r){
@@ -343,13 +384,17 @@ ${CAPTCHA_WIDGET_JS}
             '<div class="brick-help-toolbar"><span class="brick-help-msg" data-msg></span>' +
             '<button data-send>등록</button></div></div>');
 
-      body.querySelector('[data-back]').addEventListener('click', showList);
+      body.querySelector('[data-back]').addEventListener('click', function(){ showList(); });
       var send = body.querySelector('[data-send]');
       if (send) send.addEventListener('click', function(){
         var msg = body.querySelector('[data-msg]');
         json(API + '/tickets/' + id + '/replies', {
           method: 'POST', headers: {'content-type':'application/json'},
-          body: JSON.stringify({ content: body.querySelector('[data-reply]').value })
+          body: JSON.stringify({
+            content: body.querySelector('[data-reply]').value,
+            // 비회원은 세션이 없다 — 이것이 없으면 답변 칸이 보이는데 눌러도 403 이다
+            pw: guestPw || undefined,
+          })
         }).then(function(res2){
           if (!res2.ok) { msg.textContent = res2.d.message || '등록에 실패했습니다.'; return; }
           showDetail(id);

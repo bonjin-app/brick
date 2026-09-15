@@ -206,6 +206,18 @@ contains "맞는 비밀번호로 조회" "$(curl -s "$HD/tickets/$G_ID?pw=guestp
 contains "문의번호로도 조회" "$(curl -s "$HD/tickets/by-no/$G_NO?pw=guestpw")" "비회원이 남긴 내용"
 contains "운영자는 비밀번호 없이 조회" "$(curl -s -b "$CK" "$HD/tickets/$G_ID")" "비회원이 남긴 내용"
 
+# 조회 경로가 있어도 **쓸 자리가 없으면** 비회원은 못 쓴다.
+#
+# 문의를 남길 때 "조회용 비밀번호" 를 받아 놓고, 접수 뒤에는 문의번호를 알려 준
+# 다음 화면이 "문의 내역을 보려면 로그인해주세요" 라고만 했다. 받아 적은 번호와
+# 비밀번호를 넣을 칸이 어디에도 없었다.
+printf '{"slug":"help","title":"문의하기","status":"published","blocks":[{"block":"brick-helpdesk/tickets","props":{}}]}' > "$TMP/hpage.json"
+curl -s -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' --data-binary "@$TMP/hpage.json" >/dev/null
+HGUEST="$(curl -s "$API/api/render/page?path=help")"
+contains "비회원에게 조회 폼을 보여준다" "$HGUEST" "brick-help-lookup"
+contains "그 폼이 문의번호 조회 경로를 부른다" "$HGUEST" "/tickets/by-no/"
+contains "조회용 비밀번호 칸이 있다" "$HGUEST" "data-look-pw"
+
 echo "── FAQ"
 CATS="$(curl -s -b "$CK" "$HD/admin/faq-categories")"
 contains "기본 분류 심어짐" "$CATS" "자주 묻는 질문"
