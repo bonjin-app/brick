@@ -130,6 +130,14 @@ export async function getReturnable(
   /** 청약철회 기한 (배송완료 + 7일). 아직 배송 전이면 null */
   withdrawalDeadline: string | null;
   withdrawalExpired: boolean;
+  /**
+   * 이 주문에 이미 낸 요청들.
+   *
+   * 신청하고 나면 손님이 볼 수 있는 것이 아무것도 없었다 — 새로고침하면
+   * 신청 폼이 다시 나오고(남은 수량만큼), 낸 요청은 화면에서 사라진다.
+   * 승인됐는지 거절됐는지 환불이 얼마인지 알 길이 없어서 결국 전화한다.
+   */
+  requests: Array<Record<string, unknown>>;
 }> {
   const { rows } = await db.execute(sql`
     SELECT id, order_no, user_id, guest_token, status, subtotal, discount, shipping_fee,
@@ -150,6 +158,14 @@ export async function getReturnable(
     // 주문번호는 순차적이므로 존재를 알려주지 않는다
     throw new ShopError(404, "주문을 찾을 수 없습니다.");
   }
+
+  // 이미 낸 요청 — 손님이 "그래서 어떻게 됐나" 를 볼 수 있어야 한다
+  const { rows: requested } = await db.execute(sql`
+    SELECT id, return_no, kind, status, reason_code, refund_amount, return_shipping_fee,
+           shipping_payer, created_at
+    FROM shop_returns WHERE order_id = ${String(order.id)}::uuid
+    ORDER BY created_at DESC
+  `);
 
   const { rows: items } = await db.execute(sql`
     SELECT id, product_name, option_name, unit_price, quantity, cancelled_qty
@@ -182,6 +198,11 @@ export async function getReturnable(
     allowedKinds: allowedKinds(status, expired),
     withdrawalDeadline: deadline ? deadline.toISOString() : null,
     withdrawalExpired: expired,
+    requests: requested.map((r) => ({
+      ...decorate(r),
+      // 처리가 시작되기 전에만 철회할 수 있다 (cancelRequest 와 같은 규칙)
+      cancellable: String(r.status) === "requested",
+    })),
   };
 }
 
@@ -673,16 +694,34 @@ export async function updateReturnStatus(
 /** 고객이 요청을 철회 */
 export async function cancelRequest(
   db: Db,
-  params: { returnId: string; viewer: { id: string; role: string } | null },
+  params: {
+    returnId: string;
+    viewer: { id: string; role: string } | null;
+    /**
+     * 비회원 주문의 토큰.
+     *
+     * 신청은 토큰으로 되는데(청약철회권은 회원 여부와 무관하다) **철회만**
+     * 회원으로 막혀 있었다. 잘못 누른 비회원은 되돌릴 방법이 없어서
+     * 판매자에게 연락해야 했다.
+     */
+    guestToken?: string | null;
+  },
 ): Promise<void> {
   const { rows } = await db.execute(sql`
-    SELECT r.id, r.status, r.user_id FROM shop_returns r WHERE r.id = ${params.returnId}::uuid LIMIT 1
+    SELECT r.id, r.status, r.user_id, o.guest_token, o.user_id AS order_user_id
+    FROM shop_returns r JOIN shop_orders o ON o.id = r.order_id
+    WHERE r.id = ${params.returnId}::uuid LIMIT 1
   `);
   const ret = rows[0];
   if (!ret) throw new ShopError(404, "요청을 찾을 수 없습니다.");
 
   const isManager = params.viewer?.role === "admin" || params.viewer?.role === "manager";
-  if (!isManager && String(ret.user_id) !== params.viewer?.id) {
+  const isOwner = Boolean(params.viewer && String(ret.user_id) === params.viewer.id);
+  const token = String(params.guestToken ?? "");
+  const isGuestOwner = Boolean(
+    token && !ret.order_user_id && String(ret.guest_token ?? "") === token,
+  );
+  if (!isManager && !isOwner && !isGuestOwner) {
     throw new ShopError(404, "요청을 찾을 수 없습니다.");
   }
   if (String(ret.status) !== "requested") {

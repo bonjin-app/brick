@@ -119,6 +119,14 @@ const ORDERS_CSS = `
 .brick-receipt-note { font-size: 13px; color: var(--color-muted, #71717d); margin: 8px 0; }
 .brick-receipt-msg { margin-left: 10px; font-size: 13.5px; color: var(--color-danger, #c9342f); }
 .brick-receipt-done { padding: 14px; background: var(--color-bg-soft, #f7f7f9); border-radius: 10px; margin-top: 14px; }
+.brick-ret-mine { margin-top: 22px; }
+.brick-ret-mine h3 { font-size: 15px; margin: 0 0 8px; }
+.brick-ret-mine table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.brick-ret-mine th, .brick-ret-mine td { padding: 7px 6px; border-bottom: 1px solid var(--color-line, #e7e7ec); text-align: left; vertical-align: top; }
+.brick-ret-mine th { color: var(--color-muted, #71717d); font-weight: 600; }
+.brick-ret-mine small { color: var(--color-muted, #71717d); }
+/* 44px — 폰에서 신청을 물리는 버튼이다. 빗나가면 옆줄의 다른 요청을 누른다 */
+.brick-ret-drop { min-height: 40px; padding: 0 12px; cursor: pointer; font: inherit; font-size: 13px; }
 </style>`;
 
 /** 목록 화면 — 회원이면 /my/orders, 401 이면 비회원 조회 폼 */
@@ -224,6 +232,56 @@ const detailScript = (t: (k: string, p?: Record<string, string | number>) => str
    * 신청 가능 여부는 **서버가 판단해 준다**(cashReceipt). 규칙이 여기에도 있으면
    * 둘이 갈라져서, 못 하는 주문에 폼을 내밀거나 할 수 있는데 안 내밀게 된다.
    */
+  /** 이 주문에 낸 요청 목록 — 상태와 환불액, 그리고 철회 버튼 */
+  function renderMyRequests(slot, orderNo, list, q, notice){
+    if (!list.length) return;
+    var rows = list.map(function(r){
+      var refund = Number(r.refund_amount || 0);
+      return '<tr>' +
+        '<td>' + esc(r.return_no) + '<br /><small>' +
+          new Date(r.created_at).toLocaleDateString(TAG, DATE_OPTS) + '</small></td>' +
+        '<td>' + esc(r.kind_label) + '<br /><small>' + esc(r.reason_label || '') + '</small></td>' +
+        '<td>' + esc(r.status_label) + '</td>' +
+        '<td class="brick-o-total">' + (refund > 0 ? fmt(refund) : '—') + '</td>' +
+        '<td>' + (r.cancellable
+          ? '<button type="button" class="brick-ret-drop" data-ret-id="' + esc(r.id) + '">' +
+            ${JSON.stringify(t("ret.cancelRequest"))} + '</button>'
+          : '') + '</td>' +
+        '</tr>';
+    }).join('');
+
+    slot.insertAdjacentHTML('beforeend',
+      '<section class="brick-ret-mine"><h3>' + ${JSON.stringify(t("ret.myRequests"))} + '</h3>' +
+      '<table><thead><tr>' +
+      '<th>' + ${JSON.stringify(t("ret.colNo"))} + '</th>' +
+      '<th>' + ${JSON.stringify(t("ret.colKind"))} + '</th>' +
+      '<th>' + ${JSON.stringify(t("ret.colStatus"))} + '</th>' +
+      '<th class="brick-o-total">' + ${JSON.stringify(t("ret.colRefund"))} + '</th>' +
+      '<th></th></tr></thead><tbody>' + rows + '</tbody></table>' +
+      '<p class="brick-ret-msg" role="status" data-ret-drop-msg></p></section>');
+
+    var msg = slot.querySelector('[data-ret-drop-msg]');
+    if (notice) msg.textContent = notice;
+    slot.querySelectorAll('.brick-ret-drop').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        if (!confirm(${JSON.stringify(t("ret.cancelConfirm"))})) return;
+        btn.disabled = true;
+        fetch('/api/plugins/brick-shop/returns/' + encodeURIComponent(btn.dataset.retId) + '/cancel' + q,
+          { method: 'POST' })
+          .then(function(r){ return r.json().then(function(d){ return {ok:r.ok, d:d}; }); })
+          .then(function(res){
+            if (!res.ok) {
+              btn.disabled = false;
+              msg.textContent = res.d.message || ${JSON.stringify(t("ret.cancelFail"))};
+              return;
+            }
+            renderReturnSection(orderNo, ${JSON.stringify(t("ret.cancelled"))});
+          })
+          .catch(function(){ btn.disabled = false; msg.textContent = ${JSON.stringify(t("ret.cancelFail"))}; });
+      });
+    });
+  }
+
   function renderReceiptSection(orderNo, info){
     var slot = document.getElementById('brick-receipt-slot');
     if (!slot || !info) return;
@@ -303,15 +361,31 @@ const detailScript = (t: (k: string, p?: Record<string, string | number>) => str
     });
   }
 
-  function renderReturnSection(orderNo){
+  /*
+   * notice 는 **다시 그린 뒤에도 남아야 하는 말**이다. 신청 접수번호나 철회
+   * 완료를 slot 에 써 놓고 다시 그리면 그 말이 같이 지워진다 — 화면은 바뀌는데
+   * 무슨 일이 있었는지는 사라지고, 스크린리더에는 아무 일도 없었던 것이 된다.
+   */
+  function renderReturnSection(orderNo, notice){
     var slot = document.getElementById('brick-ret-slot');
     if (!slot) return;
+    slot.innerHTML = '';  // 다시 그릴 때 겹쳐 쌓이지 않게
     var guest = guestToken();
     var q = guest ? ('?token=' + encodeURIComponent(guest)) : '';
     fetch('/api/plugins/brick-shop/orders/' + encodeURIComponent(orderNo) + '/returnable' + q)
       .then(function(r){ return r.ok ? r.json() : null; })
       .then(function(v){
-        if (!v || !v.allowedKinds || !v.allowedKinds.length) return;
+        if (!v) return;
+        /*
+         * 이미 낸 요청부터 보여준다.
+         *
+         * 신청하고 나면 손님이 볼 수 있는 것이 없었다 — 새로고침하면 신청 폼만
+         * 다시 나오고, 승인됐는지 거절됐는지 환불이 얼마인지 알 길이 없었다.
+         * 신청 폼보다 **위에** 둔다: 지금 궁금한 것은 낸 것의 결과다.
+         */
+        renderMyRequests(slot, orderNo, v.requests || [], q, notice);
+
+        if (!v.allowedKinds || !v.allowedKinds.length) return;
         var openable = (v.items || []).some(function(it){ return it.availableQty > 0; });
         if (!openable) return;
 
@@ -337,7 +411,7 @@ const detailScript = (t: (k: string, p?: Record<string, string | number>) => str
             '" data-ret-qty="' + esc(it.orderItemId) + '" style="width:70px" /> / ' + it.availableQty + '</td></tr>';
         }).join('');
 
-        slot.innerHTML =
+        slot.insertAdjacentHTML('beforeend',
           '<details class="brick-ret"><summary>' + ${JSON.stringify(t("ret.request"))} + '</summary>' +
           deadline + expired +
           '<form class="brick-ret-form">' +
@@ -358,7 +432,7 @@ const detailScript = (t: (k: string, p?: Record<string, string | number>) => str
           '<p class="brick-ret-note" data-ret-payer></p>' +
           '<button type="submit" class="brick-primary">' + ${JSON.stringify(t("ret.submit"))} + '</button>' +
           '<span class="brick-ret-msg" role="status"></span>' +
-          '</form></details>';
+          '</form></details>');
 
         var form = slot.querySelector('.brick-ret-form');
         var sel = form.querySelector('select[name=reason]');
@@ -413,8 +487,10 @@ const detailScript = (t: (k: string, p?: Record<string, string | number>) => str
             .then(function(res){
               btn.disabled = false;
               if (!res.ok) { msg.textContent = res.d.message || ${JSON.stringify(t("ret.fail"))}; return; }
-              slot.innerHTML = '<p class="brick-ret-done">' +
-                ${JSON.stringify(t("ret.done", { no: "__N__" }))}.replace('__N__', esc(res.d.returnNo)) + '</p>';
+              // 접수번호만 알려주고 끝내면 그 다음이 또 안 보인다 — 목록을 다시 그리되
+              // 접수번호는 그 위에 남긴다
+              renderReturnSection(orderNo,
+                ${JSON.stringify(t("ret.done", { no: "__N__" }))}.replace('__N__', res.d.returnNo));
             })
             .catch(function(){ btn.disabled = false; msg.textContent = ${JSON.stringify(t("ret.fail"))}; });
         });

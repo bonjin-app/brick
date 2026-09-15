@@ -2252,6 +2252,8 @@ export default definePlugin(async (ctx) => {
       withdrawalExpired: view.withdrawalExpired,
       returnShippingFee: s.returnShippingFee,
       orderStatus: view.order.status,
+      // 이미 낸 요청 — 신청하고 나면 손님이 볼 수 있는 것이 없었다
+      requests: view.requests,
     };
   });
 
@@ -2282,7 +2284,9 @@ export default definePlugin(async (ctx) => {
 
   /** 고객이 요청을 철회 (처리 시작 전에만) */
   ctx.registerRoute("POST", "/returns/:id/cancel", async (req) => {
-    await cancelRequest(db, { returnId: req.params.id, viewer: req.user });
+    await cancelRequest(db, {
+      returnId: req.params.id, viewer: req.user, guestToken: req.query.token ?? null,
+    });
     return { ok: true };
   });
 

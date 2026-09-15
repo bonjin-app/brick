@@ -27,7 +27,7 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-3439%20passing-2ea043.svg" alt="스모크 테스트 3439개" />
+  <img src="https://img.shields.io/badge/E2E-3447%20passing-2ea043.svg" alt="스모크 테스트 3447개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
   <a href="https://github.com/bonjin-app/brick/pkgs/container/brick">
     <img src="https://img.shields.io/badge/docker-amd64%20%C2%B7%20arm64-2496ed.svg" alt="Docker image (amd64 · arm64)" />
@@ -367,7 +367,7 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 3,439개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 3,447개 항목):
 
 | 수트 | 항목 | 무엇을 못박는가 |
 |---|---:|---|
@@ -375,7 +375,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `smoke-member.sh` | 146 | 약관 강제 · 동의 이력 · 개인정보 파기 · 주문 보존 · 프로필 이미지·공개 카드·닉네임 변경 주기 · **관리자 메모·이메일 변경** · **가입 오류 칸 안내** · **인증 링크 화면** · **보관 기간이 지난 기록이 실제로 지워진다(검색어·인증 토큰·감사)** · **이메일 변경은 재인증을 요구하고, 옛 주소에 알리고, 세션을 끊는다** |
 | `smoke-helpdesk.sh` | 113 | 문의 열거 방지 · 비회원 조회 · 사이트맵 유출 · **설정 화면(비회원 문의 스위치 · GET/PUT 모양 일치)** |
 | `smoke-migrate.sh` | 155 | 덤프 파싱 · 레벨 매핑 · **비밀번호 보존** · 영카트 상품·주문 · 멱등성 |
-| `smoke-returns.sh` | 105 | 할인 안분 · 이중 재고 복원 방어 · 청약철회 기간 · 비회원 청약철회 |
+| `smoke-returns.sh` | 113 | 할인 안분 · 이중 재고 복원 방어 · 청약철회 기간 · 비회원 청약철회 · **신청 뒤 상태가 손님에게 보인다** · **비회원도 자기 신청을 물릴 수 있다** |
 | `smoke-storefront.sh` | 176 | 사업자번호 체크섬 · 위시리스트 격리 · 지역비 실수령 · **샘플 상품** · **NEW·BEST 뱃지** · **정렬** · **쪽나눔** · **가격대·품절 필터** | · **띄어쓰기 없는 긴 이름** |
 | `smoke-poll.sh` | 103 | 중복 투표 · IP 해시 · 결과 공개 시점 · 집계 오염 · 목록→개별 라우팅 |
 | `smoke-mailing.sh` | 106 | (광고) 강제 표기 · 동의자만 발송 · 발송 직전 동의 재확인 · 실제 발송 내용 · **수신거부 헤더(One-Click)와 그 주소가 정말 POST 를 받는가** | · **메일 미설정을 대시보드가 알린다** |

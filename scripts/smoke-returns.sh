@@ -146,6 +146,24 @@ contains "비회원이 실제로 신청한다" \
 check "토큰 없는 신청은 404" \
   "$(code -X POST "$SHOP/orders/$GNO/returns" -H 'content-type: application/json' --data-binary "@$TMP/greq.json")" "404"
 
+echo "── 신청하고 나면 어떻게 됐는지 보인다 (그리고 물릴 수 있다)"
+# 신청하고 나면 손님이 볼 수 있는 것이 없었다 — 새로고침하면 신청 폼만 다시
+# 나오고, 승인됐는지 거절됐는지 환불이 얼마인지 알 길이 없어서 결국 전화한다.
+GVIEW="$(curl -s "$SHOP/orders/$GNO/returnable?token=$GTOKEN")"
+contains "낸 요청이 주문 화면에 실려 온다" "$GVIEW" '"requests"'
+contains "접수번호를 준다" "$GVIEW" '"return_no"'
+contains "상태를 사람 말로 준다" "$GVIEW" '"status_label"'
+contains "처리 전에는 물릴 수 있다고 알려준다" "$GVIEW" '"cancellable":true'
+GRID="$(psql_q "SELECT r.id FROM shop_returns r JOIN shop_orders o ON o.id=r.order_id WHERE o.order_no='$GNO'")"
+# 신청은 토큰으로 되는데 철회만 회원으로 막혀 있었다 — 잘못 누른 비회원은
+# 되돌릴 방법이 없어 판매자에게 연락해야 했다.
+check "토큰 없이는 철회할 수 없다" "$(code -X POST "$SHOP/returns/$GRID/cancel")" "404"
+check "비회원도 자기 토큰으로 철회한다" \
+  "$(code -X POST "$SHOP/returns/$GRID/cancel?token=$GTOKEN")" "200"
+check "실제로 철회되었다" "$(psql_q "SELECT status FROM shop_returns WHERE id='$GRID'")" "cancelled"
+contains "철회한 뒤에는 물릴 수 없다고 말한다" \
+  "$(curl -s "$SHOP/orders/$GNO/returnable?token=$GTOKEN")" '"cancellable":false'
+
 echo "── 부분 취소: 할인 안분 (돈이 걸린 계산)"
 ITEM1="$(psql_q "SELECT oi.id FROM shop_order_items oi JOIN shop_orders o ON o.id=oi.order_id WHERE o.order_no='$NO1'")"
 # 2개 중 1개만 취소 → 실제로 받은 돈 18,000 중 절반 = 9,000 (10,000이 아니다)

@@ -295,5 +295,9 @@
   "receipt.issued": "현금영수증이 발급되었습니다.",
   "receipt.pending": "현금영수증 발급을 접수했습니다. 처리되면 반영됩니다.",
   "receipt.approvalNo": "승인번호",
-  "receipt.legal": "부가가치세법 제32조의2 · 제46조"
+  "receipt.legal": "부가가치세법 제32조의2 · 제46조",
+  "ret.cancelled": "신청을 철회했습니다.",
+  "ret.cancelFail": "철회하지 못했습니다.",
+  "ret.colDate": "신청일",
+  "ret.colOrder": "주문번호"
 }
