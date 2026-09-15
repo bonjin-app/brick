@@ -28,16 +28,48 @@ export function registerOrdersView(ctx: PluginContext, t: (k: string, p?: Record
     render: async (props, blockCtx) => {
       const path = String(blockCtx?.path ?? "").replace(/^\/+|\/+$/g, "");
       const tail = String(blockCtx?.pathTail ?? "").replace(/^\/+|\/+$/g, "");
-      const base = tail && path.endsWith(tail)
-        ? `/${path.slice(0, path.length - tail.length).replace(/\/+$/g, "")}`
-        : `/${path || "shop"}`;
-      const orderNo = String(props.orderNo ?? "").trim();
+      /*
+       * 주문번호는 두 길로 들어온다.
+       *
+       *   - 쇼핑몰 페이지가 있는 사이트: `/shop` 라우터가 props 로 준다.
+       *   - 페이지 없이 **선언 화면**(shop/orders)만 있는 사이트: pathTail 이
+       *     곧 주문번호다.
+       *
+       * 두 번째를 읽지 않아서, 선언 화면만 쓰는 사이트에서는 주문 상세가
+       * 아예 열리지 않았다 — 주소를 정확히 쳐도 목록이 다시 나왔다. 상세에
+       * 붙어 있는 것(입금 계좌 · 청약철회 · 현금영수증)도 전부 닿지 않았다.
+       */
+      const fromRouter = props.orderNo !== undefined;
+      let orderNo = String((fromRouter ? props.orderNo : tail) ?? "").trim();
+      if (!fromRouter && orderNo.includes("/")) orderNo = "";
+      /*
+       * 목록 주소 = 지금 경로에서 주문번호를 뗀 것.
+       *
+       * 예전에는 "블록이 올라간 페이지" 를 base 로 잡고 거기에 `/orders` 를
+       * 덧붙였는데, 선언 화면은 **이미 그 경로에 올라가 있다.** 그래서 목록의
+       * 링크가 /shop/orders/orders/… 라는 없는 주소가 됐다.
+       */
+      const listUrl = `/${
+        orderNo && path.endsWith(orderNo)
+          ? path.slice(0, path.length - orderNo.length).replace(/\/+$/g, "")
+          : path || "shop/orders"
+      }`;
+
+      /*
+       * 선언 화면으로 들어오면 제목을 여기서 정해야 한다 — `/shop` 라우터는
+       * 호출 전에 정해 주지만(blocks.ts), 선언 화면은 등록된 제목("주문 내역")을
+       * 그대로 쓴다. 상세를 열었는데 문서 제목과 h1 이 "주문 내역" 이면 어느
+       * 화면인지 알 수 없다.
+       */
+      if (!fromRouter) {
+        blockCtx?.setSeo?.({ title: t(orderNo ? "orders.detailTitle" : "orders.title") });
+      }
 
       if (orderNo) {
         // ── 상세 ──
         return `
-<div class="brick-orders" id="brick-order-detail" data-base="${escapeHtml(base)}" data-order-no="${escapeHtml(orderNo)}">
-  <p><a href="${escapeHtml(base)}/orders">← ${escapeHtml(t("orders.backToList"))}</a></p>
+<div class="brick-orders" id="brick-order-detail" data-base="${escapeHtml(listUrl)}" data-order-no="${escapeHtml(orderNo)}">
+  <p><a href="${escapeHtml(listUrl)}">← ${escapeHtml(t("orders.backToList"))}</a></p>
   <div id="brick-order-body"><p class="brick-shop-empty">${escapeHtml(t("orders.loading"))}</p></div>
 </div>
 ${detailScript(t, statusLabels())}${ORDERS_CSS}`;
@@ -45,7 +77,7 @@ ${detailScript(t, statusLabels())}${ORDERS_CSS}`;
 
       // ── 목록 (회원) / 주문번호 조회 (비회원) ──
       return `
-<div class="brick-orders" id="brick-order-list" data-base="${escapeHtml(base)}" data-guest="${blockCtx?.user ? "0" : "1"}">
+<div class="brick-orders" id="brick-order-list" data-base="${escapeHtml(listUrl)}" data-guest="${blockCtx?.user ? "0" : "1"}">
   <div id="brick-orders-body"><p class="brick-shop-empty">${escapeHtml(t("orders.loading"))}</p></div>
 </div>
 ${listScript(t, statusLabels())}${ORDERS_CSS}`;
@@ -111,7 +143,7 @@ const listScript = (t: (k: string) => string, labels: string) => `
     body.querySelector('form').addEventListener('submit', function(e){
       e.preventDefault();
       var no = body.querySelector('input').value.trim();
-      if (no) location.href = base + '/orders/' + encodeURIComponent(no);
+      if (no) location.href = base + '/' + encodeURIComponent(no);
     });
   }
 
@@ -130,7 +162,7 @@ const listScript = (t: (k: string) => string, labels: string) => `
       var rows = d.items.map(function(o){
         return '<tr>' +
           '<td>' + new Date(o.created_at).toLocaleDateString(TAG, DATE_OPTS) + '</td>' +
-          '<td><a href="' + base + '/orders/' + encodeURIComponent(o.order_no) + '">' + esc(o.order_no) + '</a><br />' +
+          '<td><a href="' + base + '/' + encodeURIComponent(o.order_no) + '">' + esc(o.order_no) + '</a><br />' +
           '<small>' + esc(o.items_summary || '') + '</small></td>' +
           '<td class="brick-o-total">' + fmt(o.total) + '</td>' +
           '<td><span class="brick-o-status">' + esc(LABEL[o.status] || o.status) + '</span></td>' +

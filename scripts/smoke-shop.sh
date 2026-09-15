@@ -681,6 +681,24 @@ absent   "별점에 <b> 를 쓰지 않는다" "$STARS" ">★</b>"
 # 같은 상태였다(색은 danger 로 고정인데 role 이 없었다).
 contains "후기 폼의 실패 안내가 읽힌다" "$STARS" 'brick-write-msg\" role=\"alert\"'
 
+# 주문 상세가 **페이지 없이 선언 화면만 있는 사이트에서도** 열려야 한다.
+#
+# 주문번호는 `/shop` 라우터가 props 로 주는 길과 선언 화면(shop/orders)의
+# pathTail 로 오는 길, 둘이 있다. 두 번째를 읽지 않아서 이 사이트에서는 상세가
+# 아예 열리지 않았다 — 주소를 정확히 쳐도 목록이 다시 나왔고, 목록의 링크는
+# /shop/orders/orders/… 라는 없는 주소를 가리켰다. 상세에 붙어 있는 것(입금
+# 계좌·청약철회·현금영수증)도 전부 닿지 않았다.
+ODETAIL="$(curl -s "$API/api/render/page?path=shop/orders/$BORDER_NO")"
+contains "주문 상세가 열린다 (선언 화면만 있는 사이트)" "$ODETAIL" 'id=\"brick-order-detail\"'
+contains "그 주문번호로 열린다" "$ODETAIL" "data-order-no=\\\"$BORDER_NO\\\""
+contains "돌아갈 목록 주소가 자기 경로다" "$ODETAIL" 'data-base=\"/shop/orders\"'
+OLIST="$(curl -s "$API/api/render/page?path=shop/orders")"
+contains "목록도 열린다" "$OLIST" 'id=\"brick-order-list\"'
+contains "목록 링크의 기준이 자기 경로다" "$OLIST" 'data-base=\"/shop/orders\"'
+# 기준이 맞아도 거기에 '/orders' 를 덧붙이면 /shop/orders/orders/… 가 된다.
+# 손님이 목록에서 주문을 누르면 목록이 다시 나오던 것이 정확히 이것이었다.
+absent "그 기준에 경로를 한 번 더 덧붙이지 않는다" "$OLIST" "/orders/' + encodeURIComponent"
+
 
 REVIEWS="$(curl -s "$SHOP/products/$OPID/reviews")"
 contains "후기 목록 공개" "$REVIEWS" "배송이 빠르고"
