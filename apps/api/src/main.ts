@@ -87,6 +87,13 @@ async function bootstrap() {
    */
   const fastify = app.getHttpAdapter().getInstance();
   fastify.addHook("onRequest", (req, reply, done) => {
+    /*
+     * 파일 업로드(멀티파트)는 **자기 한도가 따로 있다**(BRICK_MAX_UPLOAD_MB, 기본 50MB)
+     * 그리고 자기 안내 문구도 있다 — "파일이 너무 큽니다. 한 개당 최대 NMB…".
+     * 여기서 같이 막으면 손님은 업로드 한도 대신 JSON 한도를 듣는다(스모크가 잡았다).
+     */
+    if (String(req.headers["content-type"] ?? "").startsWith("multipart/")) { done(); return; }
+
     const limit = String(req.url ?? "").startsWith("/api/admin/migrate/")
       ? MIGRATE_BODY_LIMIT
       : DEFAULT_BODY_LIMIT;

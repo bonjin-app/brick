@@ -99,6 +99,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       <NavLink href="/admin/themes">{t("nav.themes")}</NavLink>
       <NavLink href="/admin/settings">{t("nav.settings")}</NavLink>
       <NavLink href="/admin/search">{t("nav.search")}</NavLink>
+      <NavLink href="/admin/migrate">{t("nav.migrate")}</NavLink>
       <NavLink href="/admin/audit">{t("nav.audit")}</NavLink>
     </nav>
   );
