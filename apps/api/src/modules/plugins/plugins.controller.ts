@@ -196,13 +196,17 @@ export class PluginsController {
    */
   @Get("admin/nav")
   @UseGuards(ManagerGuard)
-  async adminNav() {
+  async adminNav(@Req() req: FastifyRequest & { user?: { role: string } }) {
     // 선언 라벨은 서빙 시점에 번역한다 (원문=키 — 로더 localizeAdminResource)
     await this.loader.refreshLocale();
+    const isAdmin = req.user?.role === "admin";
     return {
       menus: this.loader.adminMenus.map((m) => this.loader.localizeAdminMenu(m)),
       resources: this.loader.adminResources
         .slice()
+        // 관리자 전용으로 선언된 화면은 운영자에게 보여주지 않는다 —
+        // 목록에 있는데 누르면 403 이면 목록이 거짓말을 하는 것이다
+        .filter((r) => isAdmin || !r.adminOnly)
         .sort((a, b) => (a.order ?? 100) - (b.order ?? 100))
         .map((r) => this.loader.localizeAdminResource(r.plugin, r))
         .map((r) => ({
@@ -304,9 +308,17 @@ export class PluginsController {
    */
   @Get("admin/resources/:plugin/:name")
   @UseGuards(ManagerGuard)
-  async adminResource(@Param("plugin") plugin: string, @Param("name") name: string) {
+  async adminResource(
+    @Req() req: FastifyRequest & { user?: { role: string } },
+    @Param("plugin") plugin: string,
+    @Param("name") name: string,
+  ) {
     const found = this.loader.adminResources.find((r) => r.plugin === plugin && r.name === name);
     if (!found) throw new NotFoundException(`알 수 없는 관리 화면입니다: ${plugin}/${name}`);
+    // 목록에서 가린 화면은 주소를 쳐도 열리지 않는다 (라우트의 자기 검사는 그대로다)
+    if (found.adminOnly && req.user?.role !== "admin") {
+      throw new ForbiddenException("관리자만 할 수 있는 작업입니다.");
+    }
     await this.loader.refreshLocale();
     return this.loader.localizeAdminResource(plugin, found);
   }

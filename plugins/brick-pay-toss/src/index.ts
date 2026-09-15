@@ -304,6 +304,8 @@ export default definePlugin(async (ctx) => {
     itemLabel: "설정",
     basePath: "/admin/config",
     order: 40,
+    // 시크릿 키를 다루는 화면이다 — 라우트도 관리자만 받는다(위 requireAdmin)
+    adminOnly: true,
     description:
       "토스페이먼츠 개발자센터에서 발급한 키를 입력하세요. " +
       "시크릿 키는 저장 후 다시 표시되지 않으며, 비워두고 저장하면 기존 값이 유지됩니다.",

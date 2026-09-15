@@ -43,6 +43,7 @@ ok()  { PASS=$((PASS+1)); echo "  ✅ $1"; }
 bad() { FAIL=$((FAIL+1)); echo "  ❌ $1"; }
 check()    { [[ "$2" == "$3" ]] && ok "$1" || bad "$1 (기대 $3, 실제 $2)"; }
 contains() { [[ "$2" == *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 없음: ${2:0:200})"; }
+absent()   { [[ "$2" != *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 가 있어서는 안 됨)"; }
 code()     { curl -s -o /dev/null -w "%{http_code}" "$@"; }
 
 echo "▶ 관리 리소스 왕복 스모크 테스트"
@@ -413,6 +414,16 @@ check "코어 회원 목록은 여전히 막힌다" "$(code -b "$MCK" "$API/api/
 check "코어 설정도 막힌다" "$(code -b "$MCK" "$API/api/settings")" "403"
 check "감사 로그도 막힌다" "$(code -b "$MCK" "$API/api/audit")" "403"
 check "비로그인은 목록을 볼 수 없다" "$(code "$API/api/admin/nav")" "401"
+
+# 목록을 열어 줬으면, 목록에 있는 것은 **실제로 쓸 수 있어야 한다.**
+# 결제 시크릿 키 화면처럼 관리자만 쓰는 것이 섞여 있으면 누를 때마다 403 이고,
+# 그것은 목록이 거짓말을 하는 것이다 — 리소스가 스스로 선언한다(adminOnly).
+absent   "관리자 전용 화면은 운영자 목록에 없다" "$NAVM" '"plugin":"brick-pay-toss"'
+contains "관리자 목록에는 있다" "$(curl -s -b "$CK" "$API/api/admin/nav")" '"plugin":"brick-pay-toss"'
+check "주소를 쳐도 열리지 않는다" \
+  "$(code -b "$MCK" "$API/api/admin/resources/brick-pay-toss/config")" "403"
+check "관리자는 그대로 열린다" \
+  "$(code -b "$CK" "$API/api/admin/resources/brick-pay-toss/config")" "200"
 
 echo
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
