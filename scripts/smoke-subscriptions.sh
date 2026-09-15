@@ -32,9 +32,9 @@ PASS=0; FAIL=0
 
 cleanup() {
   local rc=$?
-  if [[ -n "${API_PID:-}" ]]; then kill "$API_PID" 2>/dev/null; wait "$API_PID" 2>/dev/null || true; fi
-  if [[ -n "${PG_PID:-}" ]]; then kill "$PG_PID" 2>/dev/null; wait "$PG_PID" 2>/dev/null || true; fi
-  if [[ -n "${SINK_PID:-}" ]]; then kill "$SINK_PID" 2>/dev/null; wait "$SINK_PID" 2>/dev/null || true; fi
+  if [[ -n "${API_PID:-}" ]]; then kill "$API_PID" 2>/dev/null || true; wait "$API_PID" 2>/dev/null || true; fi
+  if [[ -n "${PG_PID:-}" ]]; then kill "$PG_PID" 2>/dev/null || true; wait "$PG_PID" 2>/dev/null || true; fi
+  if [[ -n "${SINK_PID:-}" ]]; then kill "$SINK_PID" 2>/dev/null || true; wait "$SINK_PID" 2>/dev/null || true; fi
   rm -rf "$TMP"
   exit "$rc"
 }

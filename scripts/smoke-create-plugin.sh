@@ -25,7 +25,7 @@ PASS=0; FAIL=0
 
 cleanup() {
   local rc=$?
-  if [[ -n "${API_PID:-}" ]]; then kill "$API_PID" 2>/dev/null; wait "$API_PID" 2>/dev/null || true; fi
+  if [[ -n "${API_PID:-}" ]]; then kill "$API_PID" 2>/dev/null || true; wait "$API_PID" 2>/dev/null || true; fi
   rm -rf "$TMP"
   # 설치 테스트가 저장소의 plugins/ 에 전개한 플러그인을 치운다
   rm -rf "$ROOT/plugins/guestbook"

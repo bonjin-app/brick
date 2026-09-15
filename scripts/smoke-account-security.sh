@@ -38,7 +38,7 @@ cleanup() {
   # 앞의 "스모크가 자기 실패를 숨겼다"와 짝을 이루는 반대 방향의 버그다.
   # 하네스는 양쪽 다 정확해야 한다.
   local rc=$?
-  if [[ -n "${API_PID:-}" ]]; then kill "$API_PID" 2>/dev/null; wait "$API_PID" 2>/dev/null || true; fi
+  if [[ -n "${API_PID:-}" ]]; then kill "$API_PID" 2>/dev/null || true; wait "$API_PID" 2>/dev/null || true; fi
   rm -rf "$TMP"
   exit "$rc"
 }

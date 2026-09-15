@@ -21,7 +21,16 @@ TMP="$(mktemp -d)"
 CK="$TMP/ck.txt"
 PASS=0; FAIL=0
 
-cleanup() { for p in "${API_PID:-}" "${API2_PID:-}"; do [[ -n "$p" ]] && kill "$p" 2>/dev/null; done; rm -rf "$TMP"; true; }
+# 이미 죽은 프로세스를 kill 하면 실패한다. `[[ ]] && kill` 은 && 목록의 마지막이라
+# set -e 의 예외가 아니고, 트랩 안에서 그대로 스크립트를 1 로 끝내 버린다 —
+# 단언이 전부 통과했는데 CI 만 빨개졌다. 각 줄이 실패해도 넘어가게 한다.
+cleanup() {
+  for p in "${API_PID:-}" "${API2_PID:-}"; do
+    [[ -n "$p" ]] && { kill "$p" 2>/dev/null || true; }
+  done
+  rm -rf "$TMP"
+  return 0
+}
 trap cleanup EXIT
 
 ok()  { PASS=$((PASS+1)); echo "  ✅ $1"; }

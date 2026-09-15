@@ -43,8 +43,8 @@ cleanup() {
   # kill 한 백그라운드 프로세스를 `wait` 하면 그 종료 코드(143 = SIGTERM)가
   # 스크립트의 종료 코드가 되고, 뒤에서 `exit 0` 을 해도 덮이지 않는다.
   local rc=$?
-  if [[ -n "${API_PID:-}" ]]; then kill "$API_PID" 2>/dev/null; wait "$API_PID" 2>/dev/null || true; fi
-  if [[ -n "${PG_PID:-}" ]]; then kill "$PG_PID" 2>/dev/null; wait "$PG_PID" 2>/dev/null || true; fi
+  if [[ -n "${API_PID:-}" ]]; then kill "$API_PID" 2>/dev/null || true; wait "$API_PID" 2>/dev/null || true; fi
+  if [[ -n "${PG_PID:-}" ]]; then kill "$PG_PID" 2>/dev/null || true; wait "$PG_PID" 2>/dev/null || true; fi
   rm -rf "$TMP"
   exit "$rc"
 }

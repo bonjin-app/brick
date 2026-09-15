@@ -28,7 +28,7 @@ PASS=0; FAIL=0
 
 cleanup() {
   local rc=$?
-  if [[ -n "${API_PID:-}" ]]; then kill "$API_PID" 2>/dev/null; wait "$API_PID" 2>/dev/null || true; fi
+  if [[ -n "${API_PID:-}" ]]; then kill "$API_PID" 2>/dev/null || true; wait "$API_PID" 2>/dev/null || true; fi
   rm -rf "$TMP"
   exit "$rc"
 }

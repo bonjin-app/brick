@@ -33,7 +33,7 @@ TEST_THEME=""
 
 cleanup() {
   local rc=$?
-  if [[ -n "${API_PID:-}" ]]; then kill "$API_PID" 2>/dev/null; wait "$API_PID" 2>/dev/null || true; fi
+  if [[ -n "${API_PID:-}" ]]; then kill "$API_PID" 2>/dev/null || true; wait "$API_PID" 2>/dev/null || true; fi
   # 검증용으로 만든 임시 테마는 반드시 지운다 — 남으면 다음 실행이 오염된다
   if [[ -n "$TEST_THEME" && -d "$ROOT/themes/$TEST_THEME" ]]; then rm -rf "$ROOT/themes/$TEST_THEME"; fi
   rm -rf "$TMP"

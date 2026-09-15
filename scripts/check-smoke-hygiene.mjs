@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 /*
- * 스모크가 **미래 날짜를 못박아 두지 않았는가**.
+ * 스모크 자체의 함정 — **단언은 전부 통과인데 CI 만 빨개지는** 것들.
+ *
+ * ── 1. 미래 날짜를 못박아 두지 않았는가
  *
  * 왜 필요했나: 판매 리포트 수트가 주문의 결제 시각을 `2026-09-15` 로 적어 두고
  * 그 하루만 조회해 금액을 단언하고 있었다. 적을 때는 먼 미래라 안전했다.
@@ -50,12 +52,47 @@ for (const name of readdirSync(join(ROOT, "scripts"))) {
   });
 }
 
-console.log("▶ 스모크가 미래 날짜를 못박아 두지 않았다");
+/*
+ * ── 2. 정리(trap)에서 맨손으로 kill 하지 않았는가
+ *
+ * 이미 죽은 프로세스를 `kill` 하면 실패한다. 트랩 본문도 `set -e` 아래에서
+ * 돌기 때문에, 그 실패가 그대로 스크립트를 1 로 끝낸다 — 단언이 전부
+ * 통과했는데 CI 만 빨개진다. 실제로 그렇게 한 번 속았다(85개 통과 0개 실패,
+ * 종료코드 1). 원인을 찾는 데 드는 시간이 고치는 데 드는 시간의 몇 배다.
+ */
+for (const name of readdirSync(join(ROOT, "scripts"))) {
+  if (!name.endsWith(".sh")) continue;
+  const rel = `scripts/${name}`;
+  const src = readFileSync(join(ROOT, rel), "utf8");
+  const m = /cleanup\(\)\s*\{/.exec(src);
+  if (!m) continue;
+  let depth = 1, j = m.index + m[0].length;
+  while (j < src.length && depth) {
+    if (src[j] === "{") depth++;
+    else if (src[j] === "}") depth--;
+    j++;
+  }
+  const body = src.slice(m.index + m[0].length, j);
+  const startLine = src.slice(0, m.index).split("\n").length;
+  body.split("\n").forEach((line, k) => {
+    for (const cmd of ["kill", "wait", "pkill"]) {
+      const re = new RegExp(`\\b${cmd}\\b[^;&|\n]*`, "g");
+      for (const hit of line.matchAll(re)) {
+        const rest = line.slice(hit.index + hit[0].length);
+        if (/^\s*(\|\||\)|$)/.test(rest)) continue;
+        checked++;
+        bad.push([`${rel}:${startLine + k}`, cmd, "정리에서 맨손으로 부릅니다 — 실패하면 트랩이 스크립트를 1 로 끝냅니다 (|| true 를 붙이세요)"]);
+      }
+    }
+  });
+}
+
+console.log("▶ 스모크가 스스로 함정을 만들지 않았다");
 if (!checked) { console.log("  ❌ 날짜 리터럴을 하나도 찾지 못했습니다 (검사가 고장났을 수 있습니다)"); process.exit(1); }
 const todayLabel = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 console.log(`  ✅ 검사한 날짜: ${checked}건 (오늘 ${todayLabel} 기준)`);
-for (const [where, date, why] of bad) console.log(`  ❌ ${where}  ${date} — ${why}`);
+for (const [where, what, why] of bad) console.log(`  ❌ ${where}  ${what} — ${why}`);
 console.log(bad.length
-  ? "\n그날이 오면 수트가 깨집니다 — 코드가 바뀌지 않았는데 CI 가 빨개집니다. 지난 날로 적으세요."
-  : "\n모두 지난 날입니다.");
+  ? "\n코드가 바뀌지 않았는데 CI 가 빨개지는 길입니다 — 원인을 찾는 데 드는 시간이 고치는 시간의 몇 배입니다."
+  : "\n함정 없음.");
 process.exit(bad.length ? 1 : 0);
