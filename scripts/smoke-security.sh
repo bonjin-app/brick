@@ -388,6 +388,39 @@ absent "프록시를 신뢰하면 그 경고도 사라진다" "$IDS2" "trustProx
 absent "부팅 로그도 조용하다" "$(cat "$TMP/api3.log")" "BRICK_SITE_URL 이"
 kill "${API2_PID:-0}" 2>/dev/null || true
 
+# ── 가입 스팸: 축을 나눈다 ────────────────────────────
+#
+# IP 하나에 좁은 한도를 걸면 사무실·학교·카페처럼 NAT 뒤에서 여러 사람이
+# 가입할 때 여섯 번째 사람이 막힌다 — 로그인에서 이미 겪고 고친 문제다.
+# 그래서 같은 이메일(재시도 루프)과 같은 IP(대량 생성)를 따로 센다.
+# 문서에는 한동안 옛 숫자(IP 5회)가 남아 있었다 — 여기서 **동작**을 못박는다.
+# 이 절은 IP 한도를 소진하므로 맨 끝에 둔다.
+echo "── 가입 스팸 방어"
+# 이 수트는 캡차를 켜고 돈다 — 캡차를 풀지 않으면 레이트리밋에 닿기도 전에 400 이다
+# (처음 쓴 단언이 그래서 엉뚱하게 통과했다: 전부 400 이라 429 가 한 번도 안 나왔다).
+reg() {  # reg <이메일>
+  local tk an
+  IFS='|' read -r tk an <<< "$(captcha_issue)"
+  code -X POST "$API/api/register" -H 'content-type: application/json' \
+    -d "{\"email\":\"$1\",\"password\":\"regpass1234\",\"displayName\":\"가입\",\"agreements\":{\"terms\":true,\"privacy\":true},\"captchaToken\":\"$tk\",\"captchaAnswer\":\"$an\"}"
+}
+# 한 사무실에서 다섯 명이 연달아 가입해도 막히지 않아야 한다
+NAT_OK=1
+for i in 1 2 3 4 5; do
+  [[ "$(reg "nat$i@sec.test")" == "429" ]] && NAT_OK=0
+done
+check "NAT 뒤 다섯 명이 연달아 가입해도 막히지 않는다" "$NAT_OK" "1"
+# 같은 이메일로 되풀이하는 것은 사람이 아니다 — 네 번째부터 막는다
+SAME="dup@sec.test"
+reg "$SAME" >/dev/null; reg "$SAME" >/dev/null; reg "$SAME" >/dev/null
+check "같은 이메일 네 번째는 막힌다" "$(reg "$SAME")" "429"
+# 대량 생성은 결국 막힌다
+BULK=""
+for i in $(seq 1 40); do
+  [[ "$(reg "bulk$i@sec.test")" == "429" ]] && { BULK="$i"; break; }
+done
+[[ -n "$BULK" ]] && ok "대량 생성은 결국 막힌다 (${BULK}번째)" || bad "대량 생성이 막히지 않는다"
+
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 # 실측을 남긴다(설정됐을 때만) — README 의 표가 실제와 같은지 CI 가 대조한다.
 # 표의 숫자는 조용히 썩는다: 단언을 더해도 아무도 그 줄을 고치지 않는다.
