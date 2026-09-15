@@ -51,6 +51,17 @@ export function registerCheckoutView(ctx: PluginContext, t: (k: string, p?: Reco
     ${field(t("checkout.address2"), '<input type="text" name="address2" autocomplete="address-line2" maxlength="200" />')}
     ${field(t("checkout.memo"), '<input name="deliveryMemo" maxlength="200" />')}
     ${field(t("checkout.coupon"), '<input type="text" name="couponCode" maxlength="40" autocomplete="off" />')}
+    ${/*
+       포인트 사용 — 쓸 수 있을 때만 보인다(로그인·플러그인 활성·잔액 > 0).
+       서버는 처음부터 받을 수 있었는데 화면이 없어서 회원이 한 점도 못 썼다.
+     */ ""}
+    <label class="brick-field" id="brick-co-points-row" hidden>${escapeHtml(t("checkout.points"))}
+      <span class="brick-co-points">
+        <input type="number" name="pointUsed" min="0" step="1" value="0" inputmode="numeric" />
+        <button type="button" id="brick-co-points-all">${escapeHtml(t("checkout.pointsUseAll"))}</button>
+      </span>
+      <small id="brick-co-points-hint"></small>
+    </label>
 
     <h2>${escapeHtml(t("checkout.payment"))}</h2>
     <p class="brick-co-pay">
@@ -97,6 +108,9 @@ ${checkoutScript(t)}
 .brick-co-form .brick-buy-msg.is-error { color: var(--color-danger, #c8322f); font-weight: 600; }
 .brick-co-addr { display: grid; grid-template-columns: 130px 1fr; gap: 10px; }
 .brick-co-pay { background: var(--color-bg-soft, #f7f7f9); border: 1px solid var(--color-line, #e7e7ec); border-radius: 10px; padding: 12px 14px; }
+.brick-co-points { display: flex; gap: 8px; align-items: center; }
+.brick-co-points input { flex: 1; }
+#brick-co-points-hint { display: block; margin-top: 4px; font-size: 12.5px; color: var(--color-muted, #71717d); }
 .brick-co-submit { width: 100%; padding: 14px; margin-top: 18px; font-size: 15px; }
 .brick-co-done dl { display: grid; grid-template-columns: 110px 1fr; gap: 6px 12px; }
 .brick-co-done dt { color: var(--color-muted, #71717d); }
@@ -145,8 +159,55 @@ const checkoutScript = (t: (k: string) => string) => `
         '<div class="brick-grand"><span>' + ${JSON.stringify(t("checkout.total"))} + '</span><span>' + fmt(d.total) + '</span></div>' +
         '</div>';
       form.hidden = false;
+      setupPoints(d);
     })
     .catch(function(){ itemsBox.innerHTML = '<p class="brick-shop-empty">' + ${JSON.stringify(t("checkout.fail"))} + '</p>'; });
+
+  /*
+   * 포인트 칸을 켜고, 값이 바뀌면 합계를 다시 받는다.
+   *
+   * 합계를 화면에서 빼서 계산하지 않는다 — 상한(배송비는 포인트로 못 낸다),
+   * 등급 할인, 쿠폰이 서로 얽혀 있어서 같은 규칙을 두 곳에 두면 갈라진다.
+   * 서버의 견적을 그대로 쓴다.
+   */
+  function setupPoints(cart){
+    var row = document.getElementById('brick-co-points-row');
+    if (!row || !cart.pointsAvailable || !(cart.pointBalance > 0)) return;
+    var input = row.querySelector('input[name=pointUsed]');
+    var hint = document.getElementById('brick-co-points-hint');
+    var maxUsable = Math.min(cart.pointBalance, Math.max(0, cart.total - (cart.shippingFee || 0)));
+    input.max = String(maxUsable);
+    // 포인트는 돈이 아니다 — 금액 포맷(fmt)을 쓰면 "3,000원점" 이 된다
+    var num = function(n){ return String(Math.floor(Number(n) || 0)).replace(/\\B(?=(\\d{3})+(?!\\d))/g, ','); };
+    hint.textContent = ${JSON.stringify(t("checkout.pointsHint"))}
+      .replace('{balance}', num(cart.pointBalance)).replace('{max}', num(maxUsable));
+    row.hidden = false;
+
+    var timer = null;
+    function requote(){
+      var want = Math.max(0, Math.min(maxUsable, Math.floor(Number(input.value) || 0)));
+      input.value = String(want);
+      var f = new FormData(form);
+      var coupon = String(f.get('couponCode') || '').trim();
+      fetch('/api/plugins/brick-shop/quote', {
+        method: 'POST', headers: {'content-type':'application/json'},
+        body: JSON.stringify({
+          items: cart.items.map(function(it){ return { productId: it.productId, optionId: it.optionId || null, quantity: it.quantity }; }),
+          couponCode: coupon || null,
+          pointUsed: want,
+        }),
+      }).then(function(r){ return r.ok ? r.json() : null; }).then(function(q){
+        if (!q) return;
+        var grand = document.querySelector('.brick-grand span:last-child');
+        if (grand) grand.textContent = fmt(q.total);
+      }).catch(function(){ /* 합계는 서버가 주문 시 다시 계산한다 */ });
+    }
+    input.addEventListener('input', function(){ clearTimeout(timer); timer = setTimeout(requote, 300); });
+    document.getElementById('brick-co-points-all').addEventListener('click', function(){
+      input.value = String(maxUsable);
+      requote();
+    });
+  }
 
   // 재시도(더블클릭·네트워크 재전송)로 같은 주문이 두 번 생기지 않게 키를 고정한다
   var idem = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random());
@@ -166,6 +227,8 @@ const checkoutScript = (t: (k: string) => string) => `
     var body = { orderer: orderer, idempotencyKey: idem };
     var coupon = String(f.get('couponCode') || '').trim();
     if (coupon) body.couponCode = coupon;
+    var usedPoint = Math.max(0, Math.floor(Number(f.get('pointUsed') || 0)));
+    if (usedPoint > 0) body.pointUsed = usedPoint;
     if (guest) body.guestToken = guest;
 
     fetch('/api/plugins/brick-shop/orders', {

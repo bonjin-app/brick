@@ -145,6 +145,24 @@ ONO="$(echo "$ORDER" | python3 -c 'import sys,json;print(json.load(sys.stdin).ge
 check "주문 시 즉시 차감 (1015-1000)" "$(balance)" "15"
 contains "사용 내역 기록" "$(curl -s -b "$MEMBER" "$PT/my")" "주문 결제"
 
+# 서버만 되고 화면이 없으면 회원은 포인트를 한 점도 못 쓴다.
+#
+# 서버는 처음부터 포인트로 결제할 수 있었고 `pointsAvailable` 이라는 필드까지
+# "주문서에 포인트 사용 UI 를 띄운다" 는 주석과 함께 있었다. 그런데 그것을 읽는
+# 화면이 없었다 — 회원은 포인트를 쌓기만 하고 쇼핑에는 쓸 수 없었다.
+# 주문서가 칸을 띄우려면 장바구니 응답이 **쓸 수 있는지와 얼마나 있는지**를
+# 알려줘야 한다.
+CARTINFO="$(curl -s -b "$MEMBER" "$SH/cart")"
+contains "장바구니가 포인트 사용 가능 여부를 알려준다" "$CARTINFO" '"pointsAvailable":true'
+contains "잔액도 함께 알려준다" "$CARTINFO" '"pointBalance"'
+# 비회원에게는 켜지 않는다 — 로그인해야 쓸 수 있다
+contains "비회원에게는 포인트 칸을 띄우지 않는다" "$(curl -s "$SH/cart")" '"pointsAvailable":false'
+# 주문서 화면이 그 칸을 실제로 그린다
+CO_PAGE="$(curl -s "$API/api/render/page?path=shop/checkout")"
+# id 문자열은 스크립트에도 있다 — **입력 칸 자체**를 본다(역검증에서 걸렸다)
+contains "주문서에 포인트 입력 칸이 있다" "$CO_PAGE" 'name=\"pointUsed\"'
+contains "모두 사용 버튼도" "$CO_PAGE" 'id=\"brick-co-points-all\"'
+
 echo "── 결제 완료 적립"
 printf '{"orderNo":"%s","provider":"bank_transfer","providerTid":"tid-1","amount":22000}' "$ONO" > "$TMP/pay.json"
 contains "결제 승인" "$(curl -s -b "$ADMIN" -X POST "$SH/payments/confirm" -H 'content-type: application/json' --data-binary "@$TMP/pay.json")" '"ok":true'

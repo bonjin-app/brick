@@ -256,6 +256,18 @@ export default definePlugin(async (ctx) => {
       couponCode: q.couponCode,
       couponError: q.couponError,
       hasUnavailable: q.hasUnavailable,
+      /*
+       * 포인트를 쓸 수 있는지, 얼마나 있는지 함께 알려준다.
+       *
+       * 서버는 처음부터 포인트로 결제할 수 있었다(quote·주문 모두 pointUsed 를
+       * 받는다). `pointsAvailable` 이라는 필드도 "주문서에 포인트 사용 UI 를
+       * 띄운다" 는 주석과 함께 있었다. 그런데 그것을 읽는 화면이 없어서, 회원은
+       * 포인트를 쌓기만 하고 쇼핑에는 **한 점도 쓸 수 없었다**.
+       */
+      pointsAvailable: Boolean(pointsPort() && req.user),
+      pointBalance: req.user && pointsPort()
+        ? await pointsPort()!.balance(req.user.id).catch(() => 0)
+        : 0,
     };
   });
 
