@@ -57,6 +57,7 @@ ${listScript(t, statusLabels())}${ORDERS_CSS}`;
 
 const ORDERS_CSS = `
 <style>
+.brick-o-banknote{display:block;margin-top:4px;font-size:12.5px;color:var(--color-muted, #6c6c7a)}
 .brick-orders { max-width: 720px; }
 .brick-orders table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
 .brick-orders td, .brick-orders th { padding: 10px 8px; border-bottom: 1px solid var(--color-line, #e7e7ec); text-align: left; }
@@ -306,6 +307,11 @@ const detailScript = (t: (k: string, p?: Record<string, string | number>) => str
       '<dt>' + ${JSON.stringify(t("orders.receiver"))} + '</dt><dd>' + esc(o.receiver_name || '') + ' ' + esc(o.receiver_phone || '') + '</dd>' +
       '<dt>' + ${JSON.stringify(t("orders.address"))} + '</dt><dd>(' + esc(o.postcode || '') + ') ' + esc(o.address1 || '') + ' ' + esc(o.address2 || '') + '</dd>' +
       (o.delivery_memo ? '<dt>' + ${JSON.stringify(t("orders.memo"))} + '</dt><dd>' + esc(o.delivery_memo) + '</dd>' : '') +
+      // 입금대기 무통장 주문에만 계좌가 함께 온다 — 어디에 넣어야 하는지 이 화면이 말해야 한다
+      (d.bankAccount
+        ? '<dt>' + ${JSON.stringify(t("orders.bankAccount"))} + '</dt><dd><strong>' + esc(d.bankAccount) + '</strong>' +
+          '<small class="brick-o-banknote">' + ${JSON.stringify(t("orders.bankNote"))} + '</small></dd>'
+        : '') +
       '</dl>' +
       (history ? '<h3>' + ${JSON.stringify(t("orders.history"))} + '</h3><ul class="brick-o-history">' + history + '</ul>' : '') +
       '<div id="brick-ret-slot"></div>';

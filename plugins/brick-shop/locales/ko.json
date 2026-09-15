@@ -148,6 +148,8 @@
   "ordermail.tracking": "송장번호: {trackingNo}",
   "orders.address": "배송지",
   "orders.backToList": "주문 내역으로",
+  "orders.bankAccount": "입금 계좌",
+  "orders.bankNote": "이 계좌로 입금하시면 확인 후 배송이 시작됩니다.",
   "orders.colDate": "주문일",
   "orders.colItems": "상품",
   "orders.colStatus": "상태",

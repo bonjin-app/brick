@@ -958,10 +958,23 @@ contains "무통장이면 입금 계좌를 알려준다" "$MLOG" "입금 계좌:
 contains "비회원 조회 링크에 토큰" "$MLOG" "/shop/orders/$MNO?token="
 contains "품목과 금액" "$MLOG" "안내메일 상품 × 1"
 
+# 계좌는 메일에만 있으면 안 된다.
+#
+# 주문 완료 화면은 계좌를 보여 주지만, 그 화면을 닫고 나면 다시 볼 곳이 없었다.
+# 무통장 입금은 보통 나중에 한다 — 은행 앱을 열고, 밤에, 다음 날. 그때 손님이
+# 보는 화면이 주문 상세이고, 거기에는 "입금대기" 라고만 적혀 있었다. 브라우저로
+# 확인했다: 계좌를 설정해 두어도 그 화면에는 나오지 않았다.
+# 게다가 주문서의 이메일 칸은 **선택**이고, SMTP 가 없으면 메일 자체가 안 나간다.
+MTOKEN="$(psql_q "SELECT guest_token FROM shop_orders WHERE order_no='$MNO'")"
+ODETAIL="$(curl -s "$SHOP/orders/$MNO?token=$MTOKEN")"
+contains "입금대기 주문을 조회하면 계좌가 함께 온다" "$ODETAIL" "○○은행 111-222-333"
+# 다 낸 사람에게 계좌를 다시 보여 주면 한 번 더 내야 하나 싶게 만든다 — 아래 결제 확인 뒤에 본다
+
 printf '{"orderNo":"%s","provider":"bank_transfer","providerTid":"mail-1","amount":15000}' "$MNO" > "$TMP/mpay.json"
 curl -s -b "$CK" -X POST "$SHOP/payments/confirm" -H 'content-type: application/json' --data-binary "@$TMP/mpay.json" -o /dev/null
 sleep 1
 contains "입금 확인도 알린다" "$(cat "$TMP/api.log")" "결제가 확인되었습니다 ($MNO)"
+absent "결제가 끝나면 계좌는 더 보여 주지 않는다" "$(curl -s "$SHOP/orders/$MNO?token=$MTOKEN")" "○○은행 111-222-333"
 
 # 발송은 송장번호가 본체다. 전이 규칙상 preparing 을 지나야 shipped 가 된다.
 MOID="$(curl -s -b "$CK" "$SHOP/admin/orders?status=paid" | /usr/bin/python3 -c "

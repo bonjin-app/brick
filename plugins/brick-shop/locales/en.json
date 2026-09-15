@@ -153,6 +153,8 @@
   "ordermail.tracking": "Tracking number: {trackingNo}",
   "orders.address": "Shipping address",
   "orders.backToList": "Back to orders",
+  "orders.bankAccount": "Bank account",
+  "orders.bankNote": "Transfer to this account and we will ship once payment is confirmed.",
   "orders.colDate": "Date",
   "orders.colItems": "Items",
   "orders.colStatus": "Status",

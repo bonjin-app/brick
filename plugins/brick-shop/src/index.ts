@@ -396,7 +396,25 @@ export default definePlugin(async (ctx) => {
       SELECT from_status, to_status, note, created_at FROM shop_order_events
       WHERE order_id = ${String(order.id)}::uuid ORDER BY created_at
     `);
-    return { order, items, events, statusLabel: STATUS_LABEL[order.status as OrderStatus] };
+    /*
+     * 입금 계좌를 함께 준다 — **입금대기인 무통장 주문일 때만.**
+     *
+     * 주문 완료 화면은 계좌를 보여 주는데, 그 화면을 닫고 나면 다시 볼 곳이
+     * 없었다. 무통장 입금은 보통 나중에 한다 — 은행 앱을 열고, 밤에, 다음 날.
+     * 그때 손님이 보는 화면이 여기고, "입금대기" 라고만 적혀 있었다.
+     * 메일에는 계좌가 있지만 주문서의 이메일 칸은 **선택**이고, SMTP 가 없으면
+     * 그 메일조차 나가지 않는다.
+     *
+     * 이미 입금된 주문에는 붙이지 않는다 — 다 낸 사람에게 계좌를 다시 보여 주면
+     * 한 번 더 내야 하나 싶게 만든다.
+     */
+    const needsDeposit = order.status === "pending" && order.payment_method === "bank_transfer";
+    const bankAccount = needsDeposit ? (await settings()).bankAccount : "";
+    return {
+      order, items, events,
+      statusLabel: STATUS_LABEL[order.status as OrderStatus],
+      ...(bankAccount ? { bankAccount } : {}),
+    };
   });
 
   /** 내 주문 목록 (회원) */
