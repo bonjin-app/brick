@@ -357,6 +357,16 @@ absent   "상품 화면으로 떨어지지 않는다" "$CANCEL_PAGE" "상품을 
 contains "그 토큰으로 연다" "$CANCEL_PAGE" "$TOKEN"
 contains "비회원에게는 로그인을 안내한다" \
   "$(curl -s "$API/api/render/page?path=shop/restock")" "신청 내역을 보려면 로그인"
+
+# 운영자도 볼 자리가 있어야 한다.
+#
+# docs/restock.md 는 "관리자 → 쇼핑몰 → (API GET /admin/restock-demand)" 라고
+# 적고 있었다 — 괄호 안이 화면이 없다는 뜻이다. 같은 문단은 그것을 "재입고
+# 우선순위를 정하는 근거" 라고 부르는데, 50명이 기다리는 것을 볼 자리가 없었다.
+NAV="$(curl -s -b "$CK" "$API/api/admin/nav")"
+contains "재입고 대기 화면이 관리 메뉴에 있다" "$NAV" '"name":"restock-demand"'
+DEMAND="$(curl -s -b "$CK" "$SHOP/admin/restock-demand")"
+contains "그 화면이 읽는 목록에 대기 인원이 있다" "$DEMAND" '"waiting"'
 MINE_PAGE="$(curl -s -b "$CK" "$API/api/render/page?path=shop/restock")"
 contains "회원 신청 내역 화면도 있다" "$MINE_PAGE" "brick-restock-body"
 # 해지했으면 재입고돼도 안 간다

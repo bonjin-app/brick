@@ -77,6 +77,37 @@ export const PRODUCT_RESOURCE: AdminResource = {
   ],
 };
 
+/**
+ * 재입고 대기 수요 — **읽기만 한다.**
+ *
+ * `docs/restock.md` 는 "관리자 → 쇼핑몰 → (API `GET /admin/restock-demand`)" 라고
+ * 적고 있었다. 괄호 안이 그대로 말해 준다 — 화면이 없어서 **API 이름을 문서에
+ * 적어 둔 것**이다. 같은 문단은 그것을 "재입고 우선순위를 정하는 근거" 라고
+ * 부른다: 50명이 기다리는 상품을 먼저 채우라는 이야기인데, 그 50명을 볼 자리가
+ * 없었다.
+ *
+ * 선언만 하면 코어 관리 화면이 표를 그린다 — 새 React 코드가 필요 없다.
+ * 만들거나 고칠 것이 없는 목록이므로 동작은 전부 닫는다.
+ */
+export const RESTOCK_DEMAND_RESOURCE: AdminResource = {
+  name: "restock-demand",
+  title: "재입고 대기",
+  itemLabel: "대기",
+  basePath: "/admin/restock-demand",
+  order: 42,
+  idField: "productId",
+  can: { create: false, update: false, delete: false },
+  description:
+    "품절 상품을 기다리는 사람 수입니다. 많이 기다리는 순으로 보여줍니다 — 재입고하면 신청한 사람에게 1회 자동으로 알림이 갑니다.",
+  fields: [
+    { name: "productName", label: "상품", type: "text", readOnly: true, inList: true },
+    { name: "optionName", label: "옵션", type: "text", readOnly: true, inList: true },
+    { name: "waiting", label: "대기 인원", type: "number", readOnly: true, inList: true },
+    { name: "productStatus", label: "상태", type: "text", readOnly: true, inList: true },
+    { name: "firstRequestedAt", label: "첫 신청", type: "date", readOnly: true, inList: true },
+  ],
+};
+
 export const REVIEW_RESOURCE: AdminResource = {
   name: "reviews",
   title: "상품 후기",

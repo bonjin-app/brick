@@ -9,7 +9,7 @@ import { addToCart, clearCart, getCartItems, updateCartItem, type CartOwner } fr
 import { changeOrderStatus, createOrder, onOrderTransition, type PointsPort } from "./orders.js";
 import { bankTransferGateway, confirmPayment, gateways, refundPayment, registerGateway } from "./payments.js";
 import { CASH_RECEIPT_RESOURCE, CATEGORY_RESOURCE, COLLECTION_RESOURCE, GRADE_RESOURCE, COUPON_RESOURCE, INQUIRY_RESOURCE,
-         ORDER_RESOURCE, PRODUCT_RESOURCE, RETURN_RESOURCE, REVIEW_RESOURCE,
+         ORDER_RESOURCE, PRODUCT_RESOURCE, RESTOCK_DEMAND_RESOURCE, RETURN_RESOURCE, REVIEW_RESOURCE,
          PAYMENT_REQUEST_RESOURCE, SHIPPING_ZONE_RESOURCE, SHOP_SETTINGS_RESOURCE, SUBSCRIPTION_RESOURCE,
          TAX_INVOICE_RESOURCE } from "./admin-resources.js";
 import { registerStorefrontBlocks } from "./blocks.js";
@@ -2560,6 +2560,7 @@ export default definePlugin(async (ctx) => {
   ctx.registerAdminResource(CATEGORY_RESOURCE);
   ctx.registerAdminResource(COUPON_RESOURCE);
   ctx.registerAdminResource(REVIEW_RESOURCE);
+  ctx.registerAdminResource(RESTOCK_DEMAND_RESOURCE);
   ctx.registerAdminResource(INQUIRY_RESOURCE);
   ctx.registerAdminResource(RETURN_RESOURCE);
   ctx.registerAdminResource(SHIPPING_ZONE_RESOURCE);
