@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
-import { useSiteName } from "../lib/i18n";
+import { useSiteName, useT } from "../lib/i18n";
 
 /**
  * 로그인·가입·비밀번호 화면의 공용 껍데기.
@@ -29,6 +29,7 @@ export function AuthShell({
   footer?: ReactNode;
 }) {
   const siteName = useSiteName();
+  const t = useT();
 
   return (
     <main
@@ -49,8 +50,15 @@ export function AuthShell({
         글자만 두면 23px 짜리 표적이 되고, 로그인 화면에서 사이트로 돌아가는
         유일한 길이 그것이다.
       */}
+      {/*
+        이름은 **로딩 상태와 무관해야 한다.**
+        사이트 이름은 API 에서 온다. 오기 전에는 글자가 공백 하나뿐이라 이 링크가
+        이름 없는 25px 짜리 표적이 됐다 — 화면 감사 도구가 그 순간을 잡았다.
+        사이트가 느리거나 API 가 죽으면 그 상태로 남는다.
+      */}
       <a
         href="/"
+        aria-label={siteName || t("account.backToSite")}
         style={{
           display: "inline-flex",
           alignItems: "center",

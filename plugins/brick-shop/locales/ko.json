@@ -210,6 +210,7 @@
   "ret.pickItem": "신청할 상품과 수량을 선택해주세요.",
   "ret.pickReason": "사유를 선택해주세요.",
   "ret.qty": "수량",
+  "ret.qtyLabel": "{product} 신청 수량 (최대 {max}개)",
   "ret.reason": "사유",
   "ret.reasonDetail": "상세 사유 (선택)",
   "ret.refundEstimate": "예상 환불 금액",

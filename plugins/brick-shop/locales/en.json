@@ -215,6 +215,7 @@
   "ret.pickItem": "Please choose items and quantity.",
   "ret.pickReason": "Please choose a reason.",
   "ret.qty": "Qty",
+  "ret.qtyLabel": "Quantity for {product} (up to {max})",
   "ret.reason": "Reason",
   "ret.reasonDetail": "Details (optional)",
   "ret.refundEstimate": "Estimated refund",

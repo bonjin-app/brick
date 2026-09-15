@@ -26,6 +26,15 @@
   const audit = (doc, w) => {
     const v = doc.defaultView;
     const issues = [];
+    /*
+     * 접혀 있는 <details> 를 펴 두고 본다.
+     *
+     * 닫힌 details 안의 요소는 크기가 0 이라 이 도구의 모든 검사가 건너뛴다 —
+     * "보이지 않으니 검사할 것도 없다" 는 판단이었는데, 손님이 열면 보이는 화면이다.
+     * 실제로 취소·반품 신청 폼(청약철회, 법이 보장하는 권리다)의 사유·상세 사유·
+     * 수량 칸에 이름이 없는 것을 이 도구가 오래 놓치고 있었다.
+     */
+    for (const d of doc.querySelectorAll("details:not([open])")) d.open = true;
     if (doc.documentElement.scrollWidth > w + 1) {
       issues.push(`가로 넘침 ${doc.documentElement.scrollWidth}px`);
       for (const el of doc.querySelectorAll("*")) {

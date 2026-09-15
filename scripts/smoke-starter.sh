@@ -230,6 +230,22 @@ contains "/shop 이 샘플 상품을 그린다" "$SHOP_PAGE" "brick-product-card
 contains "샘플임을 알 수 있다" "$SHOP_PAGE" "(샘플)"
 contains "할인 표시(정가)도 함께 보인다" "$SHOP_PAGE" "15,000"
 absent "빈 진열대 안내는 없다" "$SHOP_PAGE" "등록된 상품이 없습니다"
+
+# 취소·반품 신청 폼의 칸에 이름이 있는가.
+#
+# 청약철회는 전자상거래법이 보장하는 권리다. 그런데 그 신청 폼의 사유·상세 사유·
+# 수량 칸에 이름이 없어 스크린리더에는 "콤보 상자"·"편집"·"스핀 버튼" 으로만
+# 읽혔다. 접힌 <details> 안이라 화면 감사 도구도 보지 못했다 — 닫힌 details 안의
+# 요소는 크기가 0 이라 모든 검사가 건너뛴다(도구도 함께 고쳐 펴 두고 보게 했다).
+#
+# 이 수트에서 보는 이유: 상세 화면은 **경로 라우팅**(/shop/orders/<번호>)으로만
+# 그려지고, 그러려면 쇼핑몰 페이지가 있어야 한다. 스타터가 만드는 사이트가 그렇다.
+ORDER_PAGE="$(curl -s "$API/api/render/page?path=shop/orders/20260101-000001")"
+contains "주문 상세 화면이 그려진다" "$ORDER_PAGE" "brick-order-detail"
+# id 만 보면 연결을 끊어도 통과한다(h4 에 id 가 남는다) — **연결 자체**를 본다
+contains "반품 사유 칸에 이름이 있다" "$ORDER_PAGE" 'aria-labelledby=\"brick-ret-reason-label\"'
+contains "상세 사유 칸에도" "$ORDER_PAGE" 'aria-labelledby=\"brick-ret-detail-label\"'
+contains "수량 칸은 어느 상품인지 말한다" "$ORDER_PAGE" "신청 수량"
 CART_R="$(curl -s "$API/api/render/page?path=shop/cart")"
 contains "/shop/cart 가 장바구니를 그린다" "$CART_R" "brick-cart"
 # 주문하기는 상점 페이지 기준 경로다 — '/checkout' 하드코딩은 404 였다

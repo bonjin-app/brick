@@ -205,6 +205,9 @@ const detailScript = (t: (k: string, p?: Record<string, string | number>) => str
           return '<tr><td><label><input type="checkbox" data-ret-item="' + esc(it.orderItemId) + '" /> ' +
             esc(it.productName) + (it.optionName ? ' — ' + esc(it.optionName) : '') + '</label></td>' +
             '<td><input type="number" min="1" max="' + it.availableQty + '" value="' + it.availableQty +
+            // 이름이 없으면 스크린리더에 "스핀 버튼" 으로만 읽힌다 — 상품이 여럿이면 어느 것인지 알 수 없다
+            '" aria-label="' + esc(${JSON.stringify(t("ret.qtyLabel", { product: "__P__", max: "__M__" }))}
+              .replace('__P__', it.productName).replace('__M__', it.availableQty)) +
             '" data-ret-qty="' + esc(it.orderItemId) + '" style="width:70px" /> / ' + it.availableQty + '</td></tr>';
         }).join('');
 
@@ -213,8 +216,17 @@ const detailScript = (t: (k: string, p?: Record<string, string | number>) => str
           deadline + expired +
           '<form class="brick-ret-form">' +
           '<h4>' + ${JSON.stringify(t("ret.kind"))} + '</h4><div class="brick-ret-kinds">' + kinds + '</div>' +
-          '<h4>' + ${JSON.stringify(t("ret.reason"))} + '</h4><select name="reason" required><option value="">—</option></select>' +
-          '<h4>' + ${JSON.stringify(t("ret.reasonDetail"))} + '</h4><input name="detail" maxlength="500" />' +
+          /*
+           * 제목은 h4 로 크게 적혀 있는데 칸과 이어져 있지 않았다 — 눈으로는 보이지만
+           * 스크린리더에는 "콤보 상자"·"편집" 으로만 읽힌다. 청약철회는 법이 보장하는
+           * 권리이고, 그 신청 폼이 그랬다. 접힌 details 안이라 화면 감사 도구도
+           * 보지 못하고 있었다.
+           */
+          '<h4 id="brick-ret-reason-label">' + ${JSON.stringify(t("ret.reason"))} + '</h4>' +
+          '<select name="reason" required aria-labelledby="brick-ret-reason-label">' +
+          '<option value="">—</option></select>' +
+          '<h4 id="brick-ret-detail-label">' + ${JSON.stringify(t("ret.reasonDetail"))} + '</h4>' +
+          '<input name="detail" maxlength="500" aria-labelledby="brick-ret-detail-label" />' +
           '<h4>' + ${JSON.stringify(t("ret.items"))} + '</h4>' +
           '<table><tbody>' + rows + '</tbody></table>' +
           '<p class="brick-ret-note" data-ret-payer></p>' +
