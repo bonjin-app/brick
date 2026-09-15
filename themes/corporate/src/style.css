@@ -961,6 +961,19 @@ a.brick-card:hover {
   /* 로그인 상태도 한 줄: 이름만 남기고 관리자·로그아웃은 마이페이지로 미룬다 — 헤더가 가로로 넘치면 안 된다 */
   .brick-util .brick-logout { display: none; }
   .brick-util-name { max-width: 34vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /*
+   * 헤더 우측이 **줄어들 수 있어야** 한다.
+   *
+   * 이름은 34vw 까지 줄지만, 그 안의 글자가 자기 칸보다 넓으면 그대로 삐져나온다
+   * (flex 항목의 기본 min-width 는 auto 라 내용 너비 밑으로 줄지 않는다). 그래서
+   * 로그인한 손님이 폰으로 열면 **문서가 가로로 스크롤됐다** — 375px 에서 381px,
+   * 320px 에서는 더 벌어졌다. 헤더에 장바구니 같은 플러그인 링크가 붙으면 더 그렇다.
+   * min-width 를 0 으로 열어 주면 말줄임이 제 일을 한다.
+   */
+  .brick-header-right { min-width: 0; }
+  .brick-util { min-width: 0; }
+  .brick-util-name { max-width: min(34vw, 100%); min-width: 0; }
+
   .brick-util .brick-util-cta { padding: 7px 13px; font-size: 13px; }
   .brick-util-name { display: inline !important; }
 

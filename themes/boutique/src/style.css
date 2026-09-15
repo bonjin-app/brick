@@ -812,6 +812,19 @@ a.brick-card:hover { border-color: var(--color-text); color: inherit; }
   .brick-util { gap: 10px; }
   .brick-util a:not(.brick-util-cta) { display: none; }
   .brick-util-name { display: inline-flex !important; max-width: 34vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /*
+   * 헤더 우측이 **줄어들 수 있어야** 한다.
+   *
+   * 이름은 34vw 까지 줄지만, 그 안의 글자가 자기 칸보다 넓으면 그대로 삐져나온다
+   * (flex 항목의 기본 min-width 는 auto 라 내용 너비 밑으로 줄지 않는다). 그래서
+   * 로그인한 손님이 폰으로 열면 **문서가 가로로 스크롤됐다** — 375px 에서 381px,
+   * 320px 에서는 더 벌어졌다. 헤더에 장바구니 같은 플러그인 링크가 붙으면 더 그렇다.
+   * min-width 를 0 으로 열어 주면 말줄임이 제 일을 한다.
+   */
+  .brick-head-right { min-width: 0; }
+  .brick-util { min-width: 0; }
+  .brick-util-name { max-width: min(34vw, 100%); min-width: 0; }
+
   .brick-util .brick-logout { display: none; }
   .brick-burger { display: block; margin-left: -6px; }
   .brick-logo { font-size: 20px; }
@@ -841,9 +854,24 @@ a.brick-card:hover { border-color: var(--color-text); color: inherit; }
 
   .brick-actions a span { display: none; }   /* 아이콘만 남긴다 */
   .brick-actions .brick-ico { width: 19px; height: 19px; }
+  /*
+   * 좁은 화면에서는 헤더 링크를 **가장 중요한 하나만** 남긴다.
+   *
+   * 기본·회사·에디토리얼 테마가 이미 쓰는 규칙인데 여기만 빠져 있었다. 장바구니와
+   * 쪽지함이 둘 다 남아 72px 를 먹는 바람에, 로그인한 손님의 이름이 0px 로 눌려
+   * 마이페이지로 가는 유일한 링크가 사라졌다(375px 에서).
+   */
+  .brick-actions a:not(:first-child) { display: none; }
   /* 검색은 좁은 화면에서도 남긴다 — 서랍 안에 대체 수단이 없으므로 숨기면 검색이 사라진다 */
-  .brick-header-search input { width: 78px; padding-left: 20px; }
-  .brick-header-search input:focus-visible { width: min(48vw, 190px); }
+  /*
+   * 접힌 검색칸은 **아이콘 폭만** 차지한다 — 눌러야 펴진다(기본 테마와 같은 방식).
+   *
+   * 78px 를 늘 잡고 있어서 로그인한 손님의 이름이 23px 로 눌렸고, 화면 감사가
+   * "작은 터치 23x40" 으로 잡았다. 마이페이지로 가는 유일한 링크다.
+   * 검색은 그대로 남는다 — 이 테마의 서랍에는 대체 수단이 없기 때문이다.
+   */
+  .brick-header-search input { width: 40px; padding-left: 20px; padding-right: 4px; cursor: pointer; }
+  .brick-header-search input:focus-visible { width: min(48vw, 190px); padding-right: 12px; cursor: text; }
   .brick-main .brick-product-grid { gap: 28px 14px; }
 
   .brick-page > h1 { padding-bottom: 12px; margin-bottom: 22px; }
