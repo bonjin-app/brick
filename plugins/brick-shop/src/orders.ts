@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { josa } from "@brick/plugin-sdk";
 import { uuidv7 } from "uuidv7";
 import type { Db, OrderStatus, ShopSettings } from "./types.js";
-import { ShopError, STATUS_TRANSITIONS, STOCK_RESTORING } from "./types.js";
+import { ShopError, STATUS_LABEL, STATUS_TRANSITIONS, STOCK_RESTORING } from "./types.js";
 import { quote, type Quote } from "./pricing.js";
 import { t, localeTag } from "./i18n.js";
 
@@ -300,7 +300,20 @@ export async function changeOrderStatus(
 
     if (current === to) return; // 멱등
     if (!STATUS_TRANSITIONS[current].includes(to)) {
-      throw new ShopError(400, `"${current}" 상태에서 "${to}" 로 변경할 수 없습니다.`);
+      /*
+       * 화면이 쓰는 말로 말한다.
+       *
+       * 전에는 `"paid" 상태에서 "shipped" 로 변경할 수 없습니다` 였다. 운영자는
+       * 화면에서 "결제완료"·"배송중" 을 골랐는데 오류만 내부 코드로 말한다 —
+       * 자기가 무엇을 눌렀는지조차 헷갈린다. 게다가 **다음에 무엇을 해야 하는지**
+       * 말하지 않았다(결제완료에서 배송중으로 가려면 상품준비중을 거쳐야 한다).
+       */
+      const next = STATUS_TRANSITIONS[current].map((s) => STATUS_LABEL[s]).join(" · ");
+      throw new ShopError(
+        400,
+        `${STATUS_LABEL[current]}에서 ${josa(STATUS_LABEL[to], "으로/로")} 바로 바꿀 수 없습니다.` +
+          (next ? ` 지금 바꿀 수 있는 상태: ${next}` : " 더 바꿀 수 있는 상태가 없습니다."),
+      );
     }
 
     // 취소/환불이면 사용 포인트를 되돌린다.

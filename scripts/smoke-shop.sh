@@ -482,6 +482,20 @@ for o in json.load(sys.stdin)['items']:
 check "잘못된 전이 차단(pending→delivered)" \
   "$(code -b "$CK" -X PUT "$SHOP/admin/orders/$OID" -H 'content-type: application/json' \
       -d '{"status":"delivered"}')" "400"
+# 거절 메시지는 **화면이 쓰는 말**로 해야 한다.
+#
+# 전에는 `"pending" 상태에서 "delivered" 로 변경할 수 없습니다` 였다. 운영자는
+# 화면에서 "입금대기"·"배송완료" 를 골랐는데 오류만 내부 코드로 말하니 자기가
+# 무엇을 눌렀는지조차 헷갈린다. 그리고 **다음에 무엇을 할 수 있는지** 말해야
+# 한다 — 그것이 없으면 운영자는 일곱 개를 하나씩 눌러 본다.
+BADMOVE="$(curl -s -b "$CK" -X PUT "$SHOP/admin/orders/$OID" -H 'content-type: application/json' \
+  -d '{"status":"delivered"}')"
+absent  "거절 메시지에 내부 코드가 없다" "$BADMOVE" "pending"
+contains "화면이 쓰는 말로 말한다" "$BADMOVE" "입금대기에서"
+contains "지금 바꿀 수 있는 상태를 알려준다" "$BADMOVE" "지금 바꿀 수 있는 상태"
+# 조사: ㄹ 받침은 "으로" 가 아니라 "로" 다 (환불로 · 서울로). 코어 josa 가 다룬다.
+contains "ㄹ 받침 조사가 맞다" "$(curl -s -b "$CK" -X PUT "$SHOP/admin/orders/$OID" \
+  -H 'content-type: application/json' -d '{"status":"refunded"}')" "환불로"
 contains "정상 전이(pending→paid)" \
   "$(curl -s -b "$CK" -X PUT "$SHOP/admin/orders/$OID" -H 'content-type: application/json' \
       -d '{"status":"paid"}')" '"ok":true'

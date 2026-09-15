@@ -58,7 +58,7 @@ export default function PluginResourcePage() {
     if (dirty && !confirm(t("common.discardChanges"))) return;
     setEditing(null);
   }
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const [error, setError] = useState("");
   // 일괄 작업 — 선택된 행, 고른 작업, 작업에 딸린 값(예: 이동 대상)
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -184,12 +184,12 @@ export default function PluginResourcePage() {
       body: JSON.stringify(body),
     });
     if (r.ok) {
-      setMessage(t("x.savedItem", { label: res!.itemLabel }));
+      setMessage({ text: t("x.savedItem", { label: res!.itemLabel }), ok: true });
       setEditing(null);
       void reload();
     } else {
       const d = await r.json().catch(() => ({}));
-      setMessage(`${t("common.saveFailPrefix")}${d.message ?? r.status}`);
+      setMessage({ text: `${t("common.saveFailPrefix")}${d.message ?? r.status}`, ok: false });
     }
   }
 
@@ -208,7 +208,7 @@ export default function PluginResourcePage() {
 
   async function runBulk() {
     if (!api || !bulkAction || selected.size === 0) return;
-    if (bulkAction.input && !bulkParam) { setMessage(t("x.bulkNeedParam", { label: bulkAction.input.label })); return; }
+    if (bulkAction.input && !bulkParam) { setMessage({ text: t("x.bulkNeedParam", { label: bulkAction.input.label }), ok: false }); return; }
     if (bulkAction.confirm && !confirm(bulkAction.confirm)) return;
     const params: Row = {};
     if (bulkAction.input) params[bulkAction.input.name] = bulkParam;
@@ -221,14 +221,17 @@ export default function PluginResourcePage() {
     if (r.ok) {
       // 건너뛴 것이 있으면 함께 말한다 — "3건 처리"만 보면 나머지 열일곱을 어디서 찾나
       const skipped = Number(d.skipped ?? 0);
-      setMessage(skipped > 0
-        ? t("x.bulkDoneSkipped", { n: Number(d.affected ?? selected.size), s: skipped })
-        : t("x.bulkDone", { n: Number(d.affected ?? selected.size) }));
+      setMessage({
+        text: skipped > 0
+          ? t("x.bulkDoneSkipped", { n: Number(d.affected ?? selected.size), s: skipped })
+          : t("x.bulkDone", { n: Number(d.affected ?? selected.size) }),
+        ok: true,
+      });
       setSelected(new Set());
       setBulkCode("");
       void reload();
     } else {
-      setMessage(`${t("common.saveFailPrefix")}${d.message ?? r.status}`);
+      setMessage({ text: `${t("common.saveFailPrefix")}${d.message ?? r.status}`, ok: false });
     }
   }
   const toggleAll = (on: boolean) =>
@@ -240,7 +243,9 @@ export default function PluginResourcePage() {
     if (!api) return;
     if (!confirm(t("x.confirmDelete", { label: res!.itemLabel }))) return;
     const r = await fetch(`${api}/${row[idField]}`, { method: "DELETE" });
-    setMessage(r.ok ? t("x.deleted") : `${t("x.deleteFailPrefix")}${(await r.json().catch(() => ({}))).message ?? r.status}`);
+    setMessage(r.ok
+      ? { text: t("x.deleted"), ok: true }
+      : { text: `${t("x.deleteFailPrefix")}${(await r.json().catch(() => ({}))).message ?? r.status}`, ok: false });
     void reload();
   }
 
@@ -284,7 +289,15 @@ export default function PluginResourcePage() {
           onDone={() => { setImporting(false); setPage(1); void reload(); }} />
       )}
       {res.description && <p style={{ color: "var(--color-text-soft)", fontSize: 14 }}>{res.description}</p>}
-      {message && <p style={{ color: "var(--color-success)" }}>{message}</p>}
+      {/*
+        * 성공과 실패를 함께 들고 다닌다. 전에는 색이 하나뿐이라 "저장 실패: …" 가
+        * 초록으로 떴고 role 도 없어 스크린리더에는 아무것도 가지 않았다 —
+        * 이 화면은 스물네 개 관리 리소스가 모두 쓴다.
+        */}
+      {message && (
+        <p role={message.ok ? "status" : "alert"}
+           style={{ color: message.ok ? "var(--color-success)" : "var(--color-danger)" }}>{message.text}</p>
+      )}
 
       {editing ? (
         <ResourceForm

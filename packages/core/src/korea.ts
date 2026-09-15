@@ -78,12 +78,37 @@ export function hasJongseong(word: string): boolean | null {
  *   josa("사과잼", "은/는")    → "사과잼은"
  *   josa("★", "을/를")        → "★을(를)"   (판단 불가 — 괄호로 남긴다)
  *
- * pair 는 "받침 있을 때/없을 때" 순서다. "(으)로"처럼 ㄹ 받침이 예외인 조사는
- * 이 함수가 다루지 않는다 — 필요해지면 그때 규칙과 함께 더한다.
+ * pair 는 "받침 있을 때/없을 때" 순서다.
+ *
+ *   josa("환불", "으로/로")   → "환불로"    (ㄹ 받침은 예외 — "환불으로" 가 아니다)
+ *   josa("배송중", "으로/로") → "배송중으로"
+ *
+ * "으" 로 시작하는 조사(으로·으로서·으로써·으로부터)는 **ㄹ 받침을 받침 없는
+ * 것처럼** 다룬다 — 서울로, 환불로, 물로. 오래 미뤄 둔 규칙인데(주석에 "필요해지면
+ * 그때 더한다" 고 적혀 있었다), 주문 상태 안내가 "환불으로" 라고 말하면서 필요해졌다.
  */
 export function josa(word: string, pair: string): string {
   const [withJong, withoutJong] = pair.split("/");
   const has = hasJongseong(word);
   if (has === null) return `${word}${withJong}(${withoutJong})`;
+  // "으" 계열 조사 + ㄹ 받침 = 받침 없는 쪽을 쓴다
+  if (has && withJong.startsWith("으") && endsWithRieul(word)) return `${word}${withoutJong}`;
   return `${word}${has ? withJong : withoutJong}`;
+}
+
+/**
+ * 마지막 글자의 받침이 ㄹ 인가.
+ *
+ * 한글은 종성 인덱스 8 이 ㄹ 이다. 라틴 문자는 소리로 본다(l·r → ㄹ: "URL로").
+ * 숫자는 읽는 소리의 끝으로 본다 — 1(일)·7(칠)·8(팔) 이 ㄹ 로 끝난다.
+ */
+export function endsWithRieul(word: string): boolean {
+  const last = [...word.trim()].pop();
+  if (!last) return false;
+  const code = last.codePointAt(0)!;
+  if (code >= 0xac00 && code <= 0xd7a3) return (code - 0xac00) % 28 === 8;
+  const lower = last.toLowerCase();
+  if (/[a-z]/.test(lower)) return lower === "l" || lower === "r";
+  if (/[0-9]/.test(last)) return "178".includes(last);
+  return false;
 }
