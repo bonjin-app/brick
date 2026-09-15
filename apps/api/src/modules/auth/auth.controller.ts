@@ -11,6 +11,7 @@ import type { HookBus } from "@brick/core";
 import { HOOKS } from "../../runtime.module.js";
 import { AuditService } from "../audit/audit.service.js";
 import { TwoFactorService } from "./two-factor.service.js";
+import { ReauthService } from "./reauth.service.js";
 import { AdminGuard } from "./auth.guard.js";
 
 /** 소셜 로그인 state 쿠키 — 콜백 경로에서만 필요하므로 path를 좁힌다 */
@@ -24,6 +25,7 @@ function loginBack(message: string): string {
 @Controller("api/auth")
 export class AuthController {
   constructor(
+    private readonly reauth: ReauthService,
     private readonly auth: AuthService,
     private readonly rateLimit: RateLimitService,
     private readonly reset: PasswordResetService,
@@ -249,11 +251,20 @@ export class AuthController {
       throw new HttpException("요청이 너무 많습니다. 잠시 후 다시 시도하세요.", HttpStatus.TOO_MANY_REQUESTS);
     }
 
-    // link=1 이면 "연결" 흐름 — 로그인한 사람만 할 수 있다
+    /*
+     * link=1 이면 "연결" 흐름 — 로그인한 사람만, 그리고 **비밀번호를 다시 확인한
+     * 사람만** 할 수 있다.
+     *
+     * 소셜 연결은 계정 접근 수단을 하나 더 만드는 일이다. 세션만으로 되면 세션을
+     * 훔친 사람이 자기 소셜 계정을 붙여 놓고, 피해자가 비밀번호를 바꾼 뒤에도
+     * 계속 들어온다 — 비밀번호 재설정으로는 지워지지 않는 뒷문이다. 이메일 주소
+     * 변경과 같은 등급이라 같은 보호를 건다(ADR-75).
+     */
     let linkToUserId: string | null = null;
     if (link === "1") {
       const me = await this.auth.resolveFromRequest(req);
       if (!me) throw new UnauthorizedException("로그인이 필요합니다.");
+      this.reauth.assertRequest(req as never);
       linkToUserId = me.id;
     }
 

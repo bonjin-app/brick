@@ -276,7 +276,9 @@ contains "연결 목록 조회" "$(curl -s -b "$LK" "$OA/my/identities")" '"prov
 contains "공급자 이름 표시" "$(curl -s -b "$LK" "$OA/my/identities")" '"label":"SSO"'
 check "비로그인 연결 시작 차단" "$(code "$OA/oidc?link=1")" "401"
 
-# 다른 사람의 신원을 내 계정에 붙이려는 시도
+# 다른 사람의 신원을 내 계정에 붙이려는 시도 (연결은 재인증을 먼저 통과해야 한다)
+curl -s -b "$LK" -c "$LK" -X POST "$API/api/me/security/reauth" -H 'content-type: application/json' \
+  -d '{"password":"localpass123"}' -o /dev/null
 set_profile '{"sub":"sso-1","email":"first@sso.test","email_verified":true,"name":"첫 사용자"}'
 CLASH="$(curl -s -c "$LK" -b "$LK" -L -o /dev/null -w "%{url_effective}" "$OA/oidc?link=1&next=/mypage")"
 contains "남의 신원 연결 거부" "$CLASH" "/login?error="
@@ -296,6 +298,35 @@ check "해제되면 연결이 사라짐" \
   "$(psql_one "SELECT count(*) FROM user_identities WHERE provider_uid='sso-linked'")" "0"
 check "연결되지 않은 공급자 해제는 400" \
   "$(code -b "$LK" -X DELETE "$OA/my/identities/oidc")" "400"
+
+echo "── 훔친 세션으로 뒷문을 만들 수 없다"
+#
+# 소셜 연결은 **계정 접근 수단을 하나 더 만드는 일**이다. 세션만으로 되면,
+# 세션을 훔친 사람이 자기 소셜 계정을 붙여 놓고 비밀번호가 바뀐 뒤에도 계속
+# 들어온다 — 비밀번호 재설정으로는 지워지지 않는 뒷문이다. 이메일 주소 변경과
+# 같은 등급이라 같은 보호(ADR-75 재인증)를 건다.
+BD="$TMP/backdoor.txt"
+curl -s -X POST "$API/api/register" -H 'content-type: application/json' \
+  -d '{"email":"target@sso.test","password":"targetpass123","displayName":"표적","agreements":{"terms":true,"privacy":true,"third_party":true}}' >/dev/null
+curl -s -c "$BD" -X POST "$API/api/auth/login" -H 'content-type: application/json' \
+  -d '{"email":"target@sso.test","password":"targetpass123"}' >/dev/null
+set_profile '{"sub":"sso-backdoor","email":"attacker@evil.test","email_verified":true,"name":"공격자"}'
+check "재인증 없이는 연결을 시작할 수 없다" "$(code -b "$BD" "$OA/oidc?link=1")" "403"
+contains "무엇을 해야 하는지 알려준다" "$(curl -s -b "$BD" "$OA/oidc?link=1")" "비밀번호를 다시 확인"
+check "뒷문이 만들어지지 않았다" \
+  "$(psql_one "SELECT count(*) FROM user_identities WHERE provider_uid='sso-backdoor'")" "0"
+
+# 본인은 비밀번호를 다시 확인하고 연결할 수 있다
+curl -s -b "$BD" -c "$BD" -X POST "$API/api/me/security/reauth" -H 'content-type: application/json' \
+  -d '{"password":"targetpass123"}' -o /dev/null
+curl -s -c "$BD" -b "$BD" -L -o /dev/null "$OA/oidc?link=1&next=/mypage"
+check "재인증하면 본인은 연결할 수 있다" \
+  "$(psql_one "SELECT count(*) FROM user_identities WHERE provider_uid='sso-backdoor'")" "1"
+# 연결은 조용히 일어나면 안 된다 — 계정 주인이 알아야 되돌릴 수 있다
+LINK_MAIL="$(grep -c "계정에 소셜 로그인이 연결" "$TMP/api.log" || true)"
+[[ "$LINK_MAIL" -ge 1 ]] && ok "연결 사실을 계정 주소로 알린다" || bad "연결이 조용히 일어난다 (주인이 알 길이 없다)"
+# 스텁 프로필을 원래대로 돌려 둔다 — 다음 절이 이 사람으로 로그인한다
+set_profile '{"sub":"sso-1","email":"first@sso.test","email_verified":true,"name":"첫 사용자"}'
 
 echo "── 정지된 계정"
 node -e "

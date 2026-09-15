@@ -6,10 +6,13 @@ import argon2 from "argon2";
 import { eq, sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import type { BrickDb } from "@brick/database";
+import type { MailProvider } from "@brick/core";
+import { CORE_CATALOGS, makeTranslator } from "@brick/core";
 import { siteSettings, users } from "@brick/database";
-import { DB, ENV } from "../../runtime.module.js";
+import { DB, ENV, MAIL } from "../../runtime.module.js";
 import type { BrickEnv } from "../../config/env.js";
 import { OAUTH_PROVIDERS, providerDef, type OAuthProfile } from "./oauth.providers.js";
+import { PluginLoaderService } from "../plugins/plugin-loader.service.js";
 
 /** 관리자가 저장하는 공급자 설정 */
 export interface OAuthProviderConfig {
@@ -46,6 +49,8 @@ const STATE_TTL_MS = 10 * 60_000;
 @Injectable()
 export class OAuthService {
   constructor(
+    @Inject(MAIL) private readonly mail: MailProvider,
+    private readonly loader: PluginLoaderService,
     @Inject(DB) private readonly db: BrickDb,
     @Inject(ENV) private readonly env: BrickEnv,
   ) {}
@@ -341,6 +346,38 @@ export class OAuthService {
       throw new ConflictException("이 소셜 계정은 다른 회원에게 연결되어 있습니다.");
     }
     await this.insertIdentity(userId, provider, profile);
+    await this.notifyLinked(userId, provider);
+  }
+
+  /**
+   * 연결 사실을 계정 주소로 알린다.
+   *
+   * 연결은 **계정 접근 수단이 하나 늘어나는 일**이다. 조용히 일어나면, 세션을
+   * 훔친 사람이 자기 소셜 계정을 붙여 놓아도 주인은 알 길이 없다 — 비밀번호를
+   * 바꿔도 그 뒷문은 남는다. 재인증으로 막아 두었지만(auth.controller), 알림은
+   * 그것이 뚫렸을 때의 마지막 신호다.
+   *
+   * 메일이 실패해도 연결은 되돌리지 않는다 — 이미 확정된 사실이고, 여기서
+   * 예외를 던지면 정상적으로 연결한 사람이 오류 화면을 본다.
+   */
+  private async notifyLinked(userId: string, provider: string): Promise<void> {
+    try {
+      const [user] = await this.db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user?.email || user.email.endsWith("@social.invalid")) return;
+      const t = makeTranslator({ locale: this.loader.siteLocale, catalogs: CORE_CATALOGS });
+      const site = await this.loader.siteName();
+      const label = providerDef(provider)?.label ?? provider;
+      await this.mail.send({
+        to: user.email,
+        subject: t("mail.socialLinkedSubject", { site }),
+        text:
+          `${t("mail.greeting", { name: user.displayName ?? "" })}\n\n` +
+          `${t("mail.socialLinkedBody", { provider: label })}\n\n` +
+          `${t("mail.socialLinkedNotYou")}`,
+      });
+    } catch {
+      // 알림 실패가 연결을 막지 않는다
+    }
   }
 
   private async insertIdentity(userId: string, provider: string, profile: OAuthProfile): Promise<void> {

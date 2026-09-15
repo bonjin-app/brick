@@ -153,6 +153,10 @@ const CORE_KO: MessageCatalog = {
   "mail.emailChangedSubject": "[{site}] 계정 이메일 주소가 변경되었습니다",
   "mail.emailChangedBody": "이 계정의 이메일 주소가 {newEmail} (으)로 변경되었습니다.",
   "mail.emailChangedNotYou": "본인이 한 것이 아니라면 계정이 도용된 것입니다. 지금 바로 비밀번호 찾기로 비밀번호를 바꾸고 사이트 운영자에게 알려주세요.",
+  // 소셜 연결은 **계정 접근 수단이 하나 늘어나는 일**이다 — 조용히 일어나면 안 된다
+  "mail.socialLinkedSubject": "[{site}] 계정에 소셜 로그인이 연결되었습니다",
+  "mail.socialLinkedBody": "이 계정에 {provider} 로그인이 연결되었습니다. 이제 그 계정으로도 로그인할 수 있습니다.",
+  "mail.socialLinkedNotYou": "본인이 한 것이 아니라면 계정이 도용된 것입니다. 비밀번호를 바꾸고 내 정보에서 연결을 해제한 뒤 사이트 운영자에게 알려주세요.",
   "withdraw.privacyLabel": "개인정보",
   "withdraw.privacyDetail": "이메일·이름·비밀번호는 즉시 파기되며 같은 계정으로 다시 로그인할 수 없습니다.",
 };
@@ -219,6 +223,9 @@ const CORE_EN: MessageCatalog = {
   "mail.emailChangedSubject": "[{site}] The email address on your account was changed",
   "mail.emailChangedBody": "The email address on this account was changed to {newEmail}.",
   "mail.emailChangedNotYou": "If this was not you, your account has been taken over. Reset your password right now and tell the site operator.",
+  "mail.socialLinkedSubject": "[{site}] A social login was linked to your account",
+  "mail.socialLinkedBody": "{provider} login was linked to this account. It can now be used to sign in.",
+  "mail.socialLinkedNotYou": "If this was not you, your account has been taken over. Change your password, unlink it in your account settings, and tell the site operator.",
   "withdraw.privacyLabel": "Personal information",
   "withdraw.privacyDetail": "Your email, name and password are destroyed immediately and you cannot sign in again with this account.",
 };
