@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { captchaFieldHtml, type BlockRenderContext } from "@brick/plugin-sdk";
 import { asListStyle, escapeHtml, fullDate, hasRole, humanSize, shortDate, type BoardRow, type Db } from "./types.js";
 import { t } from "./i18n.js";
+import { canModifyPost } from "./access.js";
 
 /**
  * 게시판 화면 렌더 — 목록 / 상세 / 글쓰기.
@@ -471,7 +472,8 @@ ${listedFiles
     })
     .join("\n");
 
-  const canModify = isOwner || isManager || !post.author_id;
+  // 집행과 같은 규칙을 쓴다 — 세 곳에 따로 적으면 그중 하나가 달라진다
+  const canModify = canModifyPost(post as never, ctx.user ?? null);
 
   return `<div class="brick-board brick-post" data-board="${escapeHtml(board.slug)}" data-post="${escapeHtml(post.id)}">
   <div class="brick-post-head">

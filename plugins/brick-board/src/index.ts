@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import { BoardError, asListStyle, effectiveReadRole, escapeHtml, hasRole, pgArray, rankOf, type Db, type SessionUser } from "./types.js";
 import { hashGuestPassword } from "./guest.js";
-import { assertCanModify, canReadSecret, checkWriteInterval, loadBoard, requireRole } from "./access.js";
+import { assertCanModify, canModifyPost, canReadSecret, checkWriteInterval, loadBoard, requireRole } from "./access.js";
 import { attachFiles, claimDownload, deleteAttachments, listAttachments } from "./attachments.js";
 import { createPost, isBlankContent, listPosts, normalizeLinks, refreshThumb, type WritePostInput } from "./posts.js";
 import { sanitizeHtml, toPlainText } from "./sanitize.js";
@@ -198,7 +198,7 @@ export default definePlugin(async (ctx) => {
       ),
       myVote,
       scrapped,
-      canModify: hasRole(user, "manager") || Boolean(user && user.id === post.author_id),
+      canModify: canModifyPost(post as never, user),
     };
   });
 

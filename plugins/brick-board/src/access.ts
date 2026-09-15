@@ -73,6 +73,27 @@ export async function checkWriteInterval(
  * 회원 글  → 작성자 본인 또는 manager 이상
  * 비회원 글 → 비밀번호 일치 또는 manager 이상
  */
+/**
+ * 수정·삭제 버튼을 보여줄 것인가.
+ *
+ * **집행(assertCanModify)과 같은 규칙을 한 곳에 둔다.** 전에는 세 곳에 따로
+ * 적혀 있었고 그중 하나가 달랐다 — API 응답의 `canModify` 는 비회원 글에
+ * false 라고 말했는데(집행은 비밀번호로 허용한다), 그 필드를 읽는 화면이
+ * 없어서 아무도 몰랐다. 누가 그것을 믿고 화면을 만들면 비회원이 자기 글을
+ * 고칠 버튼을 잃는다.
+ *
+ * 비회원 글은 버튼을 보여주고 **누른 뒤 비밀번호를 묻는다** — 그것이 집행의
+ * 모양이고, 화면도 그래야 한다.
+ */
+export function canModifyPost(
+  post: { author_id: string | null },
+  user: SessionUser | null,
+): boolean {
+  if (hasRole(user, "manager")) return true;
+  if (!post.author_id) return true; // 비회원 글 — 비밀번호로 확인한다
+  return Boolean(user && user.id === post.author_id);
+}
+
 export function assertCanModify(
   post: { author_id: string | null; guest_password: string | null },
   user: SessionUser | null,

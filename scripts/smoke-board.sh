@@ -101,6 +101,22 @@ check "이름·비밀번호 없으면 거부" "$(code -X POST "$BD/boards/free/p
 printf '{"title":"x","content":"y","category":"없는분류","guestName":"손님","guestPassword":"1234"}' > "$TMP/pc.json"
 check "없는 분류 거부" "$(code -X POST "$BD/boards/free/posts" -H 'content-type: application/json' --data-binary "@$TMP/pc.json")" "400"
 
+# 같은 판단이 세 곳에 따로 적혀 있었다.
+#
+# 집행(assertCanModify)은 비회원 글을 **비밀번호로** 허용한다. 화면도 버튼을
+# 보여주고 누른 뒤 비밀번호를 묻는다. 그런데 API 응답의 canModify 만 비회원 글에
+# false 라고 말했다 — 읽는 화면이 없어서 아무도 몰랐고, 누가 그것을 믿고 화면을
+# 만들면 비회원이 자기 글을 고칠 버튼을 잃는다. 이제 한 함수가 셋을 다 정한다.
+GUEST_POST="$(curl -s "$BD/posts/$P1")"
+contains "비회원 글에도 수정 버튼을 보여준다고 알린다" "$GUEST_POST" '"canModify":true'
+# 그리고 실제 집행은 비밀번호를 요구한다 — 버튼만 있고 아무나 고치면 안 된다
+printf '{"title":"바뀜","content":"바뀜"}' > "$TMP/nopw.json"
+check "비밀번호 없이는 못 고친다" \
+  "$(code -X PUT "$BD/posts/$P1" -H 'content-type: application/json' --data-binary "@$TMP/nopw.json")" "401"
+printf '{"title":"바뀜","content":"바뀜","guestPassword":"9999"}' > "$TMP/badpw.json"
+check "틀린 비밀번호도 못 고친다" \
+  "$(code -X PUT "$BD/posts/$P1" -H 'content-type: application/json' --data-binary "@$TMP/badpw.json")" "403"
+
 echo "── 답변형 (계층 정렬)"
 printf '{"title":"첫 답변","content":"답변","replyTo":"%s"}' "$P1" > "$TMP/r1.json"
 R1="$(curl -s -b "$ADMIN" -X POST "$BD/boards/free/posts" -H 'content-type: application/json' --data-binary "@$TMP/r1.json" | python3 -c "import sys,json;print(json.load(sys.stdin).get('id',''))")"
