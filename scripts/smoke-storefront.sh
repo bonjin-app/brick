@@ -347,6 +347,15 @@ NOS="$(curl -s -b "$C1" -X POST "$SHOP/orders" -H 'content-type: application/jso
 AMT2="$(psql_q "SELECT zone_fee, total FROM shop_orders WHERE order_no='$NOS'")"
 check "서울 주문은 지역비 0 (23000)" "$AMT2" "0|23000"
 
+echo "── 주문서가 그 금액을 미리 보여주는가 (덜 보여주고 더 받는 것도 같은 문제다)"
+# 서버는 주문할 때 우편번호로 지역비를 붙이는데, 주문서의 견적 요청에는 우편번호가
+# 빠져 있었다. 제주 손님은 화면에서 25,000원을 보고 28,000원으로 주문됐다.
+CHECKOUT="$(curl -s "$API/api/render/page?path=shop/checkout")"
+contains "주문서가 우편번호를 견적에 함께 보낸다" "$CHECKOUT" "f.get('postcode')"
+contains "지역 추가 배송비를 줄로 보여준다" "$CHECKOUT" "지역 추가 배송비"
+# 총액 숫자만 바꿔치우면 무엇이 붙었는지 안 보인다 — 합계를 통째로 다시 그린다
+contains "합계를 통째로 다시 그린다" "$CHECKOUT" "totalsHtml"
+
 echo
 echo "── 상품 목록 페이지 나누기 (limit 를 넘는 상품에 닿을 수 있는가)"
 # 상품을 limit 보다 많이 만든다 — 전에는 25번째 상품부터 사이트에 있어도 볼 방법이 없었다

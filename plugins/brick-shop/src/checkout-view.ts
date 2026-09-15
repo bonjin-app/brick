@@ -139,6 +139,25 @@ const checkoutScript = (t: (k: string) => string) => `
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 
+  /**
+   * 합계 — 장바구니 응답과 견적 응답이 같은 모양이라 한 함수가 둘 다 그린다.
+   *
+   * 지역 추가 배송비는 **우편번호를 받은 뒤에만** 알 수 있으므로 처음에는 없고,
+   * 주소를 입력하면 나타난다. 줄로 보여줘야 한다 — 총액만 조용히 늘면 손님은
+   * 무엇이 붙었는지 모른 채 주문하거나 그 자리에서 이탈한다.
+   */
+  function totalsHtml(d){
+    return '<div class="brick-co-totals">' +
+      '<div><span>' + ${JSON.stringify(t("checkout.subtotal"))} + '</span><span>' + fmt(d.subtotal) + '</span></div>' +
+      (d.discount ? '<div><span>' + ${JSON.stringify(t("checkout.discount"))} + '</span><span>-' + fmt(d.discount) + '</span></div>' : '') +
+      '<div><span>' + ${JSON.stringify(t("checkout.shippingFee"))} + '</span><span>' +
+        (d.shippingFee ? fmt(d.shippingFee) : ${JSON.stringify(t("checkout.free"))}) + '</span></div>' +
+      (d.zoneFee ? '<div><span>' + ${JSON.stringify(t("checkout.zoneFee"))} +
+        (d.zoneName ? ' (' + esc(d.zoneName) + ')' : '') + '</span><span>' + fmt(d.zoneFee) + '</span></div>' : '') +
+      '<div class="brick-grand"><span>' + ${JSON.stringify(t("checkout.total"))} + '</span><span>' + fmt(d.total) + '</span></div>' +
+      '</div>';
+  }
+
   fetch('/api/plugins/brick-shop/cart' + qs)
     .then(function(r){ return r.json(); })
     .then(function(d){
@@ -151,13 +170,7 @@ const checkoutScript = (t: (k: string) => string) => `
         return '<tr><td>' + esc(it.productName) + (it.optionName ? ' — ' + esc(it.optionName) : '') +
                ' × ' + it.quantity + '</td><td>' + fmt(it.lineTotal) + '</td></tr>';
       }).join('');
-      itemsBox.innerHTML = '<table><tbody>' + rows + '</tbody></table>' +
-        '<div class="brick-co-totals">' +
-        '<div><span>' + ${JSON.stringify(t("checkout.subtotal"))} + '</span><span>' + fmt(d.subtotal) + '</span></div>' +
-        (d.discount ? '<div><span>' + ${JSON.stringify(t("checkout.discount"))} + '</span><span>-' + fmt(d.discount) + '</span></div>' : '') +
-        '<div><span>' + ${JSON.stringify(t("checkout.shippingFee"))} + '</span><span>' + (d.shippingFee ? fmt(d.shippingFee) : ${JSON.stringify(t("checkout.free"))}) + '</span></div>' +
-        '<div class="brick-grand"><span>' + ${JSON.stringify(t("checkout.total"))} + '</span><span>' + fmt(d.total) + '</span></div>' +
-        '</div>';
+      itemsBox.innerHTML = '<table><tbody>' + rows + '</tbody></table>' + totalsHtml(d);
       form.hidden = false;
       setupPoints(d);
     })
@@ -170,12 +183,71 @@ const checkoutScript = (t: (k: string) => string) => `
    * 등급 할인, 쿠폰이 서로 얽혀 있어서 같은 규칙을 두 곳에 두면 갈라진다.
    * 서버의 견적을 그대로 쓴다.
    */
+  /*
+   * 합계를 다시 받는 일은 **포인트와 무관하게** 필요하다.
+   *
+   * 예전에는 requote 가 포인트 설정 안에 있어서, 포인트 플러그인이 꺼진 사이트에서는
+   * 아예 다시 계산하지 않았다 — 우편번호를 넣어도 지역 추가 배송비가 화면에
+   * 나타나지 않는다.
+   */
+  var cartData = null;
+  var maxUsable = 0;
+  var requoteTimer = null;
+
+  function requote(){
+    if (!cartData) return;
+    var pointInput = form.querySelector('input[name=pointUsed]');
+    var want = 0;
+    if (pointInput) {
+      want = Math.max(0, Math.min(maxUsable, Math.floor(Number(pointInput.value) || 0)));
+      pointInput.value = String(want);
+    }
+    var f = new FormData(form);
+    var coupon = String(f.get('couponCode') || '').trim();
+    fetch('/api/plugins/brick-shop/quote', {
+      method: 'POST', headers: {'content-type':'application/json'},
+      body: JSON.stringify({
+        items: cartData.items.map(function(it){ return { productId: it.productId, optionId: it.optionId || null, quantity: it.quantity }; }),
+        couponCode: coupon || null,
+        pointUsed: want,
+        /*
+         * 우편번호를 보낸다.
+         *
+         * 안 보내면 견적에 **지역 추가 배송비가 빠진다.** 서버는 주문할 때 우편번호로
+         * 그 돈을 붙이므로, 제주·도서산간 손님은 화면에서 본 금액과 다른 금액으로
+         * 주문된다 — 화면 25,000원, 실제 28,000원.
+         */
+        postcode: String(f.get('postcode') || '').trim() || null,
+      }),
+    }).then(function(r){ return r.ok ? r.json() : null; }).then(function(q){
+      if (!q) return;
+      /*
+       * 합계 전체를 다시 그린다.
+       *
+       * 예전에는 총액 숫자 하나만 바꿔치웠는데, 그러면 **왜 늘었는지가 안 보인다.**
+       */
+      var box = document.querySelector('.brick-co-totals');
+      if (box) box.outerHTML = totalsHtml(q);
+    }).catch(function(){ /* 합계는 서버가 주문 시 다시 계산한다 */ });
+  }
+  function requoteSoon(){ clearTimeout(requoteTimer); requoteTimer = setTimeout(requote, 300); }
+
+  /** 금액이 달라지는 입력들 — 전부 합계를 다시 받는다 */
+  function bindRequote(){
+    ['postcode', 'couponCode'].forEach(function(name){
+      var el = form.querySelector('[name=' + name + ']');
+      if (el) el.addEventListener('input', requoteSoon);
+    });
+  }
+
   function setupPoints(cart){
+    cartData = cart;
+    bindRequote();
     var row = document.getElementById('brick-co-points-row');
     if (!row || !cart.pointsAvailable || !(cart.pointBalance > 0)) return;
     var input = row.querySelector('input[name=pointUsed]');
     var hint = document.getElementById('brick-co-points-hint');
-    var maxUsable = Math.min(cart.pointBalance, Math.max(0, cart.total - (cart.shippingFee || 0)));
+    maxUsable = Math.min(cart.pointBalance, Math.max(0, cart.total - (cart.shippingFee || 0)));
     input.max = String(maxUsable);
     // 포인트는 돈이 아니다 — 금액 포맷(fmt)을 쓰면 "3,000원점" 이 된다
     var num = function(n){ return String(Math.floor(Number(n) || 0)).replace(/\\B(?=(\\d{3})+(?!\\d))/g, ','); };
@@ -183,26 +255,7 @@ const checkoutScript = (t: (k: string) => string) => `
       .replace('{balance}', num(cart.pointBalance)).replace('{max}', num(maxUsable));
     row.hidden = false;
 
-    var timer = null;
-    function requote(){
-      var want = Math.max(0, Math.min(maxUsable, Math.floor(Number(input.value) || 0)));
-      input.value = String(want);
-      var f = new FormData(form);
-      var coupon = String(f.get('couponCode') || '').trim();
-      fetch('/api/plugins/brick-shop/quote', {
-        method: 'POST', headers: {'content-type':'application/json'},
-        body: JSON.stringify({
-          items: cart.items.map(function(it){ return { productId: it.productId, optionId: it.optionId || null, quantity: it.quantity }; }),
-          couponCode: coupon || null,
-          pointUsed: want,
-        }),
-      }).then(function(r){ return r.ok ? r.json() : null; }).then(function(q){
-        if (!q) return;
-        var grand = document.querySelector('.brick-grand span:last-child');
-        if (grand) grand.textContent = fmt(q.total);
-      }).catch(function(){ /* 합계는 서버가 주문 시 다시 계산한다 */ });
-    }
-    input.addEventListener('input', function(){ clearTimeout(timer); timer = setTimeout(requote, 300); });
+    input.addEventListener('input', requoteSoon);
     document.getElementById('brick-co-points-all').addEventListener('click', function(){
       input.value = String(maxUsable);
       requote();

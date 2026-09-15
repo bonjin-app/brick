@@ -299,5 +299,7 @@
   "ret.cancelled": "신청을 철회했습니다.",
   "ret.cancelFail": "철회하지 못했습니다.",
   "ret.colDate": "신청일",
-  "ret.colOrder": "주문번호"
+  "ret.colOrder": "주문번호",
+  "checkout.zoneFee": "지역 추가 배송비",
+  "checkout.zoneHint": "우편번호를 입력하면 제주·도서산간 추가 배송비가 합계에 반영됩니다."
 }

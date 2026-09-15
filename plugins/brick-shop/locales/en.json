@@ -569,5 +569,7 @@
   "ret.cancelled": "The request was withdrawn.",
   "ret.cancelFail": "Could not withdraw the request.",
   "ret.colDate": "Requested",
-  "ret.colOrder": "Order no."
+  "ret.colOrder": "Order no.",
+  "checkout.zoneFee": "Remote-area surcharge",
+  "checkout.zoneHint": "Enter a postcode and any remote-area surcharge is added to the total."
 }
