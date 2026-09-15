@@ -1000,6 +1000,27 @@ curl -s -b "$CK" -X PUT "$SHOP/admin/orders/$MOID" -H 'content-type: application
 curl -s -b "$CK" -X PUT "$SHOP/admin/orders/$MOID" -H 'content-type: application/json' \
   -d '{"status":"shipped","tracking_no":"1234567890"}' -o /dev/null
 sleep 1
+
+# 송장은 **나중에** 붙는 일이 더 많다.
+#
+# 한국 쇼핑몰의 실제 운영이 그렇다: 오전에 택배사에 넘기고 발송 처리, 송장은
+# 저녁에 일괄 등록. 관리 화면도 "발송 처리" 와 "송장번호 입력 + 발송" 을 따로
+# 두고 그 흐름을 인정한다. 그런데 나중에 붙인 송장은 아무것도 알리지 않아서,
+# 손님은 송장 없는 발송 메일만 받고 주문 조회를 새로고침하게 된다.
+BEFORE_TRK="$(grep -c "운송장 번호가 등록" "$TMP/api.log" || true)"
+curl -s -b "$CK" -X PUT "$SHOP/admin/orders/$MOID" -H 'content-type: application/json' \
+  -d '{"tracking_no":"9876543210"}' -o /dev/null
+sleep 1
+AFTER_TRK="$(grep -c "운송장 번호가 등록" "$TMP/api.log" || true)"
+[[ "$AFTER_TRK" -gt "$BEFORE_TRK" ]] && ok "나중에 붙인 송장을 손님에게 알린다" \
+  || bad "나중에 붙인 송장이 조용히 지나간다 (손님은 알 길이 없다)"
+contains "그 메일에 송장이 실린다" "$(cat "$TMP/api.log")" "9876543210"
+# 같은 값을 다시 저장하는 것은 알림이 아니다 — 목록을 통째로 다시 붙여넣는 일이 흔하다
+curl -s -b "$CK" -X PUT "$SHOP/admin/orders/$MOID" -H 'content-type: application/json' \
+  -d '{"tracking_no":"9876543210"}' -o /dev/null
+sleep 1
+check "같은 송장을 다시 저장하면 다시 알리지 않는다" \
+  "$(grep -c "운송장 번호가 등록" "$TMP/api.log")" "$AFTER_TRK"
 MLOG2="$(cat "$TMP/api.log")"
 contains "발송도 알린다" "$MLOG2" "상품이 발송되었습니다 ($MNO)"
 contains "송장번호가 들어간다" "$MLOG2" "송장번호: 1234567890"

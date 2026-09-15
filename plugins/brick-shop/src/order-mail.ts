@@ -51,11 +51,20 @@ export interface OrderMailPort {
 export async function sendOrderMail(
   db: Db,
   port: OrderMailPort,
-  params: { orderId: string; status: OrderStatus },
+  /*
+   * kind 는 상태 전이가 아닌 알림을 위한 것이다 — 지금은 "송장이 나중에 붙었다" 하나.
+   *
+   * 한국 쇼핑몰의 실제 흐름이 그렇다: 오전에 택배사에 넘기고 발송 처리, 송장은
+   * 저녁에 일괄 등록. 관리 화면의 일괄 작업도 "발송 처리" 와 "송장번호 입력 + 발송"
+   * 을 따로 두고 있다. 그런데 나중에 붙인 송장은 손님에게 아무것도 알리지 않아서,
+   * 손님은 송장 없는 발송 메일만 받고 주문 조회를 새로고침하게 된다.
+   */
+  params: { orderId: string; status: OrderStatus; kind?: "trackingAdded" },
 ): Promise<boolean> {
-  if (!MAILED.includes(params.status)) return false;
-  const subject = t(`ordermail.${params.status}.subject`);
-  const lead = t(`ordermail.${params.status}.lead`);
+  if (!params.kind && !MAILED.includes(params.status)) return false;
+  const key = params.kind ?? params.status;
+  const subject = t(`ordermail.${key}.subject`);
+  const lead = t(`ordermail.${key}.lead`);
 
   const { rows } = await db.execute(sql`
     SELECT o.order_no, o.total, o.status, o.tracking_no, o.guest_token, o.payment_method,
@@ -106,7 +115,7 @@ export async function sendOrderMail(
   if (params.status === "pending" && order.payment_method === "bank_transfer" && port.bankAccount) {
     body.push("", t("ordermail.bankAccount", { account: port.bankAccount }), t("ordermail.bankNotice"));
   }
-  if (params.status === "shipped" && order.tracking_no) {
+  if ((params.status === "shipped" || params.kind === "trackingAdded") && order.tracking_no) {
     body.push("", t("ordermail.tracking", { trackingNo: String(order.tracking_no) }));
   }
 

@@ -151,6 +151,8 @@
   "ordermail.shipped.subject": "Your order has shipped",
   "ordermail.total": "Total: {amount}",
   "ordermail.tracking": "Tracking number: {trackingNo}",
+  "ordermail.trackingAdded.lead": "A tracking number has been added to your shipment.",
+  "ordermail.trackingAdded.subject": "A tracking number was added",
   "orders.address": "Shipping address",
   "orders.backToList": "Back to orders",
   "orders.bankAccount": "Bank account",

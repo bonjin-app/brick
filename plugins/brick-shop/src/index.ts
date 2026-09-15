@@ -107,7 +107,11 @@ export default definePlugin(async (ctx) => {
    * 설정으로 끌 수 있다(`notifyOrderMail`). 실패는 삼킨다 — 메일이 안 나갔다고
    * 주문이나 상태 변경을 되돌리면 그쪽이 더 큰 사고다.
    */
-  const notifyOrder = async (orderId: string, status: OrderStatus): Promise<void> => {
+  const notifyOrder = async (
+    orderId: string,
+    status: OrderStatus,
+    kind?: "trackingAdded",
+  ): Promise<void> => {
     try {
       const s = await settings();
       if (!s.notifyOrderMail) return;
@@ -117,7 +121,7 @@ export default definePlugin(async (ctx) => {
         siteName: await ctx.site.name(),
         bankAccount: s.bankAccount,
         log: (m) => ctx.logger.warn(m),
-      }, { orderId, status });
+      }, { orderId, status, kind });
     } catch (err) {
       ctx.logger.warn(`주문 안내 메일 실패 (${orderId}): ${(err as Error).message}`);
     }
@@ -879,7 +883,7 @@ export default definePlugin(async (ctx) => {
       if (!pairs.size) throw new ShopError(400, "주문번호와 송장번호를 한 줄에 하나씩 넣어주세요.");
 
       const { rows } = await db.execute(sql`
-        SELECT id, order_no, status FROM shop_orders WHERE id = ANY(${pgArray(ids)}::uuid[])
+        SELECT id, order_no, status, tracking_no FROM shop_orders WHERE id = ANY(${pgArray(ids)}::uuid[])
       `);
       let affected = 0;
       let skipped = 0;
@@ -891,10 +895,15 @@ export default definePlugin(async (ctx) => {
         }
         const from = String(row.status) as OrderStatus;
         // 송장번호는 상태와 무관하게 남긴다(배송중인 주문의 송장을 고칠 수도 있다)
+        const trackingChanged = String(row.tracking_no ?? "") !== String(tracking);
         await db.execute(sql`
           UPDATE shop_orders SET tracking_no = ${tracking}, updated_at = now()
           WHERE id = ${String(row.id)}::uuid
         `);
+        // 이미 발송된 주문에 송장이 새로 붙으면 알린다 — 아래 전이가 없는 경로다
+        if (from === "shipped" && trackingChanged) {
+          void notifyOrder(String(row.id), "shipped", "trackingAdded");
+        }
         if (from !== "shipped") {
           const route: OrderStatus[] = from === "paid" ? ["preparing", "shipped"] : ["shipped"];
           let probe: OrderStatus = from;
@@ -1004,10 +1013,28 @@ export default definePlugin(async (ctx) => {
         pointsPort: pointsPort(),
       });
     } else if (b.tracking_no !== undefined) {
+      /*
+       * 송장이 **나중에** 붙는 흐름을 손님에게 알린다.
+       *
+       * 한국 쇼핑몰의 실제 운영이 그렇다: 오전에 택배사에 넘기고 발송 처리,
+       * 송장은 저녁에 일괄 등록. 그러면 손님이 받은 발송 메일에는 송장이 없고,
+       * 나중에 붙인 송장은 아무것도 알리지 않았다 — 손님은 주문 조회를 계속
+       * 새로고침하거나 문의한다.
+       *
+       * 값이 실제로 달라질 때만 보낸다. 같은 값을 다시 저장하는 것(목록을 통째로
+       * 다시 붙여넣는 일이 흔하다)은 알림이 아니다.
+       */
+      const { rows: before } = await db.execute(sql`
+        SELECT tracking_no, status FROM shop_orders WHERE id = ${req.params.id}::uuid LIMIT 1
+      `);
+      const changed = String(before[0]?.tracking_no ?? "") !== String(b.tracking_no ?? "");
       await db.execute(sql`
         UPDATE shop_orders SET tracking_no = ${b.tracking_no}, updated_at = now()
         WHERE id = ${req.params.id}::uuid
       `);
+      if (changed && b.tracking_no && before[0]?.status === "shipped") {
+        void notifyOrder(req.params.id, "shipped", "trackingAdded");
+      }
     }
     return { ok: true };
   });

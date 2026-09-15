@@ -146,6 +146,8 @@
   "ordermail.shipped.subject": "상품이 발송되었습니다",
   "ordermail.total": "결제 금액: {amount}",
   "ordermail.tracking": "송장번호: {trackingNo}",
+  "ordermail.trackingAdded.lead": "발송하신 상품의 운송장 번호가 등록되었습니다.",
+  "ordermail.trackingAdded.subject": "운송장 번호가 등록되었습니다",
   "orders.address": "배송지",
   "orders.backToList": "주문 내역으로",
   "orders.bankAccount": "입금 계좌",
