@@ -299,6 +299,22 @@ OG_HTML="$(curl -s "$API/api/render/page?path=&og=1" | python3 -c 'import sys,js
 contains "테마가 og:image 를 절대 URL 로 낸다" "$OG_HTML" 'property="og:image" content="http'
 contains "트위터 카드도 함께" "$OG_HTML" 'name="twitter:card"'
 check "스탬프 붙은 테마 자산은 1년 immutable" "$(curl -s -o /dev/null -w '%header{cache-control}' "$API/themes/default/assets/style.css?v=1")" "public, max-age=31536000, immutable"
+
+# ── 개인화된 응답이 공유 캐시에 담기지 않는다 ────────────
+#
+# 지금까지 API 응답에는 cache-control 이 아예 없었다. 그런 200 응답은 중간 캐시가
+# 자기 판단으로 담는다(heuristic caching). 설치 안내는 앞에 Nginx·Caddy 를 두라고
+# 하고 그 앞에 CDN 을 얹는 사이트가 많다 — 그러면 한 손님의 프로필·주문 목록이
+# 다른 손님에게 그대로 나간다.
+check "내 정보는 공유 캐시에 담기지 않는다" \
+  "$(curl -s -o /dev/null -w '%header{cache-control}' -b "$COOKIES" "$API/api/auth/me")" "private, no-store"
+check "회원 프로필도" \
+  "$(curl -s -o /dev/null -w '%header{cache-control}' -b "$COOKIES" "$API/api/me/profile")" "private, no-store"
+# 자기 정책을 정한 응답은 건드리지 않는다 — 정책을 아는 쪽이 하나여야 한다
+check "사이트맵은 자기 정책을 지킨다" \
+  "$(curl -s -o /dev/null -w '%header{cache-control}' "$API/sitemap.xml")" "public, max-age=3600"
+check "업로드 파일도 그대로 immutable" \
+  "$(curl -s -o /dev/null -w '%header{cache-control}' "$API$MEDIA_URL")" "public, max-age=31536000, immutable"
 check "스탬프 없는 자산은 1시간" "$(curl -s -o /dev/null -w '%header{cache-control}' "$API/themes/default/assets/style.css")" "public, max-age=3600"
 check "텍스트 응답은 br 로 압축된다" "$(curl -s -o /dev/null -w '%header{content-encoding}' -H 'Accept-Encoding: br, gzip' "$API/themes/default/assets/style.css")" "br"
 

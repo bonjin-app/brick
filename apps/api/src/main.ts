@@ -106,6 +106,22 @@ async function bootstrap() {
     if (header) reply.header(header.name, header.value);
     return payload;
   });
+  /*
+   * 개인화된 응답이 **공유 캐시에 담기지 않게** 한다.
+   *
+   * 지금까지 API 응답에는 cache-control 이 아예 없었다. 그런 200 응답은 중간
+   * 캐시가 자기 판단으로 담을 수 있다(heuristic caching). 설치 안내는 앞에
+   * Nginx·Caddy 를 두라고 하고, 실제로는 그 앞에 CDN 을 얹는 사이트가 많다 —
+   * 그러면 한 손님의 `/api/me/profile`·주문 목록이 다른 손님에게 나갈 수 있다.
+   *
+   * 이미 자기 정책을 정한 응답(정적 자산의 immutable, 사이트맵, 캡차)은
+   * 건드리지 않는다 — 정책을 아는 쪽이 하나여야 한다.
+   */
+  app.getHttpAdapter().getInstance().addHook("onSend", (_req, reply, payload, done) => {
+    if (!reply.getHeader("cache-control")) reply.header("cache-control", "private, no-store");
+    done(null, payload);
+  });
+
   app.getHttpAdapter().getInstance().addHook("onSend", (_req, reply, payload, done) => {
     reply.header("x-content-type-options", "nosniff");
     reply.header("x-frame-options", "SAMEORIGIN");

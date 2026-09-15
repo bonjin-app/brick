@@ -300,6 +300,18 @@ contains "계정 칸도 알아본다" "$LOGIN_HTML" '="username"'
 REG_HTML="$(curl -s "$BASE/register")"
 contains "가입은 새 비밀번호로 알린다" "$REG_HTML" '="new-password"'
 
+# 손님마다 다른 화면이 공유 캐시에 담기면 안 된다.
+#
+# 이 HTML 은 세션에 따라 달라진다 — 주문 목록, 내 쪽지, 비밀글, 장바구니 수,
+# 머리글의 로그인/로그아웃까지. 그런데 응답에 cache-control 이 없었다. 위쪽
+# fetch 는 no-store 로 막아 두었지만 그것은 **우리가 API 를 부를 때** 이야기고,
+# 아래로 내보내는 응답은 중간 캐시에게 아무것도 말하지 않았다. 설치 안내가
+# 권하는 Nginx·Caddy 앞에 CDN 을 얹으면 한 손님의 화면이 다른 손님에게 나간다.
+HOME_HDRS="$(curl -s -D - -o /dev/null "$BASE/" | tr -d '\r')"
+contains "공개 화면도 공유 캐시에는 담기지 않는다" "$HOME_HDRS" "cache-control: private"
+LOGGED_HDRS="$(curl -s -D - -o /dev/null -H "cookie: brick_session=probe" "$BASE/" | tr -d '\r')"
+contains "세션을 들고 온 요청은 저장조차 안 한다" "$LOGGED_HDRS" "cache-control: private, no-store"
+
 
 echo "── HOSTNAME 이 설정된 환경 (컨테이너·리눅스 로그인 셸)"
 # Next standalone 은 `process.env.HOSTNAME || "0.0.0.0"` 를 바인딩 주소로 쓴다. 그대로 두면 그 이름이

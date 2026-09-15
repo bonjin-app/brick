@@ -52,6 +52,22 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ slug?: stri
   // 서버 렌더 HTML 은 80KB 안팎 — br/gzip 으로 눌러 내보낸다 (Next 는 Route Handler 응답을 압축하지 않는다)
   const headers = new Headers({ "content-type": "text/html; charset=utf-8" });
   /*
+   * 이 HTML 은 **손님마다 다르다** — 주문 목록, 내 쪽지, 비밀글, 장바구니 수,
+   * 머리글의 로그인/로그아웃까지 세션에 따라 달라진다. 그런데 지금까지 이 응답에는
+   * cache-control 이 없었다. 위쪽 fetch 는 `cache: "no-store"` 로 막아 두었지만
+   * 그것은 **우리가 API 를 부를 때**의 이야기고, 아래로 내보내는 응답이 중간
+   * 캐시에게 무엇도 말하지 않았다.
+   *
+   * 설치 안내는 앞에 Nginx·Caddy 를 두라고 하고, 그 앞에 CDN 을 얹는 사이트가 많다.
+   * cache-control 없는 200 HTML 은 그런 캐시가 자기 판단으로 담는다 — 그러면 한
+   * 손님의 주문 화면이 다른 손님에게 그대로 나간다.
+   *
+   * `private` 는 공유 캐시에게 "담지 말라"고 말한다(브라우저 캐시는 허용).
+   * 세션 쿠키를 들고 온 요청은 확실히 개인화된 화면이므로 `no-store` 까지 건다 —
+   * 공용 PC 의 뒤로 가기로 남의 주문이 보이면 안 된다.
+   */
+  headers.set("cache-control", cookie ? "private, no-store" : "private, max-age=0, must-revalidate");
+  /*
    * 이 라우트는 API 의 JSON 을 받아 HTML 을 **새로** 만든다 — 그래서 API 가 붙인 응답 헤더가
    * 그냥 버려진다. 공개 화면의 보안 헤더를 여기서 옮겨 준다. 특히 CSP 는 테마·플러그인이
    * 선언한 출처를 합친 것이라 API 만이 알고 있다(next.config 의 고정 정책으로 대신할 수 없다).
