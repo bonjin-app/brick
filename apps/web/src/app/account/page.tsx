@@ -16,6 +16,13 @@ interface Profile {
   display_name_changed_at?: string | null;
 }
 
+interface PendingAgreement {
+  kind: string;
+  version: number;
+  title: string;
+  body: string;
+}
+
 interface Identity {
   provider: string;
   label: string;
@@ -58,6 +65,17 @@ export default function AccountPage() {
    * 세션으로 심어진 뒷문이라면 더더욱 그렇다. 연결 알림 메일이 "내 정보에서
    * 해제하세요" 라고 안내하는데 정작 그 화면이 없었다.
    */
+  /*
+   * 다시 동의해야 하는 약관.
+   *
+   * 개정·목록(agreements/pending)·수락(agreements/accept) API 가 다 있었고
+   * 서버는 `pendingAgreements` 개수까지 내려보내고 있었다. 그런데 그것을 읽는
+   * 화면이 없었다 — 운영자가 약관을 개정해도 기존 회원에게는 **묻지 않았다.**
+   * 필수 약관은 동의해야 계속 이용할 수 있다고 서버가 말하는데(acceptPending),
+   * 물어볼 자리가 없었던 것이다.
+   */
+  const [pending, setPending] = useState<PendingAgreement[]>([]);
+  const [agreed, setAgreed] = useState<Record<string, boolean>>({});
   const [identities, setIdentities] = useState<Identity[]>([]);
   const [providers, setProviders] = useState<Array<{ name: string; label: string }>>([]);
   const [linkPw, setLinkPw] = useState("");
@@ -100,6 +118,9 @@ export default function AccountPage() {
     fetch("/api/member/menu").then((s) => (s.ok ? s.json() : { items: [] }))
       .then((d) => setMemberMenu(d.items ?? []))
       .catch(() => {});
+    fetch("/api/agreements/pending").then((s) => (s.ok ? s.json() : { items: [] }))
+      .then((d) => setPending(d.items ?? []))
+      .catch(() => {});
     fetch("/api/auth/oauth/my/identities").then((s) => (s.ok ? s.json() : []))
       .then((d) => setIdentities(Array.isArray(d) ? d : (d.items ?? [])))
       .catch(() => {});
@@ -108,6 +129,18 @@ export default function AccountPage() {
       .catch(() => {});
   }
   useEffect(() => { load().catch(() => oops()); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function acceptPending() {
+    const r = await fetch("/api/agreements/accept", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ accepted: agreed }),
+    });
+    if (!r.ok) { oops((await r.json().catch(() => ({}))).message); return; }
+    say(t("account.pendingDone"));
+    setPending([]);
+    setAgreed({});
+  }
 
   async function unlinkIdentity(it: Identity) {
     if (!confirm(t("account.identityUnlinkConfirm", { label: it.label }))) return;
@@ -255,6 +288,37 @@ export default function AccountPage() {
 
       {me && (
         <>
+          {/* ── 다시 동의해야 하는 약관 (있을 때만, 맨 위에) ── */}
+          {pending.length > 0 && (
+            <section style={{ ...card, borderColor: "var(--color-warning)" }} role="alert">
+              <h2 style={h2}>{t("account.pendingTitle")}</h2>
+              <p style={{ ...small, marginTop: 0 }}>{t("account.pendingDesc")}</p>
+              {pending.map((a) => (
+                <div key={a.kind} style={{ marginTop: 14 }}>
+                  <strong>{a.title}</strong>
+                  <span style={{ ...small, marginLeft: 6 }}>
+                    {t("account.pendingVersion", { version: String(a.version) })}
+                  </span>
+                  <div style={{
+                    marginTop: 6, maxHeight: 180, overflow: "auto", whiteSpace: "pre-wrap",
+                    border: "1px solid var(--color-line)", borderRadius: 8, padding: 12,
+                    fontSize: 13.5, lineHeight: 1.6,
+                  }}>{a.body}</div>
+                  <label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8, minHeight: 40 }}>
+                    <input type="checkbox" checked={agreed[a.kind] === true}
+                      onChange={(e) => setAgreed((m) => ({ ...m, [a.kind]: e.target.checked }))} />
+                    {t("account.pendingAgree")}
+                  </label>
+                </div>
+              ))}
+              <button style={{ ...saveBtn, marginTop: 14 }}
+                disabled={pending.some((a) => agreed[a.kind] !== true)}
+                onClick={() => void acceptPending()}>
+                {t("account.pendingSubmit")}
+              </button>
+            </section>
+          )}
+
           {/* ── 내 활동 (플러그인이 선언한 회원 화면) ── */}
           {memberMenu.length > 0 && (
             <section style={card}>
