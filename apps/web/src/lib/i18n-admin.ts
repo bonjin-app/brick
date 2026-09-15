@@ -29,6 +29,11 @@ const KO = {
   "nav.openMenu": "메뉴 열기",
   "nav.closeMenu": "메뉴 닫기",
 
+  "business.title": "사업자정보",
+  "business.desc": "전자상거래법 제13조에 따라 소비자가 쉽게 알 수 있도록 표시해야 하는 정보입니다. 기본 테마는 푸터에 자동으로 보여줍니다.",
+  "business.missing": "쇼핑몰을 열려면 {fields:이/가} 더 필요합니다. 저장은 되지만 표시 의무를 지키지 못한 상태입니다.",
+  "business.requiredNote": "* 표시는 쇼핑몰 운영에 필수입니다. 쇼핑몰이 아니면 비워 두어도 됩니다.",
+  "business.saved": "사업자정보를 저장했습니다.",
   "common.save": "저장",
   "common.saved": "저장되었습니다.",
   "common.failPrefix": "실패: ",
@@ -373,6 +378,11 @@ const EN: Record<keyof typeof KO, string> = {
   "nav.openMenu": "Open menu",
   "nav.closeMenu": "Close menu",
 
+  "business.title": "Business information",
+  "business.desc": "Korean e-commerce law (Art. 13) requires this to be visible to customers. The default theme shows it in the footer.",
+  "business.missing": "To run a shop you still need: {fields}. It saves, but the disclosure requirement is not met yet.",
+  "business.requiredNote": "* is required to run a shop. Leave them empty if this site is not a shop.",
+  "business.saved": "Business information saved.",
   "common.save": "Save",
   "common.saved": "Saved.",
   "common.failPrefix": "Failed: ",

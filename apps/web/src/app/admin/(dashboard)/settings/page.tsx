@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { SocialLoginSettings } from "./SocialLoginSettings";
+import { BusinessInfoSettings } from "./BusinessInfoSettings";
 import { useAdminT } from "../../../../lib/i18n-admin";
 
 type Settings = Record<string, unknown>;
@@ -175,6 +176,8 @@ export default function AdminSettingsPage() {
         </Field>
         <Check k="system.update_check" label={t("settings.updateCheck")} hint={t("settings.updateCheckHint")} fallback />
       </Card>
+
+      <BusinessInfoSettings />
 
       <SocialLoginSettings />
     </div>
