@@ -24,6 +24,9 @@
  * 이 화면들은 클라이언트가 그린다 — 스모크(서버 HTML)로는 볼 수 없다. 그래서
  * **화면이 그 API 를 부르는지**를 여기서 본다. 완벽한 검사는 아니지만, 화면이
  * 통째로 사라지는 것은 잡는다.
+ *
+ * 보는 범위는 **화면을 그리는 파일**뿐이다 — 아래 SCREEN_FILE 을 보라. 서버
+ * 파일까지 훑으면 라우트 문자열에 걸려 화면 없이도 통과한다.
  */
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -41,6 +44,7 @@ const MUST_REACH = [
   ["/api/auth/login/2fa", "로그인이 2단계로 갈라지는데 코드를 받는 자리가 없습니다 — 2FA 를 켠 사람은 영영 들어오지 못합니다"],
   ["twoFactorRequired", "로그인 화면이 2단계 인증 응답을 알아보지 못합니다 (200 이지만 세션이 없어서, 로그인한 줄 알고 로그아웃 상태로 홈에 떨어집니다)"],
   ["/api/business-info", "사업자정보를 입력할 관리 화면이 없습니다 — 전자상거래법 제13조 표시 의무를 지킬 방법이 없고, 테마 푸터는 빈 채로 남습니다"],
+  ["/api/plugins/brick-shop/tax/info", "손님이 현금영수증을 신청할 자리가 없습니다 — 부가가치세법 제32조의2 는 최종소비자가 요청하면 발급하라고 정하는데, 요청할 곳이 없으면 그 권리가 없는 것과 같습니다"],
 ];
 
 function walk(dir, out = []) {
@@ -53,11 +57,25 @@ function walk(dir, out = []) {
   return out;
 }
 
-// 손님·운영자가 쓰는 화면 + 플러그인이 서버에서 그리는 화면(스크립트 포함)
+/**
+ * **화면을 그리는 파일만** 본다.
+ *
+ * 플러그인은 서버 라우트와 화면 스크립트가 한 저장소에 있다. 전부 훑으면
+ * 서버가 등록한 경로 문자열에 걸려서 **화면을 통째로 지워도 통과한다** —
+ * 역검증에서 실제로 그랬다(`pointUsed` 항목이 주문서 UI 를 다 지워도 초록이었다).
+ * 화면을 그리는 파일(`*-view.ts` · `views.ts` · `blocks.ts`)만 보면 그 구멍이 닫힌다.
+ *
+ * 대신 화면을 다른 이름의 파일에서 그리기 시작하면 여기가 먼저 빨개진다.
+ * 그때는 이 목록에 그 이름을 더한다 — 조용히 통과하는 것보다 낫다.
+ */
+const SCREEN_FILE = /(-view|views|blocks)\.tsx?$/;
 const screens = walk(join(ROOT, "apps/web/src"));
 for (const p of readdirSync(join(ROOT, "plugins"))) {
   const dir = join(ROOT, "plugins", p, "src");
-  try { if (statSync(dir).isDirectory()) walk(dir, screens); } catch { /* 없으면 건너뛴다 */ }
+  try {
+    if (!statSync(dir).isDirectory()) continue;
+    for (const f of walk(dir)) if (SCREEN_FILE.test(f)) screens.push(f);
+  } catch { /* 없으면 건너뛴다 */ }
 }
 const haystack = screens.map((f) => readFileSync(f, "utf8")).join("\n");
 

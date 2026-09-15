@@ -44,6 +44,7 @@ import {
 } from "./restock.js";
 import {
   RECEIPT_KINDS, RECEIPT_KIND_LABEL, VAT_PERIODS, cancelCashReceipt, cancelReceiptsForOrder,
+  cashReceiptStatusFor,
   listCashReceiptGateways, listCashReceipts, listTaxInvoices, markCashReceiptIssued,
   requestCashReceipt, requestTaxInvoice, updateTaxInvoice, vatReport,
 } from "./tax.js";
@@ -426,10 +427,22 @@ export default definePlugin(async (ctx) => {
      */
     const needsDeposit = order.status === "pending" && order.payment_method === "bank_transfer";
     const bankAccount = needsDeposit ? (await settings()).bankAccount : "";
+    /*
+     * 현금영수증 신청 가능 여부.
+     *
+     * 발급 라우트도 규칙도 관리 화면도 다 있었는데 **손님이 신청할 자리가
+     * 없었다.** 부가가치세법 제32조의2 는 최종소비자가 요청하면 발급하라고
+     * 정한다 — 요청할 곳이 없으면 그 권리가 없는 것과 같다. 무통장 입금
+     * 주문이 정확히 이 경우다.
+     */
+    const cashReceipt = await cashReceiptStatusFor(db, {
+      id: String(order.id), payment_method: order.payment_method, paid_at: order.paid_at,
+    });
     return {
       order, items, events,
       statusLabel: STATUS_LABEL[order.status as OrderStatus],
       ...(bankAccount ? { bankAccount } : {}),
+      cashReceipt,
     };
   });
 
@@ -1859,6 +1872,7 @@ export default definePlugin(async (ctx) => {
       identifier: String(b.identifier ?? ""),
       userId: req.user?.id ?? null,
       isManager: isManager(req),
+      guestToken: req.query.token ?? null,
       gateway: b.gateway ? String(b.gateway) : undefined,
       isValidBusinessNo,
     });

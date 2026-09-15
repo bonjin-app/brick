@@ -281,5 +281,19 @@
   "wish.remove": "삭제",
   "wish.soldout": "품절",
   "wish.title": "위시리스트",
-  "wish.unavailable": "판매 종료"
+  "wish.unavailable": "판매 종료",
+  "receipt.request": "현금영수증 신청",
+  "receipt.notice": "무통장 입금 주문에 신청할 수 있습니다. 카드 결제는 카드사가 국세청에 자동 통보합니다.",
+  "receipt.kind": "발급 용도",
+  "receipt.identifier": "번호",
+  "receipt.identifierIncome": "휴대폰 번호 또는 현금영수증 카드번호",
+  "receipt.identifierExpense": "사업자등록번호 10자리",
+  "receipt.submit": "신청",
+  "receipt.submitting": "신청 중…",
+  "receipt.pickKind": "발급 용도를 선택해주세요.",
+  "receipt.fail": "신청하지 못했습니다.",
+  "receipt.issued": "현금영수증이 발급되었습니다.",
+  "receipt.pending": "현금영수증 발급을 접수했습니다. 처리되면 반영됩니다.",
+  "receipt.approvalNo": "승인번호",
+  "receipt.legal": "부가가치세법 제32조의2 · 제46조"
 }

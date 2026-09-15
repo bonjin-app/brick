@@ -214,6 +214,53 @@ async function receivableAmount(db: Db, orderId: string): Promise<number> {
   return Math.max(0, Number(rows[0]?.amount ?? 0));
 }
 
+/**
+ * 이 주문에 현금영수증을 신청할 수 있는가 — **화면이 폼을 낼지 정하는 데 쓴다.**
+ *
+ * 신청 규칙은 `requestCashReceipt` 가 갖고 있고 거절 문구도 거기 있다. 그런데
+ * 화면이 그 규칙을 모르면 두 가지 중 하나가 된다: 못 하는 주문에 폼을 내밀어
+ * 누르고 나서 거절당하거나, 아예 안 내밀어 **할 수 있는데 못 하게** 된다.
+ * 규칙을 화면에 다시 적으면 갈라지므로, 같은 판단을 여기서 한 번 하고 준다.
+ */
+export async function cashReceiptStatusFor(
+  db: Db,
+  order: { id: string; payment_method?: unknown; paid_at?: unknown },
+): Promise<{
+  available: boolean;
+  reason?: string;
+  issued?: { kind: ReceiptKind; identifier: string; status: string; approvalNo: string | null };
+}> {
+  const { rows } = await db.execute(sql`
+    SELECT kind, identifier, status, approval_no FROM shop_cash_receipts
+    WHERE order_id = ${order.id}::uuid AND status <> 'cancelled'
+    ORDER BY requested_at DESC LIMIT 1
+  `);
+  const row = rows[0];
+  if (row) {
+    return {
+      available: false,
+      issued: {
+        kind: String(row.kind) as ReceiptKind,
+        // 원본을 그대로 돌려주지 않는다 — 주민등록번호일 수 있다
+        identifier: maskIdentifier(String(row.identifier ?? "")),
+        status: String(row.status),
+        approvalNo: (row.approval_no as string | null) ?? null,
+      },
+    };
+  }
+  if (!order.paid_at) return { available: false, reason: "결제가 확인된 뒤에 신청할 수 있습니다." };
+  if (!CASH_METHODS.includes(String(order.payment_method ?? ""))) {
+    return {
+      available: false,
+      reason: "카드 결제는 카드사가 국세청에 자동 통보하므로 현금영수증을 발급하지 않습니다.",
+    };
+  }
+  if ((await receivableAmount(db, order.id)) <= 0) {
+    return { available: false, reason: "전액 환불된 주문입니다." };
+  }
+  return { available: true };
+}
+
 export async function requestCashReceipt(
   db: Db,
   params: {
@@ -223,6 +270,15 @@ export async function requestCashReceipt(
     /** 회원 본인 또는 관리자 */
     userId: string | null;
     isManager: boolean;
+    /**
+     * 비회원 주문 조회 토큰.
+     *
+     * 이것이 없으면 **비회원은 현금영수증을 받을 수 없다.** 무통장 입금 +
+     * 비회원 주문이 한국 쇼핑몰에서 가장 흔한 조합이고, 현금영수증이 꼭
+     * 필요한 것도 바로 그 주문이다. 청약철회는 처음부터 토큰으로 되는데
+     * 여기만 빠져 있었다 — 같은 주문의 같은 주인이다.
+     */
+    guestToken?: string | null;
     gateway?: string;
     isValidBusinessNo: (v: string) => boolean;
   },
@@ -245,14 +301,18 @@ export async function requestCashReceipt(
   const identifier = validateIdentifier(kind, params.identifier, params.isValidBusinessNo);
 
   const { rows } = await db.execute(sql`
-    SELECT id, order_no, user_id, total, payment_method, payment_status, paid_at
+    SELECT id, order_no, user_id, guest_token, total, payment_method, payment_status, paid_at
     FROM shop_orders WHERE order_no = ${params.orderNo} LIMIT 1
   `);
   const order = rows[0];
   // 남의 주문이 존재하는지 알려주지 않는다 (주문번호는 순차적이다)
   if (!order) throw new ShopError(404, "주문을 찾을 수 없습니다.");
   if (!params.isManager) {
-    if (!params.userId || String(order.user_id ?? "") !== params.userId) {
+    const isOwner = Boolean(params.userId && String(order.user_id ?? "") === params.userId);
+    // 비회원 주문 — 토큰이 일치하고 그 주문에 회원이 없을 때만 (청약철회와 같은 규칙)
+    const token = String(params.guestToken ?? "");
+    const isGuestOwner = Boolean(token && !order.user_id && String(order.guest_token ?? "") === token);
+    if (!isOwner && !isGuestOwner) {
       throw new ShopError(404, "주문을 찾을 수 없습니다.");
     }
   }

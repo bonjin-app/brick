@@ -78,6 +78,15 @@ const ORDERS_CSS = `
 .brick-ret-note { font-size: 13px; color: var(--color-muted, #71717d); margin: 8px 0; }
 .brick-ret-msg { margin-left: 10px; font-size: 13.5px; color: var(--color-danger, #c9342f); }
 .brick-ret-done { padding: 14px; background: var(--color-bg-soft, #f7f7f9); border-radius: 10px; margin-top: 18px; }
+.brick-receipt { margin-top: 14px; border: 1px solid var(--color-line, #e7e7ec); border-radius: 10px; padding: 12px 16px; }
+.brick-receipt summary { cursor: pointer; font-weight: 600; }
+.brick-receipt h4 { margin: 14px 0 6px; font-size: 14px; }
+.brick-receipt-kinds { display: flex; gap: 14px; flex-wrap: wrap; font-size: 14px; }
+.brick-receipt-kind { display: flex; gap: 6px; align-items: center; }
+.brick-receipt-form input[name=identifier] { width: 100%; max-width: 420px; }
+.brick-receipt-note { font-size: 13px; color: var(--color-muted, #71717d); margin: 8px 0; }
+.brick-receipt-msg { margin-left: 10px; font-size: 13.5px; color: var(--color-danger, #c9342f); }
+.brick-receipt-done { padding: 14px; background: var(--color-bg-soft, #f7f7f9); border-radius: 10px; margin-top: 14px; }
 </style>`;
 
 /** 목록 화면 — 회원이면 /my/orders, 401 이면 비회원 조회 폼 */
@@ -175,6 +184,91 @@ const detailScript = (t: (k: string, p?: Record<string, string | number>) => str
     var url = '/api/plugins/brick-shop/orders/' + encodeURIComponent(no) +
       (withToken && guest ? '?token=' + encodeURIComponent(guest) : '');
     return fetch(url).then(function(r){ return r.ok ? r.json() : null; });
+  }
+
+  /**
+   * 현금영수증.
+   *
+   * 신청 가능 여부는 **서버가 판단해 준다**(cashReceipt). 규칙이 여기에도 있으면
+   * 둘이 갈라져서, 못 하는 주문에 폼을 내밀거나 할 수 있는데 안 내밀게 된다.
+   */
+  function renderReceiptSection(orderNo, info){
+    var slot = document.getElementById('brick-receipt-slot');
+    if (!slot || !info) return;
+
+    if (info.issued) {
+      var done = info.issued.status === 'issued'
+        ? ${JSON.stringify(t("receipt.issued"))}
+        : ${JSON.stringify(t("receipt.pending"))};
+      slot.innerHTML = '<p class="brick-receipt-done">' + esc(done) + ' ' + esc(info.issued.identifier) +
+        (info.issued.approvalNo
+          ? ' · ' + ${JSON.stringify(t("receipt.approvalNo"))} + ' ' + esc(info.issued.approvalNo)
+          : '') + '</p>';
+      return;
+    }
+    // 신청할 수 없는 주문에는 아무것도 내밀지 않는다 — 이유는 서버가 알고 있고,
+    // 카드 주문에 "발급 안 됩니다" 를 띄우면 없던 걱정을 만든다
+    if (!info.available) return;
+
+    var q = (function(){ var g = guestToken(); return g ? ('?token=' + encodeURIComponent(g)) : ''; })();
+    slot.innerHTML =
+      '<details class="brick-receipt"><summary>' + ${JSON.stringify(t("receipt.request"))} + '</summary>' +
+      '<p class="brick-receipt-note">' + ${JSON.stringify(t("receipt.notice"))} + '</p>' +
+      '<form class="brick-receipt-form">' +
+      '<h4 id="brick-rc-kind-label">' + ${JSON.stringify(t("receipt.kind"))} + '</h4>' +
+      '<div class="brick-receipt-kinds" role="radiogroup" aria-labelledby="brick-rc-kind-label"></div>' +
+      '<h4 id="brick-rc-id-label">' + ${JSON.stringify(t("receipt.identifier"))} + '</h4>' +
+      '<input name="identifier" required maxlength="40" aria-labelledby="brick-rc-id-label" ' +
+      'aria-describedby="brick-rc-id-hint" />' +
+      '<p class="brick-receipt-note" id="brick-rc-id-hint">' +
+      ${JSON.stringify(t("receipt.identifierIncome"))} + '</p>' +
+      '<button type="submit" class="brick-primary">' + ${JSON.stringify(t("receipt.submit"))} + '</button>' +
+      '<span class="brick-receipt-msg" role="status"></span>' +
+      '<p class="brick-receipt-note">' + ${JSON.stringify(t("receipt.legal"))} + '</p>' +
+      '</form></details>';
+
+    var form = slot.querySelector('.brick-receipt-form');
+    var kinds = form.querySelector('.brick-receipt-kinds');
+    var hint = form.querySelector('#brick-rc-id-hint');
+    var msg = form.querySelector('.brick-receipt-msg');
+
+    // 용도 목록은 서버에서 받는다 — 화면이 따로 적으면 코드가 갈라진다
+    fetch('/api/plugins/brick-shop/tax/info').then(function(r){ return r.json(); })
+      .then(function(d){
+        kinds.innerHTML = (d.receiptKinds || []).map(function(k){
+          return '<label class="brick-receipt-kind"><input type="radio" name="rc-kind" value="' +
+            esc(k.code) + '" /> ' + esc(k.label) + '</label>';
+        }).join('');
+        // 용도에 따라 넣을 번호가 다르다 — 고르고 나서 알면 늦는다
+        kinds.addEventListener('change', function(e){
+          hint.textContent = e.target.value === 'expense_proof'
+            ? ${JSON.stringify(t("receipt.identifierExpense"))}
+            : ${JSON.stringify(t("receipt.identifierIncome"))};
+        });
+      })
+      .catch(function(){});
+
+    form.addEventListener('submit', function(e){
+      e.preventDefault();
+      var kindEl = form.querySelector('input[name=rc-kind]:checked');
+      if (!kindEl) { msg.textContent = ${JSON.stringify(t("receipt.pickKind"))}; return; }
+      var btn = form.querySelector('button[type=submit]');
+      btn.disabled = true;
+      msg.textContent = ${JSON.stringify(t("receipt.submitting"))};
+      fetch('/api/plugins/brick-shop/orders/' + encodeURIComponent(orderNo) + '/cash-receipt' + q, {
+        method: 'POST', headers: {'content-type':'application/json'},
+        body: JSON.stringify({ kind: kindEl.value, identifier: form.querySelector('input[name=identifier]').value })
+      }).then(function(r){ return r.json().then(function(d){ return {ok:r.ok, d:d}; }); })
+        .then(function(res){
+          btn.disabled = false;
+          if (!res.ok) { msg.textContent = res.d.message || ${JSON.stringify(t("receipt.fail"))}; return; }
+          slot.innerHTML = '<p class="brick-receipt-done" role="status">' +
+            esc(res.d.pending ? ${JSON.stringify(t("receipt.pending"))} : ${JSON.stringify(t("receipt.issued"))}) +
+            (res.d.approvalNo ? ' · ' + ${JSON.stringify(t("receipt.approvalNo"))} + ' ' + esc(res.d.approvalNo) : '') +
+            '</p>';
+        })
+        .catch(function(){ btn.disabled = false; msg.textContent = ${JSON.stringify(t("receipt.fail"))}; });
+    });
   }
 
   function renderReturnSection(orderNo){
@@ -326,10 +420,14 @@ const detailScript = (t: (k: string, p?: Record<string, string | number>) => str
         : '') +
       '</dl>' +
       (history ? '<h3>' + ${JSON.stringify(t("orders.history"))} + '</h3><ul class="brick-o-history">' + history + '</ul>' : '') +
-      '<div id="brick-ret-slot"></div>';
+      '<div id="brick-ret-slot"></div>' +
+      '<div id="brick-receipt-slot"></div>';
     // 취소·반품 신청 — 신청 가능한 주문일 때만 버튼을 낸다.
     // 청약철회(전자상거래법 제17조)는 손님의 권리이므로 화면이 있어야 한다.
     renderReturnSection(o.order_no);
+    // 현금영수증 신청 — 부가가치세법 제32조의2 도 손님의 권리다.
+    // 발급 라우트는 처음부터 있었는데 신청할 자리가 없었다.
+    renderReceiptSection(o.order_no, d.cashReceipt);
   });
 })();
 </script>`;

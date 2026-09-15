@@ -474,6 +474,39 @@ contains "이유를 알려준다" \
   "$(curl -s -b "$B1" -X POST "$SHOP/orders/$O_ZERO/cash-receipt" -H 'content-type: application/json' \
       -d '{"kind":"income_deduction","identifier":"01012345678"}')" "전액 환불"
 
+echo "── 손님이 신청할 수 있는가 (주문 상세가 폼을 낼지 정한다)"
+# 발급 라우트도 규칙도 관리 화면도 다 있는데 **손님이 신청할 자리가 없었다.**
+# 화면이 규칙을 다시 적으면 갈라지므로 서버가 판단해 내려보낸다.
+O_UI="$(mkorder "$B1" "$P_TAX" 1)"
+DET="$(curl -s -b "$B1" "$SHOP/orders/$O_UI")"
+contains "미결제 주문에는 신청 폼을 내밀지 않는다" "$DET" '"available":false'
+contains "이유를 함께 준다" "$DET" "결제가 확인된 뒤"
+paynow "$O_UI"
+contains "결제되면 신청할 수 있다고 알려준다" "$(curl -s -b "$B1" "$SHOP/orders/$O_UI")" '"available":true'
+contains "카드 주문에는 신청할 수 없다고 알려준다" "$(curl -s -b "$B1" "$SHOP/orders/$O_CARD")" "자동 통보"
+curl -s -b "$B1" -X POST "$SHOP/orders/$O_UI/cash-receipt" -H 'content-type: application/json' \
+  -d '{"kind":"income_deduction","identifier":"01055556666"}' >/dev/null
+AFTER="$(curl -s -b "$B1" "$SHOP/orders/$O_UI")"
+contains "발급 뒤에는 폼 대신 결과를 보여준다" "$AFTER" '"issued"'
+absent "번호를 그대로 돌려주지 않는다 (주민등록번호일 수 있다)" "$AFTER" '"identifier":"01055556666"'
+
+echo "── 비회원도 현금영수증을 받을 수 있다 (무통장 + 비회원이 가장 흔한 조합이다)"
+# 청약철회는 처음부터 토큰으로 됐는데 현금영수증만 회원으로 막혀 있었다 —
+# 정작 현금영수증이 꼭 필요한 주문이 그 무통장 비회원 주문이다.
+printf '{"items":[{"productId":"%s","quantity":1}],"orderer":{"ordererName":"비회원","ordererPhone":"010-3333-4444","postcode":"06236","address1":"서울"}}' "$P_TAX" > "$TMP/g.json"
+GUEST="$(curl -s -X POST "$SHOP/orders" -H 'content-type: application/json' --data-binary "@$TMP/g.json")"
+O_GUEST="$(echo "$GUEST" | jq_get "['orderNo']")"
+G_TOKEN="$(psql_q "SELECT guest_token FROM shop_orders WHERE order_no='$O_GUEST'")"
+paynow "$O_GUEST"
+GRC="$(curl -s -X POST "$SHOP/orders/$O_GUEST/cash-receipt?token=$G_TOKEN" -H 'content-type: application/json' \
+  -d '{"kind":"income_deduction","identifier":"01033334444"}')"
+contains "토큰으로 신청할 수 있다" "$GRC" '"kind":"income_deduction"'
+check "실제로 저장된다" \
+  "$(psql_q "SELECT count(*) FROM shop_cash_receipts WHERE order_id=(SELECT id FROM shop_orders WHERE order_no='$O_GUEST')")" "1"
+check "토큰이 없으면 404 (남의 주문을 알려주지 않는다)" \
+  "$(code -X POST "$SHOP/orders/$O_GUEST/cash-receipt" -H 'content-type: application/json' \
+      -d '{"kind":"income_deduction","identifier":"01033334444"}')" "404"
+
 echo
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 # 실측을 남긴다(설정됐을 때만) — README 의 표가 실제와 같은지 CI 가 대조한다.
