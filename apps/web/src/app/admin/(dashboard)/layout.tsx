@@ -15,7 +15,7 @@ interface NavMenu { plugin: string; label: string; path: string; icon?: string }
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const t = useAdminT();
   const pathname = usePathname() ?? "";
-  const [user, setUser] = useState<{ displayName: string } | null | undefined>(undefined);
+  const [user, setUser] = useState<{ displayName: string; role?: string } | null | undefined>(undefined);
   const [nav, setNav] = useState<{ menus: NavMenu[]; resources: NavResource[] }>({ menus: [], resources: [] });
   const [open, setOpen] = useState(false);
 
@@ -70,8 +70,19 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
    * 팔레트가 바뀔 때마다 다시 맞추는 것보다 고정하는 편이 안전하다.
    * colorScheme 을 dark 로 알려 그 안의 UA 위젯도 어둡게 그려지게 한다.
    */
+  /*
+   * 운영자(manager)에게는 **쓸 수 있는 것만** 보여준다.
+   *
+   * 코어 관리 화면은 전부 관리자 전용이다(페이지·미디어·회원·설정·감사 …).
+   * 그런데 사이드바는 역할에 상관없이 같은 목록을 그려서, 운영자는 누르는
+   * 족족 403 을 만났다. 정작 쓸 수 있는 플러그인 리소스는 nav 가 403 이라
+   * 하나도 보이지 않았다(그쪽은 서버에서 고쳤다).
+   */
+  const isAdmin = user?.role === "admin";
   const sideNav = (
     <nav onClick={() => setOpen(false)}>
+      {isAdmin && (
+        <>
       <NavLink href="/admin">{t("nav.dashboard")}</NavLink>
       <NavLink href="/admin/pages">{t("nav.pages")}</NavLink>
       <NavLink href="/admin/media">{t("nav.media")}</NavLink>
@@ -79,6 +90,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       <NavLink href="/admin/users">{t("nav.users")}</NavLink>
       <NavLink href="/admin/agreements">{t("nav.agreements")}</NavLink>
       <NavLink href="/admin/mail">{t("nav.mail")}</NavLink>
+        </>
+      )}
 
       {(nav.resources.length > 0 || nav.menus.length > 0) && (
         <>
@@ -94,6 +107,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         </>
       )}
 
+      {isAdmin && (
+        <>
       <div style={sectionLabel}>{t("nav.system")}</div>
       <NavLink href="/admin/plugins">{t("nav.plugins")}</NavLink>
       <NavLink href="/admin/themes">{t("nav.themes")}</NavLink>
@@ -101,6 +116,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       <NavLink href="/admin/search">{t("nav.search")}</NavLink>
       <NavLink href="/admin/migrate">{t("nav.migrate")}</NavLink>
       <NavLink href="/admin/audit">{t("nav.audit")}</NavLink>
+        </>
+      )}
     </nav>
   );
 

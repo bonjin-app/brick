@@ -8,7 +8,7 @@ import type { BrickDb } from "@brick/database";
 import type { MailProvider } from "@brick/core";
 import { SITE_TZ, isRawResponse, rankOf, type PluginUploadedFile } from "@brick/core";
 import { PluginLoaderService } from "./plugin-loader.service.js";
-import { AdminGuard } from "../auth/auth.guard.js";
+import { AdminGuard, ManagerGuard } from "../auth/auth.guard.js";
 import { AuthService } from "../auth/auth.service.js";
 import { ExtensionInstallerService } from "../extensions/extension-installer.service.js";
 import { ExtensionUpdaterService } from "../extensions/extension-updater.service.js";
@@ -187,9 +187,15 @@ export class PluginsController {
   /**
    * 관리자 내비게이션 — 플러그인이 등록한 메뉴와 리소스.
    * 코어 관리자 셸이 이걸 읽어 사이드바를 구성한다.
+   *
+   * **운영자(manager)도 읽는다.** 여기 실리는 것은 플러그인이 등록한 관리
+   * 리소스뿐이고, 그 라우트들은 디스패처가 manager 까지 통과시킨다(위 참고).
+   * 그런데 이 목록만 admin 으로 닫혀 있어서, 운영자는 **자기가 쓸 수 있는
+   * 화면을 사이드바에서 찾을 수 없었다** — 게시판 관리도 주문 관리도 주소를
+   * 외워야 닿았다. 권한은 있는데 길이 없으면 역할이 없는 것과 같다.
    */
   @Get("admin/nav")
-  @UseGuards(AdminGuard)
+  @UseGuards(ManagerGuard)
   async adminNav() {
     // 선언 라벨은 서빙 시점에 번역한다 (원문=키 — 로더 localizeAdminResource)
     await this.loader.refreshLocale();
@@ -289,9 +295,15 @@ export class PluginsController {
     }
   }
 
-  /** 특정 리소스의 전체 스키마 — 관리자가 목록/폼 화면을 생성하는 데 쓴다 */
+  /**
+   * 특정 리소스의 전체 스키마 — 관리 화면이 목록/폼을 생성하는 데 쓴다.
+   *
+   * 내비게이션과 같은 이유로 **운영자도 읽는다**(위 adminNav 참고). 이것만
+   * 닫혀 있으면 사이드바에서 찾아 들어간 화면이 "오류" 로 뜬다 — 정작 그
+   * 뒤의 데이터 라우트는 열려 있는데.
+   */
   @Get("admin/resources/:plugin/:name")
-  @UseGuards(AdminGuard)
+  @UseGuards(ManagerGuard)
   async adminResource(@Param("plugin") plugin: string, @Param("name") name: string) {
     const found = this.loader.adminResources.find((r) => r.plugin === plugin && r.name === name);
     if (!found) throw new NotFoundException(`알 수 없는 관리 화면입니다: ${plugin}/${name}`);

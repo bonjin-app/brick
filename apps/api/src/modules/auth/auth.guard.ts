@@ -41,27 +41,42 @@ export class AuthGuard implements CanActivate {
 export class AdminGuard extends AuthGuard {
   constructor(
     auth: AuthService,
-    @Inject(DB) private readonly db: BrickDb,
+    @Inject(DB) protected readonly db: BrickDb,
   ) {
     super(auth);
+  }
+
+  /**
+   * 이 가드가 통과시키는 역할.
+   *
+   * `ManagerGuard` 가 낮춘다 — 2단계 인증 강제와 IP 제한은 **그대로 적용된다**.
+   * 운영자도 관리 화면을 쓰는 사람이고, 강제 설정의 이름도 "관리자·운영자" 다.
+   */
+  protected allows(role: string | undefined): boolean {
+    return role === "admin";
+  }
+  protected denyMessage(): string {
+    return "관리자만 할 수 있는 작업입니다.";
   }
 
   override async canActivate(ctx: ExecutionContext): Promise<boolean> {
     await super.canActivate(ctx);
     const req = ctx.switchToHttp().getRequest<FastifyRequest & { user?: { id: string; role: string } }>();
-    if (req.user?.role !== "admin") throw new ForbiddenException("관리자만 할 수 있는 작업입니다.");
+    const staff = req.user;
+    // AuthGuard 가 이미 세션을 확인했다 — 여기서는 타입만 좁힌다
+    if (!staff || !this.allows(staff.role)) throw new ForbiddenException(this.denyMessage());
 
     const { rows } = await this.db.execute(sql`
       SELECT
         (SELECT value FROM site_settings WHERE key = 'security.require_2fa_for_staff') AS required,
         (SELECT value FROM site_settings WHERE key = 'security.admin_ip_allowlist') AS ip_allowlist,
         EXISTS (SELECT 1 FROM user_totp
-                WHERE user_id = ${req.user.id}::uuid AND is_enabled = true) AS has_totp
+                WHERE user_id = ${staff.id}::uuid AND is_enabled = true) AS has_totp
     `);
     const required = rows[0]?.required === true || rows[0]?.required === "true";
     if (required && rows[0]?.has_totp !== true) {
       throw new ForbiddenException(
-        "이 사이트는 관리자에게 2단계 인증을 요구합니다. 계정 보안 설정에서 먼저 등록해주세요.",
+        "이 사이트는 관리자·운영자에게 2단계 인증을 요구합니다. 계정 보안 설정에서 먼저 등록해주세요.",
       );
     }
 
@@ -76,5 +91,26 @@ export class AdminGuard extends AuthGuard {
       }
     }
     return true;
+  }
+}
+
+/**
+ * 관리자 **또는 운영자**.
+ *
+ * 플러그인 관리 라우트는 디스패처가 manager 까지 통과시킨다(plugins.controller).
+ * 그런데 그 화면들의 **목록**(admin/nav)만 admin 으로 닫혀 있어서, 운영자는
+ * 자기가 쓸 수 있는 화면을 사이드바에서 찾을 수 없었다 — 권한은 있는데 길이
+ * 없으면 역할이 없는 것과 같다.
+ */
+@Injectable()
+export class ManagerGuard extends AdminGuard {
+  constructor(auth: AuthService, @Inject(DB) db: BrickDb) {
+    super(auth, db);
+  }
+  protected override allows(role: string | undefined): boolean {
+    return role === "admin" || role === "manager";
+  }
+  protected override denyMessage(): string {
+    return "관리자·운영자만 할 수 있는 작업입니다.";
   }
 }

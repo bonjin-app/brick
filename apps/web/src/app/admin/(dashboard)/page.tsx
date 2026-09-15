@@ -51,6 +51,20 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState({ plugins: 0, activePlugins: 0, themes: 0, activeTheme: "-" });
   const [recent, setRecent] = useState<AuditRow[] | null>(null);
   const [ver, setVer] = useState<VersionInfo | null>(null);
+  /*
+   * 역할.
+   *
+   * 이 화면의 카드·빠른 작업은 **전부 관리자 전용 API** 를 읽는다. 운영자에게는
+   * "⚠ 불러오지 못했습니다" 와 누를 수 없는 링크만 남았다 — 자기가 쓸 수 있는
+   * 화면은 왼쪽에 있는데 이 화면이 그것을 가리지도 않았다.
+   */
+  const [role, setRole] = useState<string | null>(null);
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setRole(d?.user?.role ?? null))
+      .catch(() => setRole(null));
+  }, []);
 
   useEffect(() => {
     // 서버는 카드 실패를 격리한다 — 클라이언트도 같은 원칙: fetch 실패(401·500·
@@ -104,6 +118,17 @@ export default function AdminDashboard() {
     ["/admin/users", t("nav.users")],
     ["/admin/settings", t("nav.settings")],
   ];
+
+  if (role && role !== "admin") {
+    return (
+      <div>
+        <h1>{t("nav.dashboard")}</h1>
+        <div className="brick-card" role="status">
+          <p style={{ margin: 0 }}>{t("dash.managerNotice")}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>

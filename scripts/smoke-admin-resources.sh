@@ -382,6 +382,38 @@ else
   bad "설정 경로를 찾지 못했다"
 fi
 
+echo "── 운영자(manager)가 자기가 쓸 수 있는 화면에 닿는가"
+# 플러그인 관리 라우트는 디스패처가 manager 까지 통과시킨다. 그런데 사이드바를
+# 만드는 목록(admin/nav)과 화면을 그리는 선언(admin/resources/…)만 admin 으로
+# 닫혀 있어서, 운영자는 **권한은 있는데 길이 없었다** — 사이드바가 비고, 주소를
+# 외워 들어가도 "오류" 가 떴다.
+MCK="$TMP/manager.txt"
+curl -s -X POST "$API/api/register" -H 'content-type: application/json' \
+  -d '{"email":"mgr@settings.test","password":"mgrpass1234","displayName":"김운영","agreements":{"terms":true,"privacy":true}}' >/dev/null
+curl -s -b "$CK" -X POST "$API/api/me/security/reauth" -H 'content-type: application/json' \
+  -d '{"password":"adminpass123"}' >/dev/null
+MGR_ID="$(curl -s -b "$CK" "$API/api/users" | /usr/bin/python3 -c "
+import sys, json
+for u in json.load(sys.stdin).get('items', []):
+    if u['email'] == 'mgr@settings.test': print(u['id'])")"
+curl -s -b "$CK" -X PUT "$API/api/users/$MGR_ID" -H 'content-type: application/json' -d '{"role":"manager"}' >/dev/null
+curl -s -c "$MCK" -X POST "$API/api/auth/login" -H 'content-type: application/json' \
+  -d '{"email":"mgr@settings.test","password":"mgrpass1234"}' >/dev/null
+
+check "운영자도 관리 목록을 읽는다 (사이드바가 여기서 만들어진다)" \
+  "$(code -b "$MCK" "$API/api/admin/nav")" "200"
+NAVM="$(curl -s -b "$MCK" "$API/api/admin/nav")"
+contains "그 목록에 플러그인 리소스가 있다" "$NAVM" '"name":"boards"'
+check "화면을 그리는 선언도 읽는다 (여기가 막히면 '오류' 가 뜬다)" \
+  "$(code -b "$MCK" "$API/api/admin/resources/brick-board/boards")" "200"
+check "그 뒤의 데이터도 읽는다" \
+  "$(code -b "$MCK" "$API/api/plugins/brick-board/admin/boards")" "200"
+# 열어 준 것은 플러그인 화면뿐이다 — 코어 관리는 그대로 관리자 전용이다
+check "코어 회원 목록은 여전히 막힌다" "$(code -b "$MCK" "$API/api/users")" "403"
+check "코어 설정도 막힌다" "$(code -b "$MCK" "$API/api/settings")" "403"
+check "감사 로그도 막힌다" "$(code -b "$MCK" "$API/api/audit")" "403"
+check "비로그인은 목록을 볼 수 없다" "$(code "$API/api/admin/nav")" "401"
+
 echo
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 # 실측을 남긴다(설정됐을 때만) — README 의 표가 실제와 같은지 CI 가 대조한다.

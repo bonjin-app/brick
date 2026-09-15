@@ -148,6 +148,7 @@ const KO = {
   "adminLogin.twoFactorFail": "코드가 맞지 않습니다.",
   "adminLogin.forgot": "비밀번호를 잊으셨나요?",
 
+  "dash.managerNotice": "운영자 계정입니다. 왼쪽 목록에서 관리할 항목을 고르세요 — 사이트 설정·회원·페이지는 관리자만 볼 수 있습니다.",
   "dash.activeTheme": "활성 테마",
   "dash.members": "회원",
   "dash.membersToday": "오늘 가입 {n}명",
@@ -574,6 +575,7 @@ const EN: Record<keyof typeof KO, string> = {
   "adminLogin.twoFactorFail": "That code is not correct.",
   "adminLogin.forgot": "Forgot your password?",
 
+  "dash.managerNotice": "You are signed in as a manager. Pick what to manage from the list on the left — site settings, members and pages are for admins only.",
   "dash.activeTheme": "Active theme",
   "dash.members": "Members",
   "dash.membersToday": "{n} joined today",
