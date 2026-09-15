@@ -77,6 +77,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       <NavLink href="/admin/media">{t("nav.media")}</NavLink>
       <NavLink href="/admin/menus">{t("nav.menus")}</NavLink>
       <NavLink href="/admin/users">{t("nav.users")}</NavLink>
+      <NavLink href="/admin/agreements">{t("nav.agreements")}</NavLink>
 
       {(nav.resources.length > 0 || nav.menus.length > 0) && (
         <>
