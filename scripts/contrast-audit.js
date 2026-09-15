@@ -61,7 +61,30 @@
       return acc ? over(acc, root).slice(0, 3) : root.slice(0, 3);
     };
 
+    /**
+     * 그림 위의 글자는 **재지 않는다.**
+     *
+     * 이 도구는 배경 **색**만 합성한다. 사진이나 그라디언트가 깔려 있으면 그 밑의
+     * 색을 재게 되고, 결과는 실제와 아무 상관이 없다 — 기본 홈의 히어로가 그랬다:
+     * 어두운 그라디언트 위의 흰 글자를 "1.1" 로 보고했다(실제로는 잘 읽힌다).
+     * 틀린 숫자는 없는 것보다 나쁘다. 읽는 사람이 나머지 보고까지 믿지 않게 된다.
+     *
+     * 대신 **몇 개를 건너뛰었는지 세어** 돌려준다 — 조용히 빠지면 그것도 거짓말이다.
+     */
+    const overImage = (el) => {
+      let n = el;
+      while (n && n !== doc.documentElement) {
+        const cs = view.getComputedStyle(n);
+        if (cs.backgroundImage && cs.backgroundImage !== "none") return true;
+        const c = parse(cs.backgroundColor);
+        if (c && (c[3] === undefined ? 1 : c[3]) >= 0.999) return false;
+        n = n.parentElement;
+      }
+      return false;
+    };
+
     const out = [], seen = new Set();
+    let skipped = 0;
     for (const el of doc.querySelectorAll("body *")) {
       // 자기 텍스트 노드를 가진 요소만 — 부모까지 세면 같은 글자를 여러 번 센다
       const txt = [...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent.trim()).join("");
@@ -72,6 +95,7 @@
       if (!box.width || !box.height) continue;
       const fg = parse(s.color);
       if (!fg) continue;
+      if (overImage(el)) { skipped++; continue; }
       const bg = bgOf(el);
       const r = ratio(over(fg, bg), bg);
       const size = parseFloat(s.fontSize), bold = Number(s.fontWeight) >= 700;
@@ -83,6 +107,7 @@
         out.push({ 위치: String(el.className).slice(0, 34) || el.tagName, 글자: txt.slice(0, 24), 대비: +r.toFixed(2), 필요: need });
       }
     }
+    out.skipped = skipped;
     return out;
   };
 
@@ -93,6 +118,7 @@
     frame.style.cssText = "position:fixed;left:-9999px;top:0;width:1280px;height:900px";
     document.body.appendChild(frame);
     const problems = {};
+    let skippedTotal = 0;
     try {
       for (const theme of themes) {
         for (const path of paths) {
@@ -102,6 +128,7 @@
           // 블록의 인라인 스크립트가 목록을 채울 시간을 준다
           await new Promise((r) => setTimeout(r, 300));
           const v = auditDoc(doc);
+          skippedTotal += v.skipped ?? 0;
           if (v.length) problems[`${theme} ${path}`] = v;
         }
       }
@@ -109,13 +136,16 @@
       frame.remove();
     }
     const count = Object.values(problems).reduce((n, v) => n + v.length, 0);
-    console.log(`${paths.length * themes.length}개 화면 검사 — 위반 ${count}건`);
+    console.log(
+      `${paths.length * themes.length}개 화면 검사 — 위반 ${count}건` +
+        (skippedTotal ? ` (그림 위 글자 ${skippedTotal}개는 재지 못해 건너뜀)` : ""),
+    );
     for (const [where, list] of Object.entries(problems)) {
       console.group(where);
       console.table(list);
       console.groupEnd();
     }
-    return { checked: paths.length * themes.length, count, problems };
+    return { checked: paths.length * themes.length, count, problems, skipped: skippedTotal };
   };
 
   console.log("brickContrastAudit() 준비됨 — 예: await brickContrastAudit(['/', '/board/free'])");
