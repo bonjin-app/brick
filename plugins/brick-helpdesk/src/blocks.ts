@@ -135,7 +135,8 @@ const FAQ_CSS = `
 .brick-faq-item summary::marker{color:var(--color-primary,#d0402c)}
 .brick-faq-answer{padding:0 4px 16px;line-height:1.8;color:var(--color-text-soft, #45454f)}
 .brick-faq-rate{display:flex;align-items:center;gap:8px;padding:0 4px 16px;font-size:13px;color:var(--color-muted, #6c6c7a)}
-.brick-faq-rate button{padding:4px 12px;border:1px solid var(--color-line, #e4e4ea);border-radius:14px;background:var(--color-bg, #ffffff);font-size:13px;cursor:pointer}
+/* 40px — 폰에서 누르는 자리다. 26px 이었고 화면 감사가 "작은 터치 38x26" 으로 잡았다 */
+.brick-faq-rate button{min-height:40px;padding:4px 14px;border:1px solid var(--color-line, #e4e4ea);border-radius:20px;background:var(--color-bg, #ffffff);font-size:13px;cursor:pointer}
 .brick-faq-thanks{color:var(--color-primary,#d0402c);font-style:normal}
 </style>`;
 

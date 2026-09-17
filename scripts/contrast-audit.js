@@ -113,18 +113,45 @@
 
   const DEFAULT_PATHS = ["/", "/about", "/search?q=a", "/no-such-page"];
 
+  /*
+   * 화면 모드는 **불러오기 전에** 정한다.
+   *
+   * 예전에는 iframe 을 띄운 뒤 `documentElement.dataset.theme` 를 바꿨다.
+   * 그러면 배경색은 새 테마로 바뀌는데 **글자색은 이전 테마 값에 머문다** —
+   * 변수(--color-text-soft)는 분명히 바뀌었는데 var() 로 물린 color 가 다시
+   * 계산되지 않는다(크로미움에서 재현했다: 변수 #4a4f59, 배경 #101216,
+   * 그런데 글자색은 rgb(74,79,89) 그대로). 밝은 글자가 밝은 배경 위에 있는
+   * 것처럼 읽혀 **헤더·내비게이션 전체가 1.1~1.9 로 보고됐다** — 한 번에
+   * 59건. 틀린 숫자는 없는 것보다 나쁘다: 진짜 두어 건이 그 밑에 묻힌다.
+   *
+   * 사이트는 첫 페인트 전에 localStorage("brick-theme")를 읽어 테마를 정한다
+   * (레이아웃의 THEME_BOOT). iframe 은 같은 출처이므로 **불러오기 전에** 그
+   * 값을 넣어 두면 페이지가 처음부터 그 테마로 그려진다. 끝나면 되돌린다.
+   */
+  const THEME_KEY = "brick-theme";
+
   window.brickContrastAudit = async (paths = DEFAULT_PATHS, themes = ["light", "dark"]) => {
     const frame = document.createElement("iframe");
     frame.style.cssText = "position:fixed;left:-9999px;top:0;width:1280px;height:900px";
     document.body.appendChild(frame);
     const problems = {};
     let skippedTotal = 0;
+    let saved = null;
+    try { saved = localStorage.getItem(THEME_KEY); } catch (e) { /* 저장소가 막혀 있으면 아래에서 걸린다 */ }
     try {
       for (const theme of themes) {
+        try { localStorage.setItem(THEME_KEY, theme); } catch (e) { /* 아래 확인에서 걸린다 */ }
         for (const path of paths) {
           await new Promise((res) => { frame.onload = res; frame.src = path; });
           const doc = frame.contentDocument;
-          doc.documentElement.dataset.theme = theme;
+          /*
+           * 정말 그 테마로 그려졌는지 확인한다. 조용히 다른 테마를 재면
+           * 보고서 전체가 거짓이 된다 — 그것이 이 도구가 한 번 저지른 일이다.
+           */
+          if (doc.documentElement.dataset.theme !== theme) {
+            problems[`${theme} ${path}`] = [{ 위치: "(검사 도구)", 글자: `화면 모드가 ${theme} 로 적용되지 않았습니다`, 대비: 0, 필요: 0 }];
+            continue;
+          }
           // 블록의 인라인 스크립트가 목록을 채울 시간을 준다
           await new Promise((r) => setTimeout(r, 300));
           const v = auditDoc(doc);
@@ -133,6 +160,10 @@
         }
       }
     } finally {
+      try {
+        if (saved === null) localStorage.removeItem(THEME_KEY);
+        else localStorage.setItem(THEME_KEY, saved);
+      } catch (e) { /* 되돌리지 못해도 측정은 끝났다 */ }
       frame.remove();
     }
     const count = Object.values(problems).reduce((n, v) => n + v.length, 0);
