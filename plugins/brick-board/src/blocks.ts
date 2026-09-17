@@ -2,7 +2,7 @@ import { dateScript, STACK_TABLE_CSS } from "@brick/plugin-sdk";
 import { sql } from "drizzle-orm";
 import type { PluginContext } from "@brick/plugin-sdk";
 import { effectiveReadRole, escapeHtml, hasRole, shortDate, type BoardRow, type Db } from "./types.js";
-import { BOARD_CSS, BOARD_SCRIPT } from "./client-script.js";
+import { BOARD_CSS, boardScript } from "./client-script.js";
 import { renderDetail, renderList, renderWrite, resolveView } from "./views.js";
 import { bindI18n, t } from "./i18n.js";
 
@@ -121,7 +121,7 @@ export function registerBoardBlocks(pluginCtx: PluginContext, db: Db): void {
           embedded,
         });
       }
-      return `${html}${BOARD_SCRIPT}${BOARD_CSS}`;
+      return `${html}${boardScript()}${BOARD_CSS}`;
     },
   });
 
@@ -290,7 +290,7 @@ export function registerBoardBlocks(pluginCtx: PluginContext, db: Db): void {
         WHERE read_role = 'guest' AND is_visible = true ${slugFilter}
         ORDER BY sort_order, title
       `);
-      if (!boards.length) return `<p class="brick-board-empty">표시할 게시판이 없습니다.</p>${BOARD_CSS}`;
+      if (!boards.length) return `<p class="brick-board-empty">${escapeHtml(t("list.emptyBoards"))}</p>${BOARD_CSS}`;
 
       // 적어준 순서를 지킨다 — 관리자가 notice 를 먼저 적었으면 먼저 나와야 한다
       const ordered = wanted.length
@@ -337,7 +337,7 @@ export function registerBoardBlocks(pluginCtx: PluginContext, db: Db): void {
       </li>`,
                 )
                 .join("\n")
-            : `      <li class="brick-board-empty">게시물이 없습니다.</li>`;
+            : `      <li class="brick-board-empty">${escapeHtml(t("list.emptyPosts"))}</li>`;
           return `  <section class="brick-latest-card">
     <h3><a href="${base}">${escapeHtml(b.title)}</a>${
       props.showMore !== false ? `<a class="brick-more" href="${base}">더보기</a>` : ""

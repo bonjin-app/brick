@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { CAPTCHA_WIDGET_CSS, CAPTCHA_WIDGET_JS, STACK_TABLE_CSS, captchaFieldHtml, type PluginContext } from "@brick/plugin-sdk";
 import { escapeHtml, type Db, type HelpSettings } from "./types.js";
 import { listCategories, listFaqs } from "./faq.js";
+import { bindI18n, t } from "./i18n.js";
 
 /**
  * 스토어프론트 블록.
@@ -15,6 +16,7 @@ export function registerHelpdeskBlocks(
   db: Db,
   settings: () => Promise<HelpSettings>,
 ): void {
+  bindI18n(ctx);
   // ── FAQ ───────────────────────────────────────────
   ctx.registerBlock({
     name: "faq",
@@ -41,7 +43,7 @@ export function registerHelpdeskBlocks(
       const tabs =
         props.showTabs !== false && cats.length > 1
           ? `<nav class="brick-faq-tabs">
-    <a href="?"${!category ? ' class="is-on"' : ""}>전체</a>
+    <a href="?"${!category ? ' class="is-on"' : ""}>${escapeHtml(t("faq.all"))}</a>
     ${cats
       .map(
         (c) =>
@@ -57,13 +59,13 @@ export function registerHelpdeskBlocks(
         props.showSearch !== false
           ? `<form class="brick-faq-search" method="get">
     ${category ? `<input type="hidden" name="category" value="${escapeHtml(category)}" />` : ""}
-    <input type="search" name="q" value="${escapeHtml(q)}" placeholder="궁금한 내용을 검색하세요" />
-    <button type="submit">검색</button>
+    <input type="search" name="q" value="${escapeHtml(q)}" placeholder="${escapeHtml(t("faq.searchPlaceholder"))}" aria-label="${escapeHtml(t("faq.searchPlaceholder"))}" />
+    <button type="submit">${escapeHtml(t("faq.searchBtn"))}</button>
   </form>`
           : "";
 
       if (!faqs.length) {
-        const msg = q ? `"${escapeHtml(q)}"에 대한 결과가 없습니다.` : "등록된 FAQ가 없습니다.";
+        const msg = escapeHtml(q ? t("faq.noResult", { q }) : t("faq.empty"));
         return `<div class="brick-faq">${tabs}${search}<p class="brick-faq-empty">${msg}</p></div>${FAQ_CSS}`;
       }
 
@@ -75,10 +77,10 @@ export function registerHelpdeskBlocks(
       <summary>${escapeHtml(f.question)}</summary>
       <div class="brick-faq-answer">${String(f.answer ?? "")}</div>
       <div class="brick-faq-rate">
-        <span>도움이 되었나요?</span>
-        <button type="button" data-rate="1">예</button>
-        <button type="button" data-rate="0">아니오</button>
-        <em class="brick-faq-thanks" hidden>의견 감사합니다.</em>
+        <span>${escapeHtml(t("faq.helpful"))}</span>
+        <button type="button" data-rate="1">${escapeHtml(t("faq.yes"))}</button>
+        <button type="button" data-rate="0">${escapeHtml(t("faq.no"))}</button>
+        <em class="brick-faq-thanks" hidden>${escapeHtml(t("faq.thanks"))}</em>
       </div>
     </details>`,
         )
@@ -109,9 +111,9 @@ ${items}
       // 껍데기만. 내 문의는 캐시에 담길 수 없다. 비로그인 여부는 서버가 알려 준다 —
       // 손님 브라우저가 401 을 받으러 갔다 오지 않게(콘솔 오류·한 번의 헛요청).
       return `<section class="brick-help" data-allow-guest="${s.allowGuest ? "1" : "0"}" data-guest="${blockCtx?.user ? "0" : "1"}">
-  <h2 class="brick-help-title">${escapeHtml(props.title ?? "1:1 문의")}</h2>
-  <div class="brick-help-body"><p class="brick-faq-empty">불러오는 중…</p></div>
-</section>${FAQ_CSS}${HELP_CSS}${HELP_SCRIPT}`;
+  <h2 class="brick-help-title">${escapeHtml(props.title ?? t("help.title"))}</h2>
+  <div class="brick-help-body"><p class="brick-faq-empty">${escapeHtml(t("help.loading"))}</p></div>
+</section>${FAQ_CSS}${HELP_CSS}${helpScript()}`;
     },
   });
 }
@@ -204,13 +206,14 @@ const FAQ_SCRIPT = `
 </script>`;
 
 /* ── 1:1 문의 클라이언트 ───────────────────────────── */
-const GUEST_CAPTCHA_HTML = captchaFieldHtml({
-  label: "자동입력 방지",
-  reload: "새로고침",
-  placeholder: "보이는 문자 입력",
+/* 함수다 — 모듈 최상단에서 굳으면 bindI18n 보다 먼저 평가된다 */
+const guestCaptchaHtml = () => captchaFieldHtml({
+  label: t("captcha.label"),
+  reload: t("captcha.reload"),
+  placeholder: t("captcha.placeholder"),
 });
 
-const HELP_SCRIPT = `
+const helpScript = () => `
 <script>
 ${CAPTCHA_WIDGET_JS}
 (function(){
@@ -222,12 +225,12 @@ ${CAPTCHA_WIDGET_JS}
   var allowGuest = root.dataset.allowGuest === '1';
   // 비회원 문의는 캡차를 요구한다 — 문의 한 건마다 운영자에게 메일이 나간다
   var isGuest = root.dataset.guest === '1';
-  var config = { categories: ['일반'] };
+  var config = { categories: [${JSON.stringify(t("help.defaultCategory"))}] };
 
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
   function day(s){ return String(s||'').slice(0,10); }
-  function label(s){ return s === 'answered' ? '답변완료' : s === 'closed' ? '종료' : '접수'; }
+  function label(s){ return s === 'answered' ? ${JSON.stringify(t("help.statusAnswered"))} : s === 'closed' ? ${JSON.stringify(t("help.statusClosed"))} : ${JSON.stringify(t("help.statusOpen"))}; }
 
   function json(url, opts){
     return fetch(url, opts).then(function(r){
@@ -249,16 +252,16 @@ ${CAPTCHA_WIDGET_JS}
     var next = encodeURIComponent(location.pathname + location.search);
     body.innerHTML = '<div class="brick-empty brick-help-guest">' +
       (allowGuest
-        ? '<form class="brick-help-lookup"><p>문의번호와 조회용 비밀번호로 내 문의를 볼 수 있습니다.</p>' +
-          '<label>문의번호<input type="text" data-look-no required placeholder="H20260101-00001" /></label>' +
-          '<label>조회용 비밀번호<input type="password" data-look-pw required /></label>' +
-          '<button class="brick-btn brick-btn-primary" type="submit">조회</button>' +
+        ? '<form class="brick-help-lookup"><p>' + ${JSON.stringify(t("help.lookupIntro"))} + '</p>' +
+          '<label>' + ${JSON.stringify(t("help.colNo"))} + '<input type="text" data-look-no required placeholder="H20260101-00001" /></label>' +
+          '<label>' + ${JSON.stringify(t("help.lookupPw"))} + '<input type="password" data-look-pw required /></label>' +
+          '<button class="brick-btn brick-btn-primary" type="submit">' + ${JSON.stringify(t("help.lookupBtn"))} + '</button>' +
           '<span class="brick-help-msg" role="alert" data-look-msg></span></form>'
         : '') +
-      '<p>로그인하면 내 문의 내역을 모두 볼 수 있습니다.' +
-      (allowGuest ? ' 로그인 없이도 문의를 남길 수 있습니다.' : '') + '</p>' +
-      '<div class="brick-actions-row"><a class="brick-btn brick-btn-primary" href="/login?next=' + next + '">로그인</a>' +
-      (allowGuest ? '<button type="button" class="brick-btn" data-new>문의하기</button>' : '') + '</div></div>';
+      '<p>' + ${JSON.stringify(t("help.loginIntro"))} +
+      (allowGuest ? ' ' + ${JSON.stringify(t("help.guestAlso"))} : '') + '</p>' +
+      '<div class="brick-actions-row"><a class="brick-btn brick-btn-primary" href="/login?next=' + next + '">' + ${JSON.stringify(t("help.login"))} + '</a>' +
+      (allowGuest ? '<button type="button" class="brick-btn" data-new>' + ${JSON.stringify(t("help.new"))} + '</button>' : '') + '</div></div>';
     bindNew();
 
     var form = body.querySelector('.brick-help-lookup');
@@ -272,7 +275,7 @@ ${CAPTCHA_WIDGET_JS}
       json(API + '/tickets/by-no/' + encodeURIComponent(no) + '?pw=' + encodeURIComponent(pw))
         .then(function(res){
           // 있는 번호인지 알려주지 않는다 — 번호는 순차적이다
-          if (!res.ok) { msg.textContent = res.d.message || '문의번호 또는 비밀번호가 맞지 않습니다.'; return; }
+          if (!res.ok) { msg.textContent = res.d.message || ${JSON.stringify(t("help.lookupFail"))}; return; }
           guestPw = pw;
           showDetail(res.d.ticket.id);
         });
@@ -283,22 +286,28 @@ ${CAPTCHA_WIDGET_JS}
     if (root.dataset.guest === '1') { guestView(); return; }
     json(API + '/my/tickets').then(function(res){
       if (res.status === 401) { guestView(); return; }
-      if (!res.ok) { body.innerHTML = '<p class="brick-faq-empty">문의 내역을 불러올 수 없습니다.</p>'; return; }
+      if (!res.ok) { body.innerHTML = '<p class="brick-faq-empty">' + ${JSON.stringify(t("help.loadFail"))} + '</p>'; return; }
 
+      /* 칸 이름은 머리글과 접힌 카드의 제목(data-label)에 같이 쓴다 */
+      var C_NO = ${JSON.stringify(t("help.colNo"))};
+      var C_TITLE = ${JSON.stringify(t("help.colTitle"))};
+      var C_CAT = ${JSON.stringify(t("help.colCategory"))};
+      var C_STATUS = ${JSON.stringify(t("help.colStatus"))};
+      var C_DATE = ${JSON.stringify(t("help.colDate"))};
       var rows = (res.d.items || []).map(function(t){
-        return '<tr><td data-label="문의번호">' + esc(t.ticket_no) + '</td>' +
-          '<td data-label="제목"><a href="#" data-open="' + esc(t.id) + '">' + esc(t.title) + '</a></td>' +
-          '<td data-label="분류">' + esc(t.category) + '</td>' +
-          '<td data-label="상태"><span class="brick-badge ' + esc(t.status) + '">' + label(t.status) + '</span></td>' +
-          '<td data-label="접수일">' + day(t.created_at) + '</td></tr>';
+        return '<tr><td data-label="' + C_NO + '">' + esc(t.ticket_no) + '</td>' +
+          '<td data-label="' + C_TITLE + '"><a href="#" data-open="' + esc(t.id) + '">' + esc(t.title) + '</a></td>' +
+          '<td data-label="' + C_CAT + '">' + esc(t.category) + '</td>' +
+          '<td data-label="' + C_STATUS + '"><span class="brick-badge ' + esc(t.status) + '">' + label(t.status) + '</span></td>' +
+          '<td data-label="' + C_DATE + '">' + day(t.created_at) + '</td></tr>';
       }).join('');
 
       body.innerHTML =
-        '<div class="brick-help-toolbar"><span>내 문의 ' + Number(res.d.total || 0) + '건</span>' +
-        '<button data-new>문의하기</button></div>' +
+        '<div class="brick-help-toolbar"><span>' + ${JSON.stringify(t("help.myCount"))}.replace('{n}', Number(res.d.total || 0)) + '</span>' +
+        '<button data-new>' + ${JSON.stringify(t("help.new"))} + '</button></div>' +
         (rows
-          ? '<table class="brick-stack-table"><thead><tr><th>문의번호</th><th>제목</th><th>분류</th><th>상태</th><th>접수일</th></tr></thead><tbody>' + rows + '</tbody></table>'
-          : '<p class="brick-faq-empty">문의 내역이 없습니다.</p>');
+          ? '<table class="brick-stack-table"><thead><tr><th>' + C_NO + '</th><th>' + C_TITLE + '</th><th>' + C_CAT + '</th><th>' + C_STATUS + '</th><th>' + C_DATE + '</th></tr></thead><tbody>' + rows + '</tbody></table>'
+          : '<p class="brick-faq-empty">' + ${JSON.stringify(t("help.empty"))} + '</p>');
 
       body.querySelectorAll('[data-open]').forEach(function(a){
         a.addEventListener('click', function(e){ e.preventDefault(); showDetail(a.dataset.open); });
@@ -318,18 +327,18 @@ ${CAPTCHA_WIDGET_JS}
     }).join('');
     body.innerHTML =
       '<div class="brick-help-form">' +
-      '<label>분류<select data-category>' + opts + '</select></label>' +
-      '<label>제목<input type="text" data-title maxlength="300" /></label>' +
-      '<label>내용<textarea data-content placeholder="문의 내용을 자세히 적어주세요."></textarea></label>' +
+      '<label>' + ${JSON.stringify(t("help.colCategory"))} + '<select data-category>' + opts + '</select></label>' +
+      '<label>' + ${JSON.stringify(t("help.colTitle"))} + '<input type="text" data-title maxlength="300" /></label>' +
+      '<label>' + ${JSON.stringify(t("help.fieldContent"))} + '<textarea data-content placeholder="' + ${JSON.stringify(t("help.contentPlaceholder"))} + '"></textarea></label>' +
       (allowGuest
-        ? '<label>이름<input type="text" data-guest-name /></label>' +
-          '<label>이메일<input type="email" data-guest-email placeholder="답변을 받을 주소" /></label>' +
-          '<label>조회용 비밀번호<input type="password" data-guest-pw placeholder="4자 이상" /></label>'
+        ? '<label>' + ${JSON.stringify(t("help.fieldName"))} + '<input type="text" data-guest-name /></label>' +
+          '<label>' + ${JSON.stringify(t("help.fieldEmail"))} + '<input type="email" data-guest-email placeholder="' + ${JSON.stringify(t("help.emailPlaceholder"))} + '" /></label>' +
+          '<label>' + ${JSON.stringify(t("help.lookupPw"))} + '<input type="password" data-guest-pw placeholder="' + ${JSON.stringify(t("help.pwPlaceholder"))} + '" /></label>'
         : '') +
-      (isGuest ? ${JSON.stringify(GUEST_CAPTCHA_HTML)} : '') +
+      (isGuest ? ${JSON.stringify(guestCaptchaHtml())} : '') +
       '<div class="brick-help-toolbar"><span class="brick-help-msg" data-msg></span>' +
-      '<span><button data-cancel style="background:var(--color-line, #e4e4ea);color:var(--color-text, #17171c);margin-right:8px">취소</button>' +
-      '<button data-submit>등록</button></span></div></div>';
+      '<span><button data-cancel style="background:var(--color-line, #e4e4ea);color:var(--color-text, #17171c);margin-right:8px">' + ${JSON.stringify(t("common.cancel"))} + '</button>' +
+      '<button data-submit>' + ${JSON.stringify(t("common.submit"))} + '</button></span></div></div>';
 
     window.brickCaptcha.attach(body);
     body.querySelector('[data-cancel]').addEventListener('click', showList);
@@ -353,8 +362,8 @@ ${CAPTCHA_WIDGET_JS}
         method: 'POST', headers: {'content-type':'application/json'}, body: JSON.stringify(payload)
       }).then(function(res){
         // 토큰은 1회용이므로 실패하면 새 문제를 받아야 한다
-        if (!res.ok) { cap.reload(); msg.textContent = res.d.message || '등록에 실패했습니다.'; return; }
-        alert('문의가 접수되었습니다. 문의번호: ' + res.d.ticketNo);
+        if (!res.ok) { cap.reload(); msg.textContent = res.d.message || ${JSON.stringify(t("help.submitFail"))}; return; }
+        alert(${JSON.stringify(t("help.created"))}.replace('{no}', res.d.ticketNo));
         showList();
       });
     });
@@ -365,26 +374,26 @@ ${CAPTCHA_WIDGET_JS}
 
   function showDetail(id){
     json(API + '/tickets/' + id + (guestPw ? '?pw=' + encodeURIComponent(guestPw) : '')).then(function(res){
-      if (!res.ok) { body.innerHTML = '<p class="brick-faq-empty">문의를 찾을 수 없습니다.</p>'; return; }
+      if (!res.ok) { body.innerHTML = '<p class="brick-faq-empty">' + ${JSON.stringify(t("help.notFound"))} + '</p>'; return; }
       var t = res.d.ticket;
       var thread = (res.d.replies || []).map(function(r){
         return '<div class="brick-thread-item' + (r.is_staff ? ' is-staff' : '') + '">' +
-          '<b>' + esc(r.author_name) + (r.is_staff ? ' (운영자)' : '') + ' · ' + day(r.created_at) + '</b>' +
+          '<b>' + esc(r.author_name) + (r.is_staff ? ' (' + ${JSON.stringify(t("help.staff"))} + ')' : '') + ' · ' + day(r.created_at) + '</b>' +
           esc(r.content) + '</div>';
       }).join('');
 
       body.innerHTML =
         '<div class="brick-help-toolbar"><span>' + esc(t.ticket_no) +
         ' <span class="brick-badge ' + esc(t.status) + '">' + label(t.status) + '</span></span>' +
-        '<button data-back style="background:var(--color-line, #e4e4ea);color:var(--color-text, #17171c)">목록</button></div>' +
+        '<button data-back style="background:var(--color-line, #e4e4ea);color:var(--color-text, #17171c)">' + ${JSON.stringify(t("help.back"))} + '</button></div>' +
         '<h3 style="margin:0 0 10px">' + esc(t.title) + '</h3>' +
         '<div class="brick-thread"><div class="brick-thread-item"><b>' + esc(t.author_name) +
         ' · ' + day(t.created_at) + '</b>' + esc(t.content) + '</div>' + thread + '</div>' +
         (t.status === 'closed' || !res.d.canReply ? ''
           : '<div class="brick-help-form" style="margin-top:20px">' +
-            '<label>추가 문의<textarea data-reply></textarea></label>' +
+            '<label>' + ${JSON.stringify(t("help.reply"))} + '<textarea data-reply></textarea></label>' +
             '<div class="brick-help-toolbar"><span class="brick-help-msg" data-msg></span>' +
-            '<button data-send>등록</button></div></div>');
+            '<button data-send>' + ${JSON.stringify(t("common.submit"))} + '</button></div></div>');
 
       body.querySelector('[data-back]').addEventListener('click', function(){ showList(); });
       var send = body.querySelector('[data-send]');
@@ -398,7 +407,7 @@ ${CAPTCHA_WIDGET_JS}
             pw: guestPw || undefined,
           })
         }).then(function(res2){
-          if (!res2.ok) { msg.textContent = res2.d.message || '등록에 실패했습니다.'; return; }
+          if (!res2.ok) { msg.textContent = res2.d.message || ${JSON.stringify(t("help.submitFail"))}; return; }
           showDetail(id);
         });
       });

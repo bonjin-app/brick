@@ -13,8 +13,13 @@
  * 편의일 뿐이고 신뢰하지 않는다.
  */
 import { CAPTCHA_WIDGET_JS, CAPTCHA_WIDGET_CSS } from "@brick/plugin-sdk";
+import { t } from "./i18n.js";
 
-export const BOARD_SCRIPT = `
+/*
+ * 함수다 — 모듈 최상단의 템플릿 리터럴은 import 시점에 굳어서 bindI18n 보다
+ * 먼저 평가된다. 그러면 영어 사이트에서도 이 스크립트의 문구만 한국어로 남는다.
+ */
+export const boardScript = () => `
 <script>
 ${CAPTCHA_WIDGET_JS}
 (function () {
@@ -74,10 +79,10 @@ ${CAPTCHA_WIDGET_JS}
       } else if (btn.dataset.block) {
         apply(function () { document.execCommand('formatBlock', false, btn.dataset.block); });
       } else if (btn.hasAttribute('data-link')) {
-        var url = prompt('링크 주소를 입력하세요 (http:// 또는 https://)');
+        var url = prompt(${JSON.stringify(t("editor.linkPrompt"))});
         if (!url) return;
         if (!/^https?:\\/\\//i.test(url) && url[0] !== '/') {
-          alert('http:// 또는 https:// 로 시작하는 주소를 입력하세요.');
+          alert(${JSON.stringify(t("editor.linkInvalid"))});
           return;
         }
         apply(function () { document.execCommand('createLink', false, url); });
@@ -98,12 +103,12 @@ ${CAPTCHA_WIDGET_JS}
         var slug = root ? root.dataset.board : '';
         var status = root ? root.querySelector('.brick-write-msg') : null;
         var fd = new FormData(); fd.append('files', file);
-        msg(status, '이미지 업로드 중…');
+        msg(status, ${JSON.stringify(t("editor.imageUploading"))});
         fetch(API + '/boards/' + encodeURIComponent(slug) + '/images', { method: 'POST', body: fd })
           .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, d: d }; }); })
           .then(function (r) {
             imagePicker.value = '';
-            if (!r.ok) { msg(status, r.d.message || '이미지를 올리지 못했습니다.', true); return; }
+            if (!r.ok) { msg(status, r.d.message || ${JSON.stringify(t("editor.imageFail"))}, true); return; }
             msg(status, '');
             // 치수를 함께 넣어 글이 그려질 때 자리가 밀리지 않게(CLS) 하고, 목록용 썸네일 주소를
             // data-thumb 로 남겨 갤러리 목록이 원본 대신 그것을 쓰게 한다 (서버 새니타이저가 허용하는 속성만)
@@ -186,7 +191,7 @@ ${CAPTCHA_WIDGET_JS}
       var eb = writeRoot.querySelector('.brick-editor-body');
       var content = eb ? eb.innerHTML : '';
       // 사진만 넣은 글도 내용이 있는 글이다 — 서버(isBlankContent)와 같은 규칙
-      if (!eb || (!eb.textContent.trim() && !eb.querySelector('img'))) { msg(status, '내용을 입력해주세요.', true); return; }
+      if (!eb || (!eb.textContent.trim() && !eb.querySelector('img'))) { msg(status, ${JSON.stringify(t("write.contentRequired"))}, true); return; }
 
       var fd = new FormData(form);
       var cap = captchaOf(form);
@@ -204,12 +209,12 @@ ${CAPTCHA_WIDGET_JS}
       Object.keys(cap.fields).forEach(function (k) { payload[k] = cap.fields[k]; });
 
       submitBtn.disabled = true;
-      msg(status, '저장 중...');
+      msg(status, ${JSON.stringify(t("write.saving"))});
 
       var url = editId ? API + '/posts/' + editId : API + '/boards/' + encodeURIComponent(slug) + '/posts';
       post(url, payload, editId ? 'PUT' : 'POST').then(function (res) {
         if (!res.ok) {
-          msg(status, res.data.message || '저장에 실패했습니다.', true);
+          msg(status, res.data.message || ${JSON.stringify(t("write.saveFail"))}, true);
           submitBtn.disabled = false;
           // 캡차 토큰은 1회용이므로 실패 후에는 새 문제를 받아야 한다
           cap.reload();
@@ -222,7 +227,7 @@ ${CAPTCHA_WIDGET_JS}
         if (!files) { location.href = '/board/' + encodeURIComponent(slug) + '/' + postId; return; }
 
         // 첨부는 글 저장 후 별도 업로드한다 (multipart와 JSON을 섞지 않는다)
-        msg(status, '파일 업로드 중...');
+        msg(status, ${JSON.stringify(t("write.fileUploading"))});
         var upload = new FormData();
         for (var i = 0; i < files.length; i++) upload.append('files', files[i]);
         var pw = fd.get('guestPassword');
@@ -232,7 +237,7 @@ ${CAPTCHA_WIDGET_JS}
           .then(function (r) {
             if (!r.ok) {
               // 글은 저장되었으므로 상세로 보내고 업로드 실패만 알린다
-              alert('글은 저장되었지만 파일 업로드에 실패했습니다: ' + (r.d.message || ''));
+              alert(${JSON.stringify(t("write.fileFail"))} + (r.d.message || ''));
             }
             location.href = '/board/' + encodeURIComponent(slug) + '/' + postId;
           });
@@ -253,7 +258,7 @@ ${CAPTCHA_WIDGET_JS}
     var card = document.createElement('div');
     card.className = 'brick-profile-card';
     card.setAttribute('role', 'dialog');
-    card.innerHTML = '<div class="brick-profile-loading">불러오는 중…</div>';
+    card.innerHTML = '<div class="brick-profile-loading">' + ${JSON.stringify(t("common.loading"))} + '</div>';
     btn.parentElement.appendChild(card); // .brick-author 가 position:relative 라 이 안에 있어야 이름 옆에 뜬다
     cardEl = card;
     Promise.all([
@@ -261,7 +266,7 @@ ${CAPTCHA_WIDGET_JS}
       fetch(API + '/authors/' + id + '/stats').then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; })
     ]).then(function (res) {
       var m = res[0], st = res[1];
-      if (!m) { card.innerHTML = '<div class="brick-profile-loading">회원 정보를 볼 수 없습니다.</div>'; return; }
+      if (!m) { card.innerHTML = '<div class="brick-profile-loading">' + ${JSON.stringify(t("profile.unavailable"))} + '</div>'; return; }
       var joined = m.joinedAt ? new Date(m.joinedAt) : null;
       var joinedText = joined ? joined.getFullYear() + '.' + String(joined.getMonth() + 1).padStart(2, '0') + '.' + String(joined.getDate()).padStart(2, '0') : '-';
       card.innerHTML =
@@ -272,10 +277,10 @@ ${CAPTCHA_WIDGET_JS}
           (m.roleLabel ? '<span class="brick-profile-role">' + esc(m.roleLabel) + '</span>' : '') + '</div>' +
         '</div>' +
         '<dl class="brick-profile-stats">' +
-          '<div><dt>가입</dt><dd>' + joinedText + '</dd></div>' +
-          (st ? '<div><dt>글</dt><dd>' + st.posts + '</dd></div><div><dt>댓글</dt><dd>' + st.comments + '</dd></div>' : '') +
+          '<div><dt>' + ${JSON.stringify(t("profile.joined"))} + '</dt><dd>' + joinedText + '</dd></div>' +
+          (st ? '<div><dt>' + ${JSON.stringify(t("profile.posts"))} + '</dt><dd>' + st.posts + '</dd></div><div><dt>' + ${JSON.stringify(t("profile.comments"))} + '</dt><dd>' + st.comments + '</dd></div>' : '') +
         '</dl>' +
-        '<button type="button" class="brick-profile-close" aria-label="닫기">&times;</button>';
+        '<button type="button" class="brick-profile-close" aria-label="' + ${JSON.stringify(t("common.close"))} + '">&times;</button>';
       card.querySelector('.brick-profile-close').addEventListener('click', closeCard);
     });
   });
@@ -292,7 +297,7 @@ ${CAPTCHA_WIDGET_JS}
     postRoot.querySelectorAll('[data-vote]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         post(API + '/posts/' + postId + '/vote', { value: Number(btn.dataset.vote) }).then(function (res) {
-          if (!res.ok) { alert(res.data.message || '추천에 실패했습니다.'); return; }
+          if (!res.ok) { alert(res.data.message || ${JSON.stringify(t("vote.fail"))}); return; }
           var up = postRoot.querySelector('[data-up]');
           var down = postRoot.querySelector('[data-down]');
           if (up) up.textContent = res.data.up;
@@ -308,7 +313,7 @@ ${CAPTCHA_WIDGET_JS}
         fetch(API + '/files/' + link.dataset.file)
           .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, d: d }; }); })
           .then(function (r) {
-            if (!r.ok) { alert(r.d.message || '다운로드할 수 없습니다.'); return; }
+            if (!r.ok) { alert(r.d.message || ${JSON.stringify(t("file.downloadFail"))}); return; }
             location.href = r.d.url;
           });
       });
@@ -329,9 +334,9 @@ ${CAPTCHA_WIDGET_JS}
       }
       var copyBtn = shareBar.querySelector('[data-share=copy]');
       if (copyBtn) copyBtn.addEventListener('click', function () {
-        var done = function () { var old = copyBtn.textContent; copyBtn.textContent = '복사됨'; setTimeout(function () { copyBtn.textContent = old; }, 1600); };
-        if (navigator.clipboard) navigator.clipboard.writeText(pageUrl).then(done, function () { prompt('주소를 복사하세요', pageUrl); });
-        else prompt('주소를 복사하세요', pageUrl);
+        var done = function () { var old = copyBtn.textContent; copyBtn.textContent = ${JSON.stringify(t("share.copied"))}; setTimeout(function () { copyBtn.textContent = old; }, 1600); };
+        if (navigator.clipboard) navigator.clipboard.writeText(pageUrl).then(done, function () { prompt(${JSON.stringify(t("share.copyPrompt"))}, pageUrl); });
+        else prompt(${JSON.stringify(t("share.copyPrompt"))}, pageUrl);
       });
       var x = shareBar.querySelector('[data-share=x]');
       if (x) { x.href = 'https://twitter.com/intent/tweet?url=' + encodeURIComponent(pageUrl) + '&text=' + encodeURIComponent(pageTitle); x.target = '_blank'; }
@@ -346,7 +351,7 @@ ${CAPTCHA_WIDGET_JS}
     if (scrapBtn) {
       scrapBtn.addEventListener('click', function () {
         post(API + '/posts/' + postId + '/scrap').then(function (res) {
-          if (!res.ok) { alert(res.data.message || '스크랩에 실패했습니다.'); return; }
+          if (!res.ok) { alert(res.data.message || ${JSON.stringify(t("scrap.fail"))}); return; }
           scrapBtn.classList.toggle('is-on', res.data.scrapped);
           scrapBtn.setAttribute('aria-pressed', res.data.scrapped ? 'true' : 'false');
           scrapBtn.querySelector('[data-scrap-icon]').innerHTML = res.data.scrapped ? '\u2605' : '\u2606';
@@ -359,16 +364,16 @@ ${CAPTCHA_WIDGET_JS}
     var delBtn = postRoot.querySelector('[data-delete-post]');
     if (delBtn) {
       delBtn.addEventListener('click', function () {
-        if (!confirm('이 글을 삭제할까요? 되돌릴 수 없습니다.')) return;
+        if (!confirm(${JSON.stringify(t("post.deleteConfirm"))})) return;
         var qs = '';
         // 비회원 글은 비밀번호가 필요하다
         if (!document.cookie.match(/(^|;)\\s*brick_session=/)) {
-          var pw = prompt('작성 시 입력한 비밀번호를 입력하세요');
+          var pw = prompt(${JSON.stringify(t("guest.passwordPrompt"))});
           if (!pw) return;
           qs = '?pw=' + encodeURIComponent(pw);
         }
         post(API + '/posts/' + postId + qs, null, 'DELETE').then(function (res) {
-          if (!res.ok) { alert(res.data.message || '삭제에 실패했습니다.'); return; }
+          if (!res.ok) { alert(res.data.message || ${JSON.stringify(t("common.deleteFail"))}); return; }
           location.href = '/board/' + encodeURIComponent(boardSlug);
         });
       });
@@ -407,7 +412,7 @@ ${CAPTCHA_WIDGET_JS}
 
         post(API + '/posts/' + postId + '/comments', payload).then(function (res) {
           if (!res.ok) {
-            alert(res.data.message || '댓글 등록에 실패했습니다.');
+            alert(res.data.message || ${JSON.stringify(t("comment.submitFail"))});
             cap.reload();
             return;
           }
@@ -419,15 +424,15 @@ ${CAPTCHA_WIDGET_JS}
     // 댓글 삭제
     postRoot.querySelectorAll('[data-del-comment]').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        if (!confirm('이 댓글을 삭제할까요?')) return;
+        if (!confirm(${JSON.stringify(t("comment.deleteConfirm"))})) return;
         var qs = '';
         if (!document.cookie.match(/(^|;)\\s*brick_session=/)) {
-          var pw = prompt('작성 시 입력한 비밀번호를 입력하세요');
+          var pw = prompt(${JSON.stringify(t("guest.passwordPrompt"))});
           if (!pw) return;
           qs = '?pw=' + encodeURIComponent(pw);
         }
         post(API + '/comments/' + btn.dataset.delComment + qs, null, 'DELETE').then(function (res) {
-          if (!res.ok) { alert(res.data.message || '삭제에 실패했습니다.'); return; }
+          if (!res.ok) { alert(res.data.message || ${JSON.stringify(t("common.deleteFail"))}); return; }
           location.reload();
         });
       });

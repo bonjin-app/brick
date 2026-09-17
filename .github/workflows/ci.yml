@@ -119,6 +119,9 @@ jobs:
       - name: 메일 문구가 사이트 언어를 따른다 (메일은 사이트 밖에서 혼자 읽힌다)
         run: node scripts/check-mail-i18n.mjs
 
+      - name: 손님 화면을 그리는 코드에 한국어가 박혀 있지 않다 (영어 사이트에서 튀어나온다)
+        run: node scripts/check-screen-i18n.mjs
+
       - name: 날짜 경계를 사이트 시간대로 센다 (UTC 자정은 한국에서 아침 9시다)
         run: node scripts/check-site-timezone.mjs
 

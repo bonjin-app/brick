@@ -1,3 +1,6 @@
 {
-  "dash.yesterday": "어제 {n}명"
+  "dash.yesterday": "어제 {n}명",
+  "popup.close": "닫기",
+  "popup.hideDays": "{n}일 동안 보지 않기",
+  "popup.more": "자세히 보기"
 }

@@ -3,6 +3,7 @@ import type { PluginContext } from "@brick/plugin-sdk";
 import { escapeHtml, type Db } from "./types.js";
 import { countView, livePopups } from "./popups.js";
 import { visitStats } from "./visits.js";
+import { bindI18n, t } from "./i18n.js";
 
 /**
  * 사이트 운영 블록.
@@ -17,6 +18,7 @@ import { visitStats } from "./visits.js";
  * HTML이 전달되고 화면을 깜빡이며 지워야 한다.
  */
 export function registerSiteBlocks(ctx: PluginContext, db: Db): void {
+  bindI18n(ctx);
   // ── 접속자 집계 ───────────────────────────────────
   ctx.registerBlock({
     name: "visit-counter",
@@ -93,7 +95,7 @@ export function registerSiteBlocks(ctx: PluginContext, db: Db): void {
     render: async () =>
       // 껍데기만 낸다. 어떤 팝업을 띄울지는 '다시 보지 않기' 상태를 아는
       // 브라우저가 정한다 (아래 스크립트).
-      `<div class="brick-popup-host" hidden></div>${POPUP_SCRIPT}${VISIT_CSS}`,
+      `<div class="brick-popup-host" hidden></div>${popupScript()}${VISIT_CSS}`,
   });
 }
 
@@ -143,7 +145,8 @@ const BANNER_SCRIPT = `
    '다시 보지 않기'는 localStorage에 만료 시각을 적어둔다.
    쿠키를 쓰지 않는 이유: 팝업 상태는 서버가 알 필요가 없고,
    쿠키는 모든 요청에 실려 나간다. */
-const POPUP_SCRIPT = `
+/* 함수다 — 모듈 최상단에서 굳으면 bindI18n 보다 먼저 평가된다 */
+const popupScript = () => `
 <script>
 (function(){
   var host = document.currentScript.parentNode.querySelector('.brick-popup-host');
@@ -182,18 +185,18 @@ const POPUP_SCRIPT = `
         // 제목처럼 평문으로 다루는 값은 여기서 이스케이프한다.
         var link = p.link_url
           ? '<p><a href="' + esc(p.link_url) + '" target="' + esc(p.link_target) +
-            '" rel="noopener noreferrer" data-go>자세히 보기</a></p>'
+            '" rel="noopener noreferrer" data-go>' + ${JSON.stringify(t("popup.more"))} + '</a></p>'
           : '';
         box.innerHTML =
           '<div class="brick-popup-head"><span>' + esc(p.title) + '</span>' +
-          '<button type="button" data-close aria-label="닫기">&times;</button></div>' +
+          '<button type="button" data-close aria-label="' + ${JSON.stringify(t("popup.close"))} + '">&times;</button></div>' +
           '<div class="brick-popup-body">' +
             (p.image_url ? '<img src="' + esc(p.image_url) + '" alt="" />' : '') +
             (p.content || '') + link +
           '</div>' +
           (Number(p.hide_days) > 0
             ? '<div class="brick-popup-foot"><label><input type="checkbox" data-hide /> ' +
-              Number(p.hide_days) + '일 동안 보지 않기</label></div>'
+              ${JSON.stringify(t("popup.hideDays"))}.replace('{n}', Number(p.hide_days)) + '</label></div>'
             : '');
 
         box.querySelector('[data-close]').addEventListener('click', function(){
