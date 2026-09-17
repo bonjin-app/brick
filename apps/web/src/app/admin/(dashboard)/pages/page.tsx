@@ -34,6 +34,13 @@ export default function AdminPagesPage() {
   // 연 시점의 모습 — 이것과 다르면 저장하지 않은 편집이 있다
   const [pristine, setPristine] = useState<string>("");
   const [message, setMessage] = useState("");
+  /*
+   * 성공과 실패가 **같은 자리**를 쓴다 — 그러면 색과 role 도 결과를 따라야 한다.
+   * 초록 글씨로 "저장 실패: …" 를 띄우고 있었고, role 이 없어 스크린리더에는 아무
+   * 일도 일어나지 않은 화면이었다. 문구로 판별하지 않는다 — 번역을 고치면 색이
+   * 뒤집힌다(메뉴 화면에서 겪은 일이다).
+   */
+  const [failed, setFailed] = useState(false);
   const dirty = draft !== null && JSON.stringify(draft) !== pristine;
   useUnsavedGuard(dirty);
   /*
@@ -44,6 +51,7 @@ export default function AdminPagesPage() {
     if (dirty && !confirm(t("common.discardChanges"))) return;
     setDraft(null);
     setMessage("");
+    setFailed(false);
   }
 
   const reload = useCallback(() => {
@@ -69,6 +77,7 @@ export default function AdminPagesPage() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(draft),
     });
+    setFailed(!res.ok);
     if (res.ok) {
       setMessage(t("pages.saveDone"));
       if (isNew) setDraft(null);
@@ -90,6 +99,7 @@ export default function AdminPagesPage() {
         draft={draft}
         catalog={catalog}
         message={message}
+        failed={failed}
         onChange={setDraft}
         onSave={save}
         onDelete={draft.id ? () => remove(draft.id!) : undefined}
@@ -104,7 +114,10 @@ export default function AdminPagesPage() {
       <button onClick={() => { setDraft({ ...EMPTY }); setPristine(JSON.stringify(EMPTY)); }} style={{ cursor: "pointer", padding: "8px 16px", marginBottom: 16 }}>
         {t("pages.new")}
       </button>
-      {message && <p style={{ color: "var(--color-success)" }}>{message}</p>}
+      {message && (
+        <p role={failed ? "alert" : "status"}
+          style={{ color: failed ? "var(--color-danger)" : "var(--color-success)" }}>{message}</p>
+      )}
       {/* 좁은 화면에서는 카드로 접힌다 (관리 셸의 .brick-x-table) */}
       <table className="brick-x-table" style={{ width: "100%", background: "var(--color-bg)", borderRadius: 8, borderCollapse: "collapse" }}>
         <thead>
@@ -143,6 +156,7 @@ function PageEditor(props: {
   draft: PageDraft;
   catalog: BlockDef[];
   message: string;
+  failed: boolean;
   onChange: (d: PageDraft) => void;
   onSave: () => void;
   onDelete?: () => void;
@@ -188,7 +202,10 @@ function PageEditor(props: {
         {props.onDelete && <button onClick={props.onDelete} style={{ cursor: "pointer", color: "var(--color-danger)" }}>{t("common.delete")}</button>}
         <button onClick={props.onSave} style={{ cursor: "pointer", padding: "8px 20px", fontWeight: 700 }}>{t("common.save")}</button>
       </div>
-      {props.message && <p style={{ color: "var(--color-success)" }}>{props.message}</p>}
+      {props.message && (
+        <p role={props.failed ? "alert" : "status"}
+          style={{ color: props.failed ? "var(--color-danger)" : "var(--color-success)" }}>{props.message}</p>
+      )}
 
       {/* 좁은 화면에서는 설정 패널이 아래로 내려간다 — 편집 영역이 먼저 */}
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">

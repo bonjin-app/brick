@@ -16,6 +16,8 @@ export default function AdminUsersPage() {
   const t = useAdminT();
   const [data, setData] = useState<{ items: UserRow[]; total: number }>({ items: [], total: 0 });
   const [message, setMessage] = useState("");
+  /* 성공과 실패가 같은 자리를 쓴다 — 색과 role 도 결과를 따라야 한다(문구로 판별하지 않는다) */
+  const [failed, setFailed] = useState(false);
   // 회원 목록은 개인정보(이메일) 열람이라 최근 10분 내 비밀번호 재확인이 필요하다.
   // 서버가 code: "reauth_required" 를 주면 비밀번호 창을 띄운다.
   const [needReauth, setNeedReauth] = useState(false);
@@ -82,6 +84,7 @@ export default function AdminUsersPage() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     });
+    setFailed(!res.ok);
     setMessage(res.ok ? t("users.changed") : `${t("common.failPrefix")}${(await res.json()).message}`);
     reload();
   }
@@ -89,7 +92,10 @@ export default function AdminUsersPage() {
   return (
     <div>
       <h1>{t("users.title")} <span style={{ color: "var(--color-muted)", fontSize: 16 }}>{t("users.countN", { n: data.total })}</span></h1>
-      {message && <p style={{ color: "var(--color-success)" }}>{message}</p>}
+      {message && (
+        <p role={failed ? "alert" : "status"}
+          style={{ color: failed ? "var(--color-danger)" : "var(--color-success)" }}>{message}</p>
+      )}
       {/*
         좁은 화면에서는 카드로 접힌다 (관리 셸의 .brick-x-table).
         이 표에는 역할 선택·정지 버튼·운영 메모가 있고 메모 칸만 200px 을 쓴다 —

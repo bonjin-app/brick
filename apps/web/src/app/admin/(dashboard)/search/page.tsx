@@ -32,6 +32,8 @@ export default function SearchAnalyticsPage() {
   const [empty, setEmpty] = useState<NoResult[]>([]);
   const [rules, setRules] = useState<Rule[]>([]);
   const [message, setMessage] = useState("");
+  /* 성공과 실패가 같은 자리를 쓴다 — 색과 role 도 결과를 따라야 한다(문구로 판별하지 않는다) */
+  const [failed, setFailed] = useState(false);
   const [form, setForm] = useState({ term: "", kind: "replace", replacement: "", note: "" });
 
   const reload = useCallback(async () => {
@@ -54,6 +56,7 @@ export default function SearchAnalyticsPage() {
       body: JSON.stringify(form),
     });
     const data = await res.json().catch(() => ({}));
+    setFailed(!res.ok);
     setMessage(res.ok ? t("search.savedRule") : `${t("common.saveFailPrefix")}${data.message ?? res.status}`);
     if (res.ok) setForm({ term: "", kind: "replace", replacement: "", note: "" });
     void reload();
@@ -80,7 +83,10 @@ export default function SearchAnalyticsPage() {
           <option value={90}>{t("search.days90")}</option>
         </select>
       </div>
-      {message && <p style={{ color: "var(--color-success)" }}>{message}</p>}
+      {message && (
+        <p role={failed ? "alert" : "status"}
+          style={{ color: failed ? "var(--color-danger)" : "var(--color-success)" }}>{message}</p>
+      )}
 
       <section style={card}>
         <h2 style={{ marginTop: 0, fontSize: 17 }}>

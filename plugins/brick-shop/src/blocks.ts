@@ -798,9 +798,11 @@ ${CAPTCHA_WIDGET_JS}
   function attach(form) {
   var btn = form.querySelector('[data-act="restock"]');
   var msg = form.querySelector(".brick-restock-msg");
+  // 이 칸은 성공도 실패도 함께 쓴다 — "이미 신청하셨습니다"가 성공 초록으로 나오고 있었다
+  function say(text, bad) { msg.textContent = text; msg.className = bad ? "brick-restock-msg is-error" : "brick-restock-msg"; }
   btn.addEventListener("click", function () {
     var email = form.querySelector('input[name="email"]').value.trim();
-    if (!email) { msg.textContent = ${JSON.stringify(t("restock.emailRequired"))}; return; }
+    if (!email) { say(${JSON.stringify(t("restock.emailRequired"))}, true); return; }
     // 옵션은 이 폼 안에서 읽는다 — 구매용 드롭다운을 읽으면 다른 옵션이 섞인다
     var opt = form.querySelector('[name="optionId"]');
     var body = { email: email };
@@ -809,7 +811,7 @@ ${CAPTCHA_WIDGET_JS}
     var cap = window.brickCaptcha.of(form);
     Object.keys(cap.fields).forEach(function (k) { body[k] = cap.fields[k]; });
     btn.disabled = true;
-    msg.textContent = ${JSON.stringify(t("restock.submitting"))};
+    say(${JSON.stringify(t("restock.submitting"))}, false);
     fetch("/api/plugins/brick-shop/products/" + encodeURIComponent(form.dataset.slug) + "/restock-alert", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -820,12 +822,12 @@ ${CAPTCHA_WIDGET_JS}
         // 실패 이유를 그대로 보여준다 — "이미 신청했습니다"를 감추면 손님이 계속 누른다
         // 토큰은 1회용이므로 실패하면 새 문제를 받아야 한다
         if (!res.ok) cap.reload();
-        msg.textContent = res.ok
+        say(res.ok
           ? ${JSON.stringify(t("restock.done"))}.replace("{email}", res.d.email)
-          : (res.d.message || ${JSON.stringify(t("restock.fail"))});
+          : (res.d.message || ${JSON.stringify(t("restock.fail"))}), !res.ok);
         if (res.ok) form.querySelector('input[name="email"]').value = "";
       })
-      .catch(function () { msg.textContent = ${JSON.stringify(t("restock.fail"))}; })
+      .catch(function () { say(${JSON.stringify(t("restock.fail"))}, true); })
       .finally(function () { btn.disabled = false; });
   });
   }
@@ -889,8 +891,14 @@ const STOREFRONT_CSS = `
 .brick-restock-form{margin-top:12px;display:flex;flex-direction:column;gap:8px;max-width:360px}
 .brick-restock-form button{padding:11px 16px;cursor:pointer;border-radius:var(--radius, 10px);border:1px solid var(--color-primary, #cf4437);background:var(--color-primary, #cf4437);color:var(--color-on-primary, #fff);font-weight:600}
 .brick-restock-form button:hover{background:var(--color-primary-hover, #b63a2e);border-color:var(--color-primary-hover, #b63a2e)}
-/* 성공 색은 테마의 --color-success (--brick-accent 는 어느 테마도 정의하지 않는다) */
-.brick-restock-msg{margin:0;font-size:13px;color:var(--color-success,#11795a)}
+/*
+ * 성공 색은 테마의 --color-success (--brick-accent 는 어느 테마도 정의하지 않는다).
+ * 선택자에 p 를 붙인 이유: 테마가 .brick-main p 에 color 를 주고 있어 본문 글자색을
+ * 주고 있어 클래스만으로는 **특이도에서 진다** — 브라우저로 재 보니 "신청되었습니다"
+ * 가 초록이 아니라 본문색으로 나오고 있었다.
+ */
+p.brick-restock-msg{margin:0;font-size:13px;color:var(--color-success,#11795a)}
+p.brick-restock-msg.is-error{color:var(--color-danger,#c9342f)}
 .brick-restock-note{margin:0;font-size:12px;color:var(--color-muted, #6c6c7a)}
 .brick-related{margin:48px 0 0}
 .brick-related h2{font-size:19px;margin:0 0 4px;padding-top:24px;border-top:1px solid var(--color-line,#e4e4ea)}

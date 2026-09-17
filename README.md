@@ -432,6 +432,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `check-smoke-hygiene.mjs` | 스모크가 스스로 만드는 함정 — 못박힌 **미래 날짜**(**그날이 오자 코드는 그대로인데 CI 가 빨개졌다**)와 정리(trap)의 맨손 `kill`(**단언 85개 전부 통과인데 종료코드 1**) |
 | `check-unsubscribe-header.mjs` | 광고 메일에 **`List-Unsubscribe` 헤더**가 없는 것 (**메일 앱이 수신거부 버튼을 못 띄우면 손님은 스팸 신고를 누르고, 그러면 입금 계좌가 담긴 주문 안내까지 스팸함으로 간다**) · One-Click 을 선언했는데 그 주소가 POST 를 안 받는 것 |
 | `check-autocomplete.mjs` | 손님이 폰에서 **손으로 다 쳐야 하는 칸** (**로그인·가입의 이메일·비밀번호에 `name` 도 `autocomplete` 도 없어 저장된 비밀번호가 채워지지 않았다 — 주문서에는 이미 있었다**) |
+| `check-fail-color.mjs` | 성공과 실패가 **같은 자리**를 쓰는데 색은 성공에 고정된 것 (**페이지 빌더를 비롯한 관리 화면 여섯 곳과 재입고 알림 폼이 초록 글씨로 "저장 실패" 를 띄웠다 — 색은 문구가 아니라 상태를 따라야 한다**) |
 | `check-error-announce.mjs` | 오류를 **눈으로만** 알려주는 것 (**로그인 실패에 라이브 영역이 하나도 없어, 스크린리더에는 버튼을 눌러도 아무 일이 없었다 — 가입 화면만 `role="alert"` 를 갖고 있었다**) |
 | `check-error-messages.mjs` | 손님·운영자에게 가는 **영어 오류 메시지** (**비밀번호를 틀리면 로그인 화면에 `invalid credentials` 가 떴다 — 화면은 서버가 준 message 를 그대로 보여준다**) |
 | `check-retention.mjs` | 치우겠다고 써 놓고 아무도 부르지 않는 정리 함수 (**넷 중 둘은 주기 정리가 빠뜨렸고 — 검색어·이메일 인증 토큰이 400일 뒤에도 남아 있었다 — 나머지 둘은 같은 정책이 두 곳에 적혀 있었다**) |
@@ -503,7 +504,7 @@ themes/
   boutique/       부티크 — 여백 위주
   corporate/      회사 홈페이지 — 히어로·특징 카드
 docs-site/        GitHub Pages 랜딩페이지
-scripts/          스모크 테스트 37종 + 정적 검사 25종 + OIDC 스텁 + 배포본 생성(build-release.sh)
+scripts/          스모크 테스트 37종 + 정적 검사 26종 + OIDC 스텁 + 배포본 생성(build-release.sh)
 docker/           Dockerfile, entrypoint
 ```
 

@@ -28,6 +28,8 @@ export default function AdminThemesPage() {
   const t = useAdminT();
   const [data, setData] = useState<{ themes: ThemeRow[]; active: string }>({ themes: [], active: "" });
   const [message, setMessage] = useState("");
+  /* 성공과 실패가 같은 자리를 쓴다 — 색과 role 도 결과를 따라야 한다(문구로 판별하지 않는다) */
+  const [failed, setFailed] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   /** 미리보기 — 팔레트 견본만으로는 레이아웃을 알 수 없다. 내 사이트 내용으로 그려 본다 */
   const [preview, setPreview] = useState<{ name: string; html: string; width: number } | null>(null);
@@ -40,6 +42,7 @@ export default function AdminThemesPage() {
 
   async function activate(name: string) {
     const res = await fetch(`/api/themes/${name}/activate`, { method: "POST" });
+    setFailed(!res.ok);
     setMessage(res.ok ? t("themes.applied", { name }) : `${t("common.failPrefix")}${await res.text()}`);
     reload();
   }
@@ -49,7 +52,7 @@ export default function AdminThemesPage() {
     try {
       const res = await fetch(`/api/admin/render/preview?path=&theme=${encodeURIComponent(name)}`);
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) { setMessage(`${t("common.failPrefix")}${body.message ?? res.status}`); return; }
+      if (!res.ok) { setFailed(true); setMessage(`${t("common.failPrefix")}${body.message ?? res.status}`); return; }
       setPreview({ name, html: String(body.html ?? ""), width: width || 0 });
     } finally {
       setPreviewBusy("");
@@ -66,6 +69,7 @@ export default function AdminThemesPage() {
     const fd = new FormData();
     fd.append("file", file);
     const res = await fetch("/api/themes/upload", { method: "POST", body: fd });
+    setFailed(!res.ok);
     setMessage(res.ok ? t("themes.installDone") : `${t("themes.installFailPrefix")}${await res.text()}`);
     if (fileRef.current) fileRef.current.value = "";
     reload();
@@ -80,7 +84,10 @@ export default function AdminThemesPage() {
         <button style={{ cursor: "pointer" }}>{t("common.install")}</button>
         <span style={{ marginLeft: 8, color: "var(--color-muted)", fontSize: 13 }}>{t("themes.hint")}</span>
       </form>
-      {message && <p style={{ color: "var(--color-success)" }}>{message}</p>}
+      {message && (
+        <p role={failed ? "alert" : "status"}
+          style={{ color: failed ? "var(--color-danger)" : "var(--color-success)" }}>{message}</p>
+      )}
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
         {data.themes.map((th) => (
           <div key={th.name} className="brick-card w-full sm:w-[280px]" style={{ marginTop: 0 }}>

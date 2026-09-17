@@ -30,6 +30,8 @@ export function SocialLoginSettings() {
   const [rows, setRows] = useState<ProviderRow[]>([]);
   const [secrets, setSecrets] = useState<Record<string, string>>({});
   const [message, setMessage] = useState("");
+  /* 성공과 실패가 같은 자리를 쓴다 — 색과 role 도 결과를 따라야 한다(문구로 판별하지 않는다) */
+  const [failed, setFailed] = useState(false);
 
   const reload = useCallback(() => {
     fetch("/api/auth/oauth/admin/providers")
@@ -52,6 +54,7 @@ export function SocialLoginSettings() {
           : {}),
       }),
     });
+    setFailed(!res.ok);
     if (res.ok) {
       setMessage(t("social.savedProvider", { label: row.label }));
       setSecrets({ ...secrets, [row.name]: "" });
@@ -155,7 +158,10 @@ export function SocialLoginSettings() {
           </button>
         </div>
       ))}
-      {message && <p style={{ color: "var(--color-success)", marginBottom: 0 }}>{message}</p>}
+      {message && (
+        <p role={failed ? "alert" : "status"}
+          style={{ color: failed ? "var(--color-danger)" : "var(--color-success)", marginBottom: 0 }}>{message}</p>
+      )}
     </section>
   );
 }

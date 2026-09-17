@@ -20,6 +20,8 @@ export default function AdminPluginsPage() {
   const t = useAdminT();
   const [plugins, setPlugins] = useState<PluginRow[]>([]);
   const [message, setMessage] = useState("");
+  /* 성공과 실패가 같은 자리를 쓴다 — 색과 role 도 결과를 따라야 한다(문구로 판별하지 않는다) */
+  const [failed, setFailed] = useState(false);
   const [updates, setUpdates] = useState<AvailableUpdate[] | null>(null);
   const [checking, setChecking] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -31,6 +33,7 @@ export default function AdminPluginsPage() {
 
   async function toggle(p: PluginRow) {
     const res = await fetch(`/api/plugins/${p.name}/${p.isActive ? "deactivate" : "activate"}`, { method: "POST" });
+    setFailed(!res.ok);
     setMessage(res.ok ? t("plugins.toggleDone", { name: p.displayName, action: p.isActive ? t("plugins.deactivate") : t("plugins.activate") }) : `${t("common.failPrefix")}${await res.text()}`);
     reload();
   }
@@ -42,16 +45,21 @@ export default function AdminPluginsPage() {
   async function checkUpdates() {
     setChecking(true);
     setMessage("");
+    setFailed(false);
     const res = await fetch("/api/admin/updates");
     const data = await res.json().catch(() => ({ items: [], errors: [] }));
     setUpdates(data.items ?? []);
-    if ((data.errors ?? []).length) setMessage(`${t("plugins.someFailed")}${data.errors.join(" · ")}`);
+    if ((data.errors ?? []).length) {
+      setFailed(true);
+      setMessage(`${t("plugins.someFailed")}${data.errors.join(" · ")}`);
+    }
     setChecking(false);
   }
 
   async function applyUpdate(u: AvailableUpdate) {
     const res = await fetch(`/api/admin/updates/${u.kind}/${u.name}/apply`, { method: "POST" });
     const data = await res.json().catch(() => ({}));
+    setFailed(!res.ok);
     setMessage(res.ok
       ? t("plugins.updateDone", { name: u.displayName, from: data.from, to: data.to })
       : `${t("plugins.updateFailPrefix")}${data.message ?? res.status}`);
@@ -66,6 +74,7 @@ export default function AdminPluginsPage() {
     const fd = new FormData();
     fd.append("file", file);
     const res = await fetch("/api/plugins/upload", { method: "POST", body: fd });
+    setFailed(!res.ok);
     setMessage(res.ok ? t("plugins.installDone") : `${t("plugins.installFailPrefix")}${await res.text()}`);
     if (fileRef.current) fileRef.current.value = "";
     reload();
@@ -106,7 +115,10 @@ export default function AdminPluginsPage() {
         <button style={{ cursor: "pointer" }}>{t("common.install")}</button>
         <span style={{ marginLeft: 8, color: "var(--color-muted)", fontSize: 13 }}>{t("plugins.uploadHint")}</span>
       </form>
-      {message && <p style={{ color: "var(--color-success)" }}>{message}</p>}
+      {message && (
+        <p role={failed ? "alert" : "status"}
+          style={{ color: failed ? "var(--color-danger)" : "var(--color-success)" }}>{message}</p>
+      )}
       {/*
         좁은 화면에서는 카드로 접힌다 (관리 셸의 .brick-x-table).
         이 표는 375px 에서 982px 로 벌어져 **켜기·끄기 버튼 여덟 개가 전부
