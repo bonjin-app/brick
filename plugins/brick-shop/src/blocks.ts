@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { CAPTCHA_WIDGET_CSS, CAPTCHA_WIDGET_JS, captchaFieldHtml,
+import { CAPTCHA_WIDGET_CSS, CAPTCHA_WIDGET_JS, STACK_TABLE_CSS, captchaFieldHtml,
          type BlockRenderContext, type PluginContext } from "@brick/plugin-sdk";
 import { escapeHtml, won, type Db, type ShopSettings } from "./types.js";
 import { bindI18n, t, moneyFnScript } from "./i18n.js";
@@ -999,6 +999,8 @@ p.brick-restock-msg.is-error{color:var(--color-danger,#c9342f)}
 .brick-stars{color:var(--color-warning, #96610a);letter-spacing:1px}
 /* 캡차 위젯 — .brick-restock-form button 뒤에 와야 새로고침 버튼이 작게 남는다 */
 ${CAPTCHA_WIDGET_CSS}
+/* 목록 표는 폰에서 카드로 접는다 — 맨 뒤에 와야 위의 표 규칙을 덮는다 */
+${STACK_TABLE_CSS}
 </style>`;
 
 /* ── 이미지 갤러리 (썸네일 클릭으로 대표 이미지 교체) ── */
@@ -1229,6 +1231,12 @@ const cartScript = (shopBase: string) => `
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 
+  /* 칸 이름은 머리글과 접힌 카드의 제목(data-label)에 같이 쓴다 */
+  var COL_PRODUCT = ${JSON.stringify(t("cart.colProduct"))};
+  var COL_UNIT = ${JSON.stringify(t("cart.colUnit"))};
+  var COL_QTY = ${JSON.stringify(t("cart.colQty"))};
+  var COL_SUM = ${JSON.stringify(t("cart.colSum"))};
+
   function render(d){
     if (!d.items || !d.items.length) {
       // 빈 장바구니가 막다른 골목이 되지 않게 — 상점으로 가는 길을 함께 준다
@@ -1238,16 +1246,16 @@ const cartScript = (shopBase: string) => `
     }
     var rows = d.items.map(function(it){
       return '<tr data-item="' + esc(it.id) + '">' +
-        '<td>' + esc(it.productName) + (it.optionName ? ' <small>(' + esc(it.optionName) + ')</small>' : '') + '</td>' +
-        '<td>' + fmt(it.unitPrice) + '</td>' +
-        '<td><input class="brick-cart-qty" type="number" min="1" max="999" value="' + Number(it.quantity) + '" /></td>' +
-        '<td>' + fmt(it.lineTotal) + '</td>' +
-        '<td><button data-remove>' + ${JSON.stringify(t("common.delete"))} + '</button></td></tr>';
+        '<td data-label="' + COL_PRODUCT + '">' + esc(it.productName) + (it.optionName ? ' <small>(' + esc(it.optionName) + ')</small>' : '') + '</td>' +
+        '<td data-label="' + COL_UNIT + '">' + fmt(it.unitPrice) + '</td>' +
+        '<td data-label="' + COL_QTY + '"><input class="brick-cart-qty" type="number" min="1" max="999" aria-label="' + COL_QTY + '" value="' + Number(it.quantity) + '" /></td>' +
+        '<td data-label="' + COL_SUM + '">' + fmt(it.lineTotal) + '</td>' +
+        '<td data-label=""><button data-remove>' + ${JSON.stringify(t("common.delete"))} + '</button></td></tr>';
     }).join('');
 
     root.innerHTML =
       '<p class="brick-cart-orders-link"><a href="' + ${JSON.stringify(shopBase)} + '/orders">' + ${JSON.stringify(t("orders.linkFromCart"))} + ' →</a></p>' +
-      '<table><thead><tr><th>' + ${JSON.stringify(t("cart.colProduct"))} + '</th><th>' + ${JSON.stringify(t("cart.colUnit"))} + '</th><th>' + ${JSON.stringify(t("cart.colQty"))} + '</th><th>' + ${JSON.stringify(t("cart.colSum"))} + '</th><th></th></tr></thead>' +
+      '<table class="brick-stack-table"><thead><tr><th>' + COL_PRODUCT + '</th><th>' + COL_UNIT + '</th><th>' + COL_QTY + '</th><th>' + COL_SUM + '</th><th></th></tr></thead>' +
       '<tbody>' + rows + '</tbody></table>' +
       '<div class="brick-cart-total"><dl>' +
       '<dt>' + ${JSON.stringify(t("cart.subtotal"))} + '</dt><dd>' + fmt(d.subtotal) + '</dd>' +

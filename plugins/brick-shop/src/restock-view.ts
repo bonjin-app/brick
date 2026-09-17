@@ -1,5 +1,5 @@
 import type { PluginContext } from "@brick/plugin-sdk";
-import { escapeHtml } from "@brick/plugin-sdk";
+import { escapeHtml, STACK_TABLE_CSS } from "@brick/plugin-sdk";
 import { localeTag, dateOptsScript } from "./i18n.js";
 
 /**
@@ -107,20 +107,24 @@ const listScript = (t: (k: string, p?: Record<string, string | number>) => strin
             (notice ? '<p class="brick-restock-result" role="status">' + esc(notice) + '</p>' : '');
           return;
         }
+        /* 칸 이름은 머리글과 접힌 카드의 제목(data-label)에 같이 쓴다 */
+        var C_PRODUCT = ${JSON.stringify(t("restock.colProduct"))};
+        var C_DATE = ${JSON.stringify(t("restock.colDate"))};
+        var C_STATUS = ${JSON.stringify(t("restock.colStatus"))};
         var rows = items.map(function(it){
-          return '<tr><td><a href="/shop/' + encodeURIComponent(it.productSlug) + '">' + esc(it.productName) + '</a>' +
+          return '<tr><td data-label="' + C_PRODUCT + '"><a href="/shop/' + encodeURIComponent(it.productSlug) + '">' + esc(it.productName) + '</a>' +
             (it.optionName ? '<br /><small>' + esc(it.optionName) + '</small>' : '') + '</td>' +
-            '<td>' + new Date(it.createdAt).toLocaleDateString(TAG, DATE_OPTS) + '</td>' +
-            '<td>' + (it.notifiedAt
+            '<td data-label="' + C_DATE + '">' + new Date(it.createdAt).toLocaleDateString(TAG, DATE_OPTS) + '</td>' +
+            '<td data-label="' + C_STATUS + '">' + (it.notifiedAt
               ? ${JSON.stringify(t("restock.statusNotified"))}
               : ${JSON.stringify(t("restock.statusWaiting"))}) + '</td>' +
-            '<td><button type="button" class="brick-restock-drop" data-path="' + esc(it.cancelPath) + '">' +
+            '<td data-label=""><button type="button" class="brick-restock-drop" data-path="' + esc(it.cancelPath) + '">' +
             ${JSON.stringify(t("restock.cancel"))} + '</button></td></tr>';
         }).join('');
-        body.innerHTML = '<table><thead><tr>' +
-          '<th>' + ${JSON.stringify(t("restock.colProduct"))} + '</th>' +
-          '<th>' + ${JSON.stringify(t("restock.colDate"))} + '</th>' +
-          '<th>' + ${JSON.stringify(t("restock.colStatus"))} + '</th>' +
+        body.innerHTML = '<table class="brick-stack-table"><thead><tr>' +
+          '<th>' + C_PRODUCT + '</th>' +
+          '<th>' + C_DATE + '</th>' +
+          '<th>' + C_STATUS + '</th>' +
           '<th></th></tr></thead><tbody>' + rows + '</tbody></table>' +
           '<p class="brick-restock-result" role="status">' + esc(notice || '') + '</p>';
 
@@ -156,4 +160,6 @@ const RESTOCK_CSS = `
 .brick-restock-drop { min-height: 40px; padding: 0 12px; cursor: pointer; font: inherit; font-size: 13px; }
 .brick-restock-cancel { max-width: 520px; margin: 0 auto; text-align: center; padding: 28px 16px; }
 .brick-restock-result { font-size: 14.5px; color: var(--color-muted, #71717d); }
+/* 목록 표는 폰에서 카드로 접는다 — 맨 뒤에 와야 위의 표 규칙을 덮는다 */
+${STACK_TABLE_CSS}
 </style>`;

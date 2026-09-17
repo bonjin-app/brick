@@ -76,3 +76,33 @@ export function maskEmail(email: string): string {
   const head = local.slice(0, 2);
   return `${head}${"*".repeat(Math.max(1, local.length - 2))}@${domain}`;
 }
+
+/**
+ * 손님 화면의 목록 표를 좁은 화면에서 **카드로 접는다** — 관리 셸의
+ * `.brick-x-table` 과 같은 일을 하는 손님 쪽 짝이다.
+ *
+ * 왜 필요했나: 영어로 쓰는 사이트에서 장바구니를 폰(375px)으로 열면 표가
+ * 391px 로 벌어져 문서가 가로로 밀렸다. 한국어에서는 우연히 들어맞아
+ * 보이지 않던 문제다 — 칸 이름이 조금만 길어지거나("Product/Price/Qty/Total"),
+ * 상품 이름이 길어지면 어느 언어에서나 밀린다. 밀려난 자리에는 수량 칸과
+ * 삭제 버튼이 있다.
+ *
+ * 왜 플러그인이 가지고 있나: 테마가 아니라 **플러그인이** 자기 표를 그린다.
+ * 테마에 두면 이 규칙이 없는 제3의 테마에서 플러그인이 깨진다.
+ *
+ * 쓰는 법: 목록 표에 `class="brick-stack-table"` 을 주고, 각 `<td>` 에
+ * `data-label="칸 이름"` 을 붙인다(접혔을 때 제목 자리가 된다). 제목이 필요
+ * 없는 칸(버튼 등)은 `data-label=""` 로 둔다.
+ */
+export const STACK_TABLE_CSS = `
+@media(max-width:640px){
+.brick-stack-table{display:block}
+.brick-stack-table thead{display:none}
+.brick-stack-table tbody,.brick-stack-table tr{display:block}
+.brick-stack-table tr{border:1px solid var(--color-line, #e4e4ea);border-radius:10px;margin-bottom:10px;padding:4px 2px}
+.brick-stack-table td{display:flex;gap:12px;align-items:baseline;justify-content:space-between;padding:8px 12px !important;border:0;text-align:right}
+.brick-stack-table td::before{content:attr(data-label);flex:none;color:var(--color-muted, #6c6c7a);font-size:12.5px;font-weight:600;text-align:left}
+/* 제목이 없는 칸(버튼 등)은 한 줄을 통째로 쓰고 오른쪽에 붙는다 */
+.brick-stack-table td[data-label=""]::before{content:none}
+.brick-stack-table td[data-label=""]{justify-content:flex-end}
+}`;

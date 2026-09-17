@@ -1,4 +1,4 @@
-import { dateScript } from "@brick/plugin-sdk";
+import { dateScript, STACK_TABLE_CSS } from "@brick/plugin-sdk";
 import { sql } from "drizzle-orm";
 import type { PluginContext } from "@brick/plugin-sdk";
 import { effectiveReadRole, escapeHtml, hasRole, shortDate, type BoardRow, type Db } from "./types.js";
@@ -403,6 +403,8 @@ const SCRAPS_CSS = `
 .brick-scraps .brick-s-act { width: 60px; text-align: right; }
 .brick-scraps .brick-s-act button { border: 0; background: none; color: var(--color-muted, #71717d); cursor: pointer; font-size: 12.5px; }
 .brick-b-empty { padding: 36px; text-align: center; color: var(--color-muted, #999); }
+/* 목록 표는 폰에서 카드로 접는다 — 맨 뒤에 와야 위의 너비 규칙을 덮는다 */
+${STACK_TABLE_CSS}
 </style>`;
 
 /** 스크랩 목록 클라이언트 — 목록 조회와 해제 */
@@ -426,17 +428,21 @@ ${dateScript()}
         body.innerHTML = '<p class="brick-b-empty">' + ${JSON.stringify(t("scrap.empty"))} + '</p>';
         return;
       }
-      body.innerHTML = '<table><thead><tr>' +
-        '<th class="brick-s-board">' + ${JSON.stringify(t("scrap.colBoard"))} + '</th>' +
-        '<th>' + ${JSON.stringify(t("scrap.colTitle"))} + '</th>' +
-        '<th class="brick-s-date">' + ${JSON.stringify(t("scrap.colDate"))} + '</th><th></th>' +
+      /* 칸 이름은 머리글과 접힌 카드의 제목(data-label)에 같이 쓴다 */
+      var C_BOARD = ${JSON.stringify(t("scrap.colBoard"))};
+      var C_TITLE = ${JSON.stringify(t("scrap.colTitle"))};
+      var C_DATE = ${JSON.stringify(t("scrap.colDate"))};
+      body.innerHTML = '<table class="brick-stack-table"><thead><tr>' +
+        '<th class="brick-s-board">' + C_BOARD + '</th>' +
+        '<th>' + C_TITLE + '</th>' +
+        '<th class="brick-s-date">' + C_DATE + '</th><th></th>' +
         '</tr></thead><tbody>' +
         d.items.map(function(it){
-          return '<tr><td class="brick-s-board">' + esc(it.board_title) + '</td>' +
-            '<td><a href="/board/' + esc(it.board_slug) + '/' + esc(it.id) + '">' + esc(it.title) + '</a>' +
+          return '<tr><td class="brick-s-board" data-label="' + C_BOARD + '">' + esc(it.board_title) + '</td>' +
+            '<td data-label="' + C_TITLE + '"><a href="/board/' + esc(it.board_slug) + '/' + esc(it.id) + '">' + esc(it.title) + '</a>' +
             (it.comment_count ? ' <small>[' + it.comment_count + ']</small>' : '') + '</td>' +
-            '<td class="brick-s-date">' + d2(it.scrapped_at) + '</td>' +
-            '<td class="brick-s-act"><button type="button" data-unscrap="' + esc(it.id) + '">' +
+            '<td class="brick-s-date" data-label="' + C_DATE + '">' + d2(it.scrapped_at) + '</td>' +
+            '<td class="brick-s-act" data-label=""><button type="button" data-unscrap="' + esc(it.id) + '">' +
             ${JSON.stringify(t("scrap.remove"))} + '</button></td></tr>';
         }).join('') + '</tbody></table>';
 

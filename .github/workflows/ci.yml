@@ -155,6 +155,9 @@ jobs:
       - name: 관리 화면의 표가 폰에서 카드로 접힌다 (밀려난 버튼은 닿을 수 없다)
         run: node scripts/check-admin-tables.mjs
 
+      - name: 손님 화면의 목록 표도 폰에서 카드로 접힌다 (영어로 열면 장바구니가 가로로 밀렸다)
+        run: node scripts/check-guest-tables.mjs
+
       - name: 누를 수 있는 것은 키보드로도 닿는다 (div + onClick 은 마우스로만 눌린다)
         run: node scripts/check-admin-keyboard.mjs
 

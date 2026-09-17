@@ -1,5 +1,5 @@
 import type { PluginContext } from "@brick/plugin-sdk";
-import { escapeHtml } from "@brick/plugin-sdk";
+import { escapeHtml, STACK_TABLE_CSS } from "@brick/plugin-sdk";
 import { moneyFnScript, localeTag, dateOptsScript } from "./i18n.js";
 
 /**
@@ -127,6 +127,8 @@ const ORDERS_CSS = `
 .brick-ret-mine small { color: var(--color-muted, #71717d); }
 /* 44px — 폰에서 신청을 물리는 버튼이다. 빗나가면 옆줄의 다른 요청을 누른다 */
 .brick-ret-drop { min-height: 40px; padding: 0 12px; cursor: pointer; font: inherit; font-size: 13px; }
+/* 목록 표는 폰에서 카드로 접는다 — 맨 뒤에 와야 위의 표 규칙을 덮는다 */
+${STACK_TABLE_CSS}
 </style>`;
 
 /** 목록 화면 — 회원이면 /my/orders, 401 이면 비회원 조회 폼 */
@@ -167,20 +169,25 @@ const listScript = (t: (k: string) => string, labels: string) => `
         body.innerHTML = '<p class="brick-shop-empty">' + ${JSON.stringify(t("orders.empty"))} + '</p>';
         return;
       }
+      /* 칸 이름은 머리글과 접힌 카드의 제목(data-label)에 같이 쓴다 */
+      var C_DATE = ${JSON.stringify(t("orders.colDate"))};
+      var C_ITEMS = ${JSON.stringify(t("orders.colItems"))};
+      var C_TOTAL = ${JSON.stringify(t("orders.colTotal"))};
+      var C_STATUS = ${JSON.stringify(t("orders.colStatus"))};
       var rows = d.items.map(function(o){
         return '<tr>' +
-          '<td>' + new Date(o.created_at).toLocaleDateString(TAG, DATE_OPTS) + '</td>' +
-          '<td><a href="' + base + '/' + encodeURIComponent(o.order_no) + '">' + esc(o.order_no) + '</a><br />' +
+          '<td data-label="' + C_DATE + '">' + new Date(o.created_at).toLocaleDateString(TAG, DATE_OPTS) + '</td>' +
+          '<td data-label="' + C_ITEMS + '"><a href="' + base + '/' + encodeURIComponent(o.order_no) + '">' + esc(o.order_no) + '</a><br />' +
           '<small>' + esc(o.items_summary || '') + '</small></td>' +
-          '<td class="brick-o-total">' + fmt(o.total) + '</td>' +
-          '<td><span class="brick-o-status">' + esc(LABEL[o.status] || o.status) + '</span></td>' +
+          '<td class="brick-o-total" data-label="' + C_TOTAL + '">' + fmt(o.total) + '</td>' +
+          '<td data-label="' + C_STATUS + '"><span class="brick-o-status">' + esc(LABEL[o.status] || o.status) + '</span></td>' +
         '</tr>';
       }).join('');
-      body.innerHTML = '<table><thead><tr>' +
-        '<th>' + ${JSON.stringify(t("orders.colDate"))} + '</th>' +
-        '<th>' + ${JSON.stringify(t("orders.colItems"))} + '</th>' +
-        '<th class="brick-o-total">' + ${JSON.stringify(t("orders.colTotal"))} + '</th>' +
-        '<th>' + ${JSON.stringify(t("orders.colStatus"))} + '</th>' +
+      body.innerHTML = '<table class="brick-stack-table"><thead><tr>' +
+        '<th>' + C_DATE + '</th>' +
+        '<th>' + C_ITEMS + '</th>' +
+        '<th class="brick-o-total">' + C_TOTAL + '</th>' +
+        '<th>' + C_STATUS + '</th>' +
         '</tr></thead><tbody>' + rows + '</tbody></table>';
     })
     .catch(function(){ body.innerHTML = '<p class="brick-shop-empty">' + ${JSON.stringify(t("orders.notFound"))} + '</p>'; });
@@ -235,15 +242,19 @@ const detailScript = (t: (k: string, p?: Record<string, string | number>) => str
   /** 이 주문에 낸 요청 목록 — 상태와 환불액, 그리고 철회 버튼 */
   function renderMyRequests(slot, orderNo, list, q, notice){
     if (!list.length) return;
+    var R_NO = ${JSON.stringify(t("ret.colNo"))};
+    var R_KIND = ${JSON.stringify(t("ret.colKind"))};
+    var R_STATUS = ${JSON.stringify(t("ret.colStatus"))};
+    var R_REFUND = ${JSON.stringify(t("ret.colRefund"))};
     var rows = list.map(function(r){
       var refund = Number(r.refund_amount || 0);
       return '<tr>' +
-        '<td>' + esc(r.return_no) + '<br /><small>' +
+        '<td data-label="' + R_NO + '">' + esc(r.return_no) + '<br /><small>' +
           new Date(r.created_at).toLocaleDateString(TAG, DATE_OPTS) + '</small></td>' +
-        '<td>' + esc(r.kind_label) + '<br /><small>' + esc(r.reason_label || '') + '</small></td>' +
-        '<td>' + esc(r.status_label) + '</td>' +
-        '<td class="brick-o-total">' + (refund > 0 ? fmt(refund) : '—') + '</td>' +
-        '<td>' + (r.cancellable
+        '<td data-label="' + R_KIND + '">' + esc(r.kind_label) + '<br /><small>' + esc(r.reason_label || '') + '</small></td>' +
+        '<td data-label="' + R_STATUS + '">' + esc(r.status_label) + '</td>' +
+        '<td class="brick-o-total" data-label="' + R_REFUND + '">' + (refund > 0 ? fmt(refund) : '—') + '</td>' +
+        '<td data-label="">' + (r.cancellable
           ? '<button type="button" class="brick-ret-drop" data-ret-id="' + esc(r.id) + '">' +
             ${JSON.stringify(t("ret.cancelRequest"))} + '</button>'
           : '') + '</td>' +
@@ -252,11 +263,11 @@ const detailScript = (t: (k: string, p?: Record<string, string | number>) => str
 
     slot.insertAdjacentHTML('beforeend',
       '<section class="brick-ret-mine"><h3>' + ${JSON.stringify(t("ret.myRequests"))} + '</h3>' +
-      '<table><thead><tr>' +
-      '<th>' + ${JSON.stringify(t("ret.colNo"))} + '</th>' +
-      '<th>' + ${JSON.stringify(t("ret.colKind"))} + '</th>' +
-      '<th>' + ${JSON.stringify(t("ret.colStatus"))} + '</th>' +
-      '<th class="brick-o-total">' + ${JSON.stringify(t("ret.colRefund"))} + '</th>' +
+      '<table class="brick-stack-table"><thead><tr>' +
+      '<th>' + R_NO + '</th>' +
+      '<th>' + R_KIND + '</th>' +
+      '<th>' + R_STATUS + '</th>' +
+      '<th class="brick-o-total">' + R_REFUND + '</th>' +
       '<th></th></tr></thead><tbody>' + rows + '</tbody></table>' +
       '<p class="brick-ret-msg" role="status" data-ret-drop-msg></p></section>');
 

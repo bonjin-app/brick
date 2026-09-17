@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { CAPTCHA_WIDGET_CSS, CAPTCHA_WIDGET_JS, captchaFieldHtml, type PluginContext } from "@brick/plugin-sdk";
+import { CAPTCHA_WIDGET_CSS, CAPTCHA_WIDGET_JS, STACK_TABLE_CSS, captchaFieldHtml, type PluginContext } from "@brick/plugin-sdk";
 import { escapeHtml, type Db, type HelpSettings } from "./types.js";
 import { listCategories, listFaqs } from "./faq.js";
 
@@ -167,6 +167,8 @@ const HELP_CSS = `
 .brick-thread-item.is-staff{background:color-mix(in srgb, var(--color-primary, #cf4437) 9%, transparent);border-left:3px solid var(--color-primary,#d0402c)}
 .brick-thread-item b{display:block;font-size:13px;margin-bottom:6px;color:var(--color-text-soft, #45454f)}
 ${CAPTCHA_WIDGET_CSS}
+/* 목록 표는 폰에서 카드로 접는다 — 맨 뒤에 와야 위의 너비 규칙을 덮는다 */
+${STACK_TABLE_CSS}
 </style>`;
 
 /* ── FAQ 클라이언트 (조회수 · 평가) ────────────────── */
@@ -284,18 +286,18 @@ ${CAPTCHA_WIDGET_JS}
       if (!res.ok) { body.innerHTML = '<p class="brick-faq-empty">문의 내역을 불러올 수 없습니다.</p>'; return; }
 
       var rows = (res.d.items || []).map(function(t){
-        return '<tr><td>' + esc(t.ticket_no) + '</td>' +
-          '<td><a href="#" data-open="' + esc(t.id) + '">' + esc(t.title) + '</a></td>' +
-          '<td>' + esc(t.category) + '</td>' +
-          '<td><span class="brick-badge ' + esc(t.status) + '">' + label(t.status) + '</span></td>' +
-          '<td>' + day(t.created_at) + '</td></tr>';
+        return '<tr><td data-label="문의번호">' + esc(t.ticket_no) + '</td>' +
+          '<td data-label="제목"><a href="#" data-open="' + esc(t.id) + '">' + esc(t.title) + '</a></td>' +
+          '<td data-label="분류">' + esc(t.category) + '</td>' +
+          '<td data-label="상태"><span class="brick-badge ' + esc(t.status) + '">' + label(t.status) + '</span></td>' +
+          '<td data-label="접수일">' + day(t.created_at) + '</td></tr>';
       }).join('');
 
       body.innerHTML =
         '<div class="brick-help-toolbar"><span>내 문의 ' + Number(res.d.total || 0) + '건</span>' +
         '<button data-new>문의하기</button></div>' +
         (rows
-          ? '<table><thead><tr><th>문의번호</th><th>제목</th><th>분류</th><th>상태</th><th>접수일</th></tr></thead><tbody>' + rows + '</tbody></table>'
+          ? '<table class="brick-stack-table"><thead><tr><th>문의번호</th><th>제목</th><th>분류</th><th>상태</th><th>접수일</th></tr></thead><tbody>' + rows + '</tbody></table>'
           : '<p class="brick-faq-empty">문의 내역이 없습니다.</p>');
 
       body.querySelectorAll('[data-open]').forEach(function(a){

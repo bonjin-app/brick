@@ -1,4 +1,4 @@
-import { definePlugin, siteToday, dateScript } from "@brick/plugin-sdk";
+import { definePlugin, siteToday, dateScript, STACK_TABLE_CSS } from "@brick/plugin-sdk";
 import { bindI18n, t, localeTag } from "./i18n.js";
 import type { PluginDb } from "@brick/plugin-sdk";
 import { sql } from "drizzle-orm";
@@ -519,6 +519,8 @@ const HISTORY_CSS = `
 .brick-point-history .brick-ph-date, .brick-point-history .brick-ph-exp { width: 110px; color: var(--color-muted, #71717d); font-size: 13px; }
 .brick-ph-empty { padding: 36px; text-align: center; color: var(--color-muted, #999); }
 .brick-ph-more { display: block; margin: 16px auto 0; padding: 9px 20px; border: 1px solid var(--color-line, #e7e7ec); border-radius: 8px; background: var(--color-bg, #ffffff); cursor: pointer; font: inherit; }
+/* 목록 표는 폰에서 카드로 접는다 — 맨 뒤에 와야 위의 너비 규칙을 덮는다 */
+${STACK_TABLE_CSS}
 </style>`;
 
 /** 내 포인트 내역 클라이언트 — 페이지 누적 로드 */
@@ -549,20 +551,25 @@ ${dateScript()}
       body.innerHTML = head + '<p class="brick-ph-empty">' + ${JSON.stringify(t("point.empty"))} + '</p>';
       return;
     }
+    /* 칸 이름은 머리글과 접힌 카드의 제목(data-label)에 같이 쓴다 */
+    var C_DATE = ${JSON.stringify(t("point.colDate"))};
+    var C_REASON = ${JSON.stringify(t("point.colReason"))};
+    var C_AMOUNT = ${JSON.stringify(t("point.colAmount"))};
+    var C_EXPIRES = ${JSON.stringify(t("point.colExpires"))};
     var trs = rows.map(function(r){
       var plus = Number(r.amount) > 0;
-      return '<tr><td class="brick-ph-date">' + d2(r.created_at) + '</td>' +
-        '<td>' + esc(r.reason || r.kindLabel || '') + '</td>' +
-        '<td class="brick-ph-amt ' + (plus ? 'brick-ph-plus' : 'brick-ph-minus') + '">' +
+      return '<tr><td class="brick-ph-date" data-label="' + C_DATE + '">' + d2(r.created_at) + '</td>' +
+        '<td data-label="' + C_REASON + '">' + esc(r.reason || r.kindLabel || '') + '</td>' +
+        '<td class="brick-ph-amt ' + (plus ? 'brick-ph-plus' : 'brick-ph-minus') + '" data-label="' + C_AMOUNT + '">' +
         (plus ? '+' : '') + num(r.amount) + '</td>' +
-        '<td class="brick-ph-exp">' + (r.expires_at ? d2(r.expires_at) : ${JSON.stringify(t("point.noExpiry"))}) + '</td></tr>';
+        '<td class="brick-ph-exp" data-label="' + C_EXPIRES + '">' + (r.expires_at ? d2(r.expires_at) : ${JSON.stringify(t("point.noExpiry"))}) + '</td></tr>';
     }).join('');
     body.innerHTML = head +
-      '<table><thead><tr>' +
-      '<th class="brick-ph-date">' + ${JSON.stringify(t("point.colDate"))} + '</th>' +
-      '<th>' + ${JSON.stringify(t("point.colReason"))} + '</th>' +
-      '<th class="brick-ph-amt">' + ${JSON.stringify(t("point.colAmount"))} + '</th>' +
-      '<th class="brick-ph-exp">' + ${JSON.stringify(t("point.colExpires"))} + '</th>' +
+      '<table class="brick-stack-table"><thead><tr>' +
+      '<th class="brick-ph-date">' + C_DATE + '</th>' +
+      '<th>' + C_REASON + '</th>' +
+      '<th class="brick-ph-amt">' + C_AMOUNT + '</th>' +
+      '<th class="brick-ph-exp">' + C_EXPIRES + '</th>' +
       '</tr></thead><tbody>' + trs + '</tbody></table>' +
       (rows.length < d.total
         ? '<button type="button" class="brick-ph-more">' + ${JSON.stringify(t("point.more"))} + '</button>'
