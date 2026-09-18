@@ -1,5 +1,6 @@
 import type { PluginContext } from "@brick/plugin-sdk";
 import { escapeHtml, STACK_TABLE_CSS } from "@brick/plugin-sdk";
+import { gatewayScripts } from "./pay-client.js";
 import { moneyFnScript, localeTag, dateOptsScript } from "./i18n.js";
 
 /**
@@ -72,7 +73,7 @@ export function registerOrdersView(ctx: PluginContext, t: (k: string, p?: Record
   <p><a href="${escapeHtml(listUrl)}">← ${escapeHtml(t("orders.backToList"))}</a></p>
   <div id="brick-order-body"><p class="brick-shop-empty">${escapeHtml(t("orders.loading"))}</p></div>
 </div>
-${detailScript(t, statusLabels())}${ORDERS_CSS}`;
+${await gatewayScripts()}${detailScript(t, statusLabels())}${ORDERS_CSS}`;
       }
 
       // ── 목록 (회원) / 주문번호 조회 (비회원) ──
@@ -90,6 +91,9 @@ ${listScript(t, statusLabels())}${ORDERS_CSS}`;
 const ORDERS_CSS = `
 <style>
 .brick-o-banknote{display:block;margin-top:4px;font-size:12.5px;color:var(--color-muted, #6c6c7a)}
+.brick-o-payagain{margin:14px 0}
+.brick-o-payagain.is-error{color:var(--color-danger, #c8322f);font-weight:600}
+.brick-o-paymsg{margin-left:8px;font-size:13.5px}
 .brick-orders { max-width: 720px; }
 .brick-orders table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
 .brick-orders td, .brick-orders th { padding: 10px 8px; border-bottom: 1px solid var(--color-line, #e7e7ec); text-align: left; }
@@ -509,6 +513,28 @@ const detailScript = (t: (k: string, p?: Record<string, string | number>) => str
       .catch(function(){});
   }
 
+  /*
+   * 결제창에서 돌아왔다 — 승인을 마치고 **상세를 다시 그린다.**
+   *
+   * 화면을 직접 고치지 않는 이유: 상태·이력·현금영수증 신청 가능 여부가 모두
+   * 결제 여부에 딸려 있다. 서버에서 다시 받아 그리면 그것들이 저절로 맞는다.
+   */
+  function finishReturn(){
+    var q = new URLSearchParams(location.search);
+    var provider = q.get('brickPay');
+    if (!provider || q.get('orderNo') !== no) return Promise.resolve(null);
+    var pay = (window.brickPay || {})[provider];
+    var got = pay && typeof pay.readReturn === 'function' ? pay.readReturn(q) : null;
+    // 취소·실패로 돌아왔다 — 주문은 결제대기로 남는다. 아래에서 다시 결제할 수 있다.
+    if (!got) return Promise.resolve(${JSON.stringify(t("orders.payCancelled"))});
+    return fetch('/api/plugins/brick-shop/payments/confirm', {
+      method: 'POST', headers: {'content-type':'application/json'},
+      body: JSON.stringify({ orderNo: no, provider: provider, providerTid: got.providerTid, amount: got.amount })
+    }).then(function(r){ return r.json().then(function(dd){ return r.ok ? null : (dd.message || ${JSON.stringify(t("orders.payFail"))}); }); })
+      .catch(function(){ return ${JSON.stringify(t("orders.payFail"))}; });
+  }
+
+  finishReturn().then(function(returnNote){
   load(false).then(function(d){ return d || load(true); }).then(function(d){
     if (!d) {
       body.innerHTML = '<p class="brick-shop-empty">' + ${JSON.stringify(t("orders.notFound"))} +
@@ -541,12 +567,45 @@ const detailScript = (t: (k: string, p?: Record<string, string | number>) => str
       (history ? '<h3>' + ${JSON.stringify(t("orders.history"))} + '</h3><ul class="brick-o-history">' + history + '</ul>' : '') +
       '<div id="brick-ret-slot"></div>' +
       '<div id="brick-receipt-slot"></div>';
+    /*
+     * 결제 다시 하기 — **서버가 된다고 한 주문에만** 낸다(d.payable).
+     *
+     * 카드로 주문했는데 결제창에서 취소하거나 실패하면 주문은 결제대기로 남는다.
+     * 그때 다시 결제할 자리가 없어서, 손님이 할 수 있는 일은 다시 주문하는 것
+     * 뿐이었다 — 앞의 주문은 미결제로 남고, 사업자는 유령 주문을 떠안는다.
+     */
+    if (d.payable) {
+      var payBox = document.createElement('p');
+      payBox.className = 'brick-o-payagain';
+      payBox.innerHTML = '<button type="button" class="brick-primary" data-pay-again>' +
+        ${JSON.stringify(t("orders.payAgain"))} + '</button> <span class="brick-o-paymsg" role="alert"></span>';
+      body.insertBefore(payBox, document.getElementById('brick-ret-slot'));
+      var payMsg = payBox.querySelector('.brick-o-paymsg');
+      payBox.querySelector('[data-pay-again]').addEventListener('click', function(){
+        var pay = (window.brickPay || {})[o.payment_method];
+        if (typeof pay !== 'function') { payMsg.textContent = ${JSON.stringify(t("orders.payUnavailable"))}; return; }
+        this.disabled = true;
+        payMsg.textContent = ${JSON.stringify(t("checkout.payRedirect"))};
+        var back = location.origin + location.pathname + '?brickPay=' + encodeURIComponent(o.payment_method) +
+          '&orderNo=' + encodeURIComponent(o.order_no);
+        Promise.resolve(pay({ orderNo: o.order_no, amount: Number(o.total), orderName: d.orderName || o.order_no, returnUrl: back }))
+          .catch(function(){ payMsg.textContent = ${JSON.stringify(t("checkout.payFail"))}; payBox.querySelector('[data-pay-again]').disabled = false; });
+      });
+    }
     // 취소·반품 신청 — 신청 가능한 주문일 때만 버튼을 낸다.
     // 청약철회(전자상거래법 제17조)는 손님의 권리이므로 화면이 있어야 한다.
     renderReturnSection(o.order_no);
     // 현금영수증 신청 — 부가가치세법 제32조의2 도 손님의 권리다.
     // 발급 라우트는 처음부터 있었는데 신청할 자리가 없었다.
     renderReceiptSection(o.order_no, d.cashReceipt);
+    if (returnNote) {
+      var note = document.createElement('p');
+      note.className = 'brick-o-payagain is-error';
+      note.setAttribute('role', 'alert');
+      note.textContent = returnNote;
+      body.insertBefore(note, body.firstChild);
+    }
+  });
   });
 })();
 </script>`;

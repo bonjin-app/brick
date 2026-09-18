@@ -443,11 +443,33 @@ export default definePlugin(async (ctx) => {
     const cashReceipt = await cashReceiptStatusFor(db, {
       id: String(order.id), payment_method: order.payment_method, paid_at: order.paid_at,
     });
+    /*
+     * 지금 결제할 수 있는 주문인가 — **서버가 판단한다.**
+     *
+     * 카드로 주문했는데 결제창에서 취소하거나 실패하면 주문은 결제대기로
+     * 남는다. 그때 다시 결제할 자리가 없어서, 손님이 할 수 있는 일은 다시
+     * 주문하는 것뿐이었다(그리고 앞의 주문은 미결제로 남는다).
+     *
+     * 판단을 화면에 두지 않는 이유는 현금영수증과 같다 — 규칙이 두 곳에 있으면
+     * 갈라져서, 못 하는 주문에 버튼을 내밀거나 할 수 있는데 안 내민다.
+     * 조건: 아직 결제대기이고, 그 결제수단의 게이트웨이가 지금 준비돼 있으며,
+     * 손님을 결제창으로 넘기는 클라이언트 단계를 선언했다.
+     */
+    const gw = gateways.get(String(order.payment_method ?? ""));
+    const gwReady = gw?.checkout ? (gw.isReady ? await gw.isReady().catch(() => false) : true) : false;
+    const payable = order.status === "pending" && order.payment_status !== "paid" && gwReady;
     return {
       order, items, events,
       statusLabel: STATUS_LABEL[order.status as OrderStatus],
       ...(bankAccount ? { bankAccount } : {}),
       cashReceipt,
+      payable,
+      // 결제창에 뜨는 이름 — 주문번호만 보내면 손님은 무엇을 사는지 알 수 없다
+      orderName: items[0]
+        ? items.length > 1
+          ? `${String(items[0].product_name)} 외 ${items.length - 1}건`
+          : String(items[0].product_name)
+        : String(order.order_no),
     };
   });
 

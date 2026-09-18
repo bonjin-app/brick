@@ -1,25 +1,7 @@
 import type { PluginContext } from "@brick/plugin-sdk";
 import { escapeHtml } from "@brick/plugin-sdk";
 import { moneyFnScript } from "./i18n.js";
-import { gateways } from "./payments.js";
-
-/**
- * 온라인 승인이 필요한 결제수단이 낸 클라이언트 단계를 모아 싣는다.
- * 각 스크립트는 window.brickPay["<provider>"] 하나를 정의한다(payments.ts 의 계약).
- *
- * **준비된 게이트웨이만** 싣는다. 키를 넣지 않은 PG 는 주문서에 나오지도 않으므로
- * 그 스크립트는 하는 일이 없고, 어떤 PG 플러그인을 깔아 두었는지만 알려 준다.
- */
-async function gatewayScripts(): Promise<string> {
-  const parts = await Promise.all(
-    [...gateways.values()].map(async (g) => {
-      if (!g.checkout) return "";
-      const ready = g.isReady ? await g.isReady().catch(() => false) : true;
-      return ready ? g.checkout.script : "";
-    }),
-  );
-  return parts.join("");
-}
+import { gatewayScripts } from "./pay-client.js";
 
 /**
  * 주문서(체크아웃) 화면 — <상점 페이지>/checkout 으로 라우팅된다.

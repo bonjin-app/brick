@@ -52,6 +52,10 @@ const MUST_REACH = [
   ["/tickets/by-no/", "비회원이 자기 문의를 볼 수 없습니다 — 조회용 비밀번호까지 받아 놓고 번호와 비밀번호를 넣을 칸이 없습니다"],
   ["/api/plugins/brick-shop/restock-alerts/cancel/", "재입고 알림을 끊을 수 없습니다 — 메일이 보내는 해지 링크가 화면 없이 떨어집니다"],
   ["/api/plugins/brick-shop/wishlist/merge", "비회원으로 담아 둔 위시리스트가 로그인하면 사라진 것처럼 보입니다"],
+  ["/api/plugins/brick-shop/payment-methods", "주문서가 결제수단을 서버에 묻지 않습니다 — PG 플러그인을 깔고 키를 넣어도 손님은 무통장입금밖에 고를 수 없고, 게이트웨이 계약도 승인·환불 코드도 닿지 않는 곳에 남습니다"],
+  // `window.brickPay` 로 본다 — 복귀 주소를 읽는 `q.get('brickPay')` 만 남아도 걸리게
+  ["window\\.brickPay", "주문을 만든 뒤 손님을 결제창으로 넘기지 못합니다 — 카드 주문이 결제대기로 만들어지기만 하고 승인으로 가지 않습니다"],
+  ["payable", "결제대기로 남은 카드 주문을 다시 결제할 자리가 없습니다 — 결제창에서 한 번 취소하면 그 주문은 영영 미결제로 남습니다"],
 ];
 
 function walk(dir, out = []) {
@@ -85,7 +89,21 @@ for (const p of readdirSync(join(ROOT, "plugins"))) {
     for (const f of walk(dir)) if (SCREEN_FILE.test(f)) screens.push(f);
   } catch { /* 없으면 건너뛴다 */ }
 }
-const haystack = screens.map((f) => readFileSync(f, "utf8")).join("\n");
+/*
+ * **주석은 뺀다.**
+ *
+ * 이 저장소가 여러 번 겪은 함정이다 — 단언이 찾는 문자열을 주석에 적어 두면
+ * 화면을 통째로 지워도 초록이 된다. 실제로 이 항목들을 더하면서 겪었다:
+ * `brickPay` 와 `payable` 은 "이 계약을 이렇게 쓴다" 고 적어 둔 주석 때문에
+ * 호출부를 다 지워도 통과했다. 부르는 코드만 남기고 본다.
+ * (`//` 는 앞이 콜론이 아닐 때만 주석으로 본다 — http:// 를 지우지 않으려고.)
+ */
+const stripComments = (src) =>
+  src
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+
+const haystack = screens.map((f) => stripComments(readFileSync(f, "utf8"))).join("\n");
 
 let fail = 0;
 console.log("▶ 서버가 만들어 둔 기능에 손님이 닿을 수 있다");
