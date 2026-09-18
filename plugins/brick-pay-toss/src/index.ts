@@ -94,6 +94,70 @@ export default definePlugin(async (ctx) => {
     provider: "toss",
     displayName: "카드·간편결제",
 
+    /*
+     * 손님을 결제창으로 넘기는 클라이언트 단계.
+     *
+     * 이것이 없으면 주문서는 이 결제수단을 **내놓지 않는다**(payments.ts 의 계약).
+     * 그동안 서버 쪽(승인·환불·정기결제)은 다 있었는데 이 한 조각이 없어서
+     * 카드로 결제할 방법 자체가 없었다.
+     *
+     * 카드번호는 토스의 결제창에서만 입력된다 — 이 시스템을 지나가지 않는다.
+     * 승인은 돌아온 뒤 주문서가 /payments/confirm 으로 마치고, 금액은 서버가
+     * 토스에 직접 물어 확인한다(화면이 보낸 금액은 신뢰하지 않는다).
+     */
+    checkout: {
+      script: `
+  <script>
+  (function(){
+    window.brickPay = window.brickPay || {};
+    var SDK = 'https://js.tosspayments.com/v2/standard';
+
+    function loadSdk(){
+      if (window.TossPayments) return Promise.resolve();
+      return new Promise(function(resolve, reject){
+        var el = document.querySelector('script[data-brick-toss]');
+        if (el) { el.addEventListener('load', resolve); el.addEventListener('error', reject); return; }
+        var s = document.createElement('script');
+        s.src = SDK; s.async = true; s.setAttribute('data-brick-toss', '1');
+        s.onload = resolve; s.onerror = reject;
+        document.head.appendChild(s);
+      });
+    }
+
+    window.brickPay['toss'] = function (order) {
+      return fetch('/api/plugins/brick-pay-toss/config')
+        .then(function(r){ return r.json(); })
+        .then(function(cfg){
+          if (!cfg.enabled || !cfg.clientKey) throw new Error('toss not configured');
+          return loadSdk().then(function(){
+            var toss = window.TossPayments(cfg.clientKey);
+            var payment = toss.payment({ customerKey: window.TossPayments.ANONYMOUS });
+            return payment.requestPayment({
+              method: 'CARD',
+              amount: { currency: 'KRW', value: order.amount },
+              orderId: order.orderNo,
+              orderName: order.orderName,
+              successUrl: order.returnUrl,
+              failUrl: order.returnUrl,
+              card: { flowMode: 'DEFAULT', useEscrow: false, useCardPoint: false, useAppCardOnly: false }
+            });
+          });
+        });
+    };
+
+    /*
+     * 결제창에서 돌아왔을 때 주소에 실려 오는 값을 주문서가 읽을 수 있는 모양으로
+     * 옮긴다. PG 마다 칸 이름이 다르므로(토스는 paymentKey) 번역은 여기서 한다.
+     * 실패·취소로 돌아오면 paymentKey 가 없다 — null 을 주면 주문서가 그렇게 알린다.
+     */
+    window.brickPay['toss'].readReturn = function (q) {
+      var key = q.get('paymentKey');
+      return key ? { providerTid: key, amount: Number(q.get('amount') || 0) } : null;
+    };
+  })();
+  </script>`,
+    },
+
     /** 키가 없거나 꺼져 있으면 결제수단으로 노출하지 않는다 */
     async isReady() {
       const cfg = await load();

@@ -392,7 +392,12 @@ export default definePlugin(async (ctx) => {
     // 접수 안내. 주문서의 이메일 칸은 "주문 안내를 받습니다"라고 적혀 있다 —
     // 그 약속을 지키는 자리다. 실패해도 주문은 이미 만들어졌으므로 막지 않는다.
     void notifyOrder(result.id, "pending");
-    return { ...result, bankAccount: s.bankAccount };
+    /*
+     * 입금 계좌는 **무통장입금일 때만** 준다. 카드로 결제한 손님에게 계좌를
+     * 보여 주면 한 번 더 보내는 사람이 나온다.
+     */
+    const method = String(body.orderer?.paymentMethod ?? "bank_transfer");
+    return { ...result, bankAccount: method === "bank_transfer" ? s.bankAccount : undefined };
   });
 
   /** 주문 조회 — 회원은 자기 주문, 비회원은 주문번호+토큰 */
@@ -526,10 +531,20 @@ export default definePlugin(async (ctx) => {
             const ready = g.isReady ? await g.isReady().catch(() => false) : true;
             // 결제수단 이름은 **손님이 주문서에서 읽는다** — 사이트 언어를 따라야 한다.
             // 선언 문자열의 규약대로 원문이 곧 키다(locales/en.json 의 "무통장입금").
-            return ready ? { provider: g.provider, displayName: t(g.displayName) } : null;
+            return ready
+              ? {
+                  provider: g.provider,
+                  displayName: t(g.displayName),
+                  /*
+                   * 그 자리에서 승인이 나는 수단인가. 주문서는 주문을 만든 뒤
+                   * window.brickPay[provider] 로 넘겨야 한다는 것을 이것으로 안다.
+                   */
+                  online: Boolean(g.checkout),
+                }
+              : null;
           }),
         )
-      ).filter((m): m is { provider: string; displayName: string } => m !== null),
+      ).filter((m): m is { provider: string; displayName: string; online: boolean } => m !== null),
       bankAccount: s.bankAccount,
       // 포인트 플러그인이 활성화되어 있으면 주문서에 포인트 사용 UI를 띄운다
       pointsAvailable: Boolean(pointsPort()),

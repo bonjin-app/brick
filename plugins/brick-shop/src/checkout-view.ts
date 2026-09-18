@@ -1,6 +1,25 @@
 import type { PluginContext } from "@brick/plugin-sdk";
 import { escapeHtml } from "@brick/plugin-sdk";
 import { moneyFnScript } from "./i18n.js";
+import { gateways } from "./payments.js";
+
+/**
+ * 온라인 승인이 필요한 결제수단이 낸 클라이언트 단계를 모아 싣는다.
+ * 각 스크립트는 window.brickPay["<provider>"] 하나를 정의한다(payments.ts 의 계약).
+ *
+ * **준비된 게이트웨이만** 싣는다. 키를 넣지 않은 PG 는 주문서에 나오지도 않으므로
+ * 그 스크립트는 하는 일이 없고, 어떤 PG 플러그인을 깔아 두었는지만 알려 준다.
+ */
+async function gatewayScripts(): Promise<string> {
+  const parts = await Promise.all(
+    [...gateways.values()].map(async (g) => {
+      if (!g.checkout) return "";
+      const ready = g.isReady ? await g.isReady().catch(() => false) : true;
+      return ready ? g.checkout.script : "";
+    }),
+  );
+  return parts.join("");
+}
 
 /**
  * 주문서(체크아웃) 화면 — <상점 페이지>/checkout 으로 라우팅된다.
@@ -64,10 +83,16 @@ export function registerCheckoutView(ctx: PluginContext, t: (k: string, p?: Reco
     </label>
 
     <h2>${escapeHtml(t("checkout.payment"))}</h2>
-    <p class="brick-co-pay">
-      <strong>${escapeHtml(t("checkout.bank"))}</strong><br />
-      <small>${escapeHtml(t("checkout.bankHint"))}</small>
-    </p>
+    ${/*
+       결제수단은 **서버가 등록된 게이트웨이로 정한다.** 예전에는 이 자리에
+       "무통장입금" 이 글자로 박혀 있었다 — PG 플러그인을 깔고 키를 넣어도
+       손님은 카드를 고를 수 없었고, /payment-methods 는 아무도 부르지 않는
+       라우트로 남아 있었다.
+     */ ""}
+    <fieldset class="brick-co-pay" id="brick-co-methods">
+      <legend class="brick-co-pay-legend">${escapeHtml(t("checkout.payment"))}</legend>
+      <p class="brick-co-pay-loading">${escapeHtml(t("checkout.loading"))}</p>
+    </fieldset>
 
     <button type="submit" class="brick-primary brick-co-submit">${escapeHtml(t("checkout.submit"))}</button>
     ${/*
@@ -91,7 +116,7 @@ export function registerCheckoutView(ctx: PluginContext, t: (k: string, p?: Reco
     </p>
   </section>
 </div>
-${checkoutScript(t)}
+${await gatewayScripts()}${checkoutScript(t)}
 <style>
 .brick-checkout { max-width: 640px; }
 .brick-checkout h2 { font-size: 17px; margin: 26px 0 10px; }
@@ -107,7 +132,17 @@ ${checkoutScript(t)}
 .brick-co-form [aria-invalid="true"] { border-color: var(--color-danger, #c8322f); outline: 2px solid var(--color-danger, #c8322f); outline-offset: 1px; }
 .brick-co-form .brick-buy-msg.is-error { color: var(--color-danger, #c8322f); font-weight: 600; }
 .brick-co-addr { display: grid; grid-template-columns: 130px 1fr; gap: 10px; }
-.brick-co-pay { background: var(--color-bg-soft, #f7f7f9); border: 1px solid var(--color-line, #e7e7ec); border-radius: 10px; padding: 12px 14px; }
+.brick-co-pay { background: var(--color-bg-soft, #f7f7f9); border: 1px solid var(--color-line, #e7e7ec); border-radius: 10px; padding: 12px 14px; margin: 0; }
+/* 제목(h2)이 바로 위에 있으므로 legend 는 스크린리더에만 남긴다 */
+.brick-co-pay-legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* 44px — 폰에서 누르는 자리다 */
+.brick-co-pay-opt { display: flex; align-items: center; gap: 9px; min-height: 44px; cursor: pointer; font-size: 14.5px; }
+.brick-co-pay-opt + .brick-co-pay-opt { border-top: 1px solid var(--color-line, #e7e7ec); }
+.brick-co-pay-one { margin: 0; font-size: 14.5px; }
+.brick-co-pay-hint, .brick-co-pay-hints { display: block; margin-top: 4px; color: var(--color-text-soft, #45454f); font-size: 12.5px; }
+.brick-co-pay-loading { margin: 0; color: var(--color-muted, #6c6c7a); font-size: 13px; }
+.brick-co-return { font-size: 15px; margin: 0 0 10px; }
+.brick-co-return.is-error { color: var(--color-danger, #c8322f); font-weight: 600; }
 .brick-co-points { display: flex; gap: 8px; align-items: center; }
 .brick-co-points input { flex: 1; }
 #brick-co-points-hint { display: block; margin-top: 4px; font-size: 12.5px; color: var(--color-muted, #71717d); }
@@ -158,7 +193,10 @@ const checkoutScript = (t: (k: string) => string) => `
       '</div>';
   }
 
-  fetch('/api/plugins/brick-shop/cart' + qs)
+  /* PG 에서 돌아온 길이면 장바구니를 다시 그리지 않는다 — 함수 선언은 호이스팅된다 */
+  var returning = finishReturn();
+
+  if (!returning) fetch('/api/plugins/brick-shop/cart' + qs)
     .then(function(r){ return r.json(); })
     .then(function(d){
       if (!d.items || !d.items.length) {
@@ -175,6 +213,108 @@ const checkoutScript = (t: (k: string) => string) => `
       setupPoints(d);
     })
     .catch(function(){ itemsBox.innerHTML = '<p class="brick-shop-empty">' + ${JSON.stringify(t("checkout.fail"))} + '</p>'; });
+
+  /*
+   * 결제수단 — 서버가 "지금 쓸 수 있는" 것만 준다(키를 넣지 않은 PG 는 빠진다).
+   * 하나뿐이면 고르게 하지 않고 그것만 알려 준다 — 선택지가 하나인 라디오는
+   * 누를 것이 없는데 자리만 차지한다.
+   */
+  var methodsBox = document.getElementById('brick-co-methods');
+  var methods = [];
+  var chosen = 'bank_transfer';
+
+  /*
+   * PG 에서 돌아왔다 — 승인을 마친다.
+   *
+   * 주소의 brickPay 가 어느 수단이었는지 알려 준다. PG 마다 돌려주는 칸 이름이
+   * 다르므로(토스는 paymentKey), 번역은 그 플러그인의 readReturn 이 한다.
+   * 우리는 주문번호와 거래 키만 들고 /payments/confirm 으로 간다 — 금액 검증은
+   * 서버가 PG 에 직접 물어서 한다(화면이 보낸 금액은 신뢰하지 않는다).
+   */
+  function finishReturn(){
+    var q = new URLSearchParams(location.search);
+    var provider = q.get('brickPay');
+    var orderNo = q.get('orderNo');
+    if (!provider || !orderNo) return false;
+    var pay = (window.brickPay || {})[provider];
+    var got = pay && typeof pay.readReturn === 'function' ? pay.readReturn(q) : null;
+    form.hidden = true;
+    var summary = document.querySelector('.brick-co-summary');
+    if (summary) summary.hidden = false;
+    /*
+     * 안내는 **주문 요약 자리**에 쓴다. 폼 안의 msg 를 쓰면 안 된다 —
+     * 돌아온 길에서는 장바구니를 다시 그리지 않으므로 폼이 비어 있고,
+     * 거기에 글자만 띄우면 손님은 빈 주문서를 마주한다.
+     * 주문은 이미 만들어져 있으므로 그 주문으로 가는 길을 함께 준다.
+     */
+    function notice(text, isError){
+      itemsBox.innerHTML = '<p class="brick-co-return' + (isError ? ' is-error' : '') + '">' + esc(text) + '</p>' +
+        '<p><a class="brick-co-back" href="' + root.dataset.shopBase + '/orders/' + encodeURIComponent(orderNo) + '">' +
+        ${JSON.stringify(t("orders.viewOrder"))} + '</a></p>';
+    }
+    if (!got) {
+      // 손님이 PG 화면에서 취소했거나 실패했다 — 주문은 결제대기로 남는다
+      notice(${JSON.stringify(t("checkout.payCancelled"))}, true);
+      return true;
+    }
+    notice(${JSON.stringify(t("checkout.payConfirming"))}, false);
+    fetch('/api/plugins/brick-shop/payments/confirm', {
+      method: 'POST', headers: {'content-type':'application/json'},
+      body: JSON.stringify({ orderNo: orderNo, provider: provider, providerTid: got.providerTid, amount: got.amount })
+    }).then(function(r){ return r.json().then(function(d){ return {ok:r.ok, d:d}; }); })
+      .then(function(res){
+        if (!res.ok) {
+          notice(res.d.message || ${JSON.stringify(t("checkout.payFail"))}, true);
+          return;
+        }
+        if (summary) summary.hidden = true;   // 완료 화면이 떴으면 진행 안내는 치운다
+        document.getElementById('brick-co-no').textContent = orderNo;
+        if (res.d.amount != null) document.getElementById('brick-co-total').textContent = fmt(res.d.amount);
+        var view = document.getElementById('brick-co-view');
+        if (view) view.href = root.dataset.shopBase + '/orders/' + encodeURIComponent(orderNo);
+        document.getElementById('brick-co-done').hidden = false;
+        window.scrollTo(0, 0);
+      })
+      .catch(function(){ notice(${JSON.stringify(t("checkout.payFail"))}, true); });
+    return true;
+  }
+
+  function drawMethods(list, bankAccount){
+    methods = list;
+    if (!list.length) { methodsBox.hidden = true; return; }
+    chosen = list[0].provider;
+    var hint = function(p){
+      return p === 'bank_transfer'
+        ? '<small class="brick-co-pay-hint">' + ${JSON.stringify(t("checkout.bankHint"))} + '</small>'
+        : '';
+    };
+    if (list.length === 1) {
+      methodsBox.innerHTML = '<p class="brick-co-pay-one"><strong>' + esc(list[0].displayName) + '</strong></p>' + hint(list[0].provider);
+      return;
+    }
+    methodsBox.innerHTML = list.map(function(m, i){
+      return '<label class="brick-co-pay-opt">' +
+        '<input type="radio" name="paymentMethod" value="' + esc(m.provider) + '"' + (i === 0 ? ' checked' : '') + ' /> ' +
+        '<span>' + esc(m.displayName) + '</span></label>';
+    }).join('') + '<div class="brick-co-pay-hints"></div>';
+    var hints = methodsBox.querySelector('.brick-co-pay-hints');
+    var sync = function(){
+      var el = methodsBox.querySelector('input[name=paymentMethod]:checked');
+      chosen = el ? el.value : list[0].provider;
+      hints.innerHTML = hint(chosen);
+    };
+    methodsBox.addEventListener('change', sync);
+    sync();
+  }
+
+  fetch('/api/plugins/brick-shop/payment-methods')
+    .then(function(r){ return r.json(); })
+    .then(function(d){ drawMethods(d.methods || [], d.bankAccount); })
+    .catch(function(){
+      // 목록을 못 받으면 기본 경로(무통장입금)로 둔다 — 주문 자체는 막지 않는다
+      methodsBox.innerHTML = '<p class="brick-co-pay-one"><strong>' + ${JSON.stringify(t("checkout.bank"))} + '</strong></p>' +
+        '<small class="brick-co-pay-hint">' + ${JSON.stringify(t("checkout.bankHint"))} + '</small>';
+    });
 
   /*
    * 포인트 칸을 켜고, 값이 바뀌면 합계를 다시 받는다.
@@ -277,6 +417,7 @@ const checkoutScript = (t: (k: string) => string) => `
       var v = String(f.get(k) || '').trim();
       if (v) orderer[k] = v;
     });
+    orderer.paymentMethod = chosen;
     var body = { orderer: orderer, idempotencyKey: idem };
     var coupon = String(f.get('couponCode') || '').trim();
     if (coupon) body.couponCode = coupon;
@@ -312,6 +453,35 @@ const checkoutScript = (t: (k: string) => string) => `
           return;
         }
         var d = res.d;
+        /*
+         * 그 자리에서 승인이 나야 하는 수단이면 PG 로 넘긴다.
+         *
+         * 주문은 이미 만들어졌다(결제대기). 승인은 PG 화면에서 끝나고,
+         * 돌아오면 이 화면이 조회 문자열을 보고 /payments/confirm 으로 마친다.
+         * 넘기는 함수가 없으면 **주문서가 그 수단을 내놓지 않았어야 한다** —
+         * 여기까지 왔다면 설치가 어긋난 것이므로 조용히 완료 화면을 띄우지
+         * 않고 그대로 말한다(손님이 결제했다고 믿는 것이 가장 나쁘다).
+         */
+        var picked = methods.filter(function(m){ return m.provider === chosen; })[0];
+        if (picked && picked.online) {
+          var pay = (window.brickPay || {})[chosen];
+          if (typeof pay !== 'function') {
+            msg.classList.add('is-error');
+            msg.textContent = ${JSON.stringify(t("checkout.payUnavailable"))};
+            msg.scrollIntoView({ block: 'center' });
+            btn.disabled = false;
+            return;
+          }
+          msg.textContent = ${JSON.stringify(t("checkout.payRedirect"))};
+          var back = location.origin + location.pathname + '?brickPay=' + encodeURIComponent(chosen) + '&orderNo=' + encodeURIComponent(d.orderNo);
+          Promise.resolve(pay({ orderNo: d.orderNo, amount: d.total, orderName: d.orderName || d.orderNo, returnUrl: back }))
+            .catch(function(){
+              msg.classList.add('is-error');
+              msg.textContent = ${JSON.stringify(t("checkout.payFail"))};
+              btn.disabled = false;
+            });
+          return;
+        }
         form.hidden = true;
         document.querySelector('.brick-co-summary').hidden = true;
         document.getElementById('brick-co-no').textContent = d.orderNo;

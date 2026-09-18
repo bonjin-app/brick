@@ -5,14 +5,28 @@ import { DB } from "../../runtime.module.js";
 import { ThemesService } from "../themes/themes.service.js";
 
 /** 정책에 실을 수 있는 지시어 — 테마·플러그인이 더할 수 있는 것만 */
-export type CspDirective = "style-src" | "font-src" | "img-src" | "media-src" | "frame-src" | "connect-src";
+export type CspDirective =
+  | "style-src" | "font-src" | "img-src" | "media-src" | "frame-src" | "connect-src" | "script-src";
 
 export type CspMode = "on" | "report-only" | "off";
 
 /** 출처 문자열 검사 — https 출처, 스킴, 잘 알려진 키워드만 받는다 */
 const SOURCE_RE = /^(https:\/\/[a-z0-9.*-]+(:\d+)?(\/[\w./-]*)?|https:|data:|blob:|'self'|'none')$/i;
 
-const DIRECTIVES: CspDirective[] = ["style-src", "font-src", "img-src", "media-src", "frame-src", "connect-src"];
+/**
+ * script-src 는 **호스트를 못박은 https 출처만** 받는다.
+ *
+ * 다른 지시어보다 좁게 보는 이유: 여기서 허용한 출처는 그대로 **코드 실행**이다.
+ * `https:` (스킴 전체)나 `*.` 가 섞인 와일드카드를 받아 주면, 게시판 본문에
+ * 심어진 `<script src="//어딘가">` 를 막는다는 이 정책의 목적 자체가 사라진다.
+ * 반대로 `https://js.tosspayments.com` 처럼 못박힌 출처는 그 위험을 늘리지
+ * 않는다 — 공격자가 그 호스트에 자기 스크립트를 올릴 수 없기 때문이다.
+ */
+const SCRIPT_SOURCE_RE = /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)+(:\d+)?(\/[\w./-]*)?$/i;
+
+const DIRECTIVES: CspDirective[] = [
+  "style-src", "font-src", "img-src", "media-src", "frame-src", "connect-src", "script-src",
+];
 
 /**
  * Content-Security-Policy — 저장형 XSS 의 두 번째 방어선.
@@ -25,6 +39,10 @@ const DIRECTIVES: CspDirective[] = ["style-src", "font-src", "img-src", "media-s
  * 플러그인 전부를 고쳐야 한다 — 지금 얻을 수 있는 것에 비해 대가가 크다. 대신 **외부 스크립트를
  * 전면 차단**한다(`script-src 'self'`): 저장형 XSS 의 가장 흔한 형태가 `<script src="//evil">` 이고,
  * 그것이 막히면 공격자는 인라인만 남는데 그건 새니타이저가 지운다.
+ *
+ * 예외는 **매니페스트에 호스트를 못박아 선언한 출처**뿐이다(PG 결제창 SDK 등).
+ * 선언은 관리자가 설치한 확장만 할 수 있고, 못박힌 호스트는 공격자가 자기 코드를
+ * 올릴 수 있는 곳이 아니므로 위 논리는 그대로 성립한다.
  *
  * 인라인과 무관하게 바로 이득인 것들도 함께 건다:
  *   object-src 'none'   — 플래시·PDF 임베드를 통한 실행
@@ -89,7 +107,8 @@ export class CspService {
           const value = String(raw).trim();
           // 잘못 적힌 출처 하나가 정책 전체를 무너뜨리지 않게 조용히 버린다.
           // (http: 나 * 를 받아 주면 선언의 의미가 없다)
-          if (SOURCE_RE.test(value)) extra.get(d)!.add(value);
+          const ok = d === "script-src" ? SCRIPT_SOURCE_RE.test(value) : SOURCE_RE.test(value);
+          if (ok) extra.get(d)!.add(value);
         }
       }
     };
@@ -101,8 +120,16 @@ export class CspService {
     const join = (d: CspDirective, base: string[]) => [...base, ...extra.get(d)!].join(" ");
     return [
       "default-src 'self'",
-      // 외부 스크립트 전면 차단. 인라인은 테마·플러그인이 쓰므로 허용한다(위 주석 참고)
-      "script-src 'self' 'unsafe-inline'",
+      /*
+       * 외부 스크립트는 **선언한 곳만** 열린다. 인라인은 테마·플러그인이 쓰므로 허용한다(위 주석 참고).
+       *
+       * 예전에는 여기가 `'self' 'unsafe-inline'` 로 닫혀 있었고 플러그인이 더할 수
+       * 없었다. 그래서 PG 결제창 SDK 를 불러올 방법이 없었고, **카드 결제가
+       * 아예 불가능했다** — 게이트웨이 계약도 승인·환불 코드도 다 있는데.
+       * 지금은 매니페스트의 `csp.script-src` 로 호스트를 못박아 선언한 출처만
+       * 실린다(SCRIPT_SOURCE_RE 참고).
+       */
+      `script-src ${join("script-src", ["'self'", "'unsafe-inline'"])}`,
       `style-src ${join("style-src", ["'self'", "'unsafe-inline'"])}`,
       // 본문에 외부 이미지를 넣는 것은 정상 사용이다 — 이미지로는 스크립트가 실행되지 않는다
       `img-src ${join("img-src", ["'self'", "data:", "blob:", "https:"])}`,

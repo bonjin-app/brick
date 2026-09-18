@@ -5,6 +5,7 @@ import type { Db, OrderStatus, ShopSettings } from "./types.js";
 import { ShopError, STATUS_LABEL, STATUS_TRANSITIONS, STOCK_RESTORING } from "./types.js";
 import { quote, type Quote } from "./pricing.js";
 import { t, localeTag } from "./i18n.js";
+import { isKnownPaymentMethod } from "./gateway-registry.js";
 
 /**
  * 포인트 서비스의 최소 계약 — brick-point가 공개하는 것 중 쇼핑몰이 쓰는 부분만.
@@ -35,7 +36,7 @@ export interface OrdererInput {
   paymentMethod?: string;
 }
 
-const PAYMENT_METHODS = ["bank_transfer"]; // PG 연동은 별도 플러그인이 추가한다
+
 
 /**
  * 주문 생성.
@@ -66,7 +67,7 @@ export async function createOrder(
     /** 회원 등급 혜택 (grades.gradeOf 결과). 라우트가 읽어서 넘긴다 */
     grade?: { name: string; discountRate: number } | null;
   },
-): Promise<{ id: string; orderNo: string; total: number; guestToken: string | null }> {
+): Promise<{ id: string; orderNo: string; total: number; guestToken: string | null; orderName: string }> {
   const { orderer } = params;
   validateOrderer(orderer);
 
@@ -76,7 +77,9 @@ export async function createOrder(
   if (idemKey) {
     if (idemKey.length > 100) throw new ShopError(400, "idempotencyKey가 너무 깁니다.");
     const { rows } = await db.execute(sql`
-      SELECT id, order_no, total, guest_token FROM shop_orders WHERE idempotency_key = ${idemKey} LIMIT 1
+      SELECT o.id, o.order_no, o.total, o.guest_token,
+             (SELECT i.product_name FROM shop_order_items i WHERE i.order_id = o.id ORDER BY i.id LIMIT 1) AS order_name
+        FROM shop_orders o WHERE o.idempotency_key = ${idemKey} LIMIT 1
     `);
     if (rows[0]) {
       return {
@@ -84,12 +87,15 @@ export async function createOrder(
         orderNo: String(rows[0].order_no),
         total: Number(rows[0].total),
         guestToken: rows[0].guest_token ? String(rows[0].guest_token) : null,
+        // 같은 키로 다시 온 주문 — 결제창 이름도 그대로 돌려준다
+        orderName: String(rows[0].order_name ?? rows[0].order_no),
       };
     }
   }
 
   const method = orderer.paymentMethod ?? "bank_transfer";
-  if (!PAYMENT_METHODS.includes(method)) {
+  // 등록된 게이트웨이만 받는다 (무통장입금도 게이트웨이로 등록돼 있다)
+  if (!isKnownPaymentMethod(method)) {
     throw new ShopError(400, `지원하지 않는 결제수단입니다: ${method}`);
   }
 
@@ -244,7 +250,19 @@ export async function createOrder(
     return orderNo;
   });
 
-  return { id: orderId, orderNo, total: q.total, guestToken };
+  /*
+   * orderName 은 **PG 결제창에 뜨는 이름**이다. 주문번호만 보내면 손님은
+   * 카드 승인 화면에서 "20260917-000001" 을 보고 무엇을 사는지 알 수 없다.
+   * 주문 시점의 상품명을 쓴다(상품이 나중에 지워져도 남는 스냅샷과 같은 값).
+   */
+  const first = q.lines[0];
+  const orderName = first
+    ? q.lines.length > 1
+      ? `${first.productName} 외 ${q.lines.length - 1}건`
+      : String(first.productName)
+    : orderNo;
+
+  return { id: orderId, orderNo, total: q.total, guestToken, orderName };
 }
 
 /**

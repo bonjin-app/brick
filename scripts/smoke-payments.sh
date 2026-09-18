@@ -176,6 +176,10 @@ absent   "저장 응답에도 시크릿 키가 없다" "$TOSS_PUT" "SECRET_VALUE
 contains "GET 과 같은 모양" "$TOSS_PUT" '"clientKey":"test_ck_public"'
 METHODS="$(curl -s "$SHOP/payment-methods")"
 contains "설정 후 목록에 뜬다" "$METHODS" '"toss"'
+# 주문서는 이 값으로 "주문 뒤 결제창으로 넘겨야 하는 수단" 을 가른다.
+# 무통장입금은 나중에 입금하므로 false, 카드는 그 자리에서 승인이 나야 하므로 true.
+contains "카드는 그 자리에서 승인이 필요하다고 알린다" "$METHODS" '"online":true'
+contains "무통장입금은 아니다" "$METHODS" '"online":false'
 
 echo "── 시크릿 키가 새지 않는다"
 PUB="$(curl -s "$TOSS/config")"
@@ -195,6 +199,30 @@ mkorder() {  # mkorder <수량> → orderNo
   printf '{"items":[{"productId":"%s","quantity":%s}],"orderer":{"ordererName":"구매자","ordererPhone":"010-1111-2222","postcode":"06236","address1":"서울"}}' "$P" "$1" > "$TMP/mk.json"
   curl -s -b "$B" -X POST "$SHOP/orders" -H 'content-type: application/json' --data-binary "@$TMP/mk.json" | jq_get "['orderNo']"
 }
+
+echo "── 등록된 결제수단은 주문에 실을 수 있다"
+# 예전에는 orders.ts 가 ["bank_transfer"] 배열로 검사해서, PG 를 깔고 키를 넣어도
+# 카드로 주문하면 "지원하지 않는 결제수단입니다: toss" 로 거절됐다 —
+# 주문서에 결제수단 선택이 아예 없어서 아무도 밟지 않던 길이다.
+#
+# 상품을 따로 쓴다: 아래 승인·환불 절들이 $P 의 재고 숫자를 못박아 검사하므로,
+# 여기서 한 개를 팔면 그쪽이 1씩 어긋난다(실제로 어긋나서 알았다).
+PM="$(curl -s -b "$CK" -X POST "$SHOP/admin/products" -H 'content-type: application/json' \
+  -d '{"slug":"pay-method-item","name":"결제수단 시험 상품","price":9000,"stock":50,"status":"selling"}' | jq_get "['id']")"
+printf '{"items":[{"productId":"%s","quantity":1}],"orderer":{"ordererName":"구매자","ordererPhone":"010-1111-2222","postcode":"06236","address1":"서울","paymentMethod":"toss"}}' "$PM" > "$TMP/mkcard.json"
+CARD_ORDER="$(curl -s -b "$B" -X POST "$SHOP/orders" -H 'content-type: application/json' --data-binary "@$TMP/mkcard.json")"
+contains "카드로 주문할 수 있다" "$CARD_ORDER" '"orderNo"'
+absent   "거절되지 않는다" "$CARD_ORDER" "지원하지 않는 결제수단"
+# 결제창에 뜨는 이름 — 주문번호만 보내면 손님은 무엇을 사는지 알 수 없다
+contains "결제창에 쓸 주문명을 준다" "$CARD_ORDER" '"orderName":"결제수단 시험 상품"'
+# 입금 계좌는 무통장입금일 때만 — 카드 손님이 계좌를 보면 한 번 더 보낸다
+absent "카드 주문에는 입금 계좌를 주지 않는다" "$CARD_ORDER" '"bankAccount"'
+CARD_NO="$(printf '%s' "$CARD_ORDER" | jq_get "['orderNo']")"
+check "주문에 결제수단이 남는다" "$(psql_q "SELECT payment_method FROM shop_orders WHERE order_no='$CARD_NO'")" "toss"
+
+echo "── 등록되지 않은 결제수단은 거절한다"
+printf '{"items":[{"productId":"%s","quantity":1}],"orderer":{"ordererName":"구매자","ordererPhone":"010-1111-2222","postcode":"06236","address1":"서울","paymentMethod":"nosuchpg"}}' "$PM" > "$TMP/mkbad.json"
+contains "모르는 결제수단은 400" "$(curl -s -b "$B" -X POST "$SHOP/orders" -H 'content-type: application/json' --data-binary "@$TMP/mkbad.json")" "지원하지 않는 결제수단"
 
 echo "══ 승인: PG 응답 금액을 신뢰하지 않는다 ══"
 # 11,000 × 2 = 22,000 + 배송비 3,000 = 25,000

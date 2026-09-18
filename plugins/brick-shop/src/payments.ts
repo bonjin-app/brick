@@ -5,6 +5,7 @@ import { ShopError } from "./types.js";
 import { changeOrderStatus, type PointsPort } from "./orders.js";
 import { isUniqueViolation } from "@brick/plugin-sdk";
 import { t, money } from "./i18n.js";
+import { gateways, registerGateway } from "./gateway-registry.js";
 
 /**
  * 결제 게이트웨이 추상화.
@@ -57,6 +58,30 @@ export interface PaymentGateway {
    * 것처럼 보이고, 그 손님은 다시 오지 않는다.
    */
   isReady?(): Promise<boolean>;
+  /**
+   * 주문을 만든 **뒤** 손님을 PG 로 넘기는 클라이언트 단계.
+   *
+   * 없으면 주문만 만들고 끝난다 — 무통장입금처럼 **나중에 돈이 들어오는**
+   * 결제수단이다. 카드처럼 그 자리에서 승인이 나야 하는 수단은 반드시 이것을
+   * 선언해야 한다. 선언하지 않으면 주문서는 그 수단을 **내놓지 않는다**:
+   * 고를 수는 있는데 승인으로 가는 길이 없으면, 손님은 결제했다고 믿고
+   * 사업자는 받지 못한 주문을 배송하게 된다. 키를 넣지 않은 PG 를 감추는
+   * `isReady` 와 같은 원칙이다.
+   *
+   * `script` 는 주문서에 함께 실린다. 그 안에서 전역 함수 하나를 정의한다:
+   *
+   * ```js
+   * window.brickPay["toss"] = async function (order) {
+   *   // order: { orderNo, amount, orderName, returnUrl }
+   *   // PG 화면으로 보낸다(리다이렉트해도 된다). 돌아온 뒤의 승인은
+   *   // 주문서가 returnUrl 의 조회 문자열을 보고 /payments/confirm 으로 마친다.
+   * };
+   * ```
+   */
+  checkout?: {
+    /** 주문서에 함께 실을 `<script>` 문자열 */
+    script: string;
+  };
   /**
    * 정기결제 — 빌링키 발급 (선택 구현).
    *
@@ -111,12 +136,8 @@ export interface PaymentGateway {
   }>;
 }
 
-/** 등록된 게이트웨이 (PG 플러그인이 registerGateway로 채운다) */
-export const gateways = new Map<string, PaymentGateway>();
-
-export function registerGateway(gateway: PaymentGateway): void {
-  gateways.set(gateway.provider, gateway);
-}
+/* 보관소는 gateway-registry.ts 에 있다(순환 참조를 피하려고) — 여기서는 그대로 다시 낸다 */
+export { gateways, registerGateway };
 
 /**
  * 결제 승인 처리 — 커머스에서 가장 위험한 코드 경로.

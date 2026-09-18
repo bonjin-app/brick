@@ -51,7 +51,13 @@ try {
 }
 const dbName = new URL(url).pathname.slice(1);
 
-const client = new pg.Client({ connectionString: url, connectionTimeoutMillis: 10_000 });
+/*
+ * 접속 제한시간 30초. 10초였는데, 바쁜 노트북에서 막 띄운 임베디드 PostgreSQL 은
+ * 첫 접속에 5초 넘게 걸리는 일이 흔하고(측정: 4~5초, 한때 79초) 그때마다
+ * "timeout expired" 한 줄만 남기고 스모크가 통째로 죽었다 — 코드는 멀쩡한데
+ * 무엇이 잘못됐는지 알 수 없는 실패다.
+ */
+const client = new pg.Client({ connectionString: url, connectionTimeoutMillis: 30_000 });
 try {
   await client.connect();
   // public 스키마를 통째로 재생성하는 것이 테이블을 하나씩 지우는 것보다 확실하다
@@ -61,7 +67,11 @@ try {
   await client.query("GRANT ALL ON SCHEMA public TO CURRENT_USER");
   console.log(`[reset-db] "${dbName}" 초기화 완료`);
 } catch (err) {
-  console.error(`[reset-db] 실패: ${err instanceof Error ? err.message : String(err)}`);
+  const msg = err instanceof Error ? err.message : String(err);
+  console.error(`[reset-db] 실패: ${msg}`);
+  if (/timeout/i.test(msg)) {
+    console.error("[reset-db] 데이터베이스가 응답하지 않습니다 — 떠 있는지(pnpm db:dev) 확인하세요.");
+  }
   process.exit(1);
 } finally {
   await client.end().catch(() => undefined);
