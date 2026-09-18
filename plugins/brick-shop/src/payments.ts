@@ -76,6 +76,15 @@ export interface PaymentGateway {
    *   // PG 화면으로 보낸다(리다이렉트해도 된다). 돌아온 뒤의 승인은
    *   // 주문서가 returnUrl 의 조회 문자열을 보고 /payments/confirm 으로 마친다.
    * };
+   * window.brickPay["toss"].readReturn = (query) => ({ providerTid, amount }) | null;
+   * ```
+   *
+   * 정기결제까지 지원한다면 카드 등록 단계도 같은 자리에 붙인다 — 이것이 없으면
+   * 회원은 카드를 등록할 수 없고, 카드가 없으면 정기배송에 가입할 수 없다:
+   *
+   * ```js
+   * window.brickPay["toss"].registerCard = async ({ customerKey, returnUrl }) => { … };
+   * window.brickPay["toss"].readCardReturn = (query) => ({ authKey, customerKey }) | null;
    * ```
    */
   checkout?: {

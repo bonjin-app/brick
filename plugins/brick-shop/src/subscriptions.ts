@@ -43,7 +43,13 @@ function billingGateway(provider: string): PaymentGateway | null {
 
 export function listBillingProviders(): Array<{ provider: string; displayName: string }> {
   return [...gateways.values()]
-    .filter((g) => g.issueBillingKey && g.chargeBillingKey)
+    /*
+     * 서버 쪽 둘(발급·청구)만으로는 부족하다. 카드 등록 창을 여는 **클라이언트
+     * 단계**(checkout.script 안의 registerCard)가 없으면 회원은 카드를 등록할
+     * 길이 없다 — 그런 결제수단을 목록에 내놓으면 누를 수는 있는데 아무 일도
+     * 일어나지 않는다. 결제수단을 감추는 isReady 와 같은 원칙이다.
+     */
+    .filter((g) => g.issueBillingKey && g.chargeBillingKey && g.checkout)
     .map((g) => ({ provider: g.provider, displayName: g.displayName }));
 }
 

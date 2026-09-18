@@ -154,6 +154,34 @@ export default definePlugin(async (ctx) => {
       var key = q.get('paymentKey');
       return key ? { providerTid: key, amount: Number(q.get('amount') || 0) } : null;
     };
+
+    /*
+     * 정기결제용 카드 등록 — 카드번호는 토스의 등록 창에서만 입력된다.
+     * 돌아올 때 authKey 와 customerKey 가 주소에 실려 오고, 빌링키 발급은
+     * 서버가 그 authKey 로 토스에 직접 요청한다(카드번호는 오지 않는다).
+     */
+    window.brickPay['toss'].registerCard = function (opts) {
+      return fetch('/api/plugins/brick-pay-toss/config')
+        .then(function(r){ return r.json(); })
+        .then(function(cfg){
+          if (!cfg.enabled || !cfg.clientKey) throw new Error('toss not configured');
+          return loadSdk().then(function(){
+            var toss = window.TossPayments(cfg.clientKey);
+            var payment = toss.payment({ customerKey: opts.customerKey });
+            return payment.requestBillingAuth({
+              method: 'CARD',
+              successUrl: opts.returnUrl,
+              failUrl: opts.returnUrl
+            });
+          });
+        });
+    };
+
+    window.brickPay['toss'].readCardReturn = function (q) {
+      var authKey = q.get('authKey');
+      var customerKey = q.get('customerKey');
+      return authKey && customerKey ? { authKey: authKey, customerKey: customerKey } : null;
+    };
   })();
   </script>`,
     },

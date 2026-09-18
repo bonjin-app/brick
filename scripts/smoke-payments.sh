@@ -126,7 +126,15 @@ done
 if kill -0 "$PG_PID" 2>/dev/null && [[ "$(pids_on_port "$PG_PORT")" == *"$PG_PID"* ]]; then
   ok "스텁 PG 시작 (우리 프로세스가 듣고 있다)"
 else
+  #
+  # 여기서 **멈춘다.** 스텁이 없으면 뒤의 단언 수십 개가 전부 의미 없이
+  # 무너지고(로그를 읽는 것들은 남의 로그를 읽는다), 진짜 원인 한 줄은 그
+  # 목록 맨 위에 묻힌다 — 실제로 59개 실패 속에서 이 한 줄을 찾아야 했다.
+  # 전제가 무너지면 결과를 내지 않는 것이 옳다.
+  #
   bad "스텁 PG 시작 ($(tail -2 "$TMP/pg.log" 2>/dev/null))"
+  echo "  포트 $PG_PORT 를 다른 프로세스가 쓰고 있습니다 — 스텁 없이는 이 수트를 돌릴 수 없습니다."
+  exit 1
 fi
 
 export BRICK_PLUGINS_DIR="$ROOT/plugins"
