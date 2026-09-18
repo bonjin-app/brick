@@ -154,6 +154,7 @@
   "inquiries.titlePh": "Title",
   "inquiries.waiting": "Pending",
   "inquiries.writeTitle": "Ask about this product",
+  "list.categoryTitle": "CATEGORY",
   "list.empty": "No products yet.",
   "list.total": "{n} items",
   "order.notEnoughPoints": "You do not have enough points. (balance: {balance})",

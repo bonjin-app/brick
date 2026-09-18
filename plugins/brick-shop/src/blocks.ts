@@ -515,7 +515,7 @@ ${buyScript(`${shopBaseOf(blockCtx)}/cart`)}${GALLERY_SCRIPT}${restockScript()}$
       if (!tail) {
         // 목록 — 분류 내비 + 상품 그리드. ?category= 로 좁힌다.
         const category = String(blockCtx.query?.category ?? "");
-        const nav = await categoryListBlock.render({}, blockCtx);
+        const nav = await categoryListBlock.render({ current: category }, blockCtx);
         // 목록 화면에서는 손님이 정렬을 고를 수 있다(홈의 진열 섹션과 달리)
         const list = await productListBlock.render(
           {
@@ -529,7 +529,23 @@ ${buyScript(`${shopBaseOf(blockCtx)}/cart`)}${GALLERY_SCRIPT}${restockScript()}$
           },
           blockCtx,
         );
-        return `${nav}\n${list}`;
+        /*
+         * 넓은 화면에서는 분류를 **왼쪽 레일**로 세운다 — 한국 쇼핑몰의 관례다.
+         * 분류가 많아지면 가로 칩은 두세 줄로 접혀 상품을 아래로 밀어내는데,
+         * 세로 레일은 몇 개가 되든 상품 격자의 시작 위치가 그대로다.
+         * 좁은 화면에서는 레일을 세울 자리가 없으므로 원래의 가로 칩으로 돌아간다.
+         *
+         * 테마가 아니라 **상점 블록이** 그린다 — 분류는 쇼핑몰의 데이터이고,
+         * 테마는 쇼핑몰을 몰라도 된다는 것이 이 저장소의 계약이다.
+         */
+        if (!nav) return list;
+        return `<div class="brick-shop-layout">
+  <aside class="brick-shop-rail">
+    <h2 class="brick-rail-title">${escapeHtml(t("list.categoryTitle"))}</h2>
+    ${nav}
+  </aside>
+  <div class="brick-shop-body">${list}</div>
+</div>`;
       }
       /**
        * 화면마다 제목을 선언한다 — 안 하면 라우터 페이지 제목("쇼핑몰")이
@@ -659,17 +675,26 @@ ${buyScript(`${shopBaseOf(blockCtx)}/cart`)}${GALLERY_SCRIPT}${restockScript()}$
   const categoryListBlock: Parameters<PluginContext["registerBlock"]>[0] = {
     name: "category-list",
     displayName: "상품 분류 목록",
-    render: async () => {
+    render: async (props) => {
       const { rows } = await db.execute(sql`
         SELECT c.slug, c.name,
                (SELECT count(*) FROM shop_products p WHERE p.category_id = c.id AND p.status = 'selling') AS n
         FROM shop_categories c WHERE c.is_visible = true ORDER BY c.sort_order, c.name
       `);
       if (!rows.length) return "";
+      /*
+       * 지금 보고 있는 분류를 표시한다 — 목록을 좁혀 놓고 어느 분류인지
+       * 알 수 없으면 손님은 "왜 상품이 몇 개뿐이지" 라고 생각한다.
+       */
+      const current = String(props.current ?? "");
+      const all = `<a href="/shop"${current ? "" : ' class="is-on" aria-current="page"'}>${escapeHtml(t("filter.all"))}</a>`;
       const items = rows
-        .map((c) => `<a href="/shop?category=${encodeURIComponent(String(c.slug))}">${escapeHtml(c.name)} <span>${Number(c.n)}</span></a>`)
+        .map((c) => {
+          const on = current && current === String(c.slug);
+          return `<a href="/shop?category=${encodeURIComponent(String(c.slug))}"${on ? ' class="is-on" aria-current="page"' : ""}>${escapeHtml(c.name)} <span>${Number(c.n)}</span></a>`;
+        })
         .join("");
-      return `<nav class="brick-category-list">${items}</nav>${STOREFRONT_CSS}`;
+      return `<nav class="brick-category-list">${all}${items}</nav>${STOREFRONT_CSS}`;
     },
   };
   ctx.registerBlock(categoryListBlock);
@@ -953,6 +978,28 @@ p.brick-restock-msg.is-error{color:var(--color-danger,#c9342f)}
 .brick-category-list{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}
 .brick-category-list a{padding:7px 14px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius-lg, 20px);text-decoration:none;color:inherit;font-size:14px}
 .brick-category-list a span{color:var(--color-muted, #6c6c7a);font-size:12px}
+.brick-category-list a.is-on{border-color:var(--color-text, #17171c);background:var(--color-text, #17171c);color:var(--color-bg, #ffffff);font-weight:600}
+.brick-category-list a.is-on span{color:inherit;opacity:.7}
+
+/* ── 목록 화면의 2단: 왼쪽 분류 레일 + 상품 ───────── */
+.brick-shop-layout{display:grid;grid-template-columns:168px minmax(0,1fr);gap:0 34px;align-items:start}
+.brick-shop-body{min-width:0}
+.brick-rail-title{margin:18px 0 10px;font-size:12px;font-weight:700;letter-spacing:.09em;color:var(--color-muted, #6c6c7a)}
+/* 레일 안에서는 칩이 아니라 줄 목록이다 — 분류가 몇 개든 격자 시작 위치가 그대로다 */
+.brick-shop-rail .brick-category-list{display:block;margin:0;border-top:1px solid var(--color-line, #e4e4ea)}
+.brick-shop-rail .brick-category-list a{display:flex;justify-content:space-between;gap:8px;padding:10px 2px;border:0;border-bottom:1px solid var(--color-line, #e4e4ea);border-radius:0;font-size:13.5px;color:var(--color-text-soft, #45454f)}
+.brick-shop-rail .brick-category-list a:hover{color:var(--color-text, #17171c)}
+.brick-shop-rail .brick-category-list a.is-on{background:none;color:var(--color-text, #17171c);font-weight:700}
+.brick-shop-rail .brick-category-list a.is-on span{color:var(--color-muted, #6c6c7a);opacity:1}
+/* 레일을 세울 자리가 없으면 원래의 가로 칩으로 돌아간다 */
+@media(max-width:900px){
+  .brick-shop-layout{grid-template-columns:1fr;gap:0}
+  .brick-rail-title{display:none}
+  .brick-shop-rail .brick-category-list{display:flex;border-top:0;margin:16px 0}
+  .brick-shop-rail .brick-category-list a{display:inline-flex;justify-content:flex-start;padding:7px 14px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius-lg, 20px);font-size:14px}
+  .brick-shop-rail .brick-category-list a.is-on{border-color:var(--color-text, #17171c);background:var(--color-text, #17171c);color:var(--color-bg, #ffffff)}
+  .brick-shop-rail .brick-category-list a.is-on span{color:inherit;opacity:.7}
+}
 .brick-product-detail{display:grid;grid-template-columns:1fr 1fr;gap:36px;margin:20px 0}
 @media(max-width:640px){.brick-product-detail{grid-template-columns:1fr;gap:20px}}
 .brick-detail-media{aspect-ratio:1;background:var(--color-bg-soft, #f6f6f9);border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius-lg, 14px);overflow:hidden;display:flex;align-items:center;justify-content:center}

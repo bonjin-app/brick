@@ -149,6 +149,7 @@
   "inquiries.titlePh": "제목",
   "inquiries.waiting": "답변대기",
   "inquiries.writeTitle": "상품 문의",
+  "list.categoryTitle": "분류",
   "list.empty": "등록된 상품이 없습니다.",
   "list.total": "총 {n}개",
   "order.notEnoughPoints": "보유 포인트가 부족합니다. (보유: {balance})",
