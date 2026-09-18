@@ -3,8 +3,8 @@ import {
   NotFoundException, Param, Post, Req, Res, UseGuards,
 } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { sql } from "drizzle-orm";
-import type { BrickDb } from "@brick/database";
+import { eq, sql } from "drizzle-orm";
+import { siteSettings, type BrickDb } from "@brick/database";
 import type { MailProvider } from "@brick/core";
 import { SITE_TZ, isRawResponse, rankOf, type PluginUploadedFile } from "@brick/core";
 import { PluginLoaderService } from "./plugin-loader.service.js";
@@ -229,8 +229,19 @@ export class PluginsController {
   @Get("admin/dashboard")
   @UseGuards(AdminGuard)
   async adminDashboard() {
-    const [core, cards] = await Promise.all([this.coreStats(), this.loader.collectDashboardCards()]);
-    return { core, cards, setup: this.setupWarnings() };
+    const [core, cards, businessMissing] = await Promise.all([
+      this.coreStats(),
+      this.loader.collectDashboardCards(),
+      this.businessInfoMissing(),
+    ]);
+    const setup = this.setupWarnings();
+    if (businessMissing) {
+      setup.push({
+        id: "businessInfoMissing",
+        docs: "https://github.com/bonjin-app/brick/blob/main/docs/business-info.md",
+      });
+    }
+    return { core, cards, setup };
   }
 
   /*
@@ -241,6 +252,31 @@ export class PluginsController {
    * 손님 쪽에서만 조용히 망가진다. 그래서 운영자가 매일 보는 화면에서
    * 한 번 말해 준다 — 이 목록이 비어 있는 것이 정상이다.
    */
+  /**
+   * 사업자정보가 비어 있는가.
+   *
+   * 전자상거래법 제13조는 상호·대표자·사업자등록번호·주소·연락처를 **초기 화면에
+   * 표시**하라고 정한다. 테마 푸터는 값이 있을 때만 그리므로(없는 것을 지어내지
+   * 않는다) 입력 전에는 그 자리가 조용히 비어 있다 — 운영자는 푸터가 원래
+   * 그런 줄 안다. 물건을 팔기 시작한 뒤에 아는 것이 가장 나쁘다.
+   *
+   * 상호와 사업자등록번호 둘 중 하나라도 없으면 아직 채우지 않은 것으로 본다.
+   */
+  private async businessInfoMissing(): Promise<boolean> {
+    try {
+      const [row] = await this.db
+        .select()
+        .from(siteSettings)
+        .where(eq(siteSettings.key, "site.business_info"))
+        .limit(1);
+      const info = (row?.value ?? {}) as { companyName?: string; businessNo?: string };
+      return !String(info.companyName ?? "").trim() || !String(info.businessNo ?? "").trim();
+    } catch {
+      // 못 읽었으면 경고하지 않는다 — 대시보드가 이것 때문에 깨지면 안 된다
+      return false;
+    }
+  }
+
   private setupWarnings(): Array<{ id: string; docs: string }> {
     const env = loadEnv();
     const out: Array<{ id: string; docs: string }> = [];

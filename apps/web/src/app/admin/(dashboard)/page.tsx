@@ -23,7 +23,7 @@ interface Dashboard {
    * 프록시는 서버만 안다). id 를 열거형으로 묶어 두면 `dash.<id>` / `dash.<id>Detail`
    * 번역이 없는 경고를 **빌드가 막는다** — 배너가 키 이름을 그대로 보여주는 일이 없다.
    */
-  setup?: Array<{ id: "mailOff" | "siteUrlLocal" | "trustProxyOff"; docs: string }>;
+  setup?: Array<{ id: "mailOff" | "siteUrlLocal" | "trustProxyOff" | "businessInfoMissing"; docs: string }>;
 }
 
 interface VersionInfo {

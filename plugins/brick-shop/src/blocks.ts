@@ -961,9 +961,16 @@ p.brick-restock-msg.is-error{color:var(--color-danger,#c9342f)}
 .brick-detail-summary{color:var(--color-text-soft, #45454f);margin:0 0 16px}
 .brick-detail-price{display:flex;align-items:baseline;gap:8px;font-size:26px;margin-bottom:18px}
 .brick-detail-price del{color:var(--color-muted, #6c6c7a);font-size:16px}
-.brick-detail-meta{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:14px;margin:0 0 20px;padding:16px 0;border-top:1px solid var(--color-line, #e4e4ea);border-bottom:1px solid var(--color-line, #e4e4ea)}
-.brick-detail-meta dt{color:var(--color-muted, #6c6c7a)}
-.brick-detail-meta dd{margin:0}
+/*
+ * 상품 정보는 **줄이 있는 표**로 읽는다 — 한국 쇼핑몰의 관례다(카페24·메이크샵
+ * 계열이 모두 이 모양이다). 라벨 칸을 고정 폭으로 두어 값이 세로로 정렬되고,
+ * 줄마다 가는 선을 넣어 배송비와 재고가 서로 다른 항목임이 한눈에 보인다.
+ * 예전에는 라벨 폭이 내용에 따라 움직이는 격자여서 값이 들쭉날쭉했다.
+ */
+.brick-detail-meta{display:grid;grid-template-columns:88px 1fr;font-size:13.5px;margin:0 0 20px;border-top:1px solid var(--color-line, #e4e4ea)}
+.brick-detail-meta dt{color:var(--color-muted, #6c6c7a);padding:9px 0;border-bottom:1px solid var(--color-line, #e4e4ea)}
+.brick-detail-meta dd{margin:0;padding:9px 0;border-bottom:1px solid var(--color-line, #e4e4ea)}
+@media(max-width:480px){.brick-detail-meta{grid-template-columns:76px 1fr;font-size:13px}}
 .brick-field{display:block;margin-bottom:12px;font-size:14px}
 .brick-field select,.brick-field input{display:block;width:100%;max-width:280px;padding:9px;margin-top:4px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 6px);box-sizing:border-box}
 .brick-buy-actions{display:flex;gap:10px;margin-top:18px}
