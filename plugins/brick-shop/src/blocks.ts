@@ -12,6 +12,7 @@ import { registerWishlistView } from "./wishlist-view.js";
 import { registerCouponsView } from "./coupons-view.js";
 import { registerRestockView } from "./restock-view.js";
 import { registerCardsView } from "./cards-view.js";
+import { registerSubscriptionsView } from "./subscriptions-view.js";
 
 /**
  * 스토어프론트 블록.
@@ -690,8 +691,9 @@ ${cartScript(shopBaseOf(blockCtx))}${STOREFRONT_CSS}`,
   const { wishlistBlock } = registerWishlistView(ctx, t);
   const { couponsBlock } = registerCouponsView(ctx, t);
   const { restockBlock } = registerRestockView(ctx, t);
-  // 결제 카드(빌링키) — 화면과 회원 메뉴 등록까지 스스로 한다
+  // 결제 카드(빌링키)·정기배송 — 화면과 회원 메뉴 등록까지 스스로 한다
   registerCardsView(ctx, t);
+  registerSubscriptionsView(ctx, t);
 
   /*
    * 화면 선언 — 쇼핑몰과 그 안의 회원 화면들.
