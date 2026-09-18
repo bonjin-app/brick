@@ -36,7 +36,7 @@ ${subsScript(t)}${SUBS_CSS}`,
 const SUBS_CSS = `
 <style>
 .brick-subs { max-width: 640px; }
-.brick-sub { border: 1px solid var(--color-line, #e7e7ec); border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+.brick-sub { border: 1px solid var(--color-line, #e7e7ec); border-radius:var(--radius-lg, 12px); padding: 16px; margin-bottom: 14px; }
 .brick-sub-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .brick-sub-name { font-weight: 700; font-size: 16px; }
 .brick-sub-state { font-size: 12px; padding: 2px 9px; border-radius: 999px; background: var(--color-bg-soft, #f7f7f9); border: 1px solid var(--color-line, #e7e7ec); }

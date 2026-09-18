@@ -105,7 +105,7 @@ const ORDERS_CSS = `
 .brick-o-meta dt { color: var(--color-muted, #71717d); }
 .brick-o-meta dd { margin: 0; }
 .brick-o-history { font-size: 13.5px; color: var(--color-muted, #71717d); }
-.brick-ret { margin-top: 22px; border: 1px solid var(--color-line, #e7e7ec); border-radius: 10px; padding: 12px 16px; }
+.brick-ret { margin-top: 22px; border: 1px solid var(--color-line, #e7e7ec); border-radius:var(--radius-lg, 10px); padding: 12px 16px; }
 .brick-ret summary { cursor: pointer; font-weight: 600; }
 .brick-ret h4 { margin: 14px 0 6px; font-size: 14px; }
 .brick-ret-kinds { display: flex; gap: 14px; flex-wrap: wrap; font-size: 14px; }
@@ -113,8 +113,8 @@ const ORDERS_CSS = `
 .brick-ret-form select, .brick-ret-form input[name=detail] { width: 100%; max-width: 420px; }
 .brick-ret-note { font-size: 13px; color: var(--color-muted, #71717d); margin: 8px 0; }
 .brick-ret-msg { margin-left: 10px; font-size: 13.5px; color: var(--color-danger, #c9342f); }
-.brick-ret-done { padding: 14px; background: var(--color-bg-soft, #f7f7f9); border-radius: 10px; margin-top: 18px; }
-.brick-receipt { margin-top: 14px; border: 1px solid var(--color-line, #e7e7ec); border-radius: 10px; padding: 12px 16px; }
+.brick-ret-done { padding: 14px; background: var(--color-bg-soft, #f7f7f9); border-radius:var(--radius-lg, 10px); margin-top: 18px; }
+.brick-receipt { margin-top: 14px; border: 1px solid var(--color-line, #e7e7ec); border-radius:var(--radius-lg, 10px); padding: 12px 16px; }
 .brick-receipt summary { cursor: pointer; font-weight: 600; }
 .brick-receipt h4 { margin: 14px 0 6px; font-size: 14px; }
 .brick-receipt-kinds { display: flex; gap: 14px; flex-wrap: wrap; font-size: 14px; }
@@ -122,7 +122,7 @@ const ORDERS_CSS = `
 .brick-receipt-form input[name=identifier] { width: 100%; max-width: 420px; }
 .brick-receipt-note { font-size: 13px; color: var(--color-muted, #71717d); margin: 8px 0; }
 .brick-receipt-msg { margin-left: 10px; font-size: 13.5px; color: var(--color-danger, #c9342f); }
-.brick-receipt-done { padding: 14px; background: var(--color-bg-soft, #f7f7f9); border-radius: 10px; margin-top: 14px; }
+.brick-receipt-done { padding: 14px; background: var(--color-bg-soft, #f7f7f9); border-radius:var(--radius-lg, 10px); margin-top: 14px; }
 .brick-ret-mine { margin-top: 22px; }
 .brick-ret-mine h3 { font-size: 15px; margin: 0 0 8px; }
 .brick-ret-mine table { width: 100%; border-collapse: collapse; font-size: 13.5px; }

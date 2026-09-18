@@ -114,7 +114,7 @@ ${await gatewayScripts()}${checkoutScript(t)}
 .brick-co-form [aria-invalid="true"] { border-color: var(--color-danger, #c8322f); outline: 2px solid var(--color-danger, #c8322f); outline-offset: 1px; }
 .brick-co-form .brick-buy-msg.is-error { color: var(--color-danger, #c8322f); font-weight: 600; }
 .brick-co-addr { display: grid; grid-template-columns: 130px 1fr; gap: 10px; }
-.brick-co-pay { background: var(--color-bg-soft, #f7f7f9); border: 1px solid var(--color-line, #e7e7ec); border-radius: 10px; padding: 12px 14px; margin: 0; }
+.brick-co-pay { background: var(--color-bg-soft, #f7f7f9); border: 1px solid var(--color-line, #e7e7ec); border-radius:var(--radius-lg, 10px); padding: 12px 14px; margin: 0; }
 /* 제목(h2)이 바로 위에 있으므로 legend 는 스크린리더에만 남긴다 */
 .brick-co-pay-legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 /* 44px — 폰에서 누르는 자리다 */
@@ -132,7 +132,7 @@ ${await gatewayScripts()}${checkoutScript(t)}
 .brick-co-done dl { display: grid; grid-template-columns: 110px 1fr; gap: 6px 12px; }
 .brick-co-done dt { color: var(--color-muted, #71717d); }
 .brick-co-done dd { margin: 0; font-weight: 600; }
-.brick-co-back { display: inline-block; padding: 10px 18px; border-radius: 8px; text-decoration: none; }
+.brick-co-back { display: inline-block; padding: 10px 18px; border-radius:var(--radius, 8px); text-decoration: none; }
 @media (max-width: 560px) { .brick-co-addr { grid-template-columns: 1fr; } }
 </style>`;
     },

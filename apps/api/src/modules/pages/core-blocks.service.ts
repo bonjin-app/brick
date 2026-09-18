@@ -605,7 +605,7 @@ ${eyebrow ? `    <span class="brick-eyebrow">${esc(eyebrow)}</span>
 /* 사진이 있는 그룹만 가로 배치. 사진 없는 항목은 빈 칸을 둔다 — 줄 높이가 흔들리지 않게 */
 .brick-search-group ul.has-thumbs li { display: flex; gap: 14px; align-items: flex-start; }
 .brick-search-thumb { flex: 0 0 auto; display: block; width: 64px; height: 64px; overflow: hidden;
-  border-radius: 8px; background: var(--color-bg-soft, #f6f6f9); }
+  border-radius:var(--radius, 8px); background: var(--color-bg-soft, #f6f6f9); }
 .brick-search-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .brick-search-meta { margin-left: 8px; font-size: 12.5px; color: var(--color-muted, #6c6c7a); }
 .brick-search-excerpt { margin: 5px 0 0; font-size: 14px; line-height: 1.6; color: var(--color-text-soft, #45454f); }

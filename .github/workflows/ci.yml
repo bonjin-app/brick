@@ -110,6 +110,9 @@ jobs:
       - name: 참조하는 테마 토큰이 실제로 정의되어 있다 (폴백만 쓰이면 테마가 통제할 수 없다)
         run: node scripts/check-theme-tokens.mjs
 
+      - name: 확장의 모서리 둥글기는 테마가 정한다 (각진 테마를 골라도 둥글게 남았다)
+        run: node scripts/check-radius-tokens.mjs
+
       - name: 자격증명 입력칸은 화면에서 가려진다
         run: node scripts/check-secret-fields.mjs
 

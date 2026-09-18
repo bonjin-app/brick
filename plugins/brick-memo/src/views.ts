@@ -75,7 +75,7 @@ export const MEMO_CSS = `
 .brick-memo-head{border-bottom:2px solid var(--color-text,#1a1a1a);padding-bottom:10px;margin-bottom:6px}
 .brick-memo-head h2{margin:0 0 10px;font-size:22px}
 .brick-memo-tabs{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-.brick-memo-tabs a{padding:6px 14px;border:1px solid var(--color-line, #e4e4ea);border-radius:16px;text-decoration:none;color:inherit;font-size:13.5px}
+.brick-memo-tabs a{padding:6px 14px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius-lg, 16px);text-decoration:none;color:inherit;font-size:13.5px}
 .brick-memo-tabs a.is-active{background:var(--color-primary,#d0402c);color:var(--color-on-primary, #ffffff);border-color:transparent}
 .brick-memo-write-btn{margin-left:auto;background:var(--color-primary, #cf4437);color:var(--color-on-primary, #ffffff)!important;border-color:transparent!important;font-weight:600}
 .brick-memo-empty{padding:40px;text-align:center;color:var(--color-muted, #6c6c7a)}
@@ -97,17 +97,17 @@ export const MEMO_CSS = `
 .brick-memo-detail-head time{color:var(--color-muted, #6c6c7a);font-size:13px}
 .brick-memo-content{padding:20px 0;line-height:1.8;white-space:pre-wrap;word-break:break-word;min-height:80px}
 .brick-memo-detail-foot{display:flex;gap:8px;padding-top:14px;border-top:1px solid var(--color-line, #e4e4ea);flex-wrap:wrap}
-.brick-memo-detail-foot a,.brick-memo-detail-foot button{padding:8px 16px;border:1px solid var(--color-line, #e4e4ea);border-radius:6px;background:var(--color-bg, #ffffff);text-decoration:none;color:inherit;cursor:pointer;font-size:14px}
+.brick-memo-detail-foot a,.brick-memo-detail-foot button{padding:8px 16px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 6px);background:var(--color-bg, #ffffff);text-decoration:none;color:inherit;cursor:pointer;font-size:14px}
 .brick-memo-form{margin-top:18px;max-width:620px}
 .brick-memo-field{display:block;margin-bottom:14px;font-size:14px}
-.brick-memo-field input,.brick-memo-field textarea{width:100%;padding:10px;margin-top:4px;border:1px solid var(--color-line, #e4e4ea);border-radius:6px;box-sizing:border-box;font-family:inherit;font-size:14px}
+.brick-memo-field input,.brick-memo-field textarea{width:100%;padding:10px;margin-top:4px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 6px);box-sizing:border-box;font-family:inherit;font-size:14px}
 .brick-memo-field textarea{min-height:180px;line-height:1.7}
 .brick-memo-hint{color:var(--color-muted, #6c6c7a);font-size:12.5px;margin-top:4px}
-.brick-memo-suggest{border:1px solid var(--color-line, #e4e4ea);border-radius:6px;margin-top:4px;max-height:180px;overflow-y:auto}
+.brick-memo-suggest{border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 6px);margin-top:4px;max-height:180px;overflow-y:auto}
 .brick-memo-suggest button{display:block;width:100%;text-align:left;padding:9px 12px;border:none;background:none;cursor:pointer;font-size:13.5px;border-bottom:1px solid var(--color-line, #e4e4ea)}
 .brick-memo-suggest button:hover{background:var(--color-bg-soft, #f6f6f9)}
 .brick-memo-msg{min-height:20px;font-size:14px;margin:8px 0}
-.brick-memo-submit{padding:11px 26px;background:var(--color-primary,#d0402c);color:var(--color-on-primary, #ffffff);border:none;border-radius:6px;cursor:pointer;font-weight:700;font-size:15px}
+.brick-memo-submit{padding:11px 26px;background:var(--color-primary,#d0402c);color:var(--color-on-primary, #ffffff);border:none;border-radius:var(--radius, 6px);cursor:pointer;font-weight:700;font-size:15px}
 .brick-memo-cost{color:var(--color-text-soft, #45454f);font-size:13px;margin-left:10px}
 @media(max-width:640px){
   .brick-memo-date{display:none}

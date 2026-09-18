@@ -45,7 +45,7 @@ const COUPON_CSS = `
 .brick-coupon-list { display: grid; gap: 12px; }
 .brick-coupon {
   display: flex; gap: 16px; align-items: center; padding: 16px 18px;
-  border: 1px solid var(--color-line, #e4e4ea); border-radius: 12px;
+  border: 1px solid var(--color-line, #e4e4ea); border-radius:var(--radius-lg, 12px);
 }
 .brick-coupon-amount { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; min-width: 96px; }
 .brick-coupon-body { flex: 1; min-width: 0; }
@@ -53,7 +53,7 @@ const COUPON_CSS = `
 .brick-coupon-body span { display: block; margin-top: 3px; font-size: 13px; color: var(--color-muted, #6c6c7a); }
 .brick-coupon-code {
   font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; letter-spacing: 1px;
-  background: var(--color-bg-soft, #f6f6f9); padding: 2px 7px; border-radius: 5px;
+  background: var(--color-bg-soft, #f6f6f9); padding: 2px 7px; border-radius:var(--radius, 5px);
 }
 .brick-coupon-state { font-size: 12.5px; font-weight: 700; white-space: nowrap; }
 /* 쓸 수 없는 쿠폰은 흐리게 — 목록에서 쓸 수 있는 것이 먼저 눈에 들어와야 한다 */

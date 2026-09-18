@@ -507,7 +507,7 @@ ${historyScript()}${HISTORY_CSS}`;
 const HISTORY_CSS = `
 <style>
 .brick-point-history { max-width: 680px; }
-.brick-ph-summary { display: flex; gap: 22px; align-items: baseline; padding: 16px 18px; background: var(--color-bg-soft, #f8f8fb); border-radius: 10px; margin-bottom: 18px; flex-wrap: wrap; }
+.brick-ph-summary { display: flex; gap: 22px; align-items: baseline; padding: 16px 18px; background: var(--color-bg-soft, #f8f8fb); border-radius:var(--radius-lg, 10px); margin-bottom: 18px; flex-wrap: wrap; }
 .brick-ph-summary strong { font-size: 24px; color: var(--color-primary, #d0402c); }
 .brick-ph-summary span { color: var(--color-muted, #888); font-size: 13.5px; }
 .brick-point-history table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
@@ -518,7 +518,7 @@ const HISTORY_CSS = `
 .brick-point-history .brick-ph-minus { color: var(--color-danger, #c9342f); }
 .brick-point-history .brick-ph-date, .brick-point-history .brick-ph-exp { width: 110px; color: var(--color-muted, #71717d); font-size: 13px; }
 .brick-ph-empty { padding: 36px; text-align: center; color: var(--color-muted, #999); }
-.brick-ph-more { display: block; margin: 16px auto 0; padding: 9px 20px; border: 1px solid var(--color-line, #e7e7ec); border-radius: 8px; background: var(--color-bg, #ffffff); cursor: pointer; font: inherit; }
+.brick-ph-more { display: block; margin: 16px auto 0; padding: 9px 20px; border: 1px solid var(--color-line, #e7e7ec); border-radius:var(--radius, 8px); background: var(--color-bg, #ffffff); cursor: pointer; font: inherit; }
 /* 목록 표는 폰에서 카드로 접는다 — 맨 뒤에 와야 위의 너비 규칙을 덮는다 */
 ${STACK_TABLE_CSS}
 </style>`;
@@ -594,7 +594,7 @@ ${dateScript()}
 
 const WIDGET_CSS = `
 <style>
-.brick-point-widget{display:flex;align-items:baseline;gap:8px;padding:14px 18px;background:var(--color-bg-soft, #f6f6f9);border-radius:10px;font-size:14px}
+.brick-point-widget{display:flex;align-items:baseline;gap:8px;padding:14px 18px;background:var(--color-bg-soft, #f6f6f9);border-radius:var(--radius-lg, 10px);font-size:14px}
 .brick-point-label{color:var(--color-muted, #6c6c7a)}
 .brick-point-value{font-size:20px;color:var(--color-primary,#d0402c)}
 </style>`;

@@ -848,12 +848,12 @@ function shortDateLocalized(d: Date | string): string {
 const COLLECTION_CSS = `
 <style>
 .brick-collection-list h1,.brick-collection h1{font-size:24px;letter-spacing:-.5px}
-.brick-collection-card{display:block;padding:20px;margin-bottom:12px;border:1px solid var(--color-line,#e4e4ea);border-radius:12px;text-decoration:none;color:inherit}
+.brick-collection-card{display:block;padding:20px;margin-bottom:12px;border:1px solid var(--color-line,#e4e4ea);border-radius:var(--radius-lg, 12px);text-decoration:none;color:inherit}
 .brick-collection-card strong{font-size:17px}
 .brick-collection-card p{margin:6px 0 0;color:var(--color-muted, #6c6c7a);font-size:14px}
 .brick-collection-card span{display:block;margin-top:8px;color:var(--color-muted, #6c6c7a);font-size:12.5px}
 .brick-collection-desc{color:var(--color-text-soft, #45454f)}
-.brick-collection-notice{padding:10px 14px;background:var(--color-bg-soft,#f6f6f9);border-radius:8px;color:var(--color-danger, #c9342f);font-weight:600}
+.brick-collection-notice{padding:10px 14px;background:var(--color-bg-soft,#f6f6f9);border-radius:var(--radius, 8px);color:var(--color-danger, #c9342f);font-weight:600}
 </style>`;
 
 /* ── 스토어프론트 CSS ────────────────────────────────
@@ -891,7 +891,7 @@ const STOREFRONT_CSS = `
 .brick-shop-heading,
 .brick-cart-name,
 .brick-buybar-info { word-break: keep-all; overflow-wrap: anywhere; }
-.brick-partial-soldout{margin-top:28px;padding:16px;background:var(--color-bg-soft,#f6f6f9);border-radius:10px}
+.brick-partial-soldout{margin-top:28px;padding:16px;background:var(--color-bg-soft,#f6f6f9);border-radius:var(--radius-lg, 10px)}
 .brick-partial-soldout>p{margin:0 0 4px;font-weight:600}
 .brick-restock-form{margin-top:12px;display:flex;flex-direction:column;gap:8px;max-width:360px}
 .brick-restock-form button{padding:11px 16px;cursor:pointer;border-radius:var(--radius, 10px);border:1px solid var(--color-primary, #cf4437);background:var(--color-primary, #cf4437);color:var(--color-on-primary, #fff);font-weight:600}
@@ -907,18 +907,17 @@ p.brick-restock-msg.is-error{color:var(--color-danger,#c9342f)}
 .brick-restock-note{margin:0;font-size:12px;color:var(--color-muted, #6c6c7a)}
 .brick-related{margin:48px 0 0}
 .brick-related h2{font-size:19px;margin:0 0 4px;padding-top:24px;border-top:1px solid var(--color-line,#e4e4ea)}
-.brick-product-grid{display:grid;grid-template-columns:repeat(var(--brick-cols,4),1fr);gap:20px;margin:20px 0}
+.brick-product-grid{display:grid;grid-template-columns:repeat(var(--brick-cols,4),1fr);gap:16px 14px;margin:20px 0}
 @media(max-width:1024px){.brick-product-grid{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}}
-@media(max-width:640px){.brick-product-grid{grid-template-columns:repeat(2,1fr);gap:14px}}
-.brick-product-card{display:block;text-decoration:none;color:inherit;transition:transform .16s ease}
-.brick-product-card:hover{transform:translateY(-2px)}
+@media(max-width:640px){.brick-product-grid{grid-template-columns:repeat(2,1fr);gap:14px 10px}}
+.brick-product-card{display:block;text-decoration:none;color:inherit}
 .brick-product-card:hover .brick-product-name{color:var(--color-primary-text, #b63a2e)}
 .brick-product-thumb{position:relative;aspect-ratio:1;background:var(--color-bg-soft, #f6f6f9);border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius-lg, 14px);overflow:hidden;display:flex;align-items:center;justify-content:center;transition:border-color .16s ease}
 .brick-product-card:hover .brick-product-thumb{border-color:var(--color-line-strong, #d0d0d9)}
 .brick-product-thumb img{width:100%;height:100%;object-fit:cover}
 .brick-noimg{display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--color-muted, #6c6c7a);font-size:12.5px}
 .brick-noimg::before{
-  content:"";opacity:.55;width:34px;height:28px;border:2px solid currentColor;border-radius:4px;
+  content:"";opacity:.55;width:34px;height:28px;border:2px solid currentColor;border-radius:var(--radius, 4px);
   background:
     radial-gradient(circle at 9px 9px, currentColor 2.5px, transparent 3px),
     linear-gradient(135deg, transparent 55%, currentColor 55%, currentColor 72%, transparent 72%);
@@ -935,7 +934,7 @@ p.brick-restock-msg.is-error{color:var(--color-danger,#c9342f)}
 .brick-filter a.is-on{border-color:var(--color-text, #17171c);background:var(--color-text, #17171c);color:var(--color-bg, #ffffff);font-weight:600}
 .brick-filter-toggle{margin-left:10px}
 /* 체크는 항상 자리를 차지한다 (색만 감춘다) — 켜고 끌 때 글자가 밀리지 않게 */
-.brick-filter-toggle::before{content:"✓";display:inline-grid;place-items:center;width:14px;height:14px;margin-right:7px;border:1px solid var(--color-line, #e4e4ea);border-radius:3px;font-size:10px;line-height:1;color:transparent}
+.brick-filter-toggle::before{content:"✓";display:inline-grid;place-items:center;width:14px;height:14px;margin-right:7px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 3px);font-size:10px;line-height:1;color:transparent}
 .brick-filter-toggle.is-on::before{border-color:currentColor;color:currentColor}
 .brick-tags{position:absolute;top:8px;left:8px;display:flex;flex-wrap:wrap;gap:4px;z-index:1}
 .brick-tag{display:inline-flex;align-items:center;height:20px;padding:0 7px;font-size:11px;font-weight:700;letter-spacing:.02em;border-radius:var(--radius, 3px);color:#fff;background:#111318}
@@ -945,14 +944,14 @@ p.brick-restock-msg.is-error{color:var(--color-danger,#c9342f)}
 .brick-badge-soldout{position:absolute;top:8px;left:8px;padding:4px 10px;border-radius:999px;background:rgba(20,20,28,.82);color:#fff;font-size:12px;font-weight:700;line-height:1.4}
 .brick-product-card.is-soldout .brick-product-thumb img{opacity:.55}
 .brick-product-card.is-soldout .brick-product-name{color:var(--color-muted, #6c6c7a)}
-.brick-product-name{margin-top:10px;font-size:15px;line-height:1.4}
-.brick-product-price{margin-top:4px;display:flex;align-items:baseline;gap:6px;font-size:15px}
-.brick-product-price del{color:var(--color-muted, #6c6c7a);font-size:13px}
+.brick-product-name{margin-top:9px;font-size:14px;line-height:1.45}
+.brick-product-price{margin-top:4px;display:flex;align-items:baseline;gap:6px;font-size:15px;font-weight:700}
+.brick-product-price del{color:var(--color-muted, #6c6c7a);font-size:13px;font-weight:400}
 .brick-discount{color:var(--color-primary,#d0402c);font-weight:700}
 .brick-shop-heading{margin:8px 0 0;font-size:22px}
 .brick-shop-empty{padding:40px;text-align:center;color:var(--color-muted, #6c6c7a)}
 .brick-category-list{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}
-.brick-category-list a{padding:7px 14px;border:1px solid var(--color-line, #e4e4ea);border-radius:20px;text-decoration:none;color:inherit;font-size:14px}
+.brick-category-list a{padding:7px 14px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius-lg, 20px);text-decoration:none;color:inherit;font-size:14px}
 .brick-category-list a span{color:var(--color-muted, #6c6c7a);font-size:12px}
 .brick-product-detail{display:grid;grid-template-columns:1fr 1fr;gap:36px;margin:20px 0}
 @media(max-width:640px){.brick-product-detail{grid-template-columns:1fr;gap:20px}}
@@ -966,9 +965,9 @@ p.brick-restock-msg.is-error{color:var(--color-danger,#c9342f)}
 .brick-detail-meta dt{color:var(--color-muted, #6c6c7a)}
 .brick-detail-meta dd{margin:0}
 .brick-field{display:block;margin-bottom:12px;font-size:14px}
-.brick-field select,.brick-field input{display:block;width:100%;max-width:280px;padding:9px;margin-top:4px;border:1px solid var(--color-line, #e4e4ea);border-radius:6px;box-sizing:border-box}
+.brick-field select,.brick-field input{display:block;width:100%;max-width:280px;padding:9px;margin-top:4px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 6px);box-sizing:border-box}
 .brick-buy-actions{display:flex;gap:10px;margin-top:18px}
-.brick-buy-actions button{flex:1;padding:14px;border:1px solid var(--color-line, #e4e4ea);border-radius:8px;background:var(--color-bg, #ffffff);font-size:15px;cursor:pointer}
+.brick-buy-actions button{flex:1;padding:14px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 8px);background:var(--color-bg, #ffffff);font-size:15px;cursor:pointer}
 .brick-buy-actions .brick-primary{background:var(--color-primary,#d0402c);color:var(--color-on-primary, #ffffff);border-color:transparent;font-weight:700}
 .brick-buy-msg{min-height:20px;font-size:14px;margin:10px 0 0}
 /* 하단 고정 구매 바 — 좁은 화면에서만. 넓은 화면은 원래 버튼이 늘 보인다 */
@@ -980,7 +979,7 @@ p.brick-restock-msg.is-error{color:var(--color-danger,#c9342f)}
   .brick-buybar-info{flex:1;min-width:0;display:grid}
   .brick-buybar-info strong{font-size:16px;line-height:1.2}
   .brick-buybar-msg{font-size:11.5px;color:var(--color-muted, #6c6c7a);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .brick-buybar button{flex:0 0 auto;min-height:44px;padding:0 14px;border:1px solid var(--color-line, #e4e4ea);border-radius:8px;
+  .brick-buybar button{flex:0 0 auto;min-height:44px;padding:0 14px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 8px);
     background:var(--color-bg, #ffffff);font-size:14px;cursor:pointer}
   .brick-buybar button.brick-primary{background:var(--color-primary,#d0402c);color:var(--color-on-primary, #ffffff);border-color:transparent;font-weight:700}
   /* 바가 가리는 만큼 아래를 비운다. 테마의 고정 버튼도 위로 올린다 —
@@ -988,16 +987,16 @@ p.brick-restock-msg.is-error{color:var(--color-danger,#c9342f)}
   .brick-buybar-on body{padding-bottom:76px}
   .brick-buybar-on .brick-quick{bottom:84px}
 }
-.brick-soldout-notice{padding:16px;background:var(--color-line, #e4e4ea);border-radius:8px;text-align:center;color:var(--color-muted, #6c6c7a)}
+.brick-soldout-notice{padding:16px;background:var(--color-line, #e4e4ea);border-radius:var(--radius, 8px);text-align:center;color:var(--color-muted, #6c6c7a)}
 .brick-detail-description{margin:40px 0;line-height:1.8}
 .brick-cart table{width:100%;border-collapse:collapse;font-size:14px}
 .brick-cart th,.brick-cart td{padding:12px 8px;border-bottom:1px solid var(--color-line, #e4e4ea);text-align:left}
-.brick-cart-total{margin-top:20px;padding:20px;background:var(--color-bg-soft, #f6f6f9);border-radius:10px}
+.brick-cart-total{margin-top:20px;padding:20px;background:var(--color-bg-soft, #f6f6f9);border-radius:var(--radius-lg, 10px)}
 .brick-cart-total dl{display:grid;grid-template-columns:1fr auto;gap:8px;margin:0}
 .brick-cart-total dt{color:var(--color-text-soft, #45454f)}
 .brick-cart-total dd{margin:0;text-align:right}
 .brick-cart-total .brick-grand{font-size:20px;font-weight:700;padding-top:10px;border-top:1px solid var(--color-line, #e4e4ea)}
-.brick-cart-qty{width:64px;padding:6px;border:1px solid var(--color-line, #e4e4ea);border-radius:5px}
+.brick-cart-qty{width:64px;padding:6px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 5px)}
 .brick-detail-rating{display:flex;align-items:center;gap:7px;margin:0 0 10px;font-size:15px}
 .brick-detail-rating a{color:var(--color-muted, #6c6c7a);font-size:13px}
 .brick-card-rating{margin-top:3px;font-size:13px;color:var(--color-muted, #6c6c7a);display:flex;gap:4px;align-items:center}
@@ -1268,7 +1267,7 @@ const cartScript = (shopBase: string) => `
       '<dt>' + ${JSON.stringify(t("cart.shipping"))} + '</dt><dd>' + (d.shippingFee ? fmt(d.shippingFee) : ${JSON.stringify(t("cart.free"))}) + '</dd>' +
       '<dt class="brick-grand">' + ${JSON.stringify(t("cart.grand"))} + '</dt><dd class="brick-grand">' + fmt(d.total) + '</dd>' +
       '</dl><div class="brick-buy-actions"><a class="brick-primary" href="' + ${JSON.stringify(shopBase)} + '/checkout" ' +
-      'style="flex:1;padding:14px;border-radius:8px;text-align:center;text-decoration:none">' + ${JSON.stringify(t("cart.order"))} + '</a></div></div>';
+      'style="flex:1;padding:14px;border-radius:var(--radius, 8px);text-align:center;text-decoration:none">' + ${JSON.stringify(t("cart.order"))} + '</a></div></div>';
 
     root.querySelectorAll('tr[data-item]').forEach(function(tr){
       var id = tr.dataset.item;

@@ -68,14 +68,14 @@ const REVIEW_CSS = `
 .brick-pd-tabnav button.is-on{color:inherit;font-weight:700;border-bottom-color:var(--color-primary,#d0402c)}
 .brick-pd-tabnav button span{color:var(--color-primary,#d0402c)}
 .brick-pd-panel{padding:24px 0}
-.brick-review-summary{display:flex;gap:32px;align-items:center;padding:24px;background:var(--color-bg-soft, #f6f6f9);border-radius:12px;flex-wrap:wrap}
+.brick-review-summary{display:flex;gap:32px;align-items:center;padding:24px;background:var(--color-bg-soft, #f6f6f9);border-radius:var(--radius-lg, 12px);flex-wrap:wrap}
 .brick-review-score{text-align:center;min-width:120px}
 .brick-review-score strong{display:block;font-size:38px;line-height:1}
 .brick-stars{color:var(--color-warning, #96610a);font-size:18px;letter-spacing:2px}
 .brick-review-score small{color:var(--color-muted, #6c6c7a);font-size:13px}
 .brick-review-dist{flex:1;min-width:220px;display:grid;gap:5px}
 .brick-dist-row{display:grid;grid-template-columns:34px 1fr 40px;align-items:center;gap:8px;font-size:13px;color:var(--color-text-soft, #45454f)}
-.brick-dist-bar{height:8px;background:var(--color-line, #e4e4ea);border-radius:4px;overflow:hidden}
+.brick-dist-bar{height:8px;background:var(--color-line, #e4e4ea);border-radius:var(--radius, 4px);overflow:hidden}
 .brick-dist-bar i{display:block;height:100%;background:var(--color-warning, #96610a)}
 .brick-review-tools{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:18px 0 4px}
 .brick-review-tools button{min-height:34px;padding:0 12px;border:0;background:none;font-size:13.5px;color:var(--color-muted, #6c6c7a);cursor:pointer;border-radius:var(--radius, 3px)}
@@ -86,23 +86,23 @@ const REVIEW_CSS = `
    좁은 데스크톱 폭에서 스위치가 가려진다(실제로 그랬다). 정렬 버튼 옆에 붙인다 */
 .brick-review-tools button.brick-review-photoonly{margin-left:10px;border:1px solid var(--color-line, #e4e4ea);border-radius:999px}
 /* 체크는 항상 자리를 차지한다 (색만 감춘다) — 켜고 끌 때 글자가 밀리지 않게 */
-.brick-review-tools button.brick-review-photoonly::before{content:"✓";display:inline-grid;place-items:center;width:14px;height:14px;margin-right:7px;border:1px solid var(--color-line, #e4e4ea);border-radius:3px;font-size:10px;line-height:1;color:transparent;vertical-align:-2px}
+.brick-review-tools button.brick-review-photoonly::before{content:"✓";display:inline-grid;place-items:center;width:14px;height:14px;margin-right:7px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 3px);font-size:10px;line-height:1;color:transparent;vertical-align:-2px}
 .brick-review-tools button.brick-review-photoonly.is-on{background:var(--color-text, #17171c);color:var(--color-bg, #ffffff);border-color:var(--color-text, #17171c)}
 .brick-review-tools button.brick-review-photoonly.is-on::before{border-color:currentColor;color:currentColor}
 .brick-review-item,.brick-inquiry-item{padding:20px 4px;border-bottom:1px solid var(--color-line, #e4e4ea)}
 .brick-review-head{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:14px}
 .brick-review-head time{color:var(--color-muted, #6c6c7a);font-size:13px}
-.brick-verified{font-size:11px;padding:2px 7px;border-radius:10px;background:color-mix(in srgb, var(--color-success, #11795a) 14%, transparent);color:var(--color-success, #11795a);font-weight:700}
-.brick-hidden-flag{font-size:11px;padding:2px 7px;border-radius:10px;background:color-mix(in srgb, var(--color-danger, #c9342f) 13%, transparent);color:var(--color-danger, #c9342f);font-weight:700}
+.brick-verified{font-size:11px;padding:2px 7px;border-radius:var(--radius-lg, 10px);background:color-mix(in srgb, var(--color-success, #11795a) 14%, transparent);color:var(--color-success, #11795a);font-weight:700}
+.brick-hidden-flag{font-size:11px;padding:2px 7px;border-radius:var(--radius-lg, 10px);background:color-mix(in srgb, var(--color-danger, #c9342f) 13%, transparent);color:var(--color-danger, #c9342f);font-weight:700}
 .brick-review-body{margin:10px 0 0;line-height:1.7;white-space:pre-wrap}
 .brick-review-photos{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
-.brick-review-photos img{width:88px;height:88px;object-fit:cover;border-radius:8px}
-.brick-admin-reply{margin:12px 0 0;padding:14px;background:var(--color-bg-soft, #f6f6f9);border-radius:8px;font-size:14px;line-height:1.7;white-space:pre-wrap}
+.brick-review-photos img{width:88px;height:88px;object-fit:cover;border-radius:var(--radius, 8px)}
+.brick-admin-reply{margin:12px 0 0;padding:14px;background:var(--color-bg-soft, #f6f6f9);border-radius:var(--radius, 8px);font-size:14px;line-height:1.7;white-space:pre-wrap}
 .brick-admin-reply b{display:block;margin-bottom:5px;font-size:13px;color:var(--color-primary,#d0402c)}
-.brick-write-box{padding:20px;border:1px solid var(--color-line, #e4e4ea);border-radius:12px;margin-bottom:24px}
+.brick-write-box{padding:20px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius-lg, 12px);margin-bottom:24px}
 .brick-write-box h3{margin:0 0 14px;font-size:16px}
-.brick-write-box textarea{width:100%;min-height:96px;padding:11px;border:1px solid var(--color-line, #e4e4ea);border-radius:8px;box-sizing:border-box;font:inherit}
-.brick-write-box input[type=text]{width:100%;padding:11px;border:1px solid var(--color-line, #e4e4ea);border-radius:8px;box-sizing:border-box;font:inherit;margin-bottom:10px}
+.brick-write-box textarea{width:100%;min-height:96px;padding:11px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 8px);box-sizing:border-box;font:inherit}
+.brick-write-box input[type=text]{width:100%;padding:11px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 8px);box-sizing:border-box;font:inherit;margin-bottom:10px}
 .brick-photo-pick{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0 2px}
 .brick-photo-add{display:inline-flex;align-items:center;min-height:38px;padding:0 14px;font-size:13.5px;font-weight:600;color:var(--color-text-soft, #45454f);background:var(--color-bg-soft, #f6f6f9);border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 8px);cursor:pointer}
 .brick-photo-add:hover{color:var(--color-text, #17171c)}
@@ -113,18 +113,18 @@ const REVIEW_CSS = `
 .brick-rating-pick{display:flex;gap:4px;margin-bottom:12px;font-size:28px;line-height:1;cursor:pointer;color:var(--color-line, #e4e4ea)}
 .brick-rating-pick button{cursor:pointer;font:inherit;color:inherit;background:none;border:0;padding:0 2px;line-height:1}
 .brick-rating-pick button.is-on{color:var(--color-warning, #96610a)}
-.brick-rating-pick button:focus-visible{outline:2px solid var(--color-primary, #cf4437);outline-offset:2px;border-radius:4px}
+.brick-rating-pick button:focus-visible{outline:2px solid var(--color-primary, #cf4437);outline-offset:2px;border-radius:var(--radius, 4px)}
 .brick-write-actions{display:flex;gap:10px;align-items:center;margin-top:12px}
-.brick-write-actions button{padding:11px 22px;border:0;border-radius:8px;background:var(--color-primary,#d0402c);color:var(--color-on-primary, #ffffff);font-size:14px;font-weight:700;cursor:pointer}
+.brick-write-actions button{padding:11px 22px;border:0;border-radius:var(--radius, 8px);background:var(--color-primary,#d0402c);color:var(--color-on-primary, #ffffff);font-size:14px;font-weight:700;cursor:pointer}
 .brick-write-msg{font-size:13px;color:var(--color-danger, #c9342f)}
-.brick-write-note{padding:16px;background:var(--color-bg-soft, #f6f6f9);border-radius:10px;font-size:14px;color:var(--color-muted, #6c6c7a);margin-bottom:24px}
+.brick-write-note{padding:16px;background:var(--color-bg-soft, #f6f6f9);border-radius:var(--radius-lg, 10px);font-size:14px;color:var(--color-muted, #6c6c7a);margin-bottom:24px}
 .brick-secret-label{display:flex;gap:6px;align-items:center;font-size:14px;color:var(--color-text-soft, #45454f);margin-top:10px}
 .brick-row-actions{margin-top:10px;display:flex;gap:8px}
 /* 내 후기·문의를 지우는 버튼 — 손가락으로 누른다. 글자 크기는 그대로 두고 영역만 44px */
-.brick-row-actions button{min-height:44px;padding:0 14px;font-size:13px;border:1px solid var(--color-line, #e4e4ea);border-radius:6px;background:var(--color-bg, #ffffff);cursor:pointer}
-.brick-pd-more{display:block;width:100%;padding:13px;margin-top:16px;border:1px solid var(--color-line, #e4e4ea);border-radius:8px;background:var(--color-bg, #ffffff);cursor:pointer}
+.brick-row-actions button{min-height:44px;padding:0 14px;font-size:13px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 6px);background:var(--color-bg, #ffffff);cursor:pointer}
+.brick-pd-more{display:block;width:100%;padding:13px;margin-top:16px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 8px);background:var(--color-bg, #ffffff);cursor:pointer}
 .brick-gallery{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
-.brick-gallery button{padding:0;border:2px solid transparent;border-radius:8px;overflow:hidden;background:none;cursor:pointer;line-height:0}
+.brick-gallery button{padding:0;border:2px solid transparent;border-radius:var(--radius, 8px);overflow:hidden;background:none;cursor:pointer;line-height:0}
 .brick-gallery button.is-on{border-color:var(--color-primary,#d0402c)}
 .brick-gallery img{width:64px;height:64px;object-fit:cover}
 </style>`;
