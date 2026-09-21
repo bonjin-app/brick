@@ -9,6 +9,7 @@ import { DB, MAIL, ENV } from "../../runtime.module.js";
 import { AuthService } from "../auth/auth.service.js";
 import { PluginLoaderService } from "../plugins/plugin-loader.service.js";
 import type { loadEnv } from "../../config/env.js";
+import { msg } from "../../common/localized-error.js";
 
 const TOKEN_TTL_HOURS = 24;
 /** 재발송 최소 간격 — 메일 폭탄에 쓰이지 않게 */
@@ -76,7 +77,7 @@ export class EmailVerifyService {
     `);
     if (recent.length) {
       throw new BadRequestException(
-        `인증 메일을 방금 보냈습니다. ${RESEND_COOLDOWN_SECONDS}초 후에 다시 시도해주세요.`,
+        msg("err.verifyMailCooldown", { seconds: RESEND_COOLDOWN_SECONDS }),
       );
     }
 

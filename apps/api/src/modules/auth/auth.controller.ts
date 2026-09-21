@@ -13,6 +13,7 @@ import { AuditService } from "../audit/audit.service.js";
 import { TwoFactorService } from "./two-factor.service.js";
 import { ReauthService } from "./reauth.service.js";
 import { AdminGuard } from "./auth.guard.js";
+import { msg } from "../../common/localized-error.js";
 
 /** 소셜 로그인 state 쿠키 — 콜백 경로에서만 필요하므로 path를 좁힌다 */
 const OAUTH_STATE_COOKIE = "brick_oauth_state";
@@ -54,7 +55,7 @@ export class AuthController {
       if (!allowed) {
         reply.header("retry-after", String(retryAfterSeconds));
         throw new HttpException(
-          `로그인 시도가 너무 많습니다. ${Math.ceil(retryAfterSeconds / 60)}분 후 다시 시도하세요.`,
+          msg("err.tooManyLogins", { minutes: Math.ceil(retryAfterSeconds / 60) }),
           HttpStatus.TOO_MANY_REQUESTS,
         );
       }
@@ -108,7 +109,7 @@ export class AuthController {
     );
     if (!allowed) {
       throw new HttpException(
-        `너무 많이 시도했습니다. ${retryAfterSeconds}초 후 다시 시도해주세요.`,
+        msg("err.tooManyAttemptsSec", { seconds: retryAfterSeconds }),
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }

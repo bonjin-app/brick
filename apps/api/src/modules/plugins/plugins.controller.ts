@@ -16,6 +16,7 @@ import { AuditService } from "../audit/audit.service.js";
 import { DB, MAIL } from "../../runtime.module.js";
 import { isLocalUrl, loadEnv } from "../../config/env.js";
 import { sawProxyHeaders } from "../../config/proxy-hint.js";
+import { msg } from "../../common/localized-error.js";
 
 @Controller("api")
 export class PluginsController {
@@ -363,7 +364,7 @@ export class PluginsController {
     @Param("name") name: string,
   ) {
     const found = this.loader.adminResources.find((r) => r.plugin === plugin && r.name === name);
-    if (!found) throw new NotFoundException(`알 수 없는 관리 화면입니다: ${plugin}/${name}`);
+    if (!found) throw new NotFoundException(msg("err.unknownAdminScreen", { screen: `${plugin}/${name}` }));
     // 목록에서 가린 화면은 주소를 쳐도 열리지 않는다 (라우트의 자기 검사는 그대로다)
     if (found.adminOnly && req.user?.role !== "admin") {
       throw new ForbiddenException("관리자만 할 수 있는 작업입니다.");
@@ -497,7 +498,7 @@ export class PluginsController {
     @Req() req: FastifyRequest,
   ) {
     const block = this.loader.blocks.get(body?.name ?? "");
-    if (!block) throw new NotFoundException(`알 수 없는 블록입니다: ${body?.name}`);
+    if (!block) throw new NotFoundException(msg("err.unknownBlock", { name: String(body?.name) }));
     const user = await this.auth.resolveFromRequest(req);
     const html = await block.render(body?.props ?? {}, {
       children: [],

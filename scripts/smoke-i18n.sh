@@ -236,10 +236,22 @@ absent "로그인 실패 문장에 한국어가 없다" "$ERR_LOGIN" "올바르�
 ERR_PAGE="$(curl -s -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' \
   -d '{"title":"x","slug":"BAD SLUG"}')"
 contains "코어 검증 오류도 영어" "$ERR_PAGE" "only lowercase letters"
+# 코어의 **값이 들어가는** 문장은 키와 값으로 던져 응답 경계에서 조립한다
+curl -s -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' \
+  -d '{"title":"dup","slug":"dup-check"}' >/dev/null
+ERR_SLUG="$(curl -s -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' \
+  -d '{"title":"dup","slug":"dup-check"}')"
+contains "값이 들어가는 코어 문장도 영어" "$ERR_SLUG" "already in use"
+absent   "조립용 재료는 응답에 실리지 않는다" "$ERR_SLUG" "messageKey"
+absent   "한국어가 남지 않는다" "$ERR_SLUG" "이미 쓰이고"
+
 # 한국어 사이트로 돌리면 원문이 그대로 나온다 (번역은 덮어쓰기가 아니라 치환이다)
 curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"site.locale":"ko"}' >/dev/null
 contains "ko 로 되돌리면 한국어" "$(curl -s "$SHOP_API/products/no-such-product")" "상품을 찾을 수 없습니다"
 contains "블록 서랍도 ko 로 되돌아온다" "$(curl -s "$API/api/blocks")" '"displayName":"문단"'
+KO_SLUG="$(curl -s -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' -d '{"title":"dup","slug":"dup-check"}')"
+contains "값이 들어가는 문장도 ko 로" "$KO_SLUG" "이미 쓰이고 있습니다"
+absent   "ko 에서도 재료는 실리지 않는다" "$KO_SLUG" "messageKey"
 contains "코어 문장도 ko 로 되돌아온다" \
   "$(curl -s -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' -d '{"title":"x","slug":"BAD SLUG"}')" \
   "소문자/숫자/하이픈"

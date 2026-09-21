@@ -9,6 +9,7 @@ import type { StorageProvider } from "@brick/core";
 import { ImageService } from "../images/image.service.js";
 import { PluginLoaderService } from "../plugins/plugin-loader.service.js";
 import { STARTERS, applyStarter, findStarter } from "./starters.js";
+import { msg } from "../../common/localized-error.js";
 
 interface InstallDto {
   siteName: string;
@@ -66,7 +67,7 @@ export class InstallController {
     // 모르는 유형은 조용히 빈 사이트로 만들지 않는다 — 오타를 알려줘야 한다
     const starterCode = String(dto.starter ?? "blank");
     if (!findStarter(starterCode)) {
-      throw new BadRequestException(`알 수 없는 사이트 유형입니다: ${starterCode}`);
+      throw new BadRequestException(msg("err.unknownStarter", { code: starterCode }));
     }
 
     await this.db.insert(users).values({

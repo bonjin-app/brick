@@ -13,6 +13,7 @@ import { DB, ENV, MAIL } from "../../runtime.module.js";
 import type { BrickEnv } from "../../config/env.js";
 import { OAUTH_PROVIDERS, providerDef, type OAuthProfile } from "./oauth.providers.js";
 import { PluginLoaderService } from "../plugins/plugin-loader.service.js";
+import { msg } from "../../common/localized-error.js";
 
 /** 관리자가 저장하는 공급자 설정 */
 export interface OAuthProviderConfig {
@@ -107,7 +108,7 @@ export class OAuthService {
         // 관리자가 넣는 값이지만 http(s)로 제한한다 — file:// 같은 스킴으로
         // 서버가 자기 파일을 읽어 오는 통로가 되지 않게 한다
         if (!/^https?:\/\//.test(v)) {
-          throw new BadRequestException(`${label}은 http(s):// 로 시작해야 합니다.`);
+          throw new BadRequestException(msg("err.mustStartWithHttp", { label }));
         }
         return v.slice(0, 500);
       };
@@ -142,7 +143,7 @@ export class OAuthService {
     if (!def) throw new BadRequestException("지원하지 않는 공급자입니다.");
     const config = (await this.config())[def.name];
     if (!config?.enabled || !config.clientId) {
-      throw new ServiceUnavailableException(`${def.label} 로그인이 설정되지 않았습니다.`);
+      throw new ServiceUnavailableException(msg("err.oauthNotConfigured", { label: def.label }));
     }
 
     const state = this.signState({

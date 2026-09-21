@@ -9,9 +9,11 @@ import type { FastifyRequest } from "fastify";
 import type { BrickDb } from "@brick/database";
 import { mediaFiles } from "@brick/database";
 import type { StorageProvider } from "@brick/core";
+import { DEFAULT_LOCALE, renderCoreMessage } from "@brick/core";
 import { AdminGuard } from "../auth/auth.guard.js";
 import { DB, STORAGE } from "../../runtime.module.js";
 import { ImageService } from "../images/image.service.js";
+import { msg } from "../../common/localized-error.js";
 
 /**
  * 허용 확장자/MIME 화이트리스트.
@@ -73,11 +75,15 @@ export class MediaController {
     const allowedMimes = ALLOWED[ext];
     if (!allowedMimes) {
       throw new BadRequestException(
-        `허용되지 않는 파일 형식입니다: ${ext || "(확장자 없음)"} — 허용: ${Object.keys(ALLOWED).filter((e) => ALLOWED[e].length).join(", ")}`,
+        msg("err.badFileType", {
+          // 확장자가 없을 때의 표기도 문장의 일부다 — 같은 카탈로그에서 꺼낸다
+          ext: ext || renderCoreMessage(DEFAULT_LOCALE, "err.noExt"),
+          allowed: Object.keys(ALLOWED).filter((e) => ALLOWED[e].length).join(", "),
+        }),
       );
     }
     if (!allowedMimes.includes(file.mimetype)) {
-      throw new BadRequestException(`파일 내용과 확장자가 일치하지 않습니다 (${file.mimetype}).`);
+      throw new BadRequestException(msg("err.mimeMismatch", { type: file.mimetype }));
     }
 
     const raw = await file.toBuffer();

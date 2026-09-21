@@ -30,6 +30,7 @@ import {
   EMPTY_BUSINESS_INFO, FIELD_LABEL, isCommerceReady, validateBusinessInfo,
   type BusinessInfo,
 } from "./business-info.js";
+import { msg } from "../../common/localized-error.js";
 
 interface MenuItem {
   label: string;
@@ -184,16 +185,17 @@ export class SiteController {
   async putSettings(@Body() body: Record<string, unknown>, @Req() req: FastifyRequest) {
     for (const [key, value] of Object.entries(body ?? {})) {
       const type = EDITABLE_SETTINGS[key];
-      if (!type) throw new BadRequestException(`수정할 수 없는 설정입니다: ${key}`);
-      if (type === "string" && typeof value !== "string") throw new BadRequestException(`${key}: 문자열이어야 합니다.`);
-      if (type === "boolean" && typeof value !== "boolean") throw new BadRequestException(`${key}: true/false여야 합니다.`);
+      if (!type) throw new BadRequestException(msg("err.settingNotEditable", { key }));
+      if (type === "string" && typeof value !== "string") throw new BadRequestException(msg("err.settingMustBeString", { key }));
+      if (type === "boolean" && typeof value !== "boolean") throw new BadRequestException(msg("err.settingMustBeBool", { key }));
 
       // 언어는 지원 목록만 받는다 — 없는 언어를 저장하면 "설정했는데 그대로
       // 한국어"인 반쪽 상태가 된다. 거절하고 목록을 알려주는 것이 맞다.
       if (key === "site.locale" && !(AVAILABLE_LOCALES as readonly string[]).includes(String(value))) {
-        throw new BadRequestException(
-          `지원하지 않는 언어입니다: ${String(value)} (지원: ${AVAILABLE_LOCALES.join(", ")})`,
-        );
+        throw new BadRequestException(msg("err.unsupportedLocale", {
+          value: String(value),
+          available: AVAILABLE_LOCALES.join(", "),
+        }));
       }
 
       // CSP 는 세 가지 값만 받는다 — 오타로 정책이 조용히 꺼지는 일이 없게
@@ -215,16 +217,10 @@ export class SiteController {
       if (key === "security.admin_ip_allowlist" && String(value).trim() !== "") {
         const parsed = parseAllowlist(String(value));
         if (parsed.invalid.length) {
-          throw new BadRequestException(
-            `IP 형식이 올바르지 않습니다: ${parsed.invalid.join(", ")} ` +
-              `(IPv4, IPv4 CIDR, IPv6 단일 주소만 받습니다)`,
-          );
+          throw new BadRequestException(msg("err.badIpListHint", { list: parsed.invalid.join(", ") }));
         }
         if (!ipAllowed(req.ip, String(value))) {
-          throw new BadRequestException(
-            `지금 접속한 IP(${req.ip})가 목록에 없습니다 — 저장하면 스스로 잠깁니다. ` +
-              `현재 IP 를 목록에 추가해주세요.`,
-          );
+          throw new BadRequestException(msg("err.wouldLockSelfIp", { ip: req.ip }));
         }
       }
       /*
@@ -253,10 +249,10 @@ export class SiteController {
       if (key === "security.blocked_ips" && String(value).trim() !== "") {
         const parsed = parseAllowlist(String(value));
         if (parsed.invalid.length) {
-          throw new BadRequestException(`IP 형식이 올바르지 않습니다: ${parsed.invalid.join(", ")}`);
+          throw new BadRequestException(msg("err.badIpList", { list: parsed.invalid.join(", ") }));
         }
         if (ipAllowed(req.ip, String(value))) {
-          throw new BadRequestException(`지금 접속한 IP(${req.ip})가 차단 목록에 있습니다 — 저장하면 스스로 차단됩니다.`);
+          throw new BadRequestException(msg("err.wouldBlockSelfIp", { ip: req.ip }));
         }
       }
       await this.db
@@ -358,7 +354,7 @@ export class SiteController {
       const url = String(item?.url ?? "").trim();
       if (!label) throw new BadRequestException("메뉴 이름은 필수입니다.");
       // javascript: 등 위험한 스킴 차단
-      if (!/^(\/|https?:\/\/|#)/.test(url)) throw new BadRequestException(`허용되지 않는 주소입니다: ${url}`);
+      if (!/^(\/|https?:\/\/|#)/.test(url)) throw new BadRequestException(msg("err.urlNotAllowed", { url }));
       return {
         label: label.slice(0, 100),
         url: url.slice(0, 500),

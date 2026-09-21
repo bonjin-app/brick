@@ -23,6 +23,7 @@ import { isUniqueViolation } from "@brick/core";
 import { AgreementsService } from "../members/agreements.service.js";
 import { EmailVerifyService } from "../members/email-verify.service.js";
 import { ImageService } from "../images/image.service.js";
+import { msg } from "../../common/localized-error.js";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ROLES = ["admin", "manager", "member"] as const;
@@ -97,7 +98,7 @@ export class UsersController {
       const { allowed, retryAfterSeconds } = this.rateLimit.consume(key, limit, 60 * 60_000);
       if (!allowed) {
         throw new HttpException(
-          `${label} 가입 시도가 너무 많습니다. ${Math.ceil(retryAfterSeconds / 60)}분 후 다시 시도하세요.`,
+          msg("err.tooManySignups", { label, minutes: Math.ceil(retryAfterSeconds / 60) }),
           HttpStatus.TOO_MANY_REQUESTS,
         );
       }
@@ -228,7 +229,7 @@ export class UsersController {
           const until = new Date(cur.changedAt.getTime() + days * 86_400_000);
           if (until.getTime() > Date.now()) {
             const left = Math.ceil((until.getTime() - Date.now()) / 86_400_000);
-            throw new BadRequestException(`이름은 ${days}일마다 바꿀 수 있습니다. ${left}일 후에 다시 시도해주세요.`);
+            throw new BadRequestException(msg("err.nameChangeCooldown", { days, left }));
           }
         }
         patch.displayName = name;

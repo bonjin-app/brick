@@ -1,7 +1,7 @@
 import { ArgumentsHost, Catch, HttpException } from "@nestjs/common";
 import { BaseExceptionFilter } from "@nestjs/core";
 import type { FastifyReply } from "fastify";
-import { DEFAULT_LOCALE, translateCoreError, type Locale } from "@brick/core";
+import { DEFAULT_LOCALE, renderCoreMessage, translateCoreError, type Locale } from "@brick/core";
 import { loadEnv } from "../config/env.js";
 
 /*
@@ -70,13 +70,36 @@ export class ErrorMessageFilter extends BaseExceptionFilter {
    * 다시 만들면 Nest 의 기본 직렬화와 갈라진다 — 갈라진 뒤에는 한쪽만 고쳐진다.
    */
   private translated(exception: unknown, host: ArgumentsHost): void {
-    const locale = safeLocale(this.localeOf);
-    if (locale === DEFAULT_LOCALE || !(exception instanceof HttpException)) {
+    if (!(exception instanceof HttpException)) {
       super.catch(exception, host);
       return;
     }
+    const locale = safeLocale(this.localeOf);
     const body = exception.getResponse();
     const status = exception.getStatus();
+
+    /*
+     * 1) 키와 값으로 던져진 문장은 여기서 조립한다 (localized-error.ts 의 msg).
+     *
+     * **언어와 무관하게** 이 가지를 지난다: 한국어일 때 건너뛰면 재료
+     * (messageKey·messageParams)가 응답에 그대로 실려 나간다. 화면이 쓰는 것은
+     * 완성된 문장과 field 뿐이고, 내부 키를 내보내면 그것을 읽는 코드가 생겨
+     * 계약이 굳는다.
+     */
+    const key = (body as { messageKey?: unknown })?.messageKey;
+    if (typeof key === "string") {
+      const { messageKey, messageParams, ...rest } = body as Record<string, unknown>;
+      void messageKey;
+      const message = renderCoreMessage(locale, key, messageParams as Record<string, string | number>);
+      super.catch(new HttpException({ ...rest, message }, status), host);
+      return;
+    }
+
+    // 2) 완성된 문장은 원문=키로 치환한다. 한국어면 원문이 곧 답이므로 그대로.
+    if (locale === DEFAULT_LOCALE) {
+      super.catch(exception, host);
+      return;
+    }
     if (typeof body === "string") {
       super.catch(new HttpException(translateCoreError(locale, body), status), host);
       return;
@@ -93,7 +116,10 @@ export class ErrorMessageFilter extends BaseExceptionFilter {
     if (Array.isArray(message)) {
       super.catch(
         new HttpException(
-          { ...(body as object), message: message.map((m) => (typeof m === "string" ? translateCoreError(locale, m) : m)) },
+          {
+            ...(body as object),
+            message: message.map((m) => (typeof m === "string" ? translateCoreError(locale, m) : m)),
+          },
           status,
         ),
         host,

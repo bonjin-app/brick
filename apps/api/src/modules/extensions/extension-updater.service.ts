@@ -36,6 +36,7 @@ import { installedPlugins, installedThemes, siteSettings } from "@brick/database
 import type { PluginManifest, ThemeManifest } from "@brick/shared";
 import { DB } from "../../runtime.module.js";
 import { ExtensionInstallerService } from "./extension-installer.service.js";
+import { msg } from "../../common/localized-error.js";
 
 /** 업데이트 매니페스트 — 배포자가 서버에 올려 두는 JSON */
 export interface UpdateManifest {
@@ -117,7 +118,7 @@ export function assertSafeUrl(raw: string): URL {
   try {
     url = new URL(raw);
   } catch {
-    throw new BadRequestException(`잘못된 주소입니다: ${raw}`);
+    throw new BadRequestException(msg("err.badUrl", { url: raw }));
   }
   const isLocal = url.hostname === "localhost" || url.hostname === "127.0.0.1";
   if (url.protocol !== "https:" && !isLocal) {
@@ -192,7 +193,7 @@ export class ExtensionUpdaterService {
     const row = kind === "plugin"
       ? (await this.db.select().from(installedPlugins).where(eq(installedPlugins.name, name)).limit(1))[0]
       : (await this.db.select().from(installedThemes).where(eq(installedThemes.name, name)).limit(1))[0];
-    if (!row) throw new BadRequestException(`설치되어 있지 않습니다: ${name}`);
+    if (!row) throw new BadRequestException(msg("err.notInstalled", { name }));
 
     const manifest = row.manifest as PluginManifest | ThemeManifest;
     const updatesUrl = manifest?.updates;
@@ -212,7 +213,7 @@ export class ExtensionUpdaterService {
     // 다운그레이드 거부 — 낮은 버전을 제시해 취약한 옛 버전을 되살리는 공격
     if (!isNewerVersion(remote.version, row.version)) {
       throw new BadRequestException(
-        `새 버전이 아닙니다 (현재 ${row.version}, 제시된 ${remote.version}).`,
+        msg("err.notNewerVersion", { current: String(row.version), offered: String(remote.version) }),
       );
     }
 
@@ -242,7 +243,7 @@ export class ExtensionUpdaterService {
       // 설치기는 ZIP 안의 이름으로 설치한다. 이름이 다르면 다른 확장을
       // 그 자리에 심으려는 시도다 — 이미 설치는 됐으므로 명확히 알린다.
       throw new BadRequestException(
-        `ZIP 안의 확장 이름(${result.name})이 요청한 이름(${name})과 다릅니다. 확인이 필요합니다.`,
+        msg("err.zipNameMismatch", { found: result.name, name }),
       );
     }
 
@@ -370,7 +371,7 @@ export class ExtensionUpdaterService {
   }> {
     const registry = await this.listRegistry();
     const item = registry.items.find((i) => i.kind === kind && i.name === name);
-    if (!item) throw new BadRequestException(`레지스트리에 없는 확장입니다: ${name}`);
+    if (!item) throw new BadRequestException(msg("err.notInRegistry", { name }));
     if (item.state !== "not_installed") {
       throw new BadRequestException(
         "이미 설치되어 있습니다. 새 버전은 원클릭 업데이트로 받으세요 — 처음 설치 때 고정된 키로 검증됩니다.",
@@ -394,7 +395,7 @@ export class ExtensionUpdaterService {
       : await this.installer.installTheme(zip);
     if (result.name !== name) {
       throw new BadRequestException(
-        `ZIP 안의 확장 이름(${result.name})이 요청한 이름(${name})과 다릅니다. 확인이 필요합니다.`,
+        msg("err.zipNameMismatch", { found: result.name, name }),
       );
     }
 
@@ -432,7 +433,7 @@ export class ExtensionUpdaterService {
     // 매니페스트의 이름이 다르면 다른 확장의 매니페스트를 물려받은 것이다
     if (String(json.name) !== expectName) {
       throw new BadRequestException(
-        `업데이트 매니페스트의 이름(${json.name})이 확장(${expectName})과 다릅니다.`,
+        msg("err.manifestNameMismatch", { found: String(json.name), expected: expectName }),
       );
     }
     if (!json.version || !json.url || !json.sha256 || !json.signature) {
@@ -452,7 +453,7 @@ export class ExtensionUpdaterService {
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     try {
       const res = await fetch(url, { signal: controller.signal, redirect: "error" });
-      if (!res.ok) throw new BadRequestException(`받기 실패 (HTTP ${res.status}): ${url.pathname}`);
+      if (!res.ok) throw new BadRequestException(msg("err.downloadFailed", { status: res.status, path: url.pathname }));
 
       const chunks: Buffer[] = [];
       let total = 0;
@@ -464,7 +465,7 @@ export class ExtensionUpdaterService {
         total += value.byteLength;
         if (total > maxBytes) {
           controller.abort();
-          throw new BadRequestException(`파일이 너무 큽니다 (${Math.round(maxBytes / 1024 / 1024)}MB 상한).`);
+          throw new BadRequestException(msg("err.fileTooLargeMb", { mb: Math.round(maxBytes / 1024 / 1024) }));
         }
         chunks.push(Buffer.from(value));
       }

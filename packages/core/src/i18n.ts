@@ -493,3 +493,133 @@ export function translateCoreLabel(locale: Locale, text: string): string {
 
 /** 검사 스크립트가 읽는 원문 목록 */
 export const CORE_LABEL_SOURCES = Object.keys(CORE_LABEL_EN);
+
+/**
+ * 값이 들어가는 오류 문장 — **키 + 파라미터**로 던지고 응답 경계에서 조립한다.
+ *
+ * 완성된 문장은 원문을 키로 치환할 수 있지만(`translateCoreError`), 값이 박힌
+ * 문장은 실행 시점 문자열이 코드의 리터럴과 달라 걸리지 않는다:
+ *
+ *   throw new BadRequestException(`${seconds}초 후 다시 시도해주세요.`)
+ *
+ * 플러그인은 활성화 때 바인딩된 `ctx.t` 를 던지는 자리에서 부를 수 있지만,
+ * 코어는 그럴 수 없다 — 사이트 언어는 DB 에 있고 던지는 곳은 동기 함수 깊은
+ * 곳이다. 그래서 **키와 값만 실어 던지고**, 언어를 아는 곳(전역 예외 필터)에서
+ * 문장을 만든다. 던져진 예외 자체에는 한국어 문장도 함께 담아 둔다 — 필터를
+ * 거치지 않는 경로(로그·테스트)에서도 읽을 수 있어야 한다.
+ */
+const CORE_TEMPLATE_KO: MessageCatalog = {
+  "err.tooManyAttemptsSec": "너무 많이 시도했습니다. {seconds}초 후 다시 시도해주세요.",
+  "err.tooManyLogins": "로그인 시도가 너무 많습니다. {minutes}분 후 다시 시도하세요.",
+  "err.tooManySignups": "{label} 가입 시도가 너무 많습니다. {minutes}분 후 다시 시도하세요.",
+  "err.mustStartWithHttp": "{label}은 http(s):// 로 시작해야 합니다.",
+  "err.oauthNotConfigured": "{label} 로그인이 설정되지 않았습니다.",
+  "err.notBase32": "base32 가 아닌 문자: {char}",
+  "err.zipEntryMissing": "zip 안에 진입 파일 \"{entry}\" 가 없습니다.",
+  "err.zipManifestCount": "zip 최상위에 {file} 이 정확히 하나 있어야 합니다 (발견 {found}개).",
+  "err.zipManifestUnreadable": "{file} 을 읽을 수 없습니다 — JSON 형식이 아닙니다.",
+  "err.badExtensionName": "확장 이름 \"{name}\" 을 쓸 수 없습니다 — 영문 소문자·숫자·하이픈만 가능합니다.",
+  "err.zipBadPath": "zip 안에 허용되지 않는 경로가 있습니다: {path}",
+  "err.badPath": "허용되지 않는 경로입니다: {path}",
+  "err.badUrl": "잘못된 주소입니다: {url}",
+  "err.notInstalled": "설치되어 있지 않습니다: {name}",
+  "err.notNewerVersion": "새 버전이 아닙니다 (현재 {current}, 제시된 {offered}).",
+  "err.zipNameMismatch": "ZIP 안의 확장 이름({found})이 요청한 이름({name})과 다릅니다. 확인이 필요합니다.",
+  "err.notInRegistry": "레지스트리에 없는 확장입니다: {name}",
+  "err.manifestNameMismatch": "업데이트 매니페스트의 이름({found})이 확장({expected})과 다릅니다.",
+  "err.downloadFailed": "받기 실패 (HTTP {status}): {path}",
+  "err.fileTooLargeMb": "파일이 너무 큽니다 ({mb}MB 상한).",
+  "err.unknownStarter": "알 수 없는 사이트 유형입니다: {code}",
+  "err.badFileType": "허용되지 않는 파일 형식입니다: {ext} — 허용: {allowed}",
+  "err.noExt": "(확장자 없음)",
+  "err.mimeMismatch": "파일 내용과 확장자가 일치하지 않습니다 ({type}).",
+  "err.agreementRequiredSignup": "{title}에 동의해야 가입할 수 있습니다.",
+  "err.agreementRequiredUse": "{title}에 동의해야 계속 이용할 수 있습니다.",
+  "err.verifyMailCooldown": "인증 메일을 방금 보냈습니다. {seconds}초 후에 다시 시도해주세요.",
+  "err.slugTaken": "주소 \"{slug}\" 는 이미 쓰이고 있습니다.",
+  "err.pluginMigrationLock": "플러그인 마이그레이션 락을 60초 안에 얻지 못했습니다 ({plugin}).",
+  "err.unknownAdminScreen": "알 수 없는 관리 화면입니다: {screen}",
+  "err.unknownBlock": "알 수 없는 블록입니다: {name}",
+  "err.settingNotEditable": "수정할 수 없는 설정입니다: {key}",
+  "err.settingMustBeString": "{key}: 문자열이어야 합니다.",
+  "err.settingMustBeBool": "{key}: true/false여야 합니다.",
+  "err.unsupportedLocale": "지원하지 않는 언어입니다: {value} (지원: {available})",
+  "err.badIpList": "IP 형식이 올바르지 않습니다: {list}",
+  "err.badIpListHint":
+    "IP 형식이 올바르지 않습니다: {list} (IPv4, IPv4 CIDR, IPv6 단일 주소만 받습니다)",
+  "err.wouldLockSelfIp":
+    "지금 접속한 IP({ip})가 목록에 없습니다 — 저장하면 스스로 잠깁니다. 현재 IP 를 목록에 추가해주세요.",
+  "err.wouldBlockSelfIp": "지금 접속한 IP({ip})가 차단 목록에 있습니다 — 저장하면 스스로 차단됩니다.",
+  "err.urlNotAllowed": "허용되지 않는 주소입니다: {url}",
+  "err.themeNotFound": "테마 \"{name}\" 을 찾을 수 없습니다.",
+  "err.nameChangeCooldown": "이름은 {days}일마다 바꿀 수 있습니다. {left}일 후에 다시 시도해주세요.",
+  "err.configUnwritable":
+    "설정 파일을 쓸 수 없습니다: {path} 디렉터리 쓰기 권한을 확인하세요. ({reason})",
+};
+const CORE_TEMPLATE_EN: MessageCatalog = {
+  "err.tooManyAttemptsSec": "Too many attempts. Please try again in {seconds} seconds.",
+  "err.tooManyLogins": "Too many sign-in attempts. Please try again in {minutes} minutes.",
+  "err.tooManySignups": "Too many {label} sign-up attempts. Please try again in {minutes} minutes.",
+  "err.mustStartWithHttp": "{label} must start with http(s)://.",
+  "err.oauthNotConfigured": "{label} sign-in is not configured.",
+  "err.notBase32": "Not a base32 character: {char}",
+  "err.zipEntryMissing": "The zip has no entry file \"{entry}\".",
+  "err.zipManifestCount": "The zip must contain exactly one {file} at its top level (found {found}).",
+  "err.zipManifestUnreadable": "{file} could not be read — it is not valid JSON.",
+  "err.badExtensionName":
+    "The extension name \"{name}\" cannot be used — only lowercase letters, digits and hyphens.",
+  "err.zipBadPath": "The zip contains a path that is not allowed: {path}",
+  "err.badPath": "That path is not allowed: {path}",
+  "err.badUrl": "That URL is not valid: {url}",
+  "err.notInstalled": "Not installed: {name}",
+  "err.notNewerVersion": "That is not a newer version (current {current}, offered {offered}).",
+  "err.zipNameMismatch":
+    "The extension name in the ZIP ({found}) differs from the requested name ({name}). Please check.",
+  "err.notInRegistry": "That extension is not in the registry: {name}",
+  "err.manifestNameMismatch":
+    "The name in the update manifest ({found}) differs from the extension ({expected}).",
+  "err.downloadFailed": "Download failed (HTTP {status}): {path}",
+  "err.fileTooLargeMb": "The file is too large ({mb}MB limit).",
+  "err.unknownStarter": "Unknown site type: {code}",
+  "err.badFileType": "That file type is not allowed: {ext} — allowed: {allowed}",
+  "err.noExt": "(no extension)",
+  "err.mimeMismatch": "The file contents do not match the extension ({type}).",
+  "err.agreementRequiredSignup": "You must accept {title} to sign up.",
+  "err.agreementRequiredUse": "You must accept {title} to continue.",
+  "err.verifyMailCooldown": "A verification email was just sent. Please try again in {seconds} seconds.",
+  "err.slugTaken": "The slug \"{slug}\" is already in use.",
+  "err.pluginMigrationLock": "Could not acquire the plugin migration lock within 60 seconds ({plugin}).",
+  "err.unknownAdminScreen": "Unknown admin screen: {screen}",
+  "err.unknownBlock": "Unknown block: {name}",
+  "err.settingNotEditable": "That setting cannot be changed: {key}",
+  "err.settingMustBeString": "{key}: must be a string.",
+  "err.settingMustBeBool": "{key}: must be true or false.",
+  "err.unsupportedLocale": "Unsupported language: {value} (supported: {available})",
+  "err.badIpList": "Those IP addresses are not valid: {list}",
+  "err.badIpListHint":
+    "Those IP addresses are not valid: {list} (only IPv4, IPv4 CIDR and single IPv6 addresses are accepted)",
+  "err.wouldLockSelfIp":
+    "The IP you are connecting from ({ip}) is not on the list — saving would lock you out. Please add your current IP.",
+  "err.wouldBlockSelfIp":
+    "The IP you are connecting from ({ip}) is on the block list — saving would block you.",
+  "err.urlNotAllowed": "That URL is not allowed: {url}",
+  "err.themeNotFound": "The theme \"{name}\" was not found.",
+  "err.nameChangeCooldown": "You can change your name every {days} days. Please try again in {left} days.",
+  "err.configUnwritable":
+    "The configuration file cannot be written: {path} Check the directory write permission. ({reason})",
+};
+
+const CORE_TEMPLATES: Record<Locale, MessageCatalog> = { ko: CORE_TEMPLATE_KO, en: CORE_TEMPLATE_EN };
+
+/** 키와 값으로 문장을 만든다 — 그 언어에 템플릿이 없으면 ko 로, 그것도 없으면 키 그대로 */
+export function renderCoreMessage(
+  locale: Locale,
+  key: string,
+  params?: Record<string, string | number>,
+): string {
+  const template = CORE_TEMPLATES[locale]?.[key] ?? CORE_TEMPLATE_KO[key];
+  return template === undefined ? key : interpolate(template, params);
+}
+
+/** 검사 스크립트가 읽는 키 목록 */
+export const CORE_TEMPLATE_KEYS = Object.keys(CORE_TEMPLATE_KO);

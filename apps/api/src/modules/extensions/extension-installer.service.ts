@@ -6,6 +6,7 @@ import type { BrickDb } from "@brick/database";
 import { installedPlugins, installedThemes } from "@brick/database";
 import type { PluginManifest, ThemeManifest } from "@brick/shared";
 import { DB } from "../../runtime.module.js";
+import { msg } from "../../common/localized-error.js";
 
 const NAME_RE = /^[a-z0-9][a-z0-9-]{1,60}$/;
 
@@ -29,7 +30,7 @@ export class ExtensionInstallerService {
   async installPlugin(zip: Buffer): Promise<{ name: string; version: string }> {
     const { manifest, files } = await this.extract<PluginManifest>(zip, "brick.plugin.json");
     if (!manifest.entry || !files.has(manifest.entry)) {
-      throw new BadRequestException(`zip 안에 진입 파일 "${manifest.entry}" 가 없습니다.`);
+      throw new BadRequestException(msg("err.zipEntryMissing", { entry: manifest.entry }));
     }
     await this.writeFiles(join(this.pluginsDir, manifest.name), files);
     await this.db
@@ -72,7 +73,7 @@ export class ExtensionInstallerService {
       (k) => k === manifestFile || (k.endsWith(`/${manifestFile}`) && k.split("/").length === 2),
     );
     if (candidates.length !== 1) {
-      throw new BadRequestException(`zip 최상위에 ${manifestFile} 이 정확히 하나 있어야 합니다 (발견 ${candidates.length}개).`);
+      throw new BadRequestException(msg("err.zipManifestCount", { file: manifestFile, found: candidates.length }));
     }
     const prefix = candidates[0] === manifestFile ? "" : candidates[0].slice(0, -manifestFile.length);
 
@@ -80,10 +81,10 @@ export class ExtensionInstallerService {
     try {
       manifest = JSON.parse(raw.get(candidates[0])!.toString("utf8")) as M;
     } catch {
-      throw new BadRequestException(`${manifestFile} 을 읽을 수 없습니다 — JSON 형식이 아닙니다.`);
+      throw new BadRequestException(msg("err.zipManifestUnreadable", { file: manifestFile }));
     }
     if (!NAME_RE.test(manifest.name ?? "")) {
-      throw new BadRequestException(`확장 이름 "${manifest.name}" 을 쓸 수 없습니다 — 영문 소문자·숫자·하이픈만 가능합니다.`);
+      throw new BadRequestException(msg("err.badExtensionName", { name: String(manifest.name) }));
     }
     if (!manifest.version) throw new BadRequestException("manifest 에 version 이 없습니다.");
 
@@ -95,7 +96,7 @@ export class ExtensionInstallerService {
       // zip-slip 방어
       const norm = normalize(rel);
       if (norm.startsWith("..") || norm.startsWith("/") || norm.includes("\0")) {
-        throw new BadRequestException(`zip 안에 허용되지 않는 경로가 있습니다: ${key}`);
+        throw new BadRequestException(msg("err.zipBadPath", { path: key }));
       }
       files.set(norm, buf);
     }
@@ -107,7 +108,7 @@ export class ExtensionInstallerService {
     await rm(targetDir, { recursive: true, force: true });
     for (const [rel, buf] of files) {
       const abs = join(targetDir, rel);
-      if (!abs.startsWith(targetDir)) throw new BadRequestException(`허용되지 않는 경로입니다: ${rel}`);
+      if (!abs.startsWith(targetDir)) throw new BadRequestException(msg("err.badPath", { path: rel }));
       await mkdir(dirname(abs), { recursive: true });
       await writeFile(abs, buf);
     }

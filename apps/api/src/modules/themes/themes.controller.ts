@@ -13,6 +13,7 @@ import { AuditService } from "../audit/audit.service.js";
 import type { CacheProvider } from "@brick/core";
 import { CACHE, DB } from "../../runtime.module.js";
 import { CspService } from "../security/csp.service.js";
+import { msg } from "../../common/localized-error.js";
 
 @Controller("api/themes")
 export class ThemesController {
@@ -66,7 +67,7 @@ export class ThemesController {
   async activate(@Param("name") name: string, @Req() req: FastifyRequest) {
     const themes = await this.themes.discover();
     const target = themes.find((t) => t.name === name);
-    if (!target) throw new NotFoundException(`테마 "${name}" 을 찾을 수 없습니다.`);
+    if (!target) throw new NotFoundException(msg("err.themeNotFound", { name }));
     await this.db
       .insert(siteSettings)
       .values({ key: "theme.active", value: name as never })

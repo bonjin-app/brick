@@ -23,6 +23,7 @@ import { sql } from "drizzle-orm";
 import { Inject } from "@nestjs/common";
 import { DB } from "../../runtime.module.js";
 import type { BrickDb } from "@brick/database";
+import { msg } from "../../common/localized-error.js";
 
 @Controller("api/me/security")
 @UseGuards(AuthGuard)
@@ -92,7 +93,7 @@ export class AccountSecurityController {
     );
     if (!allowed) {
       throw new HttpException(
-        `너무 많이 시도했습니다. ${retryAfterSeconds}초 후 다시 시도해주세요.`,
+        msg("err.tooManyAttemptsSec", { seconds: retryAfterSeconds }),
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }

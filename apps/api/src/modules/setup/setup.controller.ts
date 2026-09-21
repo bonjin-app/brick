@@ -1,6 +1,7 @@
 import { BadRequestException, Body, Controller, Get, Post } from "@nestjs/common";
 import pg from "pg";
 import { canWriteConfig, readConfigFile, writeConfigFile } from "../../config/config-file.js";
+import { msg } from "../../common/localized-error.js";
 
 interface DbConnectDto {
   host: string;
@@ -46,10 +47,10 @@ export class SetupController {
   async save(@Body() dto: DbConnectDto) {
     const writable = canWriteConfig();
     if (!writable.writable) {
-      throw new BadRequestException(
-        `설정 파일을 쓸 수 없습니다: ${writable.path}\n` +
-          `디렉터리 쓰기 권한을 확인하세요. (${writable.reason ?? "권한 없음"})`,
-      );
+      throw new BadRequestException(msg("err.configUnwritable", {
+        path: writable.path,
+        reason: writable.reason ?? "권한 없음",
+      }));
     }
 
     const url = this.buildUrl(dto);

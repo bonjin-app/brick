@@ -4,6 +4,7 @@ import { uuidv7 } from "uuidv7";
 import { createHash } from "node:crypto";
 import type { BrickDb } from "@brick/database";
 import { DB } from "../../runtime.module.js";
+import { msg } from "../../common/localized-error.js";
 
 /**
  * 약관과 동의 이력.
@@ -87,7 +88,7 @@ export class AgreementsService {
       const agreed = params.accepted?.[item.kind] === true;
 
       if (item.isRequired && !agreed) {
-        throw new BadRequestException(`${item.title}에 동의해야 가입할 수 있습니다.`);
+        throw new BadRequestException(msg("err.agreementRequiredSignup", { title: item.title }));
       }
       if (item.kind === "marketing" && agreed) marketingOptIn = true;
 
@@ -132,7 +133,7 @@ export class AgreementsService {
     const ipHash = params.ip ? hashIp(params.ip) : null;
     for (const item of pending) {
       if (params.accepted?.[item.kind] !== true) {
-        throw new BadRequestException(`${item.title}에 동의해야 계속 이용할 수 있습니다.`);
+        throw new BadRequestException(msg("err.agreementRequiredUse", { title: item.title }));
       }
       await this.db.execute(sql`
         INSERT INTO user_agreements (id, user_id, agreement_id, kind, version, agreed, ip_hash)

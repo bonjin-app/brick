@@ -19,13 +19,18 @@
  *     `ctx.t("...", { n })` 로 카탈로그에서 꺼내 맞춰야 번역된다. 플러그인은
  *     활성화 때 바인딩된 `t` 를 어디서든 부를 수 있으므로 예외를 두지 않는다.
  *
- * 코어·API 는 (2)를 아직 요구하지 않는다: 던지는 자리에 번역기가 없어서
- * (`ctx.t` 는 플러그인의 것이다) 예외에 키와 파라미터를 실어 응답 경계에서
- * 조립하는 별도 설계가 필요하다 — 로드맵에 남겼다.
+ * 코어·API 도 같은 두 가지를 지킨다. 다만 던지는 자리에 번역기가 없으므로
+ * (`ctx.t` 는 플러그인의 것이다) **키와 값을 예외에 실어**(`msg()`) 응답
+ * 경계에서 조립한다 — 그래서 여기서는 `msg()` 가 쓰는 키가 카탈로그에 있는지
+ * 함께 본다.
+ *
+ * 부팅·CLI 에서 던지는 `Error` 는 제외한다: HTTP 응답이 아니라 **로그로 읽히는
+ * 글**이고, 그 시점에는 사이트 언어를 알 수도 없다(마이그레이터는 DB 에 붙기
+ * 전에 실패한다). 사람이 읽는 것은 같지만 독자가 다르다.
  */
 import { readdirSync, statSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { CORE_ERROR_SOURCES } from "../packages/core/dist/index.js";
+import { CORE_ERROR_SOURCES, CORE_TEMPLATE_KEYS } from "../packages/core/dist/index.js";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 const PLUGINS = join(ROOT, "plugins");
@@ -68,6 +73,17 @@ function isWholeMessage(match, source) {
   return !after.startsWith("+");
 }
 
+/**
+ * 주석을 지운다.
+ *
+ * 이 저장소에서 두 번 당한 함정이다: 주석에 적어 둔 **예시 코드**가 검사에
+ * 걸려 없는 문제를 만들고(지금 이 파일의 설명이 그랬다), 반대로 주석에 적힌
+ * 이름 때문에 **화면을 통째로 지워도 검사가 초록**이 된다.
+ */
+function stripComments(code) {
+  return code.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+}
+
 function walk(dir, out = []) {
   for (const name of readdirSync(dir)) {
     if (name === "node_modules" || name === "dist" || name.startsWith(".")) continue;
@@ -92,7 +108,7 @@ for (const plugin of readdirSync(PLUGINS)) {
   const interpolated = new Set();
   let plain = 0;
   for (const file of walk(src)) {
-    const code = readFileSync(file, "utf8");
+    const code = stripComments(readFileSync(file, "utf8"));
     for (const m of code.matchAll(THROW_RE)) {
       const msg = m[2];
       if (!HANGUL.test(msg)) continue;
@@ -131,13 +147,19 @@ for (const plugin of readdirSync(PLUGINS)) {
  * 코어·API 는 카탈로그가 코드 안에 있다 (packages/core/src/i18n.ts).
  * 플러그인처럼 locales/*.json 이 없으므로 그 목록과 대조한다.
  */
+const THROW_INTERP_EXCEPTION = /throw new \w*Exception\(\s*(?:\d{3},\s*)?`((?:[^\\`]|\\.)*?)`/g;
+const MSG_KEY_RE = /\bmsg\(\s*"([\w.]+)"/g;
+
 {
   const core = new Set(CORE_ERROR_SOURCES);
+  const templates = new Set(CORE_TEMPLATE_KEYS);
   const missing = new Set();
+  const interpolated = new Set();
+  const missingKeys = new Set();
   let plain = 0;
   for (const dir of [join(ROOT, "apps/api/src"), join(ROOT, "packages/core/src")]) {
     for (const file of walk(dir)) {
-      const code = readFileSync(file, "utf8");
+      const code = stripComments(readFileSync(file, "utf8"));
       for (const m of code.matchAll(THROW_RE)) {
         const msg = m[2];
         if (!HANGUL.test(msg)) continue;
@@ -150,16 +172,38 @@ for (const plugin of readdirSync(PLUGINS)) {
         plain += 1;
         if (!core.has(msg)) missing.add(msg);
       }
+      /*
+       * 값이 박힌 **HTTP 예외**는 키로 옮겨야 한다(msg()). 부팅·CLI 의 Error 는
+       * 로그로 읽히는 글이라 제외한다 — 그 시점에는 사이트 언어도 알 수 없다.
+       */
+      for (const m of code.matchAll(THROW_INTERP_EXCEPTION)) {
+        if (HANGUL.test(m[1])) interpolated.add(m[1].replace(/\n\s*/g, " ").slice(0, 80));
+      }
+      // msg("키") 가 쓰는 키가 카탈로그에 있는가 — 없으면 화면에 키가 그대로 뜬다
+      for (const m of code.matchAll(MSG_KEY_RE)) {
+        if (!templates.has(m[1])) missingKeys.add(m[1]);
+      }
     }
   }
   checked += 1;
-  if (missing.size === 0) {
+  if (missing.size === 0 && interpolated.size === 0 && missingKeys.size === 0) {
     console.log(`  ✅ 코어·API: 오류 문장 ${plain}개가 모두 번역됩니다`);
-  } else {
+  }
+  if (missing.size > 0) {
     bad += missing.size;
     console.log(`  ❌ 코어·API: 번역 없는 오류 문장 ${missing.size}개 — packages/core/src/i18n.ts 의 CORE_ERROR_EN 에 원문을 키로 더하세요`);
     for (const m of [...missing].slice(0, 8)) console.log(`     · ${m}`);
     if (missing.size > 8) console.log(`     · … 외 ${missing.size - 8}개`);
+  }
+  if (interpolated.size > 0) {
+    bad += interpolated.size;
+    console.log(`  ❌ 코어·API: 값을 박아 넣은 HTTP 오류 ${interpolated.size}개 — msg("키", { 값 }) 로 옮기세요`);
+    for (const m of [...interpolated].slice(0, 8)) console.log(`     · ${m}`);
+  }
+  if (missingKeys.size > 0) {
+    bad += missingKeys.size;
+    console.log(`  ❌ 코어·API: 카탈로그에 없는 키 ${missingKeys.size}개 — CORE_TEMPLATE_KO/EN 에 더하세요`);
+    for (const m of [...missingKeys]) console.log(`     · ${m}`);
   }
 }
 
