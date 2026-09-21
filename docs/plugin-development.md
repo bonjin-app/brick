@@ -432,6 +432,23 @@ class HttpError extends Error {
 if (!req.user) throw new HttpError(401, "login required");
 ```
 
+에러에 `field` 속성을 붙이면 어느 입력 칸이 문제인지 화면에 함께 전달됩니다
+(`{ statusCode, message, field }`). 긴 폼에서 손님을 그 칸으로 데려갈 수 있습니다.
+
+**오류 문장도 사이트 언어를 따릅니다.** 선언 라벨과 같은 gettext 규칙입니다 —
+**원문이 곧 카탈로그 키**이므로, 던지는 코드는 그대로 두고 `locales/en.json` 에
+한 줄을 더하면 됩니다:
+
+```json
+{ "주문을 찾을 수 없습니다.": "Order not found." }
+```
+
+번역이 없으면 원문이 그대로 나갑니다. `field` 는 번역되지 않습니다 — 화면이
+그 값으로 입력 칸을 찾기 때문입니다. 값이 박힌 문장(`재고가 3개 남았습니다`)은
+원문과 키가 달라 치환되지 않으므로, 그런 문장은 `ctx.t("...", { n })` 로
+카탈로그에서 꺼내 맞추세요. `scripts/check-error-i18n.mjs` 가 번역이 빠진
+오류 문장을 CI 에서 잡습니다.
+
 ## 마이그레이션
 
 - `migrations/*.sql` 파일이 파일명 순으로, 플러그인 **활성화 시점**에 1회씩 적용됩니다 (`plugin_migrations` 테이블로 멱등 보장).

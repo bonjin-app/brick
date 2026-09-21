@@ -156,10 +156,23 @@ export class PluginsController {
          * 여덟 칸을 하나씩 되짚어야 한다.
          */
         const field = (err as { field?: unknown })?.field;
+        /*
+         * 오류 메시지도 사이트 언어를 따른다.
+         *
+         * 플러그인은 오류를 한국어 문장으로 던진다("재고가 부족합니다."). 영어
+         * 사이트에서도 그대로 나갔다 — 화면은 전부 영어인데 주문 버튼을 누르면
+         * 한국어 경고가 뜨는, **가장 눈에 띄는 자리에서만 번역이 없는** 상태였다.
+         * 선언 라벨과 같은 gettext 규칙을 쓴다: 원문이 곧 키이고, 번역이 없으면
+         * 원문이 나간다(자연 폴백). 플러그인 코드는 한 줄도 바뀌지 않는다.
+         *
+         * 값이 박힌 문장(`재고가 3개 남았습니다`)은 원문과 키가 달라 걸리지
+         * 않는다 — 그런 문장은 ctx.t 에 파라미터로 넘겨야 번역된다.
+         */
+        const message = this.loader.trCatalog(name, (err as Error).message);
         throw new HttpException(
           typeof field === "string" && field
-            ? { statusCode: status, message: (err as Error).message, field }
-            : (err as Error).message,
+            ? { statusCode: status, message, field }
+            : message,
           status,
         );
       }

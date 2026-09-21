@@ -207,6 +207,21 @@ contains "장바구니 스크립트의 포맷터도 영어" "$(curl -s "$API/api
 # 이 응답은 JSON 이므로 큰따옴표가 \" 로 온다 — 검사 문자열도 그 모양이어야 한다
 contains "주문내역 스크립트에 날짜 태그" "$(curl -s "$API/api/render/page?path=shop/orders")" 'var TAG = \"en-US\"'
 
+echo "── 서버 오류 메시지도 언어를 따라간다"
+#
+# 화면은 전부 영어인데 주문 버튼을 누르면 "재고가 부족합니다." 가 떴다 —
+# 영어 사이트의 손님은 **가장 중요한 순간에만** 못 읽는 글자를 본다.
+# 선언 라벨과 같은 gettext 규칙이다: 원문(한국어)이 곧 키, 번역이 없으면 원문.
+ERR_404="$(curl -s "$SHOP_API/products/no-such-product")"
+contains "없는 상품 오류가 영어" "$ERR_404" "Product not found."
+absent   "한국어가 남지 않는다" "$ERR_404" "상품을 찾을 수 없습니다"
+ERR_CART="$(curl -s -X POST "$SHOP_API/cart" -H 'content-type: application/json' -d '{"productId":"00000000-0000-0000-0000-000000000000","quantity":1}')"
+contains "장바구니 담기 오류도 영어" "$ERR_CART" "Product not found."
+# 한국어 사이트로 돌리면 원문이 그대로 나온다 (번역은 덮어쓰기가 아니라 치환이다)
+curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"site.locale":"ko"}' >/dev/null
+contains "ko 로 되돌리면 한국어" "$(curl -s "$SHOP_API/products/no-such-product")" "상품을 찾을 수 없습니다"
+curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"site.locale":"en"}' >/dev/null
+
 echo "── 주문 안내 메일도 언어를 따라간다"
 # 금액만 영어고 문장은 한국어면 반쪽이다 — 둘 중 하나로 통일된 것보다 나쁘다
 curl -s -b "$CK" -X PUT "$SHOP_API/admin/settings" -H 'content-type: application/json' \
@@ -224,6 +239,15 @@ contains "본문이 영어" "$MAIL_EN" "Order number:"
 contains "입금 안내도 영어" "$MAIL_EN" "Bank account: KB 123-456"
 contains "메일의 금액도 영어 표기" "$MAIL_EN" "Total: 15,000 KRW"
 absent   "한국어 문구가 남지 않는다" "$MAIL_EN" "결제 금액:"
+
+# 칸을 알려주는 오류는 **메시지만** 번역되고 field 는 코드 그대로여야 한다 —
+# 화면이 그 값으로 입력 칸을 찾아 손님을 데려간다(번역되면 못 찾는다)
+ERR_FIELD="$(curl -s -X POST "$SHOP_API/orders" -H 'content-type: application/json' \
+  -d '{"items":[{"productId":"'"$MUG_ID"'","quantity":1}],"orderer":{"ordererName":"","ordererPhone":"010-1111-2222","postcode":"04524","address1":"Seoul"}}')"
+contains "어느 칸인지는 코드 그대로" "$ERR_FIELD" '"field":"ordererName"'
+# 칸 이름이 문장 안에 들어가는 오류는 조각을 카탈로그에서 꺼내 맞춘다
+contains "칸 이름이 든 문장도 영어" "$ERR_FIELD" "Please enter the orderer's name."
+
 
 echo "── 코어와 다른 플러그인의 메일도 언어를 따라간다"
 curl -s -b "$CK" -X POST "$API/api/plugins/brick-helpdesk/activate" >/dev/null

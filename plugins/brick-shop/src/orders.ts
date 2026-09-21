@@ -464,15 +464,23 @@ export async function nextOrderNo(db: Db): Promise<string> {
 }
 
 function validateOrderer(o: OrdererInput): void {
-  const required: Array<[keyof OrdererInput, string]> = [
-    ["ordererName", "주문자 이름"],
-    ["ordererPhone", "주문자 연락처"],
-    ["postcode", "우편번호"],
-    ["address1", "주소"],
-  ];
-  // 어느 칸인지 함께 알려준다 — 화면이 그 칸으로 데려간다(주문서에는 칸이 여덟 개다)
-  for (const [key, label] of required) {
-    if (!String(o?.[key] ?? "").trim()) throw new ShopError(400, `${josa(label, "을/를")} 입력해주세요.`, String(key));
+  const required: Array<keyof OrdererInput> = ["ordererName", "ordererPhone", "postcode", "address1"];
+  /*
+   * 어느 칸인지 함께 알려준다 — 화면이 그 칸으로 데려간다(주문서에는 칸이 여덟 개다).
+   *
+   * 칸 이름이 문장 안에 들어가므로 **원문=키** 규칙(오류 문장의 gettext 치환)이
+   * 통하지 않는다 — 완성된 문장이 카탈로그에 없기 때문이다. 이런 문장은 조각을
+   * 카탈로그에서 꺼내 맞춰야 한다. 조사는 한국어에서만 붙인다: "주문자 이름을"
+   * 은 맞지만 영어 라벨에 을/를 을 붙이면 안 된다.
+   */
+  for (const key of required) {
+    if (String(o?.[key] ?? "").trim()) continue;
+    const label = t(`order.field.${key}`);
+    throw new ShopError(
+      400,
+      t("order.required", { label: localeTag() === "ko-KR" ? josa(label, "을/를") : label }),
+      String(key),
+    );
   }
   if (!/^[0-9\-+() ]{7,30}$/.test(o.ordererPhone.trim())) {
     throw new ShopError(400, "연락처 형식이 올바르지 않습니다.", "ordererPhone");
