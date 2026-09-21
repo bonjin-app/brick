@@ -80,17 +80,25 @@ export async function rateFaq(db: Db, id: string, helpful: boolean): Promise<voi
 
 /* ── 관리자 ────────────────────────────────────────── */
 
-export async function listFaqsAdmin(db: Db, page: number) {
+export async function listFaqsAdmin(db: Db, page: number, term = "") {
   const size = 30;
+  // `%`·`_` 는 이스케이프한다 — 안 하면 `%` 한 글자로 전체가 나온다
+  const q = String(term ?? "").trim().slice(0, 100);
+  const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  const where = sql`WHERE (${q} = '' OR f.question ILIKE ${like} OR f.answer ILIKE ${like})`;
   const { rows } = await db.execute(sql`
     SELECT f.id, f.question, f.answer, f.sort_order, f.is_visible, f.view_count,
            f.helpful_count, f.unhelpful_count, f.category_id, c.name AS category_name
     FROM help_faqs f
     LEFT JOIN help_faq_categories c ON c.id = f.category_id
+    ${where}
     ORDER BY c.sort_order NULLS LAST, f.sort_order, f.created_at
     LIMIT ${size} OFFSET ${(Math.max(1, page) - 1) * size}
   `);
-  const { rows: cnt } = await db.execute(sql`SELECT count(*) AS n FROM help_faqs`);
+  // count 와 목록이 **같은 조건**을 써야 한다
+  const { rows: cnt } = await db.execute(sql`
+    SELECT count(*) AS n FROM help_faqs f ${where}
+  `);
   return { items: rows, total: Number(cnt[0]?.n ?? 0), page: Math.max(1, page), pageSize: size };
 }
 

@@ -2,7 +2,7 @@ import {
   BadRequestException, Body, ConflictException, Controller, Delete, ForbiddenException, Get, HttpException,
   HttpStatus, Inject, Param, Post, Put, Query, Req, UseGuards,
 } from "@nestjs/common";
-import { count, desc, eq, sql } from "drizzle-orm";
+import { count, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import argon2 from "argon2";
 import type { FastifyRequest } from "fastify";
@@ -333,12 +333,29 @@ export class UsersController {
   // ── 관리자: 회원 관리 ──────────────────────────────
   @Get("users")
   @UseGuards(AdminGuard)
-  async list(@Req() req: FastifyRequest, @Query("page") pageParam?: string) {
+  async list(
+    @Req() req: FastifyRequest,
+    @Query("page") pageParam?: string,
+    @Query("q") qParam?: string,
+  ) {
     // 회원 개인정보(이메일) 열람 — 훔친 세션만으로는 못 본다.
     // 최근 10분 내 비밀번호 재확인(POST /api/me/security/reauth)이 필요하다.
     this.reauth.assertRequest(req as never);
     const page = Math.max(1, Number(pageParam ?? 1));
     const size = 30;
+    /*
+     * 검색 — 이메일과 이름.
+     *
+     * 회원이 만 명인 사이트에서 "김철수" 를 찾으려면 서른 명씩 삼백 쪽을 넘겨야 했다.
+     * 운영자가 회원 목록을 여는 이유는 대개 **한 사람을 찾기 위해서**다(문의가 왔다,
+     * 결제가 막혔다) — 그 일을 못 하는 목록이었다.
+     *
+     * `%`·`_` 는 이스케이프한다. 안 하면 `%` 한 글자로 전체가 나와서, 좁히려던
+     * 검색어가 아무것도 좁히지 않는다.
+     */
+    const q = String(qParam ?? "").trim().slice(0, 100);
+    const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    const where = q ? or(ilike(users.email, like), ilike(users.displayName, like)) : undefined;
     const [items, [total]] = await Promise.all([
       this.db
         .select({
@@ -347,10 +364,12 @@ export class UsersController {
           adminMemo: users.adminMemo,
         })
         .from(users)
+        .where(where)
         .orderBy(desc(users.createdAt))
         .limit(size)
         .offset((page - 1) * size),
-      this.db.select({ value: count() }).from(users),
+      // count 와 목록이 **같은 조건**을 써야 한다 — 다르면 "37명" 이라 적고 서른 명만 보여준다
+      this.db.select({ value: count() }).from(users).where(where),
     ]);
     return { items, total: Number(total?.value ?? 0), page, pageSize: size };
   }

@@ -1141,13 +1141,25 @@ export default definePlugin(async (ctx) => {
   // ── 쿠폰 ────────────────────────────────────────────
   ctx.registerRoute("GET", "/admin/coupons", async (req) => {
     requireAdmin(req);
+    /*
+     * 쪽나눔과 검색.
+     *
+     * 전에는 `LIMIT 100` 에 `total` 로 그 개수를 돌려줬다 — 쿠폰이 백 개를 넘으면
+     * **101번째부터는 화면에서 닿을 수 없고**, 화면은 "100건" 이라고 적어 그 사실조차
+     * 숨겼다. 생일 쿠폰이 매일 자동 발급되는 사이트에서는 금방 넘는 숫자다.
+     */
+    const page = Math.max(1, Number(req.query.page ?? 1));
+    const q = String(req.query.q ?? "").trim().slice(0, 100);
+    const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    const cWhere = sql`WHERE (${q} = '' OR code ILIKE ${like} OR name ILIKE ${like})`;
     const { rows } = await db.execute(sql`
       SELECT id, code, name, discount_type, discount_value, min_amount, max_discount,
              usage_limit, used_count, is_active,
              per_user_limit, first_purchase_only, grade_id, requires_issue, birthday_auto
-      FROM shop_coupons ORDER BY created_at DESC LIMIT 100
+      FROM shop_coupons ${cWhere} ORDER BY created_at DESC LIMIT 30 OFFSET ${(page - 1) * 30}
     `);
-    return { items: rows, total: rows.length };
+    const { rows: cnt } = await db.execute(sql`SELECT count(*) AS n FROM shop_coupons ${cWhere}`);
+    return { items: rows, total: Number(cnt[0]?.n ?? 0), page, pageSize: 30 };
   });
 
   ctx.registerRoute("POST", "/admin/coupons", async (req) => {
@@ -2273,9 +2285,12 @@ export default definePlugin(async (ctx) => {
      */
     const reply = String(req.query.reply ?? "");
     const visible = String(req.query.visible ?? "");
+    const q = String(req.query.q ?? "").trim().slice(0, 100);
+    const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
     const rWhere = sql`
       WHERE (${reply} = '' OR (${reply} = 'waiting') = (r.admin_reply IS NULL))
-        AND (${visible} = '' OR (${visible} = 'on') = r.is_visible)`;
+        AND (${visible} = '' OR (${visible} = 'on') = r.is_visible)
+        AND (${q} = '' OR p.name ILIKE ${like} OR r.author_name ILIKE ${like})`;
     const { rows } = await db.execute(sql`
       SELECT r.id, r.rating, r.content, r.admin_reply, r.is_visible, r.created_at,
              r.author_name, (r.order_no IS NOT NULL) AS verified, p.name AS product_name
@@ -2311,7 +2326,11 @@ export default definePlugin(async (ctx) => {
     requireAdmin(req);
     const page = Math.max(1, Number(req.query.page ?? 1));
     const qReply = String(req.query.reply ?? "");
-    const qWhere = sql`WHERE (${qReply} = '' OR (${qReply} = 'waiting') = (q.admin_reply IS NULL))`;
+    const term = String(req.query.q ?? "").trim().slice(0, 100);
+    const termLike = `%${term.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    const qWhere = sql`WHERE (${qReply} = '' OR (${qReply} = 'waiting') = (q.admin_reply IS NULL))
+                         AND (${term} = '' OR q.title ILIKE ${termLike} OR q.author_name ILIKE ${termLike}
+                              OR p.name ILIKE ${termLike})`;
     const { rows } = await db.execute(sql`
       SELECT q.id, q.title, q.content, q.is_secret, q.status, q.admin_reply, q.created_at,
              q.author_name, p.name AS product_name

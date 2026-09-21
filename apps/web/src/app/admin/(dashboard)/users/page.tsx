@@ -23,9 +23,16 @@ export default function AdminUsersPage() {
   const [needReauth, setNeedReauth] = useState(false);
   const [password, setPassword] = useState("");
   const [reauthError, setReauthError] = useState("");
+  /*
+   * 검색 — 입력칸과 **보낸 값**을 나눈다.
+   * 한 글자마다 목록을 다시 받으면 회원 만 명짜리 표를 여섯 번 훑는다.
+   */
+  const [query, setQuery] = useState("");
+  const [search, setSearch] = useState("");
 
   const reload = useCallback(() => {
-    fetch("/api/users").then(async (r) => {
+    const qs = search ? `?q=${encodeURIComponent(search)}` : "";
+    fetch(`/api/users${qs}`).then(async (r) => {
       const json = await r.json();
       if (r.status === 403 && json?.code === "reauth_required") {
         setNeedReauth(true);
@@ -34,7 +41,7 @@ export default function AdminUsersPage() {
       setNeedReauth(false);
       setData(json);
     });
-  }, []);
+  }, [search]);
   useEffect(reload, [reload]);
 
   async function submitReauth(e: React.FormEvent) {
@@ -95,6 +102,31 @@ export default function AdminUsersPage() {
       {message && (
         <p role={failed ? "alert" : "status"}
           style={{ color: failed ? "var(--color-danger)" : "var(--color-success)" }}>{message}</p>
+      )}
+      {/*
+        검색 — 회원이 만 명인 사이트에서 "김철수" 를 찾으려면 서른 명씩 삼백 쪽을
+        넘겨야 했다. 운영자가 이 화면을 여는 이유는 대개 한 사람을 찾기 위해서다.
+      */}
+      <form
+        style={{ display: "flex", gap: 6, margin: "0 0 12px" }}
+        onSubmit={(e) => { e.preventDefault(); setSearch(query.trim()); }}
+      >
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={t("users.searchPlaceholder")}
+          aria-label={t("x.search")}
+          style={{ flex: "0 1 320px", padding: "7px 10px", borderRadius: 6, border: "1px solid var(--color-line-strong)" }}
+        />
+        <button type="submit" style={{ padding: "7px 14px", borderRadius: 6, cursor: "pointer" }}>{t("x.search")}</button>
+        {search && (
+          <button type="button" style={{ padding: "7px 14px", borderRadius: 6, cursor: "pointer" }}
+            onClick={() => { setQuery(""); setSearch(""); }}>{t("x.searchClear")}</button>
+        )}
+      </form>
+      {search && data.items.length === 0 && (
+        <p style={{ color: "var(--color-muted)" }}>{t("x.emptySearch")}</p>
       )}
       {/*
         좁은 화면에서는 카드로 접힌다 (관리 셸의 .brick-x-table).

@@ -307,6 +307,21 @@ check "탈퇴하면 생일도 파기된다" \
   "$(psql_q "SELECT birth_month IS NULL AND birth_day IS NULL FROM users WHERE display_name='탈퇴한 회원' ORDER BY updated_at DESC LIMIT 1" | head -1)" "true"
 
 echo
+echo "── 쿠폰 목록 검색·쪽나눔"
+#
+# 전에는 LIMIT 100 에 total 로 그 개수를 돌려줬다 — 쿠폰이 백 개를 넘으면
+# 101번째부터는 화면에서 닿을 수 없고, 화면은 "100건" 이라 적어 그 사실조차 숨겼다.
+# 생일 쿠폰이 매일 자동 발급되는 사이트에서는 금방 넘는 숫자다.
+urlenc() { /usr/bin/python3 -c "import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1]))" "$1"; }
+CLIST="$(curl -s -b "$CK" "$SHOP/admin/coupons")"
+contains "총계를 따로 센다 (목록 길이가 아니라)" "$CLIST" '"pageSize":30'
+check "총계는 실제 개수다" "$(echo "$CLIST" | jq_get "['total']")" "$(psql_q "SELECT count(*) FROM shop_coupons")"
+contains "코드로 찾는다" "$(curl -s -b "$CK" "$SHOP/admin/coupons?q=WELCOME")" '"code":"WELCOME"'
+contains "이름으로도 찾는다" "$(curl -s -b "$CK" "$SHOP/admin/coupons?q=$(urlenc '신규')")" '"code":"WELCOME"' 
+check "없는 코드는 0건" "$(curl -s -b "$CK" "$SHOP/admin/coupons?q=$(urlenc 'zzz없는쿠폰')" | jq_get "['total']")" "0"
+check "%% 는 와일드카드가 아니다" "$(curl -s -b "$CK" "$SHOP/admin/coupons?q=%25" | jq_get "['total']")" "0"
+
+
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 # 실측을 남긴다(설정됐을 때만) — README 의 표가 실제와 같은지 CI 가 대조한다.
 # 표의 숫자는 조용히 썩는다: 단언을 더해도 아무도 그 줄을 고치지 않는다.

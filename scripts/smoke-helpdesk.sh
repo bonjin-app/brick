@@ -403,6 +403,19 @@ contains "문의 삭제를 알려준다" "$WD" "1:1 문의"
 check "삭제된 문의는 운영자도 못 본다" "$(code -b "$CK" "$HD/tickets/$T2")" "404"
 
 echo
+echo "── 관리 목록 검색 (라우트는 있었는데 화면에 칸이 없었다)"
+# 문의 목록은 q 를 처음부터 받고 있었다 — 선언이 없어 검색칸이 그려지지 않았을 뿐이다
+contains "문의 목록에 검색칸이 선언돼 있다" \
+  "$(curl -s -b "$CK" "$API/api/admin/resources/brick-helpdesk/tickets")" '"searchable"'
+contains "FAQ 목록에도" \
+  "$(curl -s -b "$CK" "$API/api/admin/resources/brick-helpdesk/faqs")" '"searchable"'
+urlenc() { /usr/bin/python3 -c "import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1]))" "$1"; }
+check "FAQ 검색: 없는 말은 0건" \
+  "$(curl -s -b "$CK" "$API/api/plugins/brick-helpdesk/admin/faqs?q=$(urlenc 'zzz없는질문')" | jq_get "['total']")" "0"
+check "FAQ 검색: %% 는 와일드카드가 아니다" \
+  "$(curl -s -b "$CK" "$API/api/plugins/brick-helpdesk/admin/faqs?q=%25" | jq_get "['total']")" "0"
+
+
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 # 실측을 남긴다(설정됐을 때만) — README 의 표가 실제와 같은지 CI 가 대조한다.
 # 표의 숫자는 조용히 썩는다: 단언을 더해도 아무도 그 줄을 고치지 않는다.

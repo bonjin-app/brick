@@ -10,6 +10,8 @@ export const TICKET_RESOURCE: AdminResource = {
   title: "1:1 문의",
   itemLabel: "문의",
   basePath: "/admin/tickets",
+  // 라우트는 처음부터 q 를 받고 있었다 — 선언이 없어 화면에 검색칸이 뜨지 않았을 뿐이다
+  searchable: { placeholder: "문의번호 · 제목 · 내용" },
   order: 5,
   description:
     "답변을 입력하고 저장하면 상태가 '답변완료'로 바뀌고 작성자에게 메일이 갑니다. " +
@@ -37,6 +39,7 @@ export const FAQ_RESOURCE: AdminResource = {
   title: "FAQ",
   itemLabel: "FAQ",
   basePath: "/admin/faqs",
+  searchable: { placeholder: "질문 또는 답변" },
   order: 10,
   description: "조회수와 '도움이 되었나'를 보고 답변을 개선하세요. 많이 읽히고 도움이 안 된 항목이 고칠 대상입니다.",
   fields: [

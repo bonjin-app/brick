@@ -516,6 +516,27 @@ check "오늘 검색어는 남아 있다" \
   "$(psql_q "SELECT count(*) FROM search_logs WHERE query = '오늘 검색어'")" "1"
 
 echo
+echo "── 회원 목록 검색 (운영자는 대개 한 사람을 찾으려고 이 화면을 연다)"
+#
+# 회원이 만 명인 사이트에서 "김철수" 를 찾으려면 서른 명씩 삼백 쪽을 넘겨야 했다.
+urlenc() { /usr/bin/python3 -c "import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1]))" "$1"; }
+# 회원 목록은 개인정보 열람이라 재확인 창이 유효해야 한다 (10분)
+curl -s -b "$CK" -c "$CK" -X POST "$API/api/me/security/reauth" -H 'content-type: application/json' \
+  -d '{"password":"adminpass123"}' -o /dev/null
+FOUND_U="$(curl -s -b "$CK" "$API/api/users?q=$(urlenc 'admin@mem.test')")"
+contains "이메일로 찾는다" "$FOUND_U" 'admin@mem.test'
+check "한 명만 나온다" "$(echo "$FOUND_U" | jq_get "['total']")" "1"
+check "없는 사람은 0명" "$(curl -s -b "$CK" "$API/api/users?q=$(urlenc 'zzz없는사람')" | jq_get "['total']")" "0"
+# 검색어의 % 는 글자다 — 이스케이프하지 않으면 그 한 글자로 전체가 나온다
+check "%% 는 와일드카드가 아니다" "$(curl -s -b "$CK" "$API/api/users?q=%25" | jq_get "['total']")" "0"
+# 건수와 목록이 같은 조건을 써야 한다 — 다르면 "37명" 이라 적고 서른 명만 보여준다
+check "건수와 목록이 같은 조건" \
+  "$(curl -s -b "$CK" "$API/api/users?q=$(urlenc 'mem.test')" | /usr/bin/python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+print('ok' if d['total'] == len(d['items']) else f\"{d['total']} vs {len(d['items'])}\")")" "ok"
+
+
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 # 실측을 남긴다(설정됐을 때만) — README 의 표가 실제와 같은지 CI 가 대조한다.
 # 표의 숫자는 조용히 썩는다: 단언을 더해도 아무도 그 줄을 고치지 않는다.

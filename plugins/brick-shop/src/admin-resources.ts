@@ -114,6 +114,7 @@ export const REVIEW_RESOURCE: AdminResource = {
   title: "상품 후기",
   itemLabel: "후기",
   basePath: "/admin/reviews",
+  searchable: { placeholder: "상품명 또는 작성자" },
   order: 40,
   description:
     "구매 확인된 후기에는 '구매확인' 표시가 붙습니다. 부적절한 후기는 삭제 대신 표시를 끄면 되돌릴 수 있습니다.",
@@ -148,6 +149,7 @@ export const INQUIRY_RESOURCE: AdminResource = {
   title: "상품 문의",
   itemLabel: "문의",
   basePath: "/admin/inquiries",
+  searchable: { placeholder: "제목 · 작성자 · 상품명" },
   order: 41,
   description: "답변을 저장하면 상태가 '답변완료'로 바뀝니다. 비밀 문의는 작성자와 관리자만 볼 수 있습니다.",
   can: { create: false },
@@ -261,6 +263,7 @@ export const COUPON_RESOURCE: AdminResource = {
   title: "쿠폰",
   itemLabel: "쿠폰",
   basePath: "/admin/coupons",
+  searchable: { placeholder: "쿠폰 코드 또는 이름" },
   order: 30,
   fields: [
     { name: "code", label: "쿠폰 코드", type: "text", required: true, inList: true,

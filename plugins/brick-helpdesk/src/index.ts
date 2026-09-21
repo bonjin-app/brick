@@ -250,7 +250,7 @@ export default definePlugin(async (ctx) => {
   // ── FAQ 관리 ────────────────────────────────────────
   ctx.registerRoute("GET", "/admin/faqs", async (req) => {
     requireManager(req);
-    return await listFaqsAdmin(db, Number(req.query.page ?? 1));
+    return await listFaqsAdmin(db, Number(req.query.page ?? 1), String(req.query.q ?? ""));
   });
 
   ctx.registerRoute("POST", "/admin/faqs", async (req) => {
