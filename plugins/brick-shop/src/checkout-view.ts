@@ -40,7 +40,7 @@ export function registerCheckoutView(
         : `/${path || "shop"}`;
 
       return `
-<div class="brick-checkout" id="brick-checkout" data-shop-base="${escapeHtml(base)}">
+<div class="brick-checkout" id="brick-checkout" data-shop-base="${escapeHtml(base)}" data-user="${blockCtx?.user ? "1" : "0"}">
   <section class="brick-co-summary">
     <h2>${escapeHtml(t("checkout.summary"))}</h2>
     <div id="brick-co-items"><p class="brick-shop-empty">${escapeHtml(t("checkout.loading"))}</p></div>
@@ -53,6 +53,11 @@ export function registerCheckoutView(
     ${field(t("checkout.email"), '<input name="ordererEmail" type="email" maxlength="255" autocomplete="email" />')}
 
     <h2>${escapeHtml(t("checkout.shippingTo"))}</h2>
+    ${/*
+       저장된 배송지 — 회원일 때만, 있을 때만 그린다.
+       서버 렌더는 자리만 두고 내용은 인증 API 가 채운다(ADR-30: 사적 내용은 캐시에 실리지 않는다).
+     */ ""}
+    <div class="brick-co-addrs" id="brick-co-addrs" hidden></div>
     <div class="brick-co-addr">
       ${field(t("checkout.postcode"), '<input type="text" name="postcode" autocomplete="postal-code" inputmode="numeric" required maxlength="10" />')}
       ${addrSearch ? addressSearchField() : ""}
@@ -60,6 +65,10 @@ export function registerCheckoutView(
     </div>
     ${field(t("checkout.address2"), '<input type="text" name="address2" autocomplete="address-line2" maxlength="200" />')}
     ${field(t("checkout.memo"), '<input name="deliveryMemo" maxlength="200" />')}
+    ${/* 다음 주문부터 다시 적지 않게 — 회원일 때만 보인다 */ ""}
+    <label class="brick-co-save-addr" id="brick-co-save-addr" hidden>
+      <input type="checkbox" name="saveAddress" checked /> ${escapeHtml(t("checkout.saveAddress"))}
+    </label>
     ${field(t("checkout.coupon"), '<input type="text" name="couponCode" maxlength="40" autocomplete="off" />')}
     ${/*
        포인트 사용 — 쓸 수 있을 때만 보인다(로그인·플러그인 활성·잔액 > 0).
@@ -138,6 +147,13 @@ ${await gatewayScripts()}${checkoutScript(t)}${addrSearch ? addressSearchScript(
 .brick-co-points input { flex: 1; }
 #brick-co-points-hint { display: block; margin-top: 4px; font-size: 12.5px; color: var(--color-muted, #71717d); }
 .brick-co-submit { width: 100%; padding: 14px; margin-top: 18px; font-size: 15px; }
+.brick-co-addrs { margin: 4px 0 8px; }
+.brick-co-addr-opt { display: flex; align-items: flex-start; gap: 9px; min-height: 44px; padding: 8px 0; cursor: pointer; font-size: 14px; }
+.brick-co-addr-opt + .brick-co-addr-opt { border-top: 1px solid var(--color-line, #e7e7ec); }
+.brick-co-addr-opt input { margin-top: 3px; }
+.brick-co-addr-sub { display: block; color: var(--color-text-soft, #45454f); font-size: 13px; }
+.brick-co-addr-manage { font-size: 12.5px; margin: 6px 0 0; }
+.brick-co-save-addr { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 13.5px; min-height: 40px; }
 .brick-co-done dl { display: grid; grid-template-columns: 110px 1fr; gap: 6px 12px; }
 .brick-co-done dt { color: var(--color-muted, #71717d); }
 .brick-co-done dd { margin: 0; font-weight: 600; }
@@ -202,6 +218,7 @@ const checkoutScript = (t: (k: string) => string) => `
       itemsBox.innerHTML = '<table><tbody>' + rows + '</tbody></table>' + totalsHtml(d);
       form.hidden = false;
       setupPoints(d);
+      setupAddresses();
     })
     .catch(function(){ itemsBox.innerHTML = '<p class="brick-shop-empty">' + ${JSON.stringify(t("checkout.fail"))} + '</p>'; });
 
@@ -371,6 +388,71 @@ const checkoutScript = (t: (k: string) => string) => `
     });
   }
 
+  /*
+   * 저장된 배송지.
+   *
+   * 회원은 주문할 때마다 이름·연락처·주소를 **처음부터** 적고 있었다. 열 번을
+   * 사도 열 번을 적는다 — 장바구니 다음으로 이탈이 잦은 자리다. 저장된 것이
+   * 있으면 고르게 하고, 없으면 지금처럼 적되 다음부터는 안 적게 한다.
+   */
+  function fillFrom(a){
+    var set = function(name, value){
+      var el = form.querySelector('[name=' + name + ']');
+      if (!el) return;
+      el.value = value || '';
+      // 우편번호가 바뀌면 지역 추가 배송비가 달라진다 — 합계를 다시 받게 깨운다
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    set('ordererName', a.receiverName);
+    set('ordererPhone', a.receiverPhone);
+    set('postcode', a.postcode);
+    set('address1', a.address1);
+    set('address2', a.address2);
+  }
+
+  function setupAddresses(){
+    var box = document.getElementById('brick-co-addrs');
+    var saveRow = document.getElementById('brick-co-save-addr');
+    if (root.dataset.user !== '1') return;      // 비회원은 저장할 곳이 없다
+    if (saveRow) saveRow.hidden = false;
+    fetch('/api/plugins/brick-shop/me/addresses')
+      .then(function(r){ return r.ok ? r.json() : { items: [] }; })
+      .then(function(d){
+        var items = d.items || [];
+        if (!items.length || !box) return;
+        var opts = items.map(function(a, i){
+          return '<label class="brick-co-addr-opt"><input type="radio" name="savedAddress" value="' + i + '"' +
+            (a.isDefault ? ' checked' : '') + ' />' +
+            '<span><strong>' + esc(a.receiverName) + '</strong>' + (a.label ? ' (' + esc(a.label) + ')' : '') +
+            '<span class="brick-co-addr-sub">[' + esc(a.postcode) + '] ' + esc(a.address1) + ' ' + esc(a.address2) + '</span>' +
+            '</span></label>';
+        }).join('');
+        box.innerHTML = opts +
+          '<label class="brick-co-addr-opt"><input type="radio" name="savedAddress" value="new" />' +
+          '<span>' + ${JSON.stringify(t("checkout.newAddress"))} + '</span></label>' +
+          '<p class="brick-co-addr-manage"><a href="/shop/addresses">' + ${JSON.stringify(t("checkout.manageAddresses"))} + '</a></p>';
+        box.hidden = false;
+        box.addEventListener('change', function(e){
+          if (e.target.name !== 'savedAddress') return;
+          if (e.target.value === 'new') {
+            fillFrom({ receiverName: '', receiverPhone: '', postcode: '', address1: '', address2: '' });
+            if (saveRow) { saveRow.hidden = false; form.saveAddress.checked = true; }
+            form.querySelector('[name=ordererName]').focus();
+            return;
+          }
+          fillFrom(items[Number(e.target.value)] || {});
+          // 이미 저장된 주소다 — 다시 저장할 이유가 없다
+          if (saveRow) { form.saveAddress.checked = false; saveRow.hidden = true; }
+        });
+        var chosen = items.filter(function(a){ return a.isDefault; })[0] || items[0];
+        if (chosen) {
+          fillFrom(chosen);
+          if (saveRow) { form.saveAddress.checked = false; saveRow.hidden = true; }
+        }
+      })
+      .catch(function(){ /* 배송지는 편의 기능이다 — 실패해도 주문서는 그대로 쓴다 */ });
+  }
+
   function setupPoints(cart){
     cartData = cart;
     bindRequote();
@@ -444,6 +526,19 @@ const checkoutScript = (t: (k: string) => string) => `
           return;
         }
         var d = res.d;
+        /*
+         * 주문한 주소를 배송지로 남긴다 — **주문과 분리해서** 부른다.
+         * 저장이 실패한다고 끝난 주문이 실패로 보이면 안 된다(응답을 기다리지 않는다).
+         */
+        if (root.dataset.user === '1' && form.saveAddress && form.saveAddress.checked) {
+          fetch('/api/plugins/brick-shop/me/addresses/remember', {
+            method: 'POST', headers: {'content-type':'application/json'},
+            body: JSON.stringify({
+              receiverName: orderer.ordererName, receiverPhone: orderer.ordererPhone,
+              postcode: orderer.postcode, address1: orderer.address1, address2: orderer.address2 || '',
+            }),
+          }).catch(function(){ /* 편의 기능이다 */ });
+        }
         /*
          * 그 자리에서 승인이 나야 하는 수단이면 PG 로 넘긴다.
          *

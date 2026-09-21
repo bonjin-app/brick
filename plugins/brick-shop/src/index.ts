@@ -63,6 +63,10 @@ import {
   quoteSubscription, resumeSubscription, revokeBillingKey, subscribe, subscriptionEvents,
 } from "./subscriptions.js";
 import { BIRTHDAY_QUEUE_JOB, issueBirthdayCoupons } from "./birthday.js";
+import {
+  addAddress, listAddresses, rememberAddress, removeAddress, setDefaultAddress, updateAddress,
+  type AddressInput,
+} from "./addresses.js";
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,148}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -1680,6 +1684,46 @@ export default definePlugin(async (ctx) => {
     if (!req.user) throw new ShopError(401, "로그인이 필요합니다.");
     return req.user.id;
   };
+
+  // ── 배송지 ──────────────────────────────────────────
+  //
+  // 주문할 때마다 주소를 다시 적지 않게 한다. 주문에는 주소를 **복사해** 두므로
+  // (shop_orders), 배송지를 고치거나 지워도 지난 주문의 배송지는 그대로다.
+  ctx.registerRoute("GET", "/me/addresses", async (req) => {
+    const userId = requireMember(req);
+    return { items: await listAddresses(db, userId) };
+  });
+
+  ctx.registerRoute("POST", "/me/addresses", async (req) => {
+    const userId = requireMember(req);
+    return await addAddress(db, userId, req.body as AddressInput);
+  });
+
+  ctx.registerRoute("PUT", "/me/addresses/:id", async (req) => {
+    const userId = requireMember(req);
+    return await updateAddress(db, userId, req.params.id, req.body as AddressInput);
+  });
+
+  ctx.registerRoute("DELETE", "/me/addresses/:id", async (req) => {
+    const userId = requireMember(req);
+    return await removeAddress(db, userId, req.params.id);
+  });
+
+  /**
+   * 주문한 주소를 배송지로 남긴다 — 주문서의 "이 주소 저장" 이 부른다.
+   *
+   * 주문 생성과 **분리한다.** 주소 저장이 실패한다고 주문이 실패하면 안 되고,
+   * 반대로 주문 경로에 끼워 넣으면 그 트랜잭션이 하는 일이 하나 더 늘어난다.
+   */
+  ctx.registerRoute("POST", "/me/addresses/remember", async (req) => {
+    const userId = requireMember(req);
+    return await rememberAddress(db, userId, req.body as AddressInput);
+  });
+
+  ctx.registerRoute("POST", "/me/addresses/:id/default", async (req) => {
+    const userId = requireMember(req);
+    return await setDefaultAddress(db, userId, req.params.id);
+  });
 
   /** 정기결제를 지원하는 결제수단 (카드 등록 화면이 조회) */
   ctx.registerRoute("GET", "/billing/providers", async () => {

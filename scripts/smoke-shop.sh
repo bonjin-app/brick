@@ -1086,6 +1086,39 @@ for c in json.load(sys.stdin).get('cards', []):
     if c['title'] == '처리 대기': print(c.get('link') or '')")"
 contains "주문이 없으면 답변 대기로 보낸다" "$QUEUE_LINK2" "reply=waiting"
 
+echo "── 배송지 (열 번을 사도 열 번 적게 하지 않는다)"
+#
+# 주문서는 이름·연락처·우편번호·주소를 매번 처음부터 받았다. 회원으로 열 번을
+# 사도 열 번을 적는다 — 장바구니 다음으로 이탈이 잦은 자리다.
+A1='{"label":"집","receiverName":"구매자","receiverPhone":"010-1111-2222","postcode":"06236","address1":"서울 강남구 테헤란로 1","address2":"101호"}'
+ADDR1="$(curl -s -b "$BCK" -X POST "$SHOP/me/addresses" -H 'content-type: application/json' -d "$A1")"
+ADDR1_ID="$(echo "$ADDR1" | jq_get "['id']")"
+[[ -n "$ADDR1_ID" ]] && ok "배송지 저장" || bad "배송지 저장 ($ADDR1)"
+contains "첫 배송지는 자동으로 기본이 된다 (기본이 없으면 주문서가 고를 것이 없다)" "$ADDR1" '"isDefault":true'
+check "비회원은 저장할 수 없다" "$(code -X POST "$SHOP/me/addresses" -H 'content-type: application/json' -d "$A1")" "401"
+check "연락처 형식은 검사한다 (주문서와 같은 규칙)" \
+  "$(code -b "$BCK" -X POST "$SHOP/me/addresses" -H 'content-type: application/json' \
+      -d '{"receiverName":"구매자","receiverPhone":"없음","postcode":"06236","address1":"서울"}')" "400"
+
+A2='{"label":"회사","receiverName":"구매자","receiverPhone":"010-3333-4444","postcode":"63000","address1":"제주시 첨단로 242"}'
+ADDR2_ID="$(curl -s -b "$BCK" -X POST "$SHOP/me/addresses" -H 'content-type: application/json' -d "$A2" | jq_get "['id']")"
+contains "두 번째는 기본이 아니다" "$(curl -s -b "$BCK" "$SHOP/me/addresses")" '"isDefault":false'
+contains "기본을 옮길 수 있다" "$(curl -s -b "$BCK" -X POST "$SHOP/me/addresses/$ADDR2_ID/default")" '"ok":true'
+check "기본은 회원당 하나뿐이다 (DB 가 지킨다)" \
+  "$(psql_q "SELECT count(*) FROM shop_addresses WHERE is_default AND user_id=(SELECT id FROM users WHERE email='buyer@shop.test')")" "1"
+
+# 같은 주소를 열 번 주문하면 목록이 열 줄이 된다 — 그 목록은 안 쓰느니만 못하다
+REM='{"receiverName":"구매자","receiverPhone":"010-1111-2222","postcode":"06236","address1":"서울 강남구 테헤란로 1","address2":"101호"}'
+contains "이미 있는 주소는 다시 만들지 않는다" \
+  "$(curl -s -b "$BCK" -X POST "$SHOP/me/addresses/remember" -H 'content-type: application/json' -d "$REM")" '"saved":false'
+check "목록은 그대로 2개" "$(psql_q "SELECT count(*) FROM shop_addresses WHERE user_id=(SELECT id FROM users WHERE email='buyer@shop.test')")" "2"
+
+# 기본 배송지를 지우면 다음 것이 기본이 된다 — 기본 없는 목록은 주문서가 고를 것이 없다
+curl -s -b "$BCK" -X DELETE "$SHOP/me/addresses/$ADDR2_ID" >/dev/null
+check "지운 뒤에도 기본이 하나 있다" \
+  "$(psql_q "SELECT count(*) FROM shop_addresses WHERE is_default AND user_id=(SELECT id FROM users WHERE email='buyer@shop.test')")" "1"
+
+
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 # 실측을 남긴다(설정됐을 때만) — README 의 표가 실제와 같은지 CI 가 대조한다.
 # 표의 숫자는 조용히 썩는다: 단언을 더해도 아무도 그 줄을 고치지 않는다.

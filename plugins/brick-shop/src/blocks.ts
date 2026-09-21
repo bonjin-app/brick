@@ -14,6 +14,7 @@ import { registerRestockView } from "./restock-view.js";
 import { registerCardsView } from "./cards-view.js";
 import { registerSubscriptionsView } from "./subscriptions-view.js";
 import { registerSubscribeView, intervalLabel } from "./subscribe-view.js";
+import { registerAddressesView } from "./addresses-view.js";
 
 /**
  * 스토어프론트 블록.
@@ -590,6 +591,10 @@ ${buyScript(`${shopBaseOf(blockCtx)}/cart`)}${GALLERY_SCRIPT}${restockScript()}$
        * 수 없습니다" 를 그렸다 — registerScreen 선언은 페이지가 없을 때만 쓰인다.
        * 스모크가 잡았다.
        */
+      if (seg[0] === "addresses") {
+        blockCtx.setSeo?.({ title: t("addrs.title") });
+        return addressesBlock.render({}, blockCtx);
+      }
       if (seg[0] === "cards") {
         blockCtx.setSeo?.({ title: t("cards.title") });
         return cardsBlock.render({}, blockCtx);
@@ -762,6 +767,7 @@ ${cartScript(shopBaseOf(blockCtx))}${STOREFRONT_CSS}`,
   const { cardsBlock } = registerCardsView(ctx, t);
   const { subsBlock } = registerSubscriptionsView(ctx, t);
   const { subscribeBlock } = registerSubscribeView(ctx, db, settings, t);
+  const { addressesBlock } = registerAddressesView(ctx, settings, t);
 
   /*
    * 화면 선언 — 쇼핑몰과 그 안의 회원 화면들.
