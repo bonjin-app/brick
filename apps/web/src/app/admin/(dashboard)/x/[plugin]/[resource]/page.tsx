@@ -69,6 +69,15 @@ export default function PluginResourcePage() {
    * `?status=paid` 로 곧바로 보낼 수 있어야 그 숫자를 누른 뜻이 산다.
    */
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
+  /*
+   * 검색어는 **누른 뒤에** 보낸다(입력할 때마다가 아니라).
+   *
+   * 한 글자마다 목록을 다시 받으면 오천 건짜리 테이블을 여섯 번 훑는다 —
+   * 운영자의 화면은 깜빡이고 DB 는 놀란다. 입력칸(query)과 실제로 보낸
+   * 값(search)을 나눠 둔다.
+   */
+  const [query, setQuery] = useState("");
+  const [search, setSearch] = useState("");
   const [filterOptions, setFilterOptions] = useState<Record<string, Array<{ value: string; label: string }>>>({});
   // 붙여넣어 여러 행을 등록·수정하는 모달
   const [importing, setImporting] = useState(false);
@@ -114,12 +123,16 @@ export default function PluginResourcePage() {
         // 주소의 쿼리를 초기값으로 (선언된 필터 이름만 받는다 — 아무 쿼리나 목록 라우트로
         // 흘려보내지 않는다)
         const fromUrl: Record<string, string> = {};
-        const search = new URLSearchParams(window.location.search);
+        const search0 = new URLSearchParams(window.location.search);
         for (const f of loaded.filters ?? []) {
-          const v = search.get(f.name);
+          const v = search0.get(f.name);
           if (v) fromUrl[f.name] = v;
         }
         setFilterValues(fromUrl);
+        // 검색어도 주소에서 읽는다 — 운영자가 링크를 그대로 보낼 수 있다
+        const q = loaded.searchable ? (search0.get("q") ?? "") : "";
+        setQuery(q);
+        setSearch(q);
         // 라우트에서 받아오는 선택지
         for (const f of loaded.filters ?? []) {
           if (!f.optionsFrom) continue;
@@ -137,13 +150,14 @@ export default function PluginResourcePage() {
     if (!api || res?.kind === "settings") return;
     const qs = new URLSearchParams({ page: String(page) });
     for (const [k, v] of Object.entries(filterValues)) if (v) qs.set(k, v);
+    if (search) qs.set("q", search);
     const r = await fetch(`${api}?${qs.toString()}`);
     if (!r.ok) { setError(t("x.listLoadFail")); return; }
     const d = await r.json();
     // 플러그인은 { items, total } 또는 배열을 반환할 수 있다
     setRows(Array.isArray(d) ? d : (d.items ?? []));
     setTotal(Array.isArray(d) ? d.length : (d.total ?? 0));
-  }, [api, page, filterValues, res?.kind]);
+  }, [api, page, filterValues, search, res?.kind]);
   useEffect(() => { void reload(); }, [reload]);
 
   /*
@@ -309,6 +323,30 @@ export default function PluginResourcePage() {
         />
       ) : (
         <>
+          {res.searchable && (
+            <form
+              style={{ display: "flex", gap: 6, margin: "0 0 10px" }}
+              onSubmit={(e) => {
+                e.preventDefault();
+                setPage(1); // 3쪽에서 좁히면 빈 화면이 나온다
+                setSearch(query.trim());
+              }}
+            >
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={res.searchable.placeholder ?? t("x.searchPlaceholder")}
+                aria-label={t("x.search")}
+                style={{ flex: "0 1 320px", padding: "7px 10px", borderRadius: 6, border: "1px solid var(--color-line-strong)" }}
+              />
+              <button type="submit" style={btnSm}>{t("x.search")}</button>
+              {search && (
+                <button type="button" style={btnSm}
+                  onClick={() => { setPage(1); setQuery(""); setSearch(""); }}>{t("x.searchClear")}</button>
+              )}
+            </form>
+          )}
           {(res.filters?.length ?? 0) > 0 && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", margin: "0 0 10px" }}>
               {res.filters!.map((f) => {
@@ -408,7 +446,14 @@ export default function PluginResourcePage() {
                 ))}
                 {!rows.length && (
                   <tr className="brick-x-empty"><td data-label="" colSpan={listFields.length + 1 + (hasBulk ? 1 : 0)} style={{ padding: 24, color: "var(--color-muted)" }}>
-                    {t("x.emptyItems", { label: res.itemLabel })}
+                    {/*
+                       좁혀서 비었으면 **그렇게 말한다.**
+                       "아직 등록된 주문이 없습니다" 는 검색이 빗나갔을 때 거짓말이 된다 —
+                       운영자는 가게에 주문이 하나도 없다고 읽는다.
+                     */}
+                    {search || Object.values(filterValues).some(Boolean)
+                      ? t("x.emptySearch")
+                      : t("x.emptyItems", { label: res.itemLabel })}
                   </td></tr>
                 )}
               </tbody>

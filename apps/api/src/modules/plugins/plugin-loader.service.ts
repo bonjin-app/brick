@@ -419,6 +419,9 @@ export class PluginLoaderService implements OnModuleInit {
         label: tr(f.label),
         options: f.options?.map((o) => ({ ...o, label: tr(o.label) })),
       })),
+      searchable: resource.searchable
+        ? { ...resource.searchable, placeholder: tr(resource.searchable.placeholder) }
+        : undefined,
       importFrom: resource.importFrom
         ? { ...resource.importFrom, label: tr(resource.importFrom.label), help: tr(resource.importFrom.help) }
         : undefined,

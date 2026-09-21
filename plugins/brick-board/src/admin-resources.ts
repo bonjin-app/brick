@@ -97,6 +97,7 @@ export const POST_RESOURCE: AdminResource = {
   title: "게시글 관리",
   itemLabel: "게시글",
   basePath: "/admin/posts",
+  searchable: { placeholder: "제목 또는 글쓴이" },
   order: 20,
   description: "모든 게시판의 글을 최신순으로 봅니다. 스팸 정리에 사용하세요.",
   can: { create: false, update: false },

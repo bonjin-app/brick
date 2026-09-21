@@ -652,8 +652,19 @@ export default definePlugin(async (ctx) => {
     const pStatus = askedStatus in PRODUCT_STATUS_LABEL ? askedStatus : "";
     const askedCat = String(req.query.category ?? "");
     const pCat = /^[0-9a-f-]{36}$/i.test(askedCat) ? askedCat : "";
+    /*
+     * 검색 — 이름과 주소(slug).
+     *
+     * 필터만으로는 부족하다. 상품이 수천 개면 "그 머그컵" 을 찾으려고 판매중으로
+     * 좁혀도 서른 개씩 넘겨야 한다. 대소문자를 가리지 않고(ILIKE) 일부만 적어도 찾게
+     * 한다 — 운영자는 전체 이름을 외우지 않는다. `%` 는 이스케이프한다(안 하면
+     * 검색어 하나로 전체가 나온다).
+     */
+    const q = String(req.query.q ?? "").trim().slice(0, 100);
+    const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
     const prodWhere = sql`WHERE (${pStatus} = '' OR p.status = ${pStatus})
-                            AND (${pCat} = '' OR p.category_id = nullif(${pCat}, '')::uuid)`;
+                            AND (${pCat} = '' OR p.category_id = nullif(${pCat}, '')::uuid)
+                            AND (${q} = '' OR p.name ILIKE ${like} OR p.slug ILIKE ${like})`;
     /*
      * 목록은 **목록에 필요한 것만** 준다.
      *
@@ -895,8 +906,28 @@ export default definePlugin(async (ctx) => {
      */
     const asked = String(req.query.status ?? "");
     const status = (ORDER_STATUS as readonly string[]).includes(asked) ? asked : "";
+    /*
+     * 검색 — 주문번호·주문자·받는 분·연락처.
+     *
+     * 손님이 전화로 "제 주문 어디쯤 왔나요" 라고 물을 때 운영자가 하는 일이다.
+     * 검색이 없으면 상태로 좁힌 뒤 서른 건씩 넘기며 이름을 눈으로 찾는다 —
+     * 그 시간에 손님은 기다린다. 연락처는 하이픈 없이 적는 사람이 많으므로
+     * **숫자만 남겨서도** 맞춰 본다("01011112222" 로 찾는 운영자가 있다).
+     */
+    const q = String(req.query.q ?? "").trim().slice(0, 100);
+    const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    const digits = q.replace(/\D/g, "");
+    const digitLike = digits ? `%${digits}%` : "";
     // count 와 목록이 **같은 조건**을 써야 한다 — 다르면 "37건"이라 표시하고 20건만 보여준다
-    const where = sql`WHERE (${status} = '' OR o.status = ${status})`;
+    const where = sql`WHERE (${status} = '' OR o.status = ${status})
+                        AND (${q} = ''
+                             OR o.order_no ILIKE ${like}
+                             OR o.orderer_name ILIKE ${like}
+                             OR o.receiver_name ILIKE ${like}
+                             OR o.orderer_phone ILIKE ${like}
+                             OR o.receiver_phone ILIKE ${like}
+                             OR (${digitLike} <> '' AND regexp_replace(o.orderer_phone, '\\D', '', 'g') ILIKE ${digitLike})
+                             OR (${digitLike} <> '' AND regexp_replace(o.receiver_phone, '\\D', '', 'g') ILIKE ${digitLike}))`;
     const { rows } = await db.execute(sql`
       SELECT o.id, o.order_no, o.status, o.total, o.created_at, o.orderer_name, o.tracking_no,
              o.receiver_name, o.receiver_phone, o.delivery_memo, o.payment_method,

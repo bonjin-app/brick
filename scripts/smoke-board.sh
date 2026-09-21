@@ -617,6 +617,19 @@ SCRAP_PAGE="$(curl -s "$API/api/render/page?path=scraps" | /usr/bin/python3 -c '
 contains "페이지 없이도 화면이 열린다" "$SCRAP_PAGE" "brick-scraps"
 contains "제목이 붙는다" "$SCRAP_PAGE" "내 스크랩"
 
+echo "── 관리 글 목록 검색 (사이트에서 가장 긴 목록이다)"
+# 스팸 한 건이나 신고받은 글 하나를 찾으려고 수십 쪽을 넘기지 않게 한다
+urlenc() { /usr/bin/python3 -c "import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1]))" "$1"; }
+FOUND="$(curl -s -b "$ADMIN" "$API/api/plugins/brick-board/admin/posts?q=$(urlenc '첫 글')")"
+contains "제목으로 찾는다" "$FOUND" '"title"'
+check "없는 말은 0건" \
+  "$(curl -s -b "$ADMIN" "$API/api/plugins/brick-board/admin/posts?q=$(urlenc 'zzz없는제목')" | jq_get "['total']")" "0"
+check "%% 는 와일드카드가 아니다" \
+  "$(curl -s -b "$ADMIN" "$API/api/plugins/brick-board/admin/posts?q=%25" | jq_get "['total']")" "0"
+contains "관리 선언에 검색칸이 있다" \
+  "$(curl -s -b "$ADMIN" "$API/api/admin/resources/brick-board/posts")" '"searchable"'
+
+
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 # 실측을 남긴다(설정됐을 때만) — README 의 표가 실제와 같은지 CI 가 대조한다.
 # 표의 숫자는 조용히 썩는다: 단언을 더해도 아무도 그 줄을 고치지 않는다.

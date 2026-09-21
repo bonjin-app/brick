@@ -789,12 +789,23 @@ ${items}
     const kind = ["notice", "secret", "normal"].includes(String(req.query.kind ?? ""))
       ? String(req.query.kind)
       : "";
+    /*
+     * 검색 — 제목과 글쓴이.
+     *
+     * 이 목록은 사이트에서 가장 길다. 스팸 한 건이나 신고받은 글 하나를 찾으려고
+     * 수십 쪽을 넘기는 대신 적어 찾게 한다. 본문은 찾지 않는다 — 긴 글 수만 건을
+     * 훑는 일이라 인덱스가 없으면 목록 화면이 느려지고, 운영자가 찾는 것은 대개
+     * 제목이나 글쓴이다.
+     */
+    const q = String(req.query.q ?? "").trim().slice(0, 100);
+    const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
     const where = sql`
       WHERE (${boardId} = '' OR p.board_id = nullif(${boardId}, '')::uuid)
         AND (${kind} = ''
              OR (${kind} = 'notice' AND p.is_notice)
              OR (${kind} = 'secret' AND p.is_secret)
-             OR (${kind} = 'normal' AND NOT p.is_notice AND NOT p.is_secret))`;
+             OR (${kind} = 'normal' AND NOT p.is_notice AND NOT p.is_secret))
+        AND (${q} = '' OR p.title ILIKE ${like} OR p.author_name ILIKE ${like})`;
     const { rows } = await db.execute(sql`
       SELECT p.id, b.title AS board, p.title, p.author_name, p.created_at,
              p.view_count, p.comment_count, p.is_notice, p.is_secret

@@ -283,6 +283,7 @@
   "잘못된 요청입니다.": "Bad request.",
   "제목": "Title",
   "제목 (비우면 표시 안 함)": "Heading (hidden when empty)",
+  "제목 또는 글쓴이": "Title or author",
   "제목과 내용을 입력해주세요.": "Please enter a title and content.",
   "제목을 입력해주세요.": "Please enter a title.",
   "제목이 너무 깁니다. (500자 이내)": "The title is too long (500 characters maximum).",

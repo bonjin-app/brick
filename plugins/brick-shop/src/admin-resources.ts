@@ -14,6 +14,7 @@ export const PRODUCT_RESOURCE: AdminResource = {
   title: "상품",
   itemLabel: "상품",
   basePath: "/admin/products",
+  searchable: { placeholder: "상품명 또는 주소(slug)" },
   order: 10,
   description: "상품을 등록하고 가격·재고·진열 상태를 관리합니다. 금액은 원 단위입니다.",
   // 엑셀에서 복사해 붙여넣으면 그대로 등록된다 — 폼으로 이백 번 입력할 수는 없다
@@ -193,6 +194,7 @@ export const ORDER_RESOURCE: AdminResource = {
   title: "주문",
   itemLabel: "주문",
   basePath: "/admin/orders",
+  searchable: { placeholder: "주문번호 · 주문자 · 받는 분 · 연락처" },
   order: 5,
   description:
     "주문 상태를 변경하면 이력이 기록됩니다. 취소·환불로 바꾸면 재고가 자동으로 복원됩니다.",

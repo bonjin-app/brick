@@ -1119,6 +1119,34 @@ check "지운 뒤에도 기본이 하나 있다" \
   "$(psql_q "SELECT count(*) FROM shop_addresses WHERE is_default AND user_id=(SELECT id FROM users WHERE email='buyer@shop.test')")" "1"
 
 
+echo "── 관리 목록 검색 (손님이 전화로 물을 때 운영자가 하는 일)"
+#
+# 검색이 없으면 상태로 좁힌 뒤 서른 건씩 넘기며 이름을 눈으로 찾는다 —
+# 그 시간에 손님은 기다린다. 주문이 오천 건인 가게에서는 못 찾는다.
+# 한글 검색어는 주소에 그대로 넣을 수 없다 (서버가 400 으로 거절한다)
+urlenc() { /usr/bin/python3 -c "import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1]))" "$1"; }
+SEARCH_ORDERS="$(curl -s -b "$CK" "$SHOP/admin/orders?q=$(urlenc '구매자')")"
+contains "주문자 이름으로 찾는다" "$SEARCH_ORDERS" '"orderer_name":"구매자"'
+NOHIT="$(curl -s -b "$CK" "$SHOP/admin/orders?q=$(urlenc '없는이름zzz')")"
+contains "없는 이름은 0건" "$NOHIT" '"total":0'
+# 표시된 건수와 실제 목록이 같은 조건을 써야 한다 — 다르면 "37건" 이라 적고 20건만 보여준다
+check "건수와 목록이 같은 조건을 쓴다" \
+  "$(echo "$NOHIT" | /usr/bin/python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+print('ok' if d['total'] == len(d['items']) else f\"{d['total']} vs {len(d['items'])}\")")" "ok"
+# 연락처는 하이픈 없이 적는 운영자가 많다
+contains "하이픈 없는 연락처로도 찾는다" \
+  "$(curl -s -b "$CK" "$SHOP/admin/orders?q=01011112222")" '"order_no"'
+# 검색어의 % 는 글자다 — 이스케이프하지 않으면 그 한 글자로 전체가 나온다
+check "%% 는 와일드카드가 아니다" \
+  "$(curl -s -b "$CK" "$SHOP/admin/orders?q=%25" | jq_get "['total']")" "0"
+contains "상품은 이름으로 찾는다" "$(curl -s -b "$CK" "$SHOP/admin/products?q=$(urlenc '머그')")" '"name"'
+check "상품 검색도 없는 말은 0건" "$(curl -s -b "$CK" "$SHOP/admin/products?q=$(urlenc 'zzz없음')" | jq_get "['total']")" "0"
+contains "관리 선언에 검색칸이 있다 (화면이 그것을 보고 그린다)" \
+  "$(curl -s -b "$CK" "$API/api/admin/resources/brick-shop/orders")" '"searchable"'
+
+
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 # 실측을 남긴다(설정됐을 때만) — README 의 표가 실제와 같은지 CI 가 대조한다.
 # 표의 숫자는 조용히 썩는다: 단언을 더해도 아무도 그 줄을 고치지 않는다.
