@@ -42,10 +42,20 @@ export class ThemesController {
       .send(css);
   }
 
+  /**
+   * 테마 목록. `problem` 은 **활성 테마를 못 읽어 대체로 그리는 중**이라는 뜻이다 —
+   * 이 화면에서 운영자는 적용해 둔 테마가 목록에서 사라진 것만 보게 되고
+   * (읽히지 않으면 discover 에 잡히지 않는다) 자기가 지웠나 의심하게 된다.
+   */
   @Get()
   async list() {
-    const [themes, active] = await Promise.all([this.themes.discover(), this.themes.activeThemeName()]);
-    return { themes, active };
+    const [themes, active, problem] = await Promise.all([
+      this.themes.discover(),
+      this.themes.activeThemeName(),
+      this.themes.problem(),
+    ]);
+    // stamp 는 내부 표식(파일 수정시각)이다 — 이 목록은 로그인 없이도 읽힌다
+    return { themes, active, problem: problem && { theme: problem.theme, message: problem.message, fallback: problem.fallback } };
   }
 
   /** theme.zip 업로드 설치 (관리자). 빌드 과정 없음 — 전개 즉시 사용 가능 */

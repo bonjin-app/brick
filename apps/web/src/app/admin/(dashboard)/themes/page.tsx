@@ -12,6 +12,18 @@ interface ThemeRow {
   tokens?: Record<string, string>;
 }
 
+/**
+ * 활성 테마를 못 읽어 다른 것으로 그리는 중이라는 알림.
+ * 읽히지 않는 테마는 목록에 나오지 않으므로(discover 가 건너뛴다) 이 줄이 없으면
+ * 운영자는 적용해 둔 테마가 통째로 사라진 화면만 본다.
+ */
+interface ThemeProblem {
+  theme: string;
+  message: string;
+  /** 대신 그리는 테마. 비어 있으면 내장 기본 화면이다 */
+  fallback: string;
+}
+
 /** 매니페스트 토큰에서 팔레트 견본 — 적용하기 전에 인상을 고를 수 있게 */
 const SWATCH_KEYS = ["color-bg", "color-bg-soft", "color-primary", "color-text"];
 function Swatches({ tokens, prefix, label }: { tokens: Record<string, string>; prefix: string; label: string }) {
@@ -26,7 +38,10 @@ function Swatches({ tokens, prefix, label }: { tokens: Record<string, string>; p
 
 export default function AdminThemesPage() {
   const t = useAdminT();
-  const [data, setData] = useState<{ themes: ThemeRow[]; active: string }>({ themes: [], active: "" });
+  const [data, setData] = useState<{ themes: ThemeRow[]; active: string; problem?: ThemeProblem | null }>({
+    themes: [],
+    active: "",
+  });
   const [message, setMessage] = useState("");
   /* 성공과 실패가 같은 자리를 쓴다 — 색과 role 도 결과를 따라야 한다(문구로 판별하지 않는다) */
   const [failed, setFailed] = useState(false);
@@ -84,6 +99,20 @@ export default function AdminThemesPage() {
         <button style={{ cursor: "pointer" }}>{t("common.install")}</button>
         <span style={{ marginLeft: 8, color: "var(--color-muted)", fontSize: 13 }}>{t("themes.hint")}</span>
       </form>
+      {data.problem && (
+        <div className="brick-card" role="alert"
+          style={{ marginTop: 0, marginBottom: 16, borderColor: "var(--color-danger)" }}>
+          <strong>{t("themes.brokenTitle", { name: data.problem.theme })}</strong>
+          <p style={{ margin: "6px 0 0", color: "var(--color-text-soft)", fontSize: 13.5 }}>
+            {data.problem.message}
+          </p>
+          <p style={{ margin: "6px 0 0", color: "var(--color-muted)", fontSize: 13 }}>
+            {data.problem.fallback
+              ? t("themes.brokenFallback", { name: data.problem.fallback })
+              : t("themes.brokenBuiltin")}
+          </p>
+        </div>
+      )}
       {message && (
         <p role={failed ? "alert" : "status"}
           style={{ color: failed ? "var(--color-danger)" : "var(--color-success)" }}>{message}</p>

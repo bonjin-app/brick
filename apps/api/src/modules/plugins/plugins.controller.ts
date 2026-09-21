@@ -13,6 +13,7 @@ import { AuthService } from "../auth/auth.service.js";
 import { ExtensionInstallerService } from "../extensions/extension-installer.service.js";
 import { ExtensionUpdaterService } from "../extensions/extension-updater.service.js";
 import { AuditService } from "../audit/audit.service.js";
+import { ThemesService } from "../themes/themes.service.js";
 import { DB, MAIL } from "../../runtime.module.js";
 import { isLocalUrl, loadEnv } from "../../config/env.js";
 import { sawProxyHeaders } from "../../config/proxy-hint.js";
@@ -29,6 +30,7 @@ export class PluginsController {
     private readonly audit: AuditService,
     @Inject(DB) private readonly db: BrickDb,
     @Inject(MAIL) private readonly mail: MailProvider,
+    private readonly themes: ThemesService,
   ) {}
 
   @Get("plugins")
@@ -264,10 +266,11 @@ export class PluginsController {
   @Get("admin/dashboard")
   @UseGuards(AdminGuard)
   async adminDashboard() {
-    const [core, cards, businessMissing] = await Promise.all([
+    const [core, cards, businessMissing, themeProblem] = await Promise.all([
       this.coreStats(),
       this.loader.collectDashboardCards(),
       this.businessInfoMissing(),
+      this.themes.problem(),
     ]);
     const setup = this.setupWarnings();
     /*
@@ -281,6 +284,17 @@ export class PluginsController {
       setup.push({
         id: "pluginNotRunning",
         docs: "https://github.com/bonjin-app/brick/blob/main/docs/plugin-development.md",
+      });
+    }
+    /*
+     * 활성 테마를 못 읽어 대체로 그리는 중 — 사이트는 나가지만 운영자가 고른
+     * 디자인이 아니다. 500 으로 죽지 않으니 아무도 신고하지 않고, 운영자는
+     * "왜 이렇게 허전하지" 하고 지나간다.
+     */
+    if (themeProblem) {
+      setup.push({
+        id: "themeNotRendering",
+        docs: "https://github.com/bonjin-app/brick/blob/main/docs/operations.md",
       });
     }
     if (businessMissing) {

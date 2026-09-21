@@ -52,11 +52,20 @@ export class PagesController {
       throw new BadRequestException("미리보기할 테마 이름이 올바르지 않습니다.");
     }
     const user = await this.auth.resolveFromRequest(req);
-    return this.renderer.renderPath(path ?? "", {
-      query: rest,
-      user: user ? { id: user.id, role: user.role, displayName: user.displayName, avatarUrl: user.avatarUrl ?? null } : null,
-      previewTheme: theme,
-    });
+    /*
+     * 미리보기는 대체 테마로 물러나지 않는다(그러면 미리보기가 거짓말을 한다).
+     * 대신 **왜 안 되는지**를 그대로 전한다 — 500 "Internal server error" 만
+     * 보면 올린 테마의 어디가 잘못됐는지 알 길이 없다.
+     */
+    try {
+      return await this.renderer.renderPath(path ?? "", {
+        query: rest,
+        user: user ? { id: user.id, role: user.role, displayName: user.displayName, avatarUrl: user.avatarUrl ?? null } : null,
+        previewTheme: theme,
+      });
+    } catch (err) {
+      throw new BadRequestException(err instanceof Error ? err.message : String(err));
+    }
   }
 
   @Get("render/page")

@@ -304,7 +304,11 @@ check "미리보기는 활성 테마를 바꾸지 않는다" "$ACTIVE_AFTER" "$A
 absent "활성 테마 화면에 미리보기 테마가 새지 않는다 (캐시 오염)" "$(render "")" "Noto Serif KR"
 check "비로그인은 미리보기를 볼 수 없다" "$(code "$API/api/admin/render/preview?path=&theme=boutique")" "401"
 check "테마 이름에 경로를 넣을 수 없다" "$(code -b "$CK" "$API/api/admin/render/preview?path=&theme=../../etc")" "400"
-check "없는 테마는 500 이 아니라 오류로" "$(code -b "$CK" "$API/api/admin/render/preview?path=&theme=nope")" "500"
+# 없는 테마를 미리보기하면 **왜 안 되는지**가 나와야 한다.
+# 500 "Internal server error" 는 올린 테마의 어디가 잘못됐는지 말해 주지 않는다.
+check "없는 테마 미리보기는 400" "$(code -b "$CK" "$API/api/admin/render/preview?path=&theme=nope")" "400"
+contains "이유를 화면에 쓸 수 있게 준다" \
+  "$(curl -s -b "$CK" "$API/api/admin/render/preview?path=&theme=nope")" "nope"
 
 echo "── 네 번째 동봉 테마(boutique): 같은 쇼핑몰, 반대편 인상"
 contains "테마 목록에 boutique" "$THEMES" '"name":"boutique"'
@@ -569,6 +573,101 @@ printf '{"slug":"board","title":"게시판","status":"published","seo":{"title":
 curl -s -b "$CK" -X PUT "$API/api/pages/$BOARD_ID" -H 'content-type: application/json' \
   --data-binary "@$TMP/seo.json" -o /dev/null
 contains "블록보다 운영자 설정이 세다" "$(render "board/free/$PID")" "<title>운영자가 정한 제목</title>"
+
+# ════════════════════════════════════════════════════
+#
+# 테마가 깨져도 사이트는 계속 나가는가.
+#
+# 테마는 디스크의 파일이다 — 그리고 "빌드 없이 파일을 고친다"가 이 테마 체계의
+# 존재 이유다. 그래서 고치다 쉼표를 하나 더 찍는 일, 컨테이너에 볼륨이 안 붙는
+# 일, BRICK_THEMES_DIR 오타가 실제로 일어난다. 그때마다 **모든 공개 페이지가
+# 500** 이 되면(고치기 전에는 실제로 그랬다) 글도 상품도 DB 에 멀쩡히 있는데
+# 손님에게는 사이트가 통째로 사라진다.
+#
+# 물러나는 순서: 고른 테마 → 기본 테마 → 내장 레이아웃.
+echo "── 테마가 깨져도 사이트는 계속 나간다"
+curl -s -b "$CK" -X POST "$API/api/themes/default/activate" -o /dev/null
+TEST_THEME="smoke-fragile"
+mkdir -p "$ROOT/themes/$TEST_THEME/templates"
+cat > "$ROOT/themes/$TEST_THEME/brick.theme.json" <<'JSON'
+{
+  "name": "smoke-fragile",
+  "version": "1.0.0",
+  "displayName": "깨지는 시험용",
+  "templates": { "layout": "templates/layout.html", "page": "templates/page.html" }
+}
+JSON
+printf '<!doctype html><html><body data-fragile="1">{{{ content }}}</body></html>' \
+  > "$ROOT/themes/$TEST_THEME/templates/layout.html"
+printf '<article>{{{ blocksHtml }}}</article>' > "$ROOT/themes/$TEST_THEME/templates/page.html"
+curl -s -b "$CK" -X POST "$API/api/themes/$TEST_THEME/activate" -o /dev/null
+contains "고른 테마로 그린다" "$(render "")" 'data-fragile="1"'
+check "정상일 때는 알릴 것이 없다" \
+  "$(curl -s "$API/api/themes" | python3 -c "import sys,json;print(json.load(sys.stdin).get('problem'))")" "None"
+
+# 운영자가 매니페스트를 고치다 쉼표를 하나 더 찍었다
+printf '{ "name": "smoke-fragile", "version": "1.0.0",, "templates": {} }' \
+  > "$ROOT/themes/$TEST_THEME/brick.theme.json"
+BROKEN="$(render "")"
+check "매니페스트가 깨져도 홈은 200" "$(code "$API/api/render/page?path=")" "200"
+contains "기본 테마로 대신 그린다" "$BROKEN" "/themes/default/assets"
+absent "고장난 테마로는 그리지 않는다" "$BROKEN" 'data-fragile="1"'
+contains "손님에게는 고장을 말하지 않는다 (사이트 내용은 그대로)" "$BROKEN" "테마시험"
+PROB="$(curl -s "$API/api/themes")"
+contains "목록이 어느 테마인지 말한다" "$PROB" '"theme":"smoke-fragile"'
+contains "목록이 이유를 말한다 (고치는 법이 곧 이유다)" "$PROB" "JSON"
+contains "무엇으로 대신 그리는지도" "$PROB" '"fallback":"default"'
+PROB_BEFORE="$(python3 -c "import sys,json;d=json.loads(sys.argv[1]).get('problem');print((d or {}).get('theme','없음'))" "$PROB")"
+absent "내부 표식은 내보내지 않는다 (로그인 없이 읽힌다)" "$PROB" '"stamp"'
+contains "대시보드가 운영자에게 알린다" \
+  "$(curl -s -b "$CK" "$API/api/admin/dashboard")" '"themeNotRendering"'
+
+echo "── 미리보기는 대체하지 않는다 (고장은 고장으로 보여준다)"
+PV="$(curl -s -b "$CK" "$API/api/admin/render/preview?path=&theme=$TEST_THEME")"
+check "깨진 테마 미리보기는 실패한다" \
+  "$(code -b "$CK" "$API/api/admin/render/preview?path=&theme=$TEST_THEME")" "400"
+contains "어느 테마가 왜 안 되는지 말한다" "$PV" "smoke-fragile"
+
+echo "── 파일을 되돌리면 저절로 돌아온다 (운영자가 할 일은 없다)"
+cat > "$ROOT/themes/$TEST_THEME/brick.theme.json" <<'JSON'
+{
+  "name": "smoke-fragile",
+  "version": "1.0.1",
+  "displayName": "깨지는 시험용",
+  "templates": { "layout": "templates/layout.html", "page": "templates/page.html" }
+}
+JSON
+contains "다시 고른 테마로 그린다" "$(render "")" 'data-fragile="1"'
+# **바뀌었는지**를 본다. "지금 경고가 없다"만 보면 경고 기능이 통째로 없어도 통과한다
+PROB_AFTER="$(curl -s "$API/api/themes" | python3 -c "import sys,json;d=json.load(sys.stdin).get('problem');print((d or {}).get('theme','없음'))")"
+check "깨졌다가 → 저절로 사라진다" "$PROB_BEFORE→$PROB_AFTER" "smoke-fragile→없음"
+
+echo "── 테마가 하나도 없어도 사이트는 나간다 (볼륨이 안 붙은 컨테이너)"
+# 마지막 방어선. 기본 테마조차 없으면 내장 레이아웃이 받는다 — 디자인은 없지만
+# 제목·본문·메뉴가 그대로 나가고 링크가 살아 있다. 주문도 글쓰기도 계속된다.
+stop_server
+mkdir -p "$TMP/no-themes"
+export BRICK_THEMES_DIR="$TMP/no-themes"
+start_server
+NONE="$(render "")"
+check "테마가 없어도 홈은 200" "$(code "$API/api/render/page?path=")" "200"
+contains "내장 레이아웃이 받는다" "$NONE" 'class="b-main"'
+contains "사이트 이름이 나온다" "$NONE" "테마시험"
+contains "메뉴 링크가 살아 있다" "$NONE" 'href="/board/free"'
+contains "본문(블록)이 그대로 나간다" "$NONE" "brick-"
+absent "없는 테마의 자산을 가리키지 않는다" "$NONE" "/themes/default/assets"
+check "테마 목록은 비었지만" \
+  "$(curl -s "$API/api/themes" | python3 -c "import sys,json;print(len(json.load(sys.stdin).get('themes',[])))")" "0"
+contains "왜 비었는지 말한다" "$(curl -s "$API/api/themes")" "설치 경로"
+contains "대신 그릴 테마조차 없다고 말한다" "$(curl -s "$API/api/themes")" '"fallback":""'
+
+echo "── 경로를 고치면 저절로 돌아온다"
+stop_server
+export BRICK_THEMES_DIR="$ROOT/themes"
+start_server
+contains "고른 테마로 다시 그린다" "$(render "")" 'data-fragile="1"'
+curl -s -b "$CK" -X POST "$API/api/themes/default/activate" -o /dev/null
+rm -rf "$ROOT/themes/$TEST_THEME"; TEST_THEME=""
 
 # ════════════════════════════════════════════════════
 echo
