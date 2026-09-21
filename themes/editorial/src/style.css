@@ -45,15 +45,15 @@
  * 블록·플러그인 마크업은 자기 클래스로 그리지만, 에디터로 쓴 글의 목록·제목은 클래스가 없다.
  */
 @layer base {
-  .brick-main ul:not([class]), .brick-main ol:not([class]) { padding-left: 1.5em; margin: 0 0 14px; }
-  .brick-main ul:not([class]) { list-style: disc; }
-  .brick-main ol:not([class]) { list-style: decimal; }
-  .brick-main img { display: inline-block; }
-  .brick-main table:not([class]) th, .brick-main table:not([class]) td { text-align: left; }
-  .brick-main b, .brick-main strong { font-weight: 700; }
-  .brick-main em, .brick-main i { font-style: italic; }
-  .brick-main input[type="checkbox"], .brick-main input[type="radio"] { appearance: auto; }
-  .brick-main select { appearance: auto; }
+  :where(.brick-main ul:not([class])), :where(.brick-main ol:not([class])) { padding-left: 1.5em; margin: 0 0 14px; }
+  :where(.brick-main ul:not([class])) { list-style: disc; }
+  :where(.brick-main ol:not([class])) { list-style: decimal; }
+  :where(.brick-main img) { display: inline-block; }
+  :where(.brick-main table:not([class]) th), :where(.brick-main table:not([class]) td) { text-align: left; }
+  :where(.brick-main b), :where(.brick-main strong) { font-weight: 700; }
+  :where(.brick-main em), :where(.brick-main i) { font-style: italic; }
+  :where(.brick-main input[type="checkbox"]), :where(.brick-main input[type="radio"]) { appearance: auto; }
+  :where(.brick-main select) { appearance: auto; }
 }
 
 /*
@@ -141,7 +141,7 @@ blockquote {
 :root[data-theme="light"] { color-scheme: light; }
 
 /* 제목은 명조 — 이 테마의 목소리 */
-.brick-main h1, .brick-main h2, .brick-main h3,
+:where(.brick-main h1), :where(.brick-main h2), :where(.brick-main h3),
 .brick-logo, .brick-footer-logo, .brick-navbar-logo, .brick-stat strong, .brick-quote blockquote {
   font-family: var(--font-display);
   font-weight: 700;
@@ -335,17 +335,17 @@ blockquote {
 /* .brick-main 폭·여백은 유틸리티 */
 .brick-bleed { margin-left: calc(var(--brick-pad-x) * -1); margin-right: calc(var(--brick-pad-x) * -1); }
 
-.brick-main h1, .brick-page > h1 { font-size: clamp(30px, 4.4vw, 42px); line-height: 1.2; margin: 0 0 12px; }
-.brick-main h2 { font-size: clamp(22px, 2.8vw, 28px); line-height: 1.3; margin: 44px 0 14px; }
-.brick-main h3 { font-size: 19px; margin: 30px 0 8px; }
-.brick-main h4 { font-size: 16px; margin: 22px 0 6px; font-weight: 700; }
-.brick-main p { margin: 0 0 16px; color: var(--color-text-soft); }
-.brick-main li { margin: 4px 0; color: var(--color-text-soft); }
+:where(.brick-main h1), :where(.brick-page > h1) { font-size: clamp(30px, 4.4vw, 42px); line-height: 1.2; margin: 0 0 12px; }
+:where(.brick-main h2) { font-size: clamp(22px, 2.8vw, 28px); line-height: 1.3; margin: 44px 0 14px; }
+:where(.brick-main h3) { font-size: 19px; margin: 30px 0 8px; }
+:where(.brick-main h4) { font-size: 16px; margin: 22px 0 6px; font-weight: 700; }
+:where(.brick-main p) { margin: 0 0 16px; color: var(--color-text-soft); }
+:where(.brick-main li) { margin: 4px 0; color: var(--color-text-soft); }
 .brick-main > :first-child { margin-top: 0; }
 .brick-main > *:last-child, .brick-page > *:last-child { margin-bottom: 0; }
 
 /* 페이지 제목 — 아래 굵은 괘선. 기사 제목 */
-.brick-page > h1 { padding-bottom: 16px; margin-bottom: 30px; border-bottom: 2px solid var(--color-text); }
+:where(.brick-page > h1) { padding-bottom: 16px; margin-bottom: 30px; border-bottom: 2px solid var(--color-text); }
 
 /* ── 히어로: 헤드라인 ──────────────────────────────── */
 .brick-hero {
@@ -526,8 +526,8 @@ blockquote {
 
 /* ── 버튼 — 네모, 대문자 소자 ─────────────────────── */
 .brick-btn,
-.brick-main button,
-.brick-main input[type="submit"] {
+:where(.brick-main button),
+:where(.brick-main input[type="submit"]) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -547,10 +547,10 @@ blockquote {
   transition: background var(--brick-t), color var(--brick-t), border-color var(--brick-t);
 }
 .brick-btn:hover,
-.brick-main button:hover,
-.brick-main input[type="submit"]:hover { background: var(--color-text); color: var(--color-bg); border-color: var(--color-text); }
-.brick-btn[disabled], .brick-main button[disabled] { opacity: 0.45; cursor: not-allowed; }
-.brick-btn[disabled]:hover, .brick-main button[disabled]:hover { background: transparent; color: var(--color-text); }
+:where(.brick-main button:hover),
+:where(.brick-main input[type="submit"]:hover) { background: var(--color-text); color: var(--color-bg); border-color: var(--color-text); }
+.brick-btn[disabled], :where(.brick-main button[disabled]) { opacity: 0.45; cursor: not-allowed; }
+.brick-btn[disabled]:hover, :where(.brick-main button[disabled]:hover) { background: transparent; color: var(--color-text); }
 
 .brick-btn-primary,
 .brick-main button.brick-primary,
@@ -567,17 +567,17 @@ blockquote {
 .brick-btn-block { width: 100%; }
 
 /* ── 폼 ───────────────────────────────────────────── */
-.brick-main input:not([type]),
-.brick-main input[type="text"],
-.brick-main input[type="search"],
-.brick-main input[type="number"],
-.brick-main input[type="tel"],
-.brick-main input[type="url"],
-.brick-main input[type="date"],
-.brick-main input[type="email"],
-.brick-main input[type="password"],
-.brick-main select,
-.brick-main textarea,
+:where(.brick-main input:not([type])),
+:where(.brick-main input[type="text"]),
+:where(.brick-main input[type="search"]),
+:where(.brick-main input[type="number"]),
+:where(.brick-main input[type="tel"]),
+:where(.brick-main input[type="url"]),
+:where(.brick-main input[type="date"]),
+:where(.brick-main input[type="email"]),
+:where(.brick-main input[type="password"]),
+:where(.brick-main select),
+:where(.brick-main textarea),
 .brick-input {
   font: inherit;
   font-size: 15px;
@@ -589,26 +589,26 @@ blockquote {
   transition: border-color var(--brick-t);
   max-width: 100%;
 }
-.brick-main textarea { line-height: 1.6; }
-.brick-main input::placeholder, .brick-main textarea::placeholder { color: var(--color-muted); }
-.brick-main input:hover, .brick-main select:hover, .brick-main textarea:hover { border-color: var(--color-text-soft); }
-.brick-main input:focus-visible, .brick-main select:focus-visible, .brick-main textarea:focus-visible { outline: 0; border-color: var(--color-text); box-shadow: 0 0 0 1px var(--color-text); }
-.brick-main input:disabled, .brick-main select:disabled, .brick-main textarea:disabled { background: var(--color-bg-soft); color: var(--color-muted); cursor: not-allowed; }
-.brick-main input[type="checkbox"], .brick-main input[type="radio"] { accent-color: var(--color-primary); width: 16px; height: 16px; vertical-align: -2px; }
-.brick-main label { color: var(--color-text); }
+:where(.brick-main textarea) { line-height: 1.6; }
+:where(.brick-main input::placeholder), :where(.brick-main textarea::placeholder) { color: var(--color-muted); }
+:where(.brick-main input:hover), :where(.brick-main select:hover), :where(.brick-main textarea:hover) { border-color: var(--color-text-soft); }
+:where(.brick-main input:focus-visible), :where(.brick-main select:focus-visible), :where(.brick-main textarea:focus-visible) { outline: 0; border-color: var(--color-text); box-shadow: 0 0 0 1px var(--color-text); }
+:where(.brick-main input:disabled), :where(.brick-main select:disabled), :where(.brick-main textarea:disabled) { background: var(--color-bg-soft); color: var(--color-muted); cursor: not-allowed; }
+:where(.brick-main input[type="checkbox"]), :where(.brick-main input[type="radio"]) { accent-color: var(--color-primary); width: 16px; height: 16px; vertical-align: -2px; }
+:where(.brick-main label) { color: var(--color-text); }
 .brick-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 18px; }
 .brick-field > label { font-size: 13px; font-weight: 600; letter-spacing: 0.03em; }
 .brick-field-hint { font-size: 12.5px; color: var(--color-muted); }
 .brick-field-error { font-size: 12.5px; color: var(--color-danger); font-weight: 500; }
 
 /* 파일 선택 — UA 기본 버튼은 어느 OS 에서도 사이트와 어울리지 않는다 */
-.brick-main input[type="file"] { font: inherit; font-size: 14px; color: var(--color-text-soft); max-width: 100%; }
-.brick-main input[type="file"]::file-selector-button {
+:where(.brick-main input[type="file"]) { font: inherit; font-size: 14px; color: var(--color-text-soft); max-width: 100%; }
+:where(.brick-main input[type="file"]::file-selector-button) {
   font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; margin-right: 10px;
   padding: 7px 12px; border-radius: var(--radius); border: 1px solid var(--color-line-strong);
   background: var(--color-bg); color: var(--color-text); transition: background var(--brick-t), border-color var(--brick-t);
 }
-.brick-main input[type="file"]::file-selector-button:hover { background: var(--color-bg-soft); border-color: var(--color-muted); }
+:where(.brick-main input[type="file"]::file-selector-button:hover) { background: var(--color-bg-soft); border-color: var(--color-muted); }
 
 /* ── 카드 — 괘선 상자, 그림자 없음 ─────────────────── */
 .brick-card { background: var(--color-bg); border: 1px solid var(--color-line-strong); border-radius: var(--radius); padding: 22px; }
@@ -671,9 +671,9 @@ a.brick-card:hover { border-color: var(--color-text); color: inherit; }
 
 /* ── 표 — 신문 시세표 ───────────────────────────────── */
 .brick-table-wrap { overflow-x: auto; }
-.brick-main table { border-collapse: collapse; width: 100%; font-size: 15px; border-top: 2px solid var(--color-text); }
-.brick-main caption { text-align: left; color: var(--color-muted); font-size: 13px; padding-bottom: 8px; }
-.brick-main th {
+:where(.brick-main table) { border-collapse: collapse; width: 100%; font-size: 15px; border-top: 2px solid var(--color-text); }
+:where(.brick-main caption) { text-align: left; color: var(--color-muted); font-size: 13px; padding-bottom: 8px; }
+:where(.brick-main th) {
   text-align: left;
   font-weight: 700;
   color: var(--color-text);
@@ -684,10 +684,10 @@ a.brick-card:hover { border-color: var(--color-text); color: inherit; }
   text-transform: uppercase;
   white-space: nowrap;
 }
-.brick-main td { border-bottom: 1px solid var(--color-line); padding: 13px 12px; color: var(--color-text-soft); }
-.brick-main tbody tr:hover { background: var(--color-bg-soft); }
-.brick-main td a { font-weight: 500; color: var(--color-text); text-decoration: none; }
-.brick-main td a:hover { text-decoration: underline; }
+:where(.brick-main td) { border-bottom: 1px solid var(--color-line); padding: 13px 12px; color: var(--color-text-soft); }
+:where(.brick-main tbody tr:hover) { background: var(--color-bg-soft); }
+:where(.brick-main td a) { font-weight: 500; color: var(--color-text); text-decoration: none; }
+:where(.brick-main td a:hover) { text-decoration: underline; }
 .brick-num { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* ── 페이지네이션 ─────────────────────────────────── */
@@ -767,8 +767,8 @@ a.brick-card:hover { border-color: var(--color-text); color: inherit; }
   .brick-header-search input { width: 32px; padding-left: 26px; padding-right: 0; cursor: pointer; border-bottom-color: transparent; }
   .brick-header-search input:focus-visible { width: min(50vw, 220px); cursor: text; padding-right: 8px; border-bottom-color: var(--color-text); }
 
-  .brick-page > h1 { padding-bottom: 12px; margin-bottom: 22px; }
-  .brick-main h2 { margin-top: 34px; }
+  :where(.brick-page > h1) { padding-bottom: 12px; margin-bottom: 22px; }
+  :where(.brick-main h2) { margin-top: 34px; }
   .brick-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 }
 
@@ -983,13 +983,13 @@ a.brick-card:hover { border-color: var(--color-text); color: inherit; }
  * 이 테마의 네모 모서리로 맞춘다 — 문서의 약속대로 테마가 덮어 쓸 수 있다.
  * 특이성을 한 단계(.brick-main) 올려 로드 순서와 무관하게 이긴다.
  */
-.brick-main .brick-share a, .brick-main .brick-share button,
-.brick-main .brick-vote button, .brick-main .brick-scrap,
-.brick-main .brick-cat-nav a, .brick-main .brick-cat,
+:where(.brick-main .brick-share a), :where(.brick-main .brick-share button),
+:where(.brick-main .brick-vote button), .brick-main .brick-scrap,
+:where(.brick-main .brick-cat-nav a), .brick-main .brick-cat,
 .brick-main .brick-board-card, .brick-main .brick-list-badge,
 .brick-main .brick-secret-notice { border-radius: var(--radius); }
-.brick-main .brick-share a, .brick-main .brick-share button,
-.brick-main .brick-vote button, .brick-main .brick-scrap { font-size: 12.5px; letter-spacing: 0.03em; border-color: var(--color-line-strong); }
+:where(.brick-main .brick-share a), :where(.brick-main .brick-share button),
+:where(.brick-main .brick-vote button), .brick-main .brick-scrap { font-size: 12.5px; letter-spacing: 0.03em; border-color: var(--color-line-strong); }
 
 /* 홈 폴백(설치 직후) */
 .brick-home-steps { margin-top: 32px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); }

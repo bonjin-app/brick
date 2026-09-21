@@ -131,6 +131,9 @@ jobs:
       - name: 페이지 빌더의 블록 라벨이 사이트 언어를 따른다 (사이트를 만드는 첫 화면이다)
         run: node scripts/check-block-i18n.mjs
 
+      - name: 테마의 본문 기본값이 확장의 스타일에 진다 (기본값이 이기면 블록은 자기 모양을 못 정한다)
+        run: node scripts/check-theme-defaults.mjs
+
       - name: 날짜 경계를 사이트 시간대로 센다 (UTC 자정은 한국에서 아침 9시다)
         run: node scripts/check-site-timezone.mjs
 

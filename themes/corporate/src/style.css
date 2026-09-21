@@ -43,15 +43,15 @@
  * 블록·플러그인 마크업은 자기 클래스로 그리지만, 에디터로 쓴 글의 목록·제목은 클래스가 없다.
  */
 @layer base {
-  .brick-main ul:not([class]), .brick-main ol:not([class]) { padding-left: 1.5em; margin: 0 0 14px; }
-  .brick-main ul:not([class]) { list-style: disc; }
-  .brick-main ol:not([class]) { list-style: decimal; }
-  .brick-main img { display: inline-block; }
-  .brick-main table:not([class]) th, .brick-main table:not([class]) td { text-align: left; }
-  .brick-main b, .brick-main strong { font-weight: 700; }
-  .brick-main em, .brick-main i { font-style: italic; }
-  .brick-main input[type="checkbox"], .brick-main input[type="radio"] { appearance: auto; }
-  .brick-main select { appearance: auto; }
+  :where(.brick-main ul:not([class])), :where(.brick-main ol:not([class])) { padding-left: 1.5em; margin: 0 0 14px; }
+  :where(.brick-main ul:not([class])) { list-style: disc; }
+  :where(.brick-main ol:not([class])) { list-style: decimal; }
+  :where(.brick-main img) { display: inline-block; }
+  :where(.brick-main table:not([class]) th), :where(.brick-main table:not([class]) td) { text-align: left; }
+  :where(.brick-main b), :where(.brick-main strong) { font-weight: 700; }
+  :where(.brick-main em), :where(.brick-main i) { font-style: italic; }
+  :where(.brick-main input[type="checkbox"]), :where(.brick-main input[type="radio"]) { appearance: auto; }
+  :where(.brick-main select) { appearance: auto; }
 }
 
 /*
@@ -404,30 +404,30 @@ blockquote {
 /* 히어로처럼 폭을 꽉 쓰는 블록이 바깥 여백을 뚫고 나갈 수 있게 */
 .brick-bleed { margin-left: calc(var(--brick-pad-x) * -1); margin-right: calc(var(--brick-pad-x) * -1); }
 
-.brick-main h1, .brick-page > h1 {
+:where(.brick-main h1), :where(.brick-page > h1) {
   font-size: clamp(25px, 4vw, 33px);
   line-height: 1.25;
   letter-spacing: -1px;
   margin: 0 0 10px;
   font-weight: 800;
 }
-.brick-main h2 {
+:where(.brick-main h2) {
   font-size: clamp(19px, 2.6vw, 23px);
   line-height: 1.35;
   letter-spacing: -0.5px;
   margin: 40px 0 12px;
   font-weight: 700;
 }
-.brick-main h3 { font-size: 17px; letter-spacing: -0.2px; margin: 28px 0 8px; font-weight: 700; }
-.brick-main h4 { font-size: 15.5px; margin: 22px 0 6px; font-weight: 700; }
-.brick-main p { margin: 0 0 14px; color: var(--color-text-soft); }
-.brick-main li { margin: 4px 0; color: var(--color-text-soft); }
+:where(.brick-main h3) { font-size: 17px; letter-spacing: -0.2px; margin: 28px 0 8px; font-weight: 700; }
+:where(.brick-main h4) { font-size: 15.5px; margin: 22px 0 6px; font-weight: 700; }
+:where(.brick-main p) { margin: 0 0 14px; color: var(--color-text-soft); }
+:where(.brick-main li) { margin: 4px 0; color: var(--color-text-soft); }
 .brick-main > :first-child { margin-top: 0; }
 .brick-main > *:last-child,
 .brick-page > *:last-child { margin-bottom: 0; }
 
 /* 페이지 제목 아래 얇은 구분 — 제목과 본문 사이 리듬 */
-.brick-page > h1 { padding-bottom: 18px; margin-bottom: 26px; border-bottom: 1px solid var(--color-line); }
+:where(.brick-page > h1) { padding-bottom: 18px; margin-bottom: 26px; border-bottom: 1px solid var(--color-line); }
 
 /* ── 히어로 ───────────────────────────────────────── */
 .brick-hero {
@@ -640,8 +640,8 @@ blockquote {
  * 붙이지 않은 버튼(플러그인이 급하게 그린 것)도 사이트와 어울리게 만든다.
  */
 .brick-btn,
-.brick-main button,
-.brick-main input[type="submit"] {
+:where(.brick-main button),
+:where(.brick-main input[type="submit"]) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -660,16 +660,16 @@ blockquote {
   transition: background var(--brick-t), border-color var(--brick-t), color var(--brick-t), transform var(--brick-t);
 }
 .brick-btn:hover,
-.brick-main button:hover,
-.brick-main input[type="submit"]:hover {
+:where(.brick-main button:hover),
+:where(.brick-main input[type="submit"]:hover) {
   background: var(--color-bg-soft);
   border-color: var(--color-muted);
   color: var(--color-text);
 }
 .brick-btn:active,
-.brick-main button:active { transform: translateY(1px); }
+:where(.brick-main button:active) { transform: translateY(1px); }
 .brick-btn[disabled],
-.brick-main button[disabled] {
+:where(.brick-main button[disabled]) {
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
@@ -712,17 +712,17 @@ blockquote {
  * UA 기본 스타일로 남아 **다크에서 흰 입력칸 + 흰 글자**가 된다 (주문서가
  * 그랬다). 테마는 블록의 실수에도 읽히는 화면을 내야 한다.
  */
-.brick-main input:not([type]),
-.brick-main input[type="text"],
-.brick-main input[type="search"],
-.brick-main input[type="number"],
-.brick-main input[type="tel"],
-.brick-main input[type="url"],
-.brick-main input[type="date"],
-.brick-main input[type="email"],
-.brick-main input[type="password"],
-.brick-main select,
-.brick-main textarea,
+:where(.brick-main input:not([type])),
+:where(.brick-main input[type="text"]),
+:where(.brick-main input[type="search"]),
+:where(.brick-main input[type="number"]),
+:where(.brick-main input[type="tel"]),
+:where(.brick-main input[type="url"]),
+:where(.brick-main input[type="date"]),
+:where(.brick-main input[type="email"]),
+:where(.brick-main input[type="password"]),
+:where(.brick-main select),
+:where(.brick-main textarea),
 .brick-input {
   font: inherit;
   font-size: 14.5px;
@@ -734,41 +734,41 @@ blockquote {
   transition: border-color var(--brick-t), box-shadow var(--brick-t);
   max-width: 100%;
 }
-.brick-main textarea { line-height: 1.6; }
-.brick-main input::placeholder, .brick-main textarea::placeholder { color: var(--color-muted); }
-.brick-main input:hover, .brick-main select:hover, .brick-main textarea:hover { border-color: var(--color-muted); }
-.brick-main input:focus-visible,
-.brick-main select:focus-visible,
-.brick-main textarea:focus-visible {
+:where(.brick-main textarea) { line-height: 1.6; }
+:where(.brick-main input::placeholder), :where(.brick-main textarea::placeholder) { color: var(--color-muted); }
+:where(.brick-main input:hover), :where(.brick-main select:hover), :where(.brick-main textarea:hover) { border-color: var(--color-muted); }
+:where(.brick-main input:focus-visible),
+:where(.brick-main select:focus-visible),
+:where(.brick-main textarea:focus-visible) {
   outline: var(--brick-ring);
   outline-offset: 0;
   border-color: transparent;
 }
-.brick-main input:disabled, .brick-main select:disabled, .brick-main textarea:disabled {
+:where(.brick-main input:disabled), :where(.brick-main select:disabled), :where(.brick-main textarea:disabled) {
   background: var(--color-bg-soft);
   color: var(--color-muted);
   cursor: not-allowed;
 }
-.brick-main input[type="checkbox"], .brick-main input[type="radio"] {
+:where(.brick-main input[type="checkbox"]), :where(.brick-main input[type="radio"]) {
   accent-color: var(--color-primary);
   width: 16px;
   height: 16px;
   vertical-align: -2px;
 }
-.brick-main label { color: var(--color-text); }
+:where(.brick-main label) { color: var(--color-text); }
 .brick-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
 .brick-field > label { font-size: 13.5px; font-weight: 600; }
 .brick-field-hint { font-size: 12.5px; color: var(--color-muted); }
 .brick-field-error { font-size: 12.5px; color: var(--color-danger); font-weight: 500; }
 
 /* 파일 선택 — UA 기본 버튼은 어느 OS 에서도 사이트와 어울리지 않는다 */
-.brick-main input[type="file"] { font: inherit; font-size: 14px; color: var(--color-text-soft); max-width: 100%; }
-.brick-main input[type="file"]::file-selector-button {
+:where(.brick-main input[type="file"]) { font: inherit; font-size: 14px; color: var(--color-text-soft); max-width: 100%; }
+:where(.brick-main input[type="file"]::file-selector-button) {
   font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; margin-right: 10px;
   padding: 7px 12px; border-radius: var(--radius); border: 1px solid var(--color-line-strong);
   background: var(--color-bg); color: var(--color-text); transition: background var(--brick-t), border-color var(--brick-t);
 }
-.brick-main input[type="file"]::file-selector-button:hover { background: var(--color-bg-soft); border-color: var(--color-muted); }
+:where(.brick-main input[type="file"]::file-selector-button:hover) { background: var(--color-bg-soft); border-color: var(--color-muted); }
 
 /* ── 카드 ─────────────────────────────────────────── */
 .brick-card {
@@ -844,9 +844,9 @@ a.brick-card:hover {
 /* ── 표 ───────────────────────────────────────────── */
 /* 좁은 화면에서 표가 페이지를 밀지 않게 감싼다 */
 .brick-table-wrap { overflow-x: auto; }
-.brick-main table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
-.brick-main caption { text-align: left; color: var(--color-muted); font-size: 13px; padding-bottom: 8px; }
-.brick-main th {
+:where(.brick-main table) { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+:where(.brick-main caption) { text-align: left; color: var(--color-muted); font-size: 13px; padding-bottom: 8px; }
+:where(.brick-main th) {
   text-align: left;
   font-weight: 600;
   color: var(--color-muted);
@@ -856,11 +856,11 @@ a.brick-card:hover {
   letter-spacing: 0.02em;
   white-space: nowrap;
 }
-.brick-main td { border-bottom: 1px solid var(--color-line); padding: 13px 12px; color: var(--color-text-soft); }
-.brick-main tbody tr { transition: background var(--brick-t); }
-.brick-main tbody tr:hover { background: var(--color-bg-soft); }
-.brick-main td a { font-weight: 500; color: var(--color-text); text-decoration: none; }
-.brick-main td a:hover { color: var(--color-primary-text); text-decoration: underline; }
+:where(.brick-main td) { border-bottom: 1px solid var(--color-line); padding: 13px 12px; color: var(--color-text-soft); }
+:where(.brick-main tbody tr) { transition: background var(--brick-t); }
+:where(.brick-main tbody tr:hover) { background: var(--color-bg-soft); }
+:where(.brick-main td a) { font-weight: 500; color: var(--color-text); text-decoration: none; }
+:where(.brick-main td a:hover) { color: var(--color-primary-text); text-decoration: underline; }
 .brick-num { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* ── 페이지네이션 ─────────────────────────────────── */
@@ -977,8 +977,8 @@ a.brick-card:hover {
   .brick-util .brick-util-cta { padding: 7px 13px; font-size: 13px; }
   .brick-util-name { display: inline !important; }
 
-  .brick-page > h1 { padding-bottom: 14px; margin-bottom: 20px; }
-  .brick-main h2 { margin-top: 32px; }
+  :where(.brick-page > h1) { padding-bottom: 14px; margin-bottom: 20px; }
+  :where(.brick-main h2) { margin-top: 32px; }
   .brick-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 }
 
