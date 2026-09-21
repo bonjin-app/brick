@@ -18,6 +18,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/lib-smoke.sh
+source "$ROOT/scripts/lib-smoke.sh"
 API_PORT="${BRICK_API_PORT:-3001}"
 API="http://127.0.0.1:${API_PORT}"
 SHOP="$API/api/plugins/brick-shop"
@@ -104,13 +106,6 @@ if [[ "${BRICK_SMOKE_KEEP_DB:-}" != "1" ]]; then
   node "$ROOT/scripts/reset-test-db.mjs" || exit 1
 fi
 
-pids_on_port() {
-  if command -v lsof >/dev/null 2>&1; then
-    lsof -nP -iTCP:"$1" -sTCP:LISTEN 2>/dev/null | awk 'NR>1 {print $2}' | sort -u || true
-  elif command -v ss >/dev/null 2>&1; then
-    ss -lptnH "sport = :$1" 2>/dev/null | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u || true
-  fi
-}
 
 echo "── 스텁 시작 (PG · SMTP)"
 # 고정 포트가 리눅스 임시포트 범위(32768–60999) 안이라 드물게 다른 프로세스의
@@ -163,6 +158,8 @@ for i in $(seq 1 60); do
   kill -0 "$API_PID" 2>/dev/null || { echo "서버 종료:"; tail -30 "$TMP/api.log"; exit 1; }
   sleep 1
 done
+# 우리가 띄운 서버와 이야기하는지 확인한다 (scripts/lib-smoke.sh 의 설명 참고)
+assert_own_api "$API_PID" "$API_PORT" "$TMP/api.log"
 
 CONSENT='"agreements":{"terms":true,"privacy":true},'
 if [[ "$(curl -s "$API/api/install/status")" == *not_installed* ]]; then

@@ -27,6 +27,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/lib-smoke.sh
+source "$ROOT/scripts/lib-smoke.sh"
 API_PORT="${BRICK_API_PORT:-3001}"
 API="http://127.0.0.1:${API_PORT}"
 SHOP="$API/api/plugins/brick-shop"
@@ -105,15 +107,6 @@ fi
 
 echo "── 스텁 PG 시작"
 # 이전 실행의 스텁이 포트를 잡고 있으면 우리 기록이 비어 있는데도 통과한다
-pids_on_port() {
-  if command -v lsof >/dev/null 2>&1; then
-    lsof -nP -iTCP:"$1" -sTCP:LISTEN 2>/dev/null | awk 'NR>1 {print $2}' | sort -u || true
-  elif command -v ss >/dev/null 2>&1; then
-    ss -lptnH "sport = :$1" 2>/dev/null | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u || true
-  elif command -v fuser >/dev/null 2>&1; then
-    fuser -n tcp "$1" 2>/dev/null | tr -s ' ' '\n' | grep -E '^[0-9]+$' | sort -u || true
-  fi
-}
 for p in $(pids_on_port "$PG_PORT"); do kill -9 "$p" 2>/dev/null || true; done
 
 node "$ROOT/scripts/pg-stub.mjs" --port "$PG_PORT" --out "$PGLOG" > "$TMP/pg.log" 2>&1 &
@@ -123,19 +116,8 @@ for i in $(seq 1 30); do
   kill -0 "$PG_PID" 2>/dev/null || break
   sleep 0.3
 done
-if kill -0 "$PG_PID" 2>/dev/null && [[ "$(pids_on_port "$PG_PORT")" == *"$PG_PID"* ]]; then
-  ok "스텁 PG 시작 (우리 프로세스가 듣고 있다)"
-else
-  #
-  # 여기서 **멈춘다.** 스텁이 없으면 뒤의 단언 수십 개가 전부 의미 없이
-  # 무너지고(로그를 읽는 것들은 남의 로그를 읽는다), 진짜 원인 한 줄은 그
-  # 목록 맨 위에 묻힌다 — 실제로 59개 실패 속에서 이 한 줄을 찾아야 했다.
-  # 전제가 무너지면 결과를 내지 않는 것이 옳다.
-  #
-  bad "스텁 PG 시작 ($(tail -2 "$TMP/pg.log" 2>/dev/null))"
-  echo "  포트 $PG_PORT 를 다른 프로세스가 쓰고 있습니다 — 스텁 없이는 이 수트를 돌릴 수 없습니다."
-  exit 1
-fi
+assert_own_stub "$PG_PID" "$PG_PORT" "PG" "$TMP/pg.log"
+ok "스텁 PG 시작 (우리 프로세스가 듣고 있다)"
 
 export BRICK_PLUGINS_DIR="$ROOT/plugins"
 export BRICK_THEMES_DIR="$ROOT/themes"
@@ -154,6 +136,8 @@ for i in $(seq 1 60); do
   kill -0 "$API_PID" 2>/dev/null || { echo "서버 종료:"; tail -30 "$TMP/api.log"; exit 1; }
   sleep 1
 done
+# 우리가 띄운 서버와 이야기하는지 확인한다 (scripts/lib-smoke.sh 의 설명 참고)
+assert_own_api "$API_PID" "$API_PORT" "$TMP/api.log"
 
 CONSENT='"agreements":{"terms":true,"privacy":true},'
 if [[ "$(curl -s "$API/api/install/status")" == *not_installed* ]]; then

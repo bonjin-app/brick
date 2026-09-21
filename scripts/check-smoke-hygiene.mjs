@@ -16,6 +16,17 @@
  *
  * 범위의 끝(`to=2026-12-31`)은 보지 않는다 — 미래여도 해롭지 않고, 오히려
  * "지금까지 전부"를 뜻하는 흔한 표현이다.
+ *
+ * ── 2. 정리(cleanup)에서 kill 을 맨손으로 부르지 않았는가
+ *
+ * ── 3. 자기가 띄운 서버와 이야기하는지 확인하는가
+ *
+ * 수트는 자기 API 를 :3001 에 띄운다. 그 포트를 다른 프로세스가 쥐고 있으면
+ * 우리 서버는 EADDRINUSE 로 죽는데 `curl /readyz` 는 **그 남의 서버**에 붙어
+ * 성공한다 — 수트는 남의 서버를 검사하며 뜻 모를 실패를 쏟는다(개발용으로 띄워
+ * 둔 API 때문에 실제로 그랬고, DB 까지 초기화됐다). 대기 루프의 `kill -0` 로는
+ * 못 잡는다: curl 이 먼저 성공해 break 하기 때문이다. 그래서 포트의 주인이
+ * 우리인지 따로 확인해야 한다(`assert_own_api`, scripts/lib-smoke.sh).
  */
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -85,6 +96,29 @@ for (const name of readdirSync(join(ROOT, "scripts"))) {
       }
     }
   });
+}
+
+/*
+ * 3. API 를 띄우는 수트는 **그 서버가 우리 것인지** 확인해야 한다.
+ *
+ * 예외: smoke-starter 는 자기만의 재시작 흐름 때문에 같은 확인을 직접 들고 있고,
+ * smoke-release 는 런처가 자식으로 서버를 띄워 포트 주인이 런처 PID 와 다르다.
+ */
+const OWN_API_EXEMPT = new Set(["smoke-starter.sh", "smoke-release.sh"]);
+for (const name of readdirSync(join(ROOT, "scripts"))) {
+  if (!name.startsWith("smoke-") || !name.endsWith(".sh")) continue;
+  if (OWN_API_EXEMPT.has(name)) continue;
+  /*
+   * 주석은 지우고 본다 — 주석에 적힌 이름 때문에 **부르지 않아도 통과**하면
+   * 검사가 거짓말을 한다(이 저장소에서 이미 두 번 당한 함정이다).
+   */
+  const src = readFileSync(join(ROOT, "scripts", name), "utf8")
+    .split("\n").map((l) => l.replace(/^\s*#.*$/, "")).join("\n");
+  if (!/apps\/api\/dist\/main\.js/.test(src)) continue;
+  checked++;
+  if (!/assert_own_api\s/.test(src)) {
+    bad.push([`scripts/${name}`, "assert_own_api", "자기가 띄운 서버인지 확인하지 않습니다 — 포트를 남이 쥐고 있으면 남의 서버를 검사합니다"]);
+  }
 }
 
 console.log("▶ 스모크가 스스로 함정을 만들지 않았다");

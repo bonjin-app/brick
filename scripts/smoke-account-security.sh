@@ -22,6 +22,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/lib-smoke.sh
+source "$ROOT/scripts/lib-smoke.sh"
 API_PORT="${BRICK_API_PORT:-3001}"
 API="http://127.0.0.1:${API_PORT}"
 TMP="$(mktemp -d)"
@@ -110,6 +112,8 @@ for i in $(seq 1 60); do
   kill -0 "$API_PID" 2>/dev/null || { echo "서버 종료:"; tail -30 "$TMP/api.log"; exit 1; }
   sleep 1
 done
+# 우리가 띄운 서버와 이야기하는지 확인한다 (scripts/lib-smoke.sh 의 설명 참고)
+assert_own_api "$API_PID" "$API_PORT" "$TMP/api.log"
 
 echo "── RFC 6238 표준 벡터 (구현이 표준과 맞는가)"
 # 맞지 않으면 인증 앱이 만든 코드를 거절한다 — 아무도 로그인할 수 없다

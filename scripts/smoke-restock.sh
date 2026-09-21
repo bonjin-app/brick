@@ -21,6 +21,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/lib-smoke.sh
+source "$ROOT/scripts/lib-smoke.sh"
 API_PORT="${BRICK_API_PORT:-3001}"
 API="http://127.0.0.1:${API_PORT}"
 SHOP="$API/api/plugins/brick-shop"
@@ -113,15 +115,6 @@ if [[ "${BRICK_SMOKE_KEEP_DB:-}" != "1" ]]; then
 fi
 
 echo "── SMTP 스텁 시작 (실제로 무엇이 발송되는지 본다)"
-pids_on_port() {
-  if command -v lsof >/dev/null 2>&1; then
-    lsof -nP -iTCP:"$1" -sTCP:LISTEN 2>/dev/null | awk 'NR>1 {print $2}' | sort -u || true
-  elif command -v ss >/dev/null 2>&1; then
-    ss -lptnH "sport = :$1" 2>/dev/null | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u || true
-  elif command -v fuser >/dev/null 2>&1; then
-    fuser -n tcp "$1" 2>/dev/null | tr -s ' ' '\n' | grep -E '^[0-9]+$' | sort -u || true
-  fi
-}
 for p in $(pids_on_port "$SMTP_PORT"); do kill -9 "$p" 2>/dev/null || true; done
 node "$ROOT/scripts/smtp-sink.mjs" --port "$SMTP_PORT" --out "$MAILBOX" > "$TMP/sink.log" 2>&1 &
 SINK_PID=$!
@@ -130,11 +123,8 @@ for i in $(seq 1 30); do
   kill -0 "$SINK_PID" 2>/dev/null || break
   sleep 0.3
 done
-if kill -0 "$SINK_PID" 2>/dev/null && [[ "$(pids_on_port "$SMTP_PORT")" == *"$SINK_PID"* ]]; then
-  ok "SMTP 스텁 시작"
-else
-  bad "SMTP 스텁 시작 ($(tail -2 "$TMP/sink.log" 2>/dev/null))"
-fi
+assert_own_stub "$SINK_PID" "$SMTP_PORT" "SMTP" "$TMP/sink.log"
+ok "SMTP 스텁 시작 (우리 프로세스가 듣고 있다)"
 
 export BRICK_PLUGINS_DIR="$ROOT/plugins"
 export BRICK_THEMES_DIR="$ROOT/themes"
@@ -155,6 +145,8 @@ for i in $(seq 1 60); do
   kill -0 "$API_PID" 2>/dev/null || { echo "서버 종료:"; tail -30 "$TMP/api.log"; exit 1; }
   sleep 1
 done
+# 우리가 띄운 서버와 이야기하는지 확인한다 (scripts/lib-smoke.sh 의 설명 참고)
+assert_own_api "$API_PID" "$API_PORT" "$TMP/api.log"
 
 CONSENT='"agreements":{"terms":true,"privacy":true},'
 if [[ "$(curl -s "$API/api/install/status")" == *not_installed* ]]; then

@@ -22,6 +22,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/lib-smoke.sh
+source "$ROOT/scripts/lib-smoke.sh"
 API_PORT="${BRICK_API_PORT:-3001}"
 API="http://127.0.0.1:${API_PORT}"
 SHOP="$API/api/plugins/brick-shop"
@@ -88,7 +90,11 @@ start_api() { # <마이그레이션 디렉터리> <로그>
   BRICK_MIGRATIONS_DIR="$1" node "$ROOT/apps/api/dist/main.js" > "$2" 2>&1 &
   API_PID=$!
   for i in $(seq 1 60); do
-    curl -fsS "$API/readyz" >/dev/null 2>&1 && return 0
+    if curl -fsS "$API/readyz" >/dev/null 2>&1; then
+      # 우리가 띄운 서버와 이야기하는지 확인한다 (scripts/lib-smoke.sh 의 설명 참고)
+      assert_own_api "$API_PID" "$API_PORT" "$2"
+      return 0
+    fi
     kill -0 "$API_PID" 2>/dev/null || { echo "서버 종료:"; cat "$2"; return 1; }
     sleep 0.5
   done

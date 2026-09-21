@@ -84,6 +84,23 @@ CI(GitHub Actions)가 PR마다 전부 실행합니다:
 - `pkill -f "…/server.js"` 는 실제 커맨드라인(`node server.js`)과 어긋나 매칭되지 않습니다.
   실행 시 `$!` 로 PID를 잡아두세요.
 - 배포본 테스트는 `env -u DATABASE_URL …` 로 환경변수를 차단해야 설치 모드를 재현합니다.
+- **자기가 띄운 서버와 이야기하는지 확인하세요.** 포트를 다른 프로세스가 쥐고
+  있으면 우리 서버는 `EADDRINUSE` 로 죽는데 `curl /readyz` 는 **그 남의 서버**에
+  붙어 성공합니다 — 수트는 남의 서버를 검사하며 뜻 모를 실패를 쏟습니다(개발용으로
+  띄워 둔 API 때문에 실제로 그랬고, DB 까지 초기화됐습니다). 대기 루프의
+  `kill -0 $API_PID` 로는 못 잡습니다: curl 이 먼저 성공해 `break` 하기 때문입니다.
+
+  ```bash
+  source "$ROOT/scripts/lib-smoke.sh"
+  ...
+  assert_own_api "$API_PID" "$API_PORT" "$TMP/api.log"   # 대기 루프 바로 뒤
+  assert_own_stub "$PG_PID" "$PG_PORT" "PG" "$TMP/pg.log"
+  ```
+
+  전제가 무너졌으면 **결과를 내지 않는 것이 옳습니다.** 스텁 없이 계속 돌면 뒤의
+  단언 수십 개가 의미 없이 무너지고, 진짜 원인 한 줄이 그 목록에 묻힙니다
+  (실제로 59개 실패 속에서 그 한 줄을 찾아야 했습니다).
+  `scripts/check-smoke-hygiene.mjs` 가 이 확인을 빠뜨린 수트를 잡습니다.
 
 ### 코드에서 하지 말아야 할 것
 
