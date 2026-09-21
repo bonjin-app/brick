@@ -2,6 +2,8 @@ import type { PluginContext } from "@brick/plugin-sdk";
 import { escapeHtml } from "@brick/plugin-sdk";
 import { moneyFnScript } from "./i18n.js";
 import { gatewayScripts } from "./pay-client.js";
+import { addressSearchField, addressSearchScript, ADDRESS_SEARCH_CSS } from "./address-search.js";
+import type { ShopSettings } from "./types.js";
 
 /**
  * 주문서(체크아웃) 화면 — <상점 페이지>/checkout 으로 라우팅된다.
@@ -17,7 +19,11 @@ import { gatewayScripts } from "./pay-client.js";
  * 결제 수단은 무통장 입금이다 — 설치 직후 PG 계약 없이도 팔 수 있는
  * 기본 경로. 주문이 생기면 응답의 입금 계좌를 완료 화면에 보여준다.
  */
-export function registerCheckoutView(ctx: PluginContext, t: (k: string, p?: Record<string, string | number>) => string) {
+export function registerCheckoutView(
+  ctx: PluginContext,
+  t: (k: string, p?: Record<string, string | number>) => string,
+  settings: () => Promise<ShopSettings>,
+) {
   const field = (label: string, inner: string) =>
     `<label class="brick-field">${escapeHtml(label)}${inner}</label>`;
 
@@ -25,6 +31,8 @@ export function registerCheckoutView(ctx: PluginContext, t: (k: string, p?: Reco
     name: "checkout",
     displayName: "주문서",
     render: async (_props, blockCtx) => {
+      // 주소 검색은 운영자가 끌 수 있다 (제3자 스크립트를 두지 않으려는 가게)
+      const addrSearch = (await settings()).addressSearch !== false;
       const path = String(blockCtx?.path ?? "").replace(/^\/+|\/+$/g, "");
       const tail = String(blockCtx?.pathTail ?? "").replace(/^\/+|\/+$/g, "");
       const base = tail && path.endsWith(tail)
@@ -47,6 +55,7 @@ export function registerCheckoutView(ctx: PluginContext, t: (k: string, p?: Reco
     <h2>${escapeHtml(t("checkout.shippingTo"))}</h2>
     <div class="brick-co-addr">
       ${field(t("checkout.postcode"), '<input type="text" name="postcode" autocomplete="postal-code" inputmode="numeric" required maxlength="10" />')}
+      ${addrSearch ? addressSearchField() : ""}
       ${field(t("checkout.address1"), '<input type="text" name="address1" autocomplete="street-address" required maxlength="200" />')}
     </div>
     ${field(t("checkout.address2"), '<input type="text" name="address2" autocomplete="address-line2" maxlength="200" />')}
@@ -98,7 +107,7 @@ export function registerCheckoutView(ctx: PluginContext, t: (k: string, p?: Reco
     </p>
   </section>
 </div>
-${await gatewayScripts()}${checkoutScript(t)}
+${await gatewayScripts()}${checkoutScript(t)}${addrSearch ? addressSearchScript() + ADDRESS_SEARCH_CSS : ""}
 <style>
 .brick-checkout { max-width: 640px; }
 .brick-checkout h2 { font-size: 17px; margin: 26px 0 10px; }

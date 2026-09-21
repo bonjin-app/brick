@@ -753,7 +753,7 @@ ${cartScript(shopBaseOf(blockCtx))}${STOREFRONT_CSS}`,
   };
   ctx.registerBlock(cartBlock);
 
-  const checkoutBlock = registerCheckoutView(ctx, t);
+  const checkoutBlock = registerCheckoutView(ctx, t, settings);
   const ordersBlock = registerOrdersView(ctx, t);
   const { wishlistBlock } = registerWishlistView(ctx, t);
   const { couponsBlock } = registerCouponsView(ctx, t);
@@ -761,7 +761,7 @@ ${cartScript(shopBaseOf(blockCtx))}${STOREFRONT_CSS}`,
   // 결제 카드(빌링키)·정기배송 — 화면과 회원 메뉴 등록까지 스스로 한다
   const { cardsBlock } = registerCardsView(ctx, t);
   const { subsBlock } = registerSubscriptionsView(ctx, t);
-  const { subscribeBlock } = registerSubscribeView(ctx, db, t);
+  const { subscribeBlock } = registerSubscribeView(ctx, db, settings, t);
 
   /*
    * 화면 선언 — 쇼핑몰과 그 안의 회원 화면들.

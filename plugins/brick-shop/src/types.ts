@@ -96,6 +96,15 @@ export interface ShopSettings {
    * 그 판단은 사유 구분(returns.ts REASON_CODES)이 한다.
    */
   returnShippingFee: number;
+  /**
+   * 주문서에서 **우편번호·주소를 검색**할 수 있게 한다.
+   *
+   * 기본은 켜짐이다 — 한국에서 자기 우편번호를 외우는 사람은 거의 없고, 이
+   * 사이트는 우편번호로 제주·도서산간 추가 배송비를 계산한다. 다만 제3자
+   * 스크립트(다음 우편번호)를 일절 두지 않으려는 가게를 위해 끌 수 있다.
+   * 켜져 있어도 스크립트는 **손님이 버튼을 누른 뒤에야** 내려온다.
+   */
+  addressSearch: boolean;
 }
 
 export const DEFAULT_SETTINGS: ShopSettings = {
@@ -105,6 +114,7 @@ export const DEFAULT_SETTINGS: ShopSettings = {
   pageSize: 20,
   notifyOrderMail: true,
   returnShippingFee: 3000,
+  addressSearch: true,
 };
 
 export function escapeHtml(s: unknown): string {

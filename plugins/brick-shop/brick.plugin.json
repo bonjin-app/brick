@@ -6,5 +6,14 @@
   "author": "Brick",
   "brickVersion": ">=0.0.1",
   "entry": "dist/index.js",
-  "migrations": "migrations"
+  "migrations": "migrations",
+  "csp": {
+    "script-src": [
+      "https://t1.daumcdn.net"
+    ],
+    "frame-src": [
+      "https://postcode.map.kakao.com",
+      "https://postcode.map.daum.net"
+    ]
+  }
 }

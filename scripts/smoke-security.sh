@@ -248,7 +248,9 @@ CSP="$(curl -s -D - -o /dev/null "$API/api/render/page?path=" | grep -i '^conten
 contains "공개 화면에 CSP 가 붙는다" "$CSP" "default-src 'self'"
 # 결제창 SDK 를 선언한 PG 플러그인이 위에서 활성화됐다 — 그 **호스트 하나만** 열려야 한다.
 # (예전 단언은 script-src 가 고정이던 시절의 것이라, 선언 기능이 생긴 뒤 조용히 낡아 있었다)
-contains "선언한 결제창 호스트만 열린다" "$CSP" "script-src 'self' 'unsafe-inline' https://js.tosspayments.com;"
+# 선언한 곳만 열린다 — 결제창(토스)과 주소 검색(다음)이 각자의 매니페스트로 더한 둘뿐이다
+contains "선언한 결제창 호스트가 열린다" "$CSP" "https://js.tosspayments.com"
+contains "선언한 주소 검색 호스트가 열린다" "$CSP" "https://t1.daumcdn.net"
 absent   "와일드카드로 열지 않는다" "$CSP" "script-src 'self' 'unsafe-inline' *"
 absent   "https: 통째로 열지 않는다" "$CSP" "script-src 'self' 'unsafe-inline' https:;"
 contains "플러그인·객체 삽입 차단" "$CSP" "object-src 'none'"

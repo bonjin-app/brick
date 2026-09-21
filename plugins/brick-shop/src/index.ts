@@ -2512,6 +2512,7 @@ export default definePlugin(async (ctx) => {
       notifyOrderMail: b.notifyOrderMail !== false,
       pageSize: Math.min(60, Math.max(4, Math.floor(Number(b.pageSize ?? DEFAULT_SETTINGS.pageSize)))),
       returnShippingFee: Math.max(0, Math.floor(Number(b.returnShippingFee ?? DEFAULT_SETTINGS.returnShippingFee))),
+      addressSearch: b.addressSearch !== false,
     };
     await ctx.settings.set("settings", next);
     await ctx.cache.invalidateTag("pages");

@@ -1,8 +1,9 @@
 import { sql } from "drizzle-orm";
 import type { BlockRenderContext, PluginContext } from "@brick/plugin-sdk";
 import { escapeHtml } from "@brick/plugin-sdk";
-import { won, type Db } from "./types.js";
+import { won, type Db, type ShopSettings } from "./types.js";
 import { moneyFnScript } from "./i18n.js";
+import { addressSearchField, addressSearchScript, ADDRESS_SEARCH_CSS } from "./address-search.js";
 
 /**
  * 정기배송 신청 화면 — /shop/subscribe/<상품 slug>.
@@ -19,6 +20,7 @@ import { moneyFnScript } from "./i18n.js";
 export function registerSubscribeView(
   ctx: PluginContext,
   db: Db,
+  settings: () => Promise<ShopSettings>,
   t: (k: string, p?: Record<string, string | number>) => string,
 ) {
   const field = (label: string, inner: string) =>
@@ -64,6 +66,7 @@ export function registerSubscribeView(
       }
 
       blockCtx?.setSeo?.({ title: t("subs.signupTitle") });
+      const addrSearch = (await settings()).addressSearch !== false;
       const cycle = intervalLabel(String(p.sub_interval), t);
       const href = `/shop/${encodeURIComponent(String(p.slug))}`;
 
@@ -99,6 +102,7 @@ export function registerSubscribeView(
     <h2>${escapeHtml(t("checkout.shippingTo"))}</h2>
     <div class="brick-subf-addr">
       ${field(t("checkout.postcode"), '<input type="text" name="postcode" autocomplete="postal-code" inputmode="numeric" required maxlength="10" />')}
+      ${addrSearch ? addressSearchField() : ""}
       ${field(t("checkout.address1"), '<input type="text" name="address1" autocomplete="street-address" required maxlength="200" />')}
     </div>
     ${field(t("checkout.address2"), '<input type="text" name="address2" autocomplete="address-line2" maxlength="200" />')}
@@ -129,7 +133,7 @@ export function registerSubscribeView(
     </p>
   </section>
 </div>
-${subscribeScript(t)}${SUBSCRIBE_CSS}`;
+${subscribeScript(t)}${addrSearch ? addressSearchScript() + ADDRESS_SEARCH_CSS : ""}${SUBSCRIBE_CSS}`;
     },
   };
 

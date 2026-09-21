@@ -375,6 +375,34 @@ contains "지역 추가 배송비를 줄로 보여준다" "$CHECKOUT" "지역 �
 contains "합계를 통째로 다시 그린다" "$CHECKOUT" "totalsHtml"
 
 echo
+echo "── 주소 검색 (우편번호를 외우는 손님은 없다)"
+#
+# 주문서는 우편번호를 다섯 자리로 직접 받고 있었다. 한국에서 자기 우편번호를
+# 아는 사람은 거의 없고, 이 사이트는 그 값으로 제주·도서산간 추가 배송비까지
+# 계산한다 — 대충 적으면 금액이 틀어진다.
+CO="$(curl -s "$API/api/render/page?path=shop/checkout")"
+contains "주문서에 주소 검색 버튼이 있다" "$CO" "주소 검색"
+contains "우편번호 칸은 그대로 쓸 수 있다" "$CO" 'name=\"postcode\"'
+# 스크립트는 **누른 뒤에** 내려온다 — 주문서를 열기만 한 사람은 제3자에 붙지 않는다
+absent "열기만 해서는 외부 스크립트를 부르지 않는다" "$CO" '<script src=\"https://t1.daumcdn.net'
+contains "누르면 그때 내려받는다" "$CO" "t1.daumcdn.net"
+# 정책에 그 출처가 열려 있어야 실제로 내려온다 (선언하지 않으면 조용히 막힌다)
+CSP_HDR="$(curl -s -D - -o /dev/null "$API/api/render/page?path=shop/checkout" | grep -i '^content-security-policy:' | tr -d '\r')"
+contains "CSP 에 스크립트 출처가 선언돼 있다" "$CSP_HDR" "https://t1.daumcdn.net"
+contains "CSP 에 검색 창(iframe) 출처도" "$CSP_HDR" "https://postcode.map.kakao.com"
+
+# 끌 수 있어야 한다 — 제3자 스크립트를 일절 두지 않으려는 가게를 위해
+curl -s -b "$CK" -X PUT "$SHOP/admin/settings" -H 'content-type: application/json' \
+  -d '{"bankAccount":"","shippingFee":3000,"freeShippingOver":50000,"returnShippingFee":3000,"pageSize":20,"notifyOrderMail":true,"addressSearch":false}' >/dev/null
+bust_cache
+CO_OFF="$(curl -s "$API/api/render/page?path=shop/checkout")"
+absent "끄면 버튼이 사라진다" "$CO_OFF" "주소 검색"
+absent "끄면 스크립트 주소도 사라진다" "$CO_OFF" "t1.daumcdn.net"
+contains "그래도 우편번호는 직접 입력할 수 있다" "$CO_OFF" 'name=\"postcode\"'
+curl -s -b "$CK" -X PUT "$SHOP/admin/settings" -H 'content-type: application/json' \
+  -d '{"bankAccount":"","shippingFee":3000,"freeShippingOver":50000,"returnShippingFee":3000,"pageSize":20,"notifyOrderMail":true,"addressSearch":true}' >/dev/null
+bust_cache
+echo
 echo "── 정기배송 신청 (관리자가 주기를 설정한 상품을 손님이 신청할 수 있는가)"
 #
 # 서버에는 가입 라우트가, 회원 화면에는 카드 등록과 해지가 있었는데 **신청 화면이

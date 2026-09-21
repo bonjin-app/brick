@@ -591,5 +591,7 @@ export const SHOP_SETTINGS_RESOURCE: AdminResource = {
       help: "단순 변심 반품에서 고객이 부담하는 반송비입니다. 불량·오배송은 이 값을 쓰지 않습니다." },
     { name: "pageSize", label: "상품 목록 개수", type: "number", required: true,
       help: "한 페이지에 보일 상품 수 (4~60)." },
+    { name: "addressSearch", label: "주문서에서 주소를 검색할 수 있게 한다", type: "boolean",
+      help: "다음(카카오) 우편번호 창을 씁니다. 스크립트는 손님이 \"주소 검색\"을 누른 뒤에야 내려오고, 열리지 않아도 우편번호를 직접 입력해 주문할 수 있습니다." },
   ],
 };

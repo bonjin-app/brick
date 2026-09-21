@@ -1,4 +1,9 @@
 {
+  "addr.blocked": "주소 검색 창을 열지 못했습니다. 우편번호를 직접 입력해주세요.",
+  "addr.close": "닫기",
+  "addr.failed": "주소 검색을 열지 못했습니다. 우편번호를 직접 입력해주세요.",
+  "addr.search": "주소 검색",
+  "addr.title": "우편번호 검색",
   "buy.addFail": "담기에 실패했습니다.",
   "buy.added": "장바구니에 담았습니다.",
   "buy.error": "오류가 발생했습니다.",
