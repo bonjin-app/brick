@@ -4,7 +4,7 @@ import { uuidv7 } from "uuidv7";
 import type { Db, OrderStatus, ShopSettings } from "./types.js";
 import { ShopError, STATUS_LABEL, STATUS_TRANSITIONS, STOCK_RESTORING } from "./types.js";
 import { quote, type Quote } from "./pricing.js";
-import { t, localeTag } from "./i18n.js";
+import { t, localeTag, label, withJosa } from "./i18n.js";
 import { isKnownPaymentMethod } from "./gateway-registry.js";
 
 /**
@@ -96,7 +96,7 @@ export async function createOrder(
   const method = orderer.paymentMethod ?? "bank_transfer";
   // 등록된 게이트웨이만 받는다 (무통장입금도 게이트웨이로 등록돼 있다)
   if (!isKnownPaymentMethod(method)) {
-    throw new ShopError(400, `지원하지 않는 결제수단입니다: ${method}`);
+    throw new ShopError(400, t("err.unsupportedMethod", { method }));
   }
 
   // 포인트는 회원만 쓸 수 있고, 실제 잔액을 넘을 수 없다.
@@ -149,7 +149,7 @@ export async function createOrder(
       const { rows } = await tx.execute(target);
       if (!rows.length) {
         // 다른 주문이 먼저 재고를 가져갔다
-        throw new ShopError(409, `"${line.productName}" 재고가 부족합니다. 장바구니를 다시 확인해주세요.`);
+        throw new ShopError(409, t("err.outOfStockLine", { name: line.productName }));
       }
     }
 
@@ -326,11 +326,11 @@ export async function changeOrderStatus(
        * 자기가 무엇을 눌렀는지조차 헷갈린다. 게다가 **다음에 무엇을 해야 하는지**
        * 말하지 않았다(결제완료에서 배송중으로 가려면 상품준비중을 거쳐야 한다).
        */
-      const next = STATUS_TRANSITIONS[current].map((s) => STATUS_LABEL[s]).join(" · ");
+      const next = STATUS_TRANSITIONS[current].map((s) => label(STATUS_LABEL[s])).join(" · ");
       throw new ShopError(
         400,
-        `${STATUS_LABEL[current]}에서 ${josa(STATUS_LABEL[to], "으로/로")} 바로 바꿀 수 없습니다.` +
-          (next ? ` 지금 바꿀 수 있는 상태: ${next}` : " 더 바꿀 수 있는 상태가 없습니다."),
+        t("err.badTransition", { from: label(STATUS_LABEL[current]), to: withJosa(label(STATUS_LABEL[to]), "으로/로") }) +
+          " " + (next ? t("err.nextStates", { states: next }) : t("err.noNextState")),
       );
     }
 

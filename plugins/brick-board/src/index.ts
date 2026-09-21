@@ -2,6 +2,7 @@ import { definePlugin, searchExcerpt, isUniqueViolation, rawResponse, SITE_TZ } 
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import { BoardError, asListStyle, effectiveReadRole, escapeHtml, hasRole, pgArray, rankOf, type Db, type SessionUser } from "./types.js";
+import { t } from "./i18n.js";
 import { hashGuestPassword } from "./guest.js";
 import { assertCanModify, canModifyPost, canReadSecret, checkWriteInterval, loadBoard, requireRole } from "./access.js";
 import { attachFiles, claimDownload, deleteAttachments, listAttachments } from "./attachments.js";
@@ -30,7 +31,7 @@ export default definePlugin(async (ctx) => {
   /** 금지 단어(사이트 설정) — 걸린 단어를 알려준다. 무엇이 문제인지 모르는 400 은 고칠 수 없다 */
   const assertClean = async (text: string) => {
     const hit = await ctx.moderation.findBannedWord(text);
-    if (hit) throw new BoardError(400, `사용할 수 없는 단어가 있습니다: ${hit}`);
+    if (hit) throw new BoardError(400, t("err.bannedWord", { word: hit }));
   };
 
   const requireManager = (req: { user: unknown }) => {
@@ -79,7 +80,7 @@ export default definePlugin(async (ctx) => {
   /** 글 목록 */
   ctx.registerRoute("GET", "/boards/:slug/posts", async (req) => {
     const board = await loadBoard(db, req.params.slug);
-    requireRole(userOf(req), board.read_role, "이 게시판 열람");
+    requireRole(userOf(req), board.read_role, "act.readBoard");
     return listPosts(db, {
       board,
       page: Number(req.query.page ?? 1),
@@ -93,7 +94,7 @@ export default definePlugin(async (ctx) => {
   ctx.registerRoute("POST", "/boards/:slug/posts", async (req) => {
     const board = await loadBoard(db, req.params.slug);
     const user = userOf(req);
-    requireRole(user, board.write_role, "글쓰기");
+    requireRole(user, board.write_role, "act.write");
     await requireCaptchaForGuest(user, req.body as never);
     await checkWriteInterval(db, board, user, ipOf(req));
     await assertClean(`${String((req.body as WritePostInput).title ?? "")} ${String((req.body as WritePostInput).content ?? "")}`);
@@ -149,7 +150,7 @@ export default definePlugin(async (ctx) => {
     if (!post) throw new BoardError(404, "글을 찾을 수 없습니다.");
 
     const user = userOf(req);
-    requireRole(user, String(post.read_role), "이 게시판 열람");
+    requireRole(user, String(post.read_role), "act.readBoard");
 
     const guestPw = req.query.pw;
     if (!canReadSecret(post as never, user, guestPw)) {
@@ -225,7 +226,7 @@ export default definePlugin(async (ctx) => {
     const cats = Array.isArray(post.categories) ? (post.categories as string[]) : [];
     const category = body.category ? String(body.category).trim() : null;
     if (category && cats.length && !cats.includes(category)) {
-      throw new BoardError(400, `허용되지 않는 분류입니다: ${category}`);
+      throw new BoardError(400, t("err.badCategory", { category }));
     }
     if (post.category_required === true && cats.length && !category) throw new BoardError(400, "분류를 선택해주세요.");
 
@@ -300,7 +301,7 @@ export default definePlugin(async (ctx) => {
     const user = userOf(req);
     if (!user) throw new BoardError(401, "이미지 삽입은 회원만 할 수 있습니다.");
     const board = await loadBoard(db, req.params.slug);
-    requireRole(user, board.write_role, "글쓰기");
+    requireRole(user, board.write_role, "act.write");
     if (!board.allow_upload) throw new BoardError(400, "이 게시판은 이미지 업로드를 허용하지 않습니다.");
     const files = await req.files();
     const file = files[0];
@@ -308,7 +309,7 @@ export default definePlugin(async (ctx) => {
     const ext = (file.fileName.match(/\.[a-z0-9]+$/i)?.[0] ?? "").toLowerCase();
     const okExt = [".png", ".jpg", ".jpeg", ".gif", ".webp"];
     if (!okExt.includes(ext) || !/^image\//.test(file.contentType)) {
-      throw new BoardError(400, `이미지 파일만 넣을 수 있습니다 (${okExt.join(", ")}).`);
+      throw new BoardError(400, t("err.imageOnly", { allowed: okExt.join(", ") }));
     }
     if (file.buffer.length > 8 * 1024 * 1024) throw new BoardError(400, "이미지는 8MB 이하만 넣을 수 있습니다.");
     const now = new Date();
@@ -341,7 +342,7 @@ export default definePlugin(async (ctx) => {
       WHERE a.id = ${req.params.id}::uuid LIMIT 1
     `);
     if (!rows[0]) throw new BoardError(404, "파일을 찾을 수 없습니다.");
-    requireRole(userOf(req), String(rows[0].download_role), "파일 다운로드");
+    requireRole(userOf(req), String(rows[0].download_role), "act.download");
 
     const file = await claimDownload(db, req.params.id);
     if (!file) throw new BoardError(404, "파일을 찾을 수 없습니다.");
@@ -368,7 +369,7 @@ export default definePlugin(async (ctx) => {
     if (!post) throw new BoardError(404, "글을 찾을 수 없습니다.");
 
     const user = userOf(req);
-    requireRole(user, String(post.comment_role), "댓글 작성");
+    requireRole(user, String(post.comment_role), "act.comment");
     await requireCaptchaForGuest(user, body);
 
     // 댓글은 서식을 허용하지 않는다 — 평문으로 저장하고 렌더 시 이스케이프한다.
@@ -538,7 +539,7 @@ export default definePlugin(async (ctx) => {
       WHERE p.id = ${req.params.id}::uuid LIMIT 1
     `);
     if (!rows[0]) throw new BoardError(404, "글을 찾을 수 없습니다.");
-    requireRole(user, String(rows[0].read_role), "이 게시판 열람");
+    requireRole(user, String(rows[0].read_role), "act.readBoard");
 
     return db.transaction(async (tx) => {
       const { rows: existing } = await tx.execute(sql`
@@ -653,13 +654,13 @@ ${items}
     const roles = ["guest", "member", "manager", "admin"];
     const role = (v: unknown, fallback: string) => {
       const s = String(v ?? fallback);
-      if (!roles.includes(s)) throw new BoardError(400, `알 수 없는 권한입니다: ${s}`);
+      if (!roles.includes(s)) throw new BoardError(400, t("err.unknownRole", { role: s }));
       return s;
     };
     const num = (v: unknown, fallback: number, min: number, max: number) => {
       const n = Math.floor(Number(v ?? fallback));
       if (!Number.isFinite(n) || n < min || n > max) {
-        throw new BoardError(400, `값이 허용 범위를 벗어났습니다 (${min}~${max}).`);
+        throw new BoardError(400, t("err.outOfRange", { min, max }));
       }
       return n;
     };
@@ -724,7 +725,7 @@ ${items}
       `);
     } catch (err) {
       if (isUniqueViolation(err, "board_boards_slug")) {
-        throw new BoardError(409, `이미 사용 중인 주소입니다: ${v.slug}`);
+        throw new BoardError(409, t("err.slugTaken", { slug: v.slug }));
       }
       throw err;
     }
@@ -753,7 +754,7 @@ ${items}
       if (!rows.length) throw new BoardError(404, "게시판을 찾을 수 없습니다.");
     } catch (err) {
       if (isUniqueViolation(err, "board_boards_slug")) {
-        throw new BoardError(409, `이미 사용 중인 주소입니다: ${v.slug}`);
+        throw new BoardError(409, t("err.slugTaken", { slug: v.slug }));
       }
       throw err;
     }
@@ -828,7 +829,7 @@ ${items}
     const title = String(g.title ?? "").trim().slice(0, 200);
     if (!title) throw new BoardError(400, "그룹 이름을 입력해주세요.");
     const role = String(g.read_role ?? "guest");
-    if (!["guest", "member", "manager", "admin"].includes(role)) throw new BoardError(400, `알 수 없는 권한입니다: ${role}`);
+    if (!["guest", "member", "manager", "admin"].includes(role)) throw new BoardError(400, t("err.unknownRole", { role }));
     const order = Math.floor(Number(g.sort_order ?? 0));
     return { slug, title, description: String(g.description ?? "").trim() || null, readRole: role,
              sortOrder: Number.isFinite(order) ? order : 0 };
@@ -843,7 +844,7 @@ ${items}
         VALUES (${id}, ${v.slug}, ${v.title}, ${v.description}, ${v.readRole}, ${v.sortOrder})
       `);
     } catch (err) {
-      if (isUniqueViolation(err, "board_groups_slug")) throw new BoardError(409, `이미 사용 중인 주소입니다: ${v.slug}`);
+      if (isUniqueViolation(err, "board_groups_slug")) throw new BoardError(409, t("err.slugTaken", { slug: v.slug }));
       throw err;
     }
     await ctx.cache.invalidateTag("pages");
@@ -934,7 +935,7 @@ ${items}
       `);
       affected = rows.length;
     } else {
-      throw new BoardError(400, `알 수 없는 작업입니다: ${action}`);
+      throw new BoardError(400, t("err.unknownAction", { action }));
     }
     await ctx.cache.invalidateTag("pages");
     return { ok: true, affected };

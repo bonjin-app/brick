@@ -324,7 +324,7 @@ export default definePlugin(async (ctx) => {
     const num = (v: unknown, fallback: number, min: number, max: number) => {
       const n = Math.floor(Number(v ?? fallback));
       if (!Number.isFinite(n) || n < min || n > max) {
-        throw new PointError(400, `값이 허용 범위를 벗어났습니다 (${min}~${max}).`);
+        throw new PointError(400, t("err.outOfRange", { min, max }));
       }
       return n;
     };

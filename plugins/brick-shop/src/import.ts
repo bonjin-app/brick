@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import { PRODUCT_STATUS_LABEL, ShopError, type Db } from "./types.js";
+import { t } from "./i18n.js";
 
 /**
  * 상품 붙여넣기 등록.
@@ -78,7 +79,7 @@ const truthy = (v: string): boolean => ["1", "y", "yes", "true", "o", "예", "y/
 export async function importProducts(db: Db, text: string, maxRows = 500): Promise<ImportResult> {
   const lines = String(text ?? "").split(/\r?\n/).filter((l) => l.trim());
   if (lines.length < 2) throw new ShopError(400, "머리글 한 줄과 상품 한 줄 이상이 필요합니다.");
-  if (lines.length - 1 > maxRows) throw new ShopError(400, `한 번에 ${maxRows}줄까지 넣을 수 있습니다.`);
+  if (lines.length - 1 > maxRows) throw new ShopError(400, t("err.tooManyRows", { n: maxRows }));
 
   const sep = lines[0].includes("\t") ? "\t" : ",";
   const header = splitLine(lines[0], sep).map((h) => COLUMNS[h.toLowerCase()] ?? COLUMNS[h] ?? "");
@@ -116,11 +117,11 @@ export async function importProducts(db: Db, text: string, maxRows = 500): Promi
       const status = !statusRaw ? "selling"
         : statusRaw in PRODUCT_STATUS_LABEL ? statusRaw
         : STATUS_BY_LABEL[statusRaw];
-      if (!status) throw new Error(`모르는 판매 상태입니다: ${statusRaw}`);
+      if (!status) throw new Error(t("err.unknownStatus", { status: statusRaw }));
 
       const catName = String(row.category ?? "").trim();
       const categoryId = catName ? catByName.get(catName) : null;
-      if (catName && !categoryId) throw new Error(`없는 분류입니다: ${catName}`);
+      if (catName && !categoryId) throw new Error(t("err.noSuchCategory", { name: catName }));
 
       const sortRaw = String(row.sortOrder ?? "").trim();
       const sortOrder = sortRaw ? Math.round(Number(sortRaw)) : 0;

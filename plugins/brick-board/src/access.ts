@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import type { BoardRow, Db, SessionUser } from "./types.js";
 import { BoardError, effectiveReadRole, hasRole } from "./types.js";
 import { verifyGuestPassword } from "./guest.js";
+import { t } from "./i18n.js";
 
 /** slug로 게시판을 읽고, 없으면 404 */
 export async function loadBoard(db: Db, slug: string): Promise<BoardRow> {
@@ -31,8 +32,14 @@ export function requireRole(
 ): void {
   if (hasRole(user, required)) return;
   // 로그인만 하면 되는 경우와 등급이 부족한 경우를 구분해야 사용자가 조치할 수 있다
-  if (!user) throw new BoardError(401, `${what}에는 로그인이 필요합니다.`);
-  throw new BoardError(403, `${what} 권한이 없습니다.`);
+  /*
+   * `what` 은 **카탈로그 키**다("act.write"). 예전에는 한국어 문구를 그대로
+   * 받아 문장에 끼웠는데, 그러면 영어 사이트에서 "Signing in is required for
+   * 글쓰기" 처럼 반쪽이 된다 — 문장과 그 안의 낱말이 같은 카탈로그를 타야 한다.
+   */
+  const act = t(what);
+  if (!user) throw new BoardError(401, t("err.loginFor", { act }));
+  throw new BoardError(403, t("err.noPermFor", { act }));
 }
 
 /**
@@ -63,7 +70,7 @@ export async function checkWriteInterval(
     ORDER BY created_at DESC LIMIT 1
   `);
   if (rows.length) {
-    throw new BoardError(429, `너무 빠르게 작성했습니다. ${board.write_interval}초 후 다시 시도해주세요.`);
+    throw new BoardError(429, t("err.tooFast", { seconds: board.write_interval }));
   }
 }
 

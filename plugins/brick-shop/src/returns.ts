@@ -5,6 +5,7 @@ import type { Db } from "./types.js";
 import { cancelReceiptsForOrder } from "./tax.js";
 import { ShopError } from "./types.js";
 import type { PointsPort } from "./orders.js";
+import { t, label, withJosa } from "./i18n.js";
 
 /**
  * 주문 취소 · 반품 · 교환.
@@ -240,11 +241,7 @@ function assertReasonAllowed(reasonCode: ReasonCode, withdrawalExpired: boolean)
   if (!withdrawalExpired) return;
   const payer = REASON_CODES[reasonCode].payer;
   if (payer === "customer") {
-    throw new ShopError(
-      400,
-      `단순 변심으로 인한 반품은 배송 완료 후 ${WITHDRAWAL_DAYS}일 안에만 신청할 수 있습니다. ` +
-        `상품에 문제가 있다면 사유를 다시 선택해주세요.`,
-    );
+    throw new ShopError(400, t("err.withdrawalExpired", { days: WITHDRAWAL_DAYS }));
   }
 }
 
@@ -294,10 +291,9 @@ export async function requestReturn(
     guestToken: params.guestToken,
   });
   if (!view.allowedKinds.includes(kind)) {
-    throw new ShopError(
-      400,
-      `현재 주문 상태에서는 ${KIND_LABEL[kind]}을 신청할 수 없습니다.`,
-    );
+    throw new ShopError(400, t("err.kindNotAllowed", {
+      kind: withJosa(label(KIND_LABEL[kind]), "을/를"),
+    }));
   }
   assertReasonAllowed(reasonCode, view.withdrawalExpired);
 
@@ -319,10 +315,10 @@ export async function requestReturn(
     const qty = Math.floor(Number(line.quantity));
     if (!Number.isInteger(qty) || qty < 1) throw new ShopError(400, "수량이 올바르지 않습니다.");
     if (qty > item.availableQty) {
-      throw new ShopError(
-        400,
-        `${josa(item.productName, "은/는")} ${item.availableQty}개까지만 신청할 수 있습니다.`,
-      );
+      throw new ShopError(400, t("err.qtyOverAvailable", {
+        name: withJosa(item.productName, "은/는"),
+        n: item.availableQty,
+      }));
     }
     if (lines.some((l) => l.orderItemId === item.orderItemId)) {
       throw new ShopError(400, "같은 상품이 두 번 포함되었습니다.");
@@ -490,10 +486,10 @@ export async function updateReturnStatus(
   const current = String(ret.status) as ReturnStatus;
   if (current === next) return { status: next, refunded: 0, stockRestored: 0, receiptsCancelled: 0 };
   if (!RETURN_TRANSITIONS[current].includes(next)) {
-    throw new ShopError(
-      400,
-      `${RETURN_STATUS_LABEL[current]} → ${RETURN_STATUS_LABEL[next]} 로는 바꿀 수 없습니다.`,
-    );
+    throw new ShopError(400, t("err.badReturnTransition", {
+      from: label(RETURN_STATUS_LABEL[current]),
+      to: label(RETURN_STATUS_LABEL[next]),
+    }));
   }
   if (next === "rejected" && !String(params.rejectReason ?? "").trim()) {
     // 거부는 반드시 이유를 남겨야 한다. 고객이 왜 거부됐는지 알아야 다투거나 승복할 수 있다.
@@ -638,11 +634,12 @@ export async function updateReturnStatus(
       } catch (err) {
         // 실패를 삼키지 않는다 — 운영자가 알아야 수동으로 처리할 수 있다.
         // 상태는 이미 completed 이므로 재고는 돌아갔고, 환불만 남는다.
-        throw new ShopError(
-          502,
-          `재고와 요청 상태는 처리했지만 환불에 실패했습니다: ${String(err)}. ` +
-            `결제 관리에서 수동 환불해주세요.`,
-        );
+        /*
+         * 이 502 는 **운영자가 본다**(반품 승인은 관리 화면의 동작이다).
+         * 그래서 자세한 이유를 그대로 싣는다 — 손님에게 가는 결제 실패와
+         * 반대 방향의 선택이다: 수동 환불을 하려면 원인을 알아야 한다.
+         */
+        throw new ShopError(502, t("err.refundFailedAfterRestock", { detail: String(err) }));
       }
     }
 

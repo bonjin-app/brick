@@ -171,10 +171,10 @@ export default definePlugin(async (ctx) => {
     const content = String(body?.content ?? "").trim();
     if (!content) throw new MemoError(400, "내용을 입력해주세요.");
     if (content.length > s.maxLength) {
-      throw new MemoError(400, `쪽지는 ${s.maxLength}자까지 보낼 수 있습니다.`);
+      throw new MemoError(400, t("err.tooLong", { n: s.maxLength }));
     }
     const banned = await ctx.moderation.findBannedWord(content);
-    if (banned) throw new MemoError(400, `사용할 수 없는 단어가 있습니다: ${banned}`);
+    if (banned) throw new MemoError(400, t("err.bannedWord", { word: banned }));
 
     // 수신자 확인 — 이메일 또는 id
     const { rows: receivers } = await db.execute(sql`
@@ -206,7 +206,7 @@ export default definePlugin(async (ctx) => {
         LIMIT 1
       `);
       if (recent.length) {
-        throw new MemoError(429, `너무 빠르게 보냈습니다. ${s.sendInterval}초 후 다시 시도해주세요.`);
+        throw new MemoError(429, t("err.tooFast", { seconds: s.sendInterval }));
       }
     }
 
@@ -225,7 +225,7 @@ export default definePlugin(async (ctx) => {
           AND created_at >= (date_trunc('day', now() AT TIME ZONE ${SITE_TZ}) AT TIME ZONE ${SITE_TZ})
       `);
       if (Number(today[0]?.n ?? 0) >= s.dailyLimit) {
-        throw new MemoError(429, `하루 발송 한도(${s.dailyLimit}건)를 초과했습니다.`);
+        throw new MemoError(429, t("err.dailyLimit", { n: s.dailyLimit }));
       }
     }
 
@@ -423,7 +423,7 @@ export default definePlugin(async (ctx) => {
     const num = (v: unknown, fallback: number, min: number, max: number) => {
       const n = Math.floor(Number(v ?? fallback));
       if (!Number.isFinite(n) || n < min || n > max) {
-        throw new MemoError(400, `값이 허용 범위를 벗어났습니다 (${min}~${max}).`);
+        throw new MemoError(400, t("err.outOfRange", { min, max }));
       }
       return n;
     };

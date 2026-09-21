@@ -22,6 +22,7 @@
 import { sql } from "drizzle-orm";
 import type { Db } from "./types.js";
 import { ShopError } from "./types.js";
+import { t } from "./i18n.js";
 
 /** 상품 상세에 붙일 만큼 (한 줄에 4개 × 2줄) */
 export const RELATED_LIMIT = 8;
@@ -80,7 +81,7 @@ export async function syncRelated(
 
   const missing = unique.filter((s) => !bySlug.has(s));
   if (missing.length) {
-    throw new ShopError(400, `이런 주소(slug)의 상품이 없습니다: ${missing.join(", ")}`);
+    throw new ShopError(400, t("err.noSuchSlugs", { slugs: missing.join(", ") }));
   }
   const self = unique.filter((s) => bySlug.get(s) === productId);
   if (self.length) throw new ShopError(400, "자기 자신을 관련 상품으로 지정할 수 없습니다.");

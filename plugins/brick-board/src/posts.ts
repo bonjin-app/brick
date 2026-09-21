@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import type { BoardRow, Db, SessionUser } from "./types.js";
 import { BoardError, hasRole } from "./types.js";
+import { t } from "./i18n.js";
 import { hashGuestPassword } from "./guest.js";
 import { sanitizeHtml } from "./sanitize.js";
 
@@ -57,7 +58,7 @@ export async function createPost(
   // 분류가 설정된 게시판이면 목록에 있는 값만 허용한다
   const category = input.category ? String(input.category).trim() : null;
   if (category && board.categories.length && !board.categories.includes(category)) {
-    throw new BoardError(400, `허용되지 않는 분류입니다: ${category}`);
+    throw new BoardError(400, t("err.badCategory", { category }));
   }
   if (board.category_required && board.categories.length && !category) {
     throw new BoardError(400, "분류를 선택해주세요.");
@@ -204,7 +205,7 @@ export function normalizeLinks(raw: unknown): string[] {
   for (const v of arr) {
     const u = String(v ?? "").trim();
     if (!u) continue;
-    if (!/^https?:\/\/[^\s<>"']+$/i.test(u)) throw new BoardError(400, `링크는 http:// 또는 https:// 로 시작해야 합니다: ${u.slice(0, 60)}`);
+    if (!/^https?:\/\/[^\s<>"']+$/i.test(u)) throw new BoardError(400, t("err.badLink", { url: u.slice(0, 60) }));
     if (u.length > 2000) throw new BoardError(400, "링크가 너무 깁니다.");
     out.push(u);
     if (out.length >= 2) break;

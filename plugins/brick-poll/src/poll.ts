@@ -275,7 +275,7 @@ export async function vote(
     throw new PollError(400, "하나만 선택할 수 있습니다.");
   }
   if (picked.length > poll.max_choices) {
-    throw new PollError(400, `최대 ${poll.max_choices}개까지 선택할 수 있습니다.`);
+    throw new PollError(400, t("err.maxChoices", { n: poll.max_choices }));
   }
 
   // 이 설문의 선택지인지 확인한다. 남의 설문 선택지 id 를 보내면
@@ -409,9 +409,9 @@ export function parseOptions(text: string): string[] {
 
   const seen = new Set<string>();
   for (const line of lines) {
-    if (line.length > 300) throw new PollError(400, `선택지가 너무 깁니다: ${line.slice(0, 30)}…`);
+    if (line.length > 300) throw new PollError(400, t("err.choiceTooLong", { text: line.slice(0, 30) }));
     const key = line.toLowerCase();
-    if (seen.has(key)) throw new PollError(400, `선택지가 중복되었습니다: ${line}`);
+    if (seen.has(key)) throw new PollError(400, t("err.choiceDup", { text: line }));
     seen.add(key);
   }
   return lines;

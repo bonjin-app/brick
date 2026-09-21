@@ -25,6 +25,7 @@ import { uuidv7 } from "uuidv7";
 import { isUniqueViolation } from "@brick/plugin-sdk";
 import type { Db } from "./types.js";
 import { ShopError } from "./types.js";
+import { t } from "./i18n.js";
 
 export const RECEIPT_KINDS = ["income_deduction", "expense_proof"] as const;
 export type ReceiptKind = (typeof RECEIPT_KINDS)[number];
@@ -176,7 +177,7 @@ export function listCashReceiptGateways(): CashReceiptGateway[] {
 
 function resolveGateway(name: string): CashReceiptGateway {
   const gw = gateways.get(name);
-  if (!gw) throw new ShopError(400, `현금영수증 발급 수단을 찾을 수 없습니다: ${name}`);
+  if (!gw) throw new ShopError(400, t("err.noCashReceiptProvider", { name }));
   return gw;
 }
 

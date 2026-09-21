@@ -1131,7 +1131,7 @@ export default definePlugin(async (ctx) => {
       `);
     } catch (err) {
       if (isUniqueViolation(err, "shop_coupons_code")) {
-        throw new ShopError(409, `쿠폰 코드 "${c.code}" 는 이미 사용 중입니다.`);
+        throw new ShopError(409, t("err.couponCodeTaken", { code: c.code }));
       }
       throw err;
     }

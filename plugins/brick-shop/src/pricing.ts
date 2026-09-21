@@ -330,7 +330,7 @@ async function applyCoupon(
       const { rows: gname } = await db.execute(sql`
         SELECT name FROM shop_grades WHERE id = ${String(c.grade_id)}::uuid LIMIT 1
       `);
-      throw new ShopError(400, `${String(gname[0]?.name ?? "특정")} 등급 전용 쿠폰입니다.`);
+      throw new ShopError(400, t("err.gradeOnlyCoupon", { grade: String(gname[0]?.name ?? t("err.someGrade")) }));
     }
   }
 

@@ -11,9 +11,17 @@
  * 를 더하면 되고, 던지는 코드는 한 줄도 바뀌지 않는다. 번역이 없으면 원문이
  * 그대로 나간다 — 조용히 비지 않는다.
  *
- * 이 검사는 **새로 더한 오류 문장이 번역 없이 남는 것**을 막는다. 값이 박힌
- * 문장(템플릿 리터럴)은 원문과 키가 달라 어차피 걸리지 않으므로 세지 않는다 —
- * 그런 문장은 ctx.t 에 파라미터로 넘겨야 한다(로드맵에 남겼다).
+ * 이 검사는 두 가지를 막는다.
+ *
+ *  1. 새로 더한 오류 문장이 **번역 없이** 남는 것.
+ *  2. 플러그인이 값을 문장에 **박아 넣는** 것(`재고가 ${n}개 남았습니다`).
+ *     그런 문장은 실행 시점 값이 리터럴과 달라 원문=키가 성립하지 않는다 —
+ *     `ctx.t("...", { n })` 로 카탈로그에서 꺼내 맞춰야 번역된다. 플러그인은
+ *     활성화 때 바인딩된 `t` 를 어디서든 부를 수 있으므로 예외를 두지 않는다.
+ *
+ * 코어·API 는 (2)를 아직 요구하지 않는다: 던지는 자리에 번역기가 없어서
+ * (`ctx.t` 는 플러그인의 것이다) 예외에 키와 파라미터를 실어 응답 경계에서
+ * 조립하는 별도 설계가 필요하다 — 로드맵에 남겼다.
  */
 import { readdirSync, statSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
@@ -81,12 +89,15 @@ for (const plugin of readdirSync(PLUGINS)) {
   const en = existsSync(enPath) ? JSON.parse(readFileSync(enPath, "utf8")) : {};
 
   const missing = new Set();
+  const interpolated = new Set();
   let plain = 0;
   for (const file of walk(src)) {
     const code = readFileSync(file, "utf8");
     for (const m of code.matchAll(THROW_RE)) {
       const msg = m[2];
       if (!HANGUL.test(msg)) continue;
+      // 값을 박아 넣은 문장은 번역될 수 없다 — 카탈로그로 옮기라고 말한다
+      if (m[1] === "`" && msg.includes("${")) { interpolated.add(msg); continue; }
       if (!isWholeMessage(m, code)) continue;
       plain += 1;
       if (typeof en[msg] !== "string") missing.add(msg);
@@ -97,15 +108,22 @@ for (const plugin of readdirSync(PLUGINS)) {
       if (typeof en[msg] !== "string") missing.add(msg);
     }
   }
-  if (!plain) continue;
+  if (!plain && interpolated.size === 0) continue;
   checked += 1;
-  if (missing.size === 0) {
+  if (missing.size === 0 && interpolated.size === 0) {
     console.log(`  ✅ ${plugin}: 오류 문장 ${plain}개가 모두 번역됩니다`);
-  } else {
+  }
+  if (missing.size > 0) {
     bad += missing.size;
     console.log(`  ❌ ${plugin}: 번역 없는 오류 문장 ${missing.size}개 — locales/en.json 에 원문을 키로 더하세요`);
     for (const m of [...missing].slice(0, 8)) console.log(`     · ${m}`);
     if (missing.size > 8) console.log(`     · … 외 ${missing.size - 8}개`);
+  }
+  if (interpolated.size > 0) {
+    bad += interpolated.size;
+    console.log(`  ❌ ${plugin}: 값을 박아 넣은 오류 문장 ${interpolated.size}개 — ctx.t("키", { 값 }) 로 옮기세요`);
+    for (const m of [...interpolated].slice(0, 8)) console.log(`     · ${m}`);
+    if (interpolated.size > 8) console.log(`     · … 외 ${interpolated.size - 8}개`);
   }
 }
 

@@ -1,4 +1,5 @@
 {
+  "err.outOfRange": "값이 허용 범위를 벗어났습니다 ({min}~{max}).",
   "point.balance": "사용 가능 포인트",
   "point.colAmount": "변동",
   "point.colDate": "날짜",

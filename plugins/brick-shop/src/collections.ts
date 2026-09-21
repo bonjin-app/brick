@@ -10,6 +10,7 @@ import { uuidv7 } from "uuidv7";
 import { isUniqueViolation } from "@brick/plugin-sdk";
 import type { Db } from "./types.js";
 import { ShopError } from "./types.js";
+import { t } from "./i18n.js";
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,98}$/;
 
@@ -81,7 +82,7 @@ async function resolveItems(db: Db, text: string): Promise<Array<{ id: string; s
   const bySlug = new Map(rows.map((r) => [String(r.slug), String(r.id)]));
   const missing = slugs.filter((s) => !bySlug.has(s));
   if (missing.length) {
-    throw new ShopError(400, `이런 주소(slug)의 상품이 없습니다: ${missing.join(", ")}`);
+    throw new ShopError(400, t("err.noSuchSlugs", { slugs: missing.join(", ") }));
   }
   return slugs.map((slug) => ({ id: bySlug.get(slug)!, slug }));
 }
@@ -113,7 +114,7 @@ export async function createCollection(db: Db, body: Record<string, unknown>): P
     });
   } catch (err) {
     if (isUniqueViolation(err, "shop_collections_slug")) {
-      throw new ShopError(409, `이미 사용 중인 주소(slug)입니다: ${c.slug}`);
+      throw new ShopError(409, t("err.slugTaken", { slug: c.slug }));
     }
     throw err;
   }
@@ -136,7 +137,7 @@ export async function updateCollection(db: Db, id: string, body: Record<string, 
     });
   } catch (err) {
     if (isUniqueViolation(err, "shop_collections_slug")) {
-      throw new ShopError(409, `이미 사용 중인 주소(slug)입니다: ${c.slug}`);
+      throw new ShopError(409, t("err.slugTaken", { slug: c.slug }));
     }
     throw err;
   }

@@ -271,6 +271,20 @@ contains "어느 칸인지는 코드 그대로" "$ERR_FIELD" '"field":"ordererNa
 # 칸 이름이 문장 안에 들어가는 오류는 조각을 카탈로그에서 꺼내 맞춘다
 contains "칸 이름이 든 문장도 영어" "$ERR_FIELD" "Please enter the orderer's name."
 
+# 값이 들어가는 문장도 번역된다 — 예전에는 문장이 코드에 박혀 있어 통째로 한국어였다
+ERR_QTY="$(curl -s -X POST "$SHOP_API/cart" -H 'content-type: application/json' \
+  -d "{\"productId\":\"$MUG_ID\",\"quantity\":0}")"
+contains "값이 들어가는 문장도 영어" "$ERR_QTY" "between 1 and 999"
+# 문장 **안의 낱말**(주문 상태)도 같은 카탈로그를 탄다 — 반쪽 번역이 가장 나쁘다
+ORDER_ID="$(curl -s -b "$CK" "$SHOP_API/admin/orders" | /usr/bin/python3 -c "
+import sys, json
+items = json.load(sys.stdin)['items']
+print(items[0]['id'] if items else '')")"
+ERR_TRANS="$(curl -s -b "$CK" -X PUT "$SHOP_API/admin/orders/$ORDER_ID" -H 'content-type: application/json' \
+  -d '{"status":"delivered"}')"
+contains "문장 안의 상태 이름도 영어" "$ERR_TRANS" "Awaiting payment"
+absent   "한국어 상태 이름이 남지 않는다" "$ERR_TRANS" "입금대기"
+
 
 echo "── 코어와 다른 플러그인의 메일도 언어를 따라간다"
 curl -s -b "$CK" -X POST "$API/api/plugins/brick-helpdesk/activate" >/dev/null

@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import { extname } from "node:path";
 import type { StorageProvider } from "@brick/plugin-sdk";
+import { t } from "./i18n.js";
 import type { BoardRow, Db } from "./types.js";
 import { ALLOWED_UPLOAD, BoardError, pgArray } from "./types.js";
 
@@ -46,7 +47,7 @@ export async function attachFiles(
 
   const already = params.existingCount ?? 0;
   if (already + files.length > board.max_files) {
-    throw new BoardError(400, `첨부파일은 최대 ${board.max_files}개까지 가능합니다.`);
+    throw new BoardError(400, t("err.tooManyFiles", { n: board.max_files }));
   }
 
   // ── 1단계: 전부 검증 ────────────────────────────────
@@ -56,18 +57,17 @@ export async function attachFiles(
     const ext = extname(file.fileName ?? "").toLowerCase();
     const allowedMimes = ALLOWED_UPLOAD[ext];
     if (!allowedMimes) {
-      throw new BoardError(
-        400,
-        `허용되지 않는 파일 형식입니다: ${ext || "(확장자 없음)"} — ` +
-          `허용: ${Object.keys(ALLOWED_UPLOAD).join(", ")}`,
-      );
+      throw new BoardError(400, t("err.badFileType", {
+        ext: ext || t("err.noExt"),
+        allowed: Object.keys(ALLOWED_UPLOAD).join(", "),
+      }));
     }
     // hwp 등 일부 형식은 브라우저가 MIME을 제대로 못 붙이므로 octet-stream을 허용한다
     if (!allowedMimes.includes(file.contentType) && file.contentType !== "application/octet-stream") {
-      throw new BoardError(400, `파일 내용과 확장자가 일치하지 않습니다 (${file.contentType}).`);
+      throw new BoardError(400, t("err.mimeMismatch", { type: file.contentType }));
     }
     if (!file.buffer?.length) {
-      throw new BoardError(400, `빈 파일은 첨부할 수 없습니다: ${file.fileName}`);
+      throw new BoardError(400, t("err.emptyFile", { name: file.fileName }));
     }
 
     const id = uuidv7();

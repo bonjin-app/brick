@@ -6,7 +6,7 @@
  * 함수 시그니처에 t 를 꿰는 기계적 소음을 없앤다. 활성화 때 bindI18n(ctx).
  */
 import type { PluginContext } from "@brick/plugin-sdk";
-import { SITE_TZ } from "@brick/plugin-sdk";
+import { SITE_TZ, josa } from "@brick/plugin-sdk";
 
 type TFn = PluginContext["t"];
 
@@ -70,4 +70,29 @@ export function moneyFnScript(name = "fmt"): string {
  */
 export function dateOptsScript(name = "DATE_OPTS"): string {
   return `var ${name} = { timeZone: ${JSON.stringify(SITE_TZ)} };`;
+}
+
+/**
+ * 선언 라벨(한국어 원문)을 사이트 언어로 — **원문이 곧 키**다.
+ *
+ * 주문 상태·반품 종류처럼 코드 안의 Record 로 사는 라벨이 오류 문장에 들어간다
+ * ("결제완료에서 배송중으로 바로 바꿀 수 없습니다"). 문장만 번역하면 그 안의
+ * 낱말이 한국어로 남아 반쪽이 된다.
+ *
+ * ko 에서는 **찾지 않는다** — 원문이 곧 답이므로, 빠짐 로그를 내면 모든 라벨이
+ * 노이즈가 된다. 다른 언어에서 번역이 없으면 원문이 나가고 한 번 로그된다.
+ */
+export function label(text: string): string {
+  return boundLocale() === "ko" ? text : boundT(text);
+}
+
+/**
+ * 조사는 **한국어에서만** 붙인다.
+ *
+ * `josa("배송중", "으로/로")` 은 한국어의 문법이다 — 영어 라벨에 붙이면
+ * "Shipping으로" 가 된다. 문장 템플릿은 언어마다 다르므로, 조사가 필요 없는
+ * 언어에서는 낱말을 그대로 돌려준다.
+ */
+export function withJosa(text: string, pair: string): string {
+  return boundLocale() === "ko" ? josa(text, pair) : text;
 }

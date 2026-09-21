@@ -1,4 +1,7 @@
 {
+  "err.choiceDup": "That choice is duplicated: {text}",
+  "err.choiceTooLong": "That choice is too long: {text}…",
+  "err.maxChoices": "You can choose up to {n}.",
   "poll.alreadyVoted": "You have already voted.",
   "poll.closed": "This poll is closed.",
   "poll.commentPlaceholder": "Other thoughts (optional)",

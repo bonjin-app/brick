@@ -1,10 +1,10 @@
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
-import type { Db } from "./types.js";
-import { ShopError } from "./types.js";
+import type { Db, OrderStatus } from "./types.js";
+import { ShopError, STATUS_LABEL } from "./types.js";
 import { changeOrderStatus, type PointsPort } from "./orders.js";
 import { isUniqueViolation } from "@brick/plugin-sdk";
-import { t, money } from "./i18n.js";
+import { t, money, label } from "./i18n.js";
 import { gateways, registerGateway } from "./gateway-registry.js";
 
 /**
@@ -192,7 +192,7 @@ export async function confirmPayment(
   },
 ): Promise<{ ok: boolean; orderNo: string; amount: number }> {
   const gateway = gateways.get(params.provider);
-  if (!gateway) throw new ShopError(400, `등록되지 않은 결제수단입니다: ${params.provider}`);
+  if (!gateway) throw new ShopError(400, t("err.unknownProvider", { provider: params.provider }));
 
   // ── 1. 주문 확인 (금액의 기준은 언제나 DB) ──────────
   const { rows: orderRows } = await db.execute(sql`
@@ -220,7 +220,7 @@ export async function confirmPayment(
     throw new ShopError(409, "이미 결제가 완료된 주문입니다.");
   }
   if (order.status !== "pending") {
-    throw new ShopError(400, `결제할 수 없는 주문 상태입니다: ${order.status}`);
+    throw new ShopError(400, t("err.notPayableStatus", { status: label(STATUS_LABEL[order.status as OrderStatus] ?? String(order.status)) }));
   }
 
   // ── 2. 결제 시도 기록 (중복은 unique 인덱스가 막는다) ──
@@ -354,7 +354,7 @@ export async function refundPayment(
   if (!payment) throw new ShopError(404, "환불할 결제 내역이 없습니다.");
 
   const gateway = gateways.get(String(payment.provider));
-  if (!gateway) throw new ShopError(400, `${payment.provider} 게이트웨이가 활성화되지 않았습니다.`);
+  if (!gateway) throw new ShopError(400, t("err.gatewayOff", { provider: String(payment.provider) }));
 
   const paid = Number(payment.amount);
   const already = Number(payment.refunded_amount);

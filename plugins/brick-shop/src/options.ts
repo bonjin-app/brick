@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import type { Db } from "./types.js";
 import { ShopError } from "./types.js";
+import { t } from "./i18n.js";
 
 /**
  * 상품 옵션 관리.
@@ -39,11 +40,11 @@ export function parseOptions(text: string): ParsedOption[] {
   return lines.map((line, index) => {
     const parts = line.split("|").map((p) => p.trim());
     const name = parts[0];
-    if (!name) throw new ShopError(400, `${index + 1}번째 옵션: 이름이 비어 있습니다.`);
-    if (name.length > 200) throw new ShopError(400, `${index + 1}번째 옵션: 이름이 너무 깁니다.`);
+    if (!name) throw new ShopError(400, t("err.optionNameEmpty", { n: index + 1 }));
+    if (name.length > 200) throw new ShopError(400, t("err.optionNameLong", { n: index + 1 }));
 
     const key = name.toLowerCase();
-    if (seen.has(key)) throw new ShopError(400, `옵션 이름이 중복되었습니다: ${name}`);
+    if (seen.has(key)) throw new ShopError(400, t("err.optionDup", { name }));
     seen.add(key);
 
     // 추가금: 비우면 0. 음수(할인 옵션)도 허용하되 상품가를 넘지 못하게 하는 것은
@@ -51,14 +52,14 @@ export function parseOptions(text: string): ParsedOption[] {
     const extraRaw = parts[1] ?? "";
     const extraPrice = extraRaw === "" ? 0 : Math.floor(Number(extraRaw));
     if (!Number.isFinite(extraPrice)) {
-      throw new ShopError(400, `${index + 1}번째 옵션 "${name}": 추가금이 숫자가 아닙니다.`);
+      throw new ShopError(400, t("err.optionExtraNaN", { n: index + 1, name }));
     }
 
     // 재고: 비우면 무한(null)
     const stockRaw = parts[2] ?? "";
     const stock = stockRaw === "" ? null : Math.floor(Number(stockRaw));
     if (stock !== null && (!Number.isFinite(stock) || stock < 0)) {
-      throw new ShopError(400, `${index + 1}번째 옵션 "${name}": 재고가 올바르지 않습니다.`);
+      throw new ShopError(400, t("err.optionStockBad", { n: index + 1, name }));
     }
 
     return { name, extraPrice, stock };
@@ -142,7 +143,7 @@ export function parseImages(text: string): string[] {
     // 상대 경로(/uploads/...) 또는 http(s)만 허용한다.
     // javascript: 같은 스킴이 img src에 들어가는 것을 막는다.
     if (!/^(\/|https?:\/\/)/.test(url)) {
-      throw new ShopError(400, `이미지 주소가 올바르지 않습니다: ${url.slice(0, 60)}`);
+      throw new ShopError(400, t("err.badImageUrl", { url: url.slice(0, 60) }));
     }
     if (url.length > 1000) throw new ShopError(400, "이미지 주소가 너무 깁니다.");
   }

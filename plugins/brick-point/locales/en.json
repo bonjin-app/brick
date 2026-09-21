@@ -1,6 +1,7 @@
 {
   "0이면 무기한. 오래된 포인트부터 자동으로 사용됩니다.": "0 = no expiry. Oldest points are spent first, automatically.",
   "1일 1회": "Once per day",
+  "err.outOfRange": "The value is out of range ({min}–{max}).",
   "point.balance": "Available points",
   "point.colAmount": "Change",
   "point.colDate": "Date",

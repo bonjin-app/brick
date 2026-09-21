@@ -42,6 +42,7 @@ import { sql } from "drizzle-orm";
 import { SITE_TZ, siteToday } from "@brick/plugin-sdk";
 import type { PluginDb } from "@brick/plugin-sdk";
 import { ShopError } from "./types.js";
+import { t } from "./i18n.js";
 
 /** 사이트 시간대 — 정의는 @brick/core 하나다 (복사본 다섯이 우연히 같길 비는 대신) */
 export { SITE_TZ };
@@ -93,8 +94,8 @@ export function parsePeriod(query: Record<string, unknown>): Period {
     const t = new Date(`${d}T00:00:00Z`);
     return !Number.isNaN(t.getTime()) && t.toISOString().slice(0, 10) === d;
   };
-  if (!isRealDate(from)) throw new ShopError(400, `없는 날짜입니다: ${from}`);
-  if (!isRealDate(to)) throw new ShopError(400, `없는 날짜입니다: ${to}`);
+  if (!isRealDate(from)) throw new ShopError(400, t("err.badDate", { date: from }));
+  if (!isRealDate(to)) throw new ShopError(400, t("err.badDate", { date: to }));
   if (from > to) throw new ShopError(400, "from 이 to 보다 뒤입니다.");
 
   // 상한을 둔다 — 일별로 10년을 뽑으면 3천 행이 넘고 화면이 죽는다
