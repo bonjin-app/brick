@@ -71,6 +71,7 @@
   "쪽지를 찾을 수 없습니다.": "Message not found.",
   "쪽지함": "Messages",
   "최대 글자 수": "Max length",
+  "페이지 주소를 'memo' 로 만들면 받은함·보낸함·쓰기가 모두 동작합니다": "Give the page the slug \"memo\" and the inbox, sent box and compose screens all work",
   "하루 발송 한도": "Daily send limit",
   "회원을 찾을 수 없습니다.": "Member not found."
 }

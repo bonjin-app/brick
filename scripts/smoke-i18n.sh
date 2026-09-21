@@ -207,6 +207,18 @@ contains "장바구니 스크립트의 포맷터도 영어" "$(curl -s "$API/api
 # 이 응답은 JSON 이므로 큰따옴표가 \" 로 온다 — 검사 문자열도 그 모양이어야 한다
 contains "주문내역 스크립트에 날짜 태그" "$(curl -s "$API/api/render/page?path=shop/orders")" 'var TAG = \"en-US\"'
 
+echo "── 페이지 빌더의 블록 서랍도 언어를 따라간다"
+#
+# 관리 화면은 전부 번역돼 있는데 **사이트를 만드는 첫 화면**인 블록 서랍만
+# 한국어였다 — 빌더는 서버가 준 displayName·속성 title 을 그대로 그린다.
+BLOCKS_EN="$(curl -s "$API/api/blocks")"
+contains "코어 블록 이름이 영어" "$BLOCKS_EN" '"displayName":"Hero (large headline area)"'
+contains "코어 블록 속성 제목도 영어" "$BLOCKS_EN" '"title":"Background image URL (text is laid over it)"'
+contains "플러그인 블록 이름도 영어" "$BLOCKS_EN" '"displayName":"Product detail"'
+absent   "한국어 블록 이름이 남지 않는다" "$BLOCKS_EN" '"displayName":"문단"'
+# 키·타입은 데이터다 — 번역되면 저장된 페이지의 props 가 붙을 곳을 잃는다
+contains "속성 키는 그대로" "$BLOCKS_EN" '"eyebrow"'
+
 echo "── 서버 오류 메시지도 언어를 따라간다"
 #
 # 화면은 전부 영어인데 주문 버튼을 누르면 "재고가 부족합니다." 가 떴다 —
@@ -227,6 +239,7 @@ contains "코어 검증 오류도 영어" "$ERR_PAGE" "only lowercase letters"
 # 한국어 사이트로 돌리면 원문이 그대로 나온다 (번역은 덮어쓰기가 아니라 치환이다)
 curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"site.locale":"ko"}' >/dev/null
 contains "ko 로 되돌리면 한국어" "$(curl -s "$SHOP_API/products/no-such-product")" "상품을 찾을 수 없습니다"
+contains "블록 서랍도 ko 로 되돌아온다" "$(curl -s "$API/api/blocks")" '"displayName":"문단"'
 contains "코어 문장도 ko 로 되돌아온다" \
   "$(curl -s -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' -d '{"title":"x","slug":"BAD SLUG"}')" \
   "소문자/숫자/하이픈"

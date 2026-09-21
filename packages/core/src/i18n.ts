@@ -420,3 +420,76 @@ export function translateCoreError(locale: Locale, message: string): string {
 
 /** 검사 스크립트가 읽는 원문 목록 — 번역이 빠진 오류 문장을 CI 가 잡는다 */
 export const CORE_ERROR_SOURCES = Object.keys(CORE_ERROR_EN);
+
+/**
+ * 코어 블록의 **선언 라벨** — 페이지 빌더가 읽는 이름과 속성 제목.
+ *
+ * 빌더는 서버가 준 `displayName`·속성 `title` 을 그대로 그린다. 그래서 영어
+ * 사이트의 운영자에게도 블록 서랍이 "제목 · 문단 · 히어로 (큰 제목 영역)" 로
+ * 보였다 — 관리 화면의 나머지는 다 영어인데 **페이지를 만드는 바로 그 화면만**
+ * 한국어였다. 플러그인 블록은 각자의 locales/en.json 이 받고(같은 gettext
+ * 규칙), 코어 블록은 코드 안에 사는 선언이라 여기서 받는다.
+ */
+const CORE_LABEL_EN: MessageCatalog = {
+  "제목": "Heading",
+  "내용": "Text",
+  "크기 (1-3)": "Size (1–3)",
+  "문단": "Paragraph",
+  "이미지": "Image",
+  "이미지 URL": "Image URL",
+  "대체 텍스트": "Alt text",
+  "다단 레이아웃": "Columns",
+  "간격(px)": "Gap (px)",
+  "히어로 (큰 제목 영역)": "Hero (large headline area)",
+  "작은 위 라벨": "Small label above",
+  "설명": "Description",
+  "버튼 1 문구": "Button 1 label",
+  "버튼 1 링크": "Button 1 link",
+  "버튼 2 문구": "Button 2 label",
+  "버튼 2 링크": "Button 2 link",
+  "배경 없이 (글자만)": "No background (text only)",
+  "배경 이미지 URL (있으면 그 위에 글자를 얹는다)": "Background image URL (text is laid over it)",
+  "특징 카드": "Feature cards",
+  "묶음 제목 (비우면 표시 안 함)": "Group heading (hidden when empty)",
+  "카드 — 한 줄에 하나: 제목 | 설명 | 링크(선택) | 아이콘(선택: truck, shield, chat, clock, star, check, heart, pin, mail, phone, image, cart, user, bell)":
+    "Cards — one per line: title | description | link (optional) | icon (optional: truck, shield, chat, clock, star, check, heart, pin, mail, phone, image, cart, user, bell)",
+  "행동 유도 배너": "Call-to-action banner",
+  "버튼 문구": "Button label",
+  "버튼 링크": "Button link",
+  "자주 묻는 질문": "FAQ",
+  "한 줄에 하나: 질문 | 답변": "One per line: question | answer",
+  "알림 박스": "Callout box",
+  "색 (info/success/warning/danger)": "Color (info/success/warning/danger)",
+  "이미지 + 글": "Image with text",
+  "이미지 설명(대체 텍스트)": "Image description (alt text)",
+  "본문": "Body",
+  "이미지를 오른쪽에": "Image on the right",
+  "숫자 강조": "Highlighted numbers",
+  "한 줄에 하나: 숫자 | 라벨": "One per line: number | label",
+  "고객 후기": "Testimonials",
+  "한 줄에 하나: 인용문 | 이름 | 소속(선택)": "One per line: quote | name | affiliation (optional)",
+  "이미지 갤러리": "Image gallery",
+  "한 줄에 하나: 이미지 URL | 캡션 | 링크(선택)": "One per line: image URL | caption | link (optional)",
+  "열 수 (2~5)": "Columns (2–5)",
+  "배너 슬라이드": "Banner slides",
+  "한 줄에 하나: 이미지 URL | 제목(선택) | 설명(선택) | 링크(선택)":
+    "One per line: image URL | title (optional) | description (optional) | link (optional)",
+  "높이 px (기본 420, 0 이면 이미지 비율)": "Height in px (420 by default; 0 keeps the image ratio)",
+  "자동 넘김 초 (0 이면 자동 넘김 없음)": "Auto-advance seconds (0 turns it off)",
+  "화면 폭 꽉 채우기": "Full-bleed width",
+  "구분선": "Divider",
+  "여백": "Spacer",
+  "높이(px)": "Height (px)",
+  "통합검색": "Site search",
+};
+
+const CORE_LABELS: Partial<Record<Locale, MessageCatalog>> = { en: CORE_LABEL_EN };
+
+/** 코어가 선언한 라벨을 사이트 언어로 — 없으면 원문 그대로(자연 폴백) */
+export function translateCoreLabel(locale: Locale, text: string): string {
+  if (locale === DEFAULT_LOCALE) return text;
+  return CORE_LABELS[locale]?.[text] ?? text;
+}
+
+/** 검사 스크립트가 읽는 원문 목록 */
+export const CORE_LABEL_SOURCES = Object.keys(CORE_LABEL_EN);

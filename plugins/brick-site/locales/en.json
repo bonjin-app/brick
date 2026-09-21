@@ -44,6 +44,7 @@
   "이미지": "Image",
   "일별 합계 보관 기간(일)": "Keep daily totals for (days)",
   "작을수록 먼저.": "Lower comes first.",
+  "접속자 집계": "Visitor counter",
   "제목": "Title",
   "제목을 입력해주세요.": "Please enter a title.",
   "제목이 너무 깁니다.": "The title is too long.",
@@ -51,10 +52,13 @@
   "종류": "Type",
   "종류가 올바르지 않습니다.": "That type is not valid.",
   "주소는 / 또는 http(s):// 로 시작해야 합니다.": "A URL must start with / or http(s)://.",
+  "최고 방문자 표시": "Show the all-time peak",
   "클릭": "Clicks",
   "클릭 시 이동": "Link URL",
   "팝업": "Popup",
   "팝업 · 배너": "Popups · Banners",
   "팝업을 찾을 수 없습니다.": "Popup not found.",
+  "표시 (inline | box)": "Display (inline | box)",
+  "표시 개수": "How many to show",
   "현재 창": "Same window"
 }

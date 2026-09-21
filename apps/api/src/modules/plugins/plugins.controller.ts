@@ -6,7 +6,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { eq, sql } from "drizzle-orm";
 import { siteSettings, type BrickDb } from "@brick/database";
 import type { MailProvider } from "@brick/core";
-import { SITE_TZ, isRawResponse, rankOf, type PluginUploadedFile } from "@brick/core";
+import { SITE_TZ, isRawResponse, rankOf, translateCoreLabel, type PluginUploadedFile } from "@brick/core";
 import { PluginLoaderService } from "./plugin-loader.service.js";
 import { AdminGuard, ManagerGuard } from "../auth/auth.guard.js";
 import { AuthService } from "../auth/auth.service.js";
@@ -457,13 +457,30 @@ export class PluginsController {
     return { items: this.loader.memberMenu() };
   }
 
-  /** 페이지 빌더가 사용할 블록 카탈로그 */
+  /**
+   * 페이지 빌더가 사용할 블록 카탈로그.
+   *
+   * 이름과 속성 제목도 **사이트 언어를 따른다.** 빌더는 여기서 준 문자열을
+   * 그대로 그리므로, 번역하지 않으면 영어 사이트의 운영자에게도 블록 서랍이
+   * "제목 · 문단 · 히어로 (큰 제목 영역)" 로 보인다 — 관리 화면의 나머지는 다
+   * 영어인데 **페이지를 만드는 바로 그 화면만** 한국어였다.
+   *
+   * 선언 라벨과 같은 gettext 규칙이다(원문=키): 플러그인 블록은 각자의
+   * locales/en.json 이, 코어 블록(`core/…`)은 코어 카탈로그가 받는다.
+   */
   @Get("blocks")
-  blocks() {
+  async blocks() {
+    await this.loader.refreshLocale();
+    const locale = this.loader.siteLocale;
+    const tr = (name: string, text?: string): string | undefined => {
+      if (!text) return text;
+      const plugin = name.split("/")[0];
+      return plugin === "core" ? translateCoreLabel(locale, text) : this.loader.trCatalog(plugin, text);
+    };
     return [...this.loader.blocks.values()].map(({ name, displayName, propsSchema }) => ({
       name,
-      displayName,
-      propsSchema,
+      displayName: tr(name, displayName) ?? displayName,
+      propsSchema: localizeSchema(propsSchema, (text) => tr(name, text) ?? text),
     }));
   }
 
@@ -491,4 +508,27 @@ export class PluginsController {
     });
     return { html };
   }
+}
+
+/**
+ * 블록 속성 스키마의 **보이는 글자만** 갈아 끼운다.
+ *
+ * 키(`limit`·`columns`)와 타입·기본값은 그대로 둔다 — 그것은 데이터이고,
+ * 저장된 페이지의 props 가 그 키로 붙어 있다. 번역되면 페이지가 깨진다.
+ */
+function localizeSchema(
+  schema: { type?: string; properties?: Record<string, Record<string, unknown>> } | undefined,
+  tr: (text: string) => string,
+): unknown {
+  const props = schema?.properties;
+  if (!props) return schema;
+  const out: Record<string, Record<string, unknown>> = {};
+  for (const [key, meta] of Object.entries(props)) {
+    const next: Record<string, unknown> = { ...meta };
+    for (const field of ["title", "description"]) {
+      if (typeof next[field] === "string") next[field] = tr(next[field] as string);
+    }
+    out[key] = next;
+  }
+  return { ...schema, properties: out };
 }

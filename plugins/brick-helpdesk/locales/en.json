@@ -60,6 +60,7 @@
   "mail.answeredSubject": "[Inquiry {no}] Your inquiry has been answered",
   "mail.answeredTitle": "Subject: {title}",
   "mail.answeredVisit": "Please sign in to the site to read it.",
+  "검색창": "Search box",
   "권한이 없습니다.": "You do not have permission.",
   "내용을 입력해주세요.": "Please enter some content.",
   "내용이 너무 깁니다.": "The content is too long.",
@@ -89,7 +90,9 @@
   "문의번호": "Ticket no.",
   "보이는 문자 입력": "Type the characters shown",
   "분류": "Category",
+  "분류 slug (비우면 전체)": "Category slug (all categories when empty)",
   "분류 지정": "Category id",
+  "분류 탭": "Category tabs",
   "분류를 목록에서 골라주세요.": "Please choose a category from the list.",
   "분류를 찾을 수 없습니다.": "Category not found.",
   "분류명": "Category name",
@@ -127,5 +130,6 @@
   "질문이 너무 깁니다. (500자 이내)": "The question is too long (500 characters maximum).",
   "켜면 로그인 없이 문의를 남길 수 있습니다. 자동입력 방지 문자를 함께 요구합니다.": "When on, visitors can submit tickets without logging in. A CAPTCHA is required.",
   "표시": "Visible",
+  "표시 개수": "How many to show",
   "한 줄에 하나씩 적습니다 (최대 20개).": "One per line (up to 20)."
 }
