@@ -34,7 +34,28 @@ export class PluginsController {
   @Get("plugins")
   async list() {
     const manifests = await this.loader.discover();
-    return manifests.map((m) => ({ ...m, isActive: this.loader.isActive(m.name) }));
+    const failed = this.loader.failedPlugins();
+    const rows = manifests.map((m) => ({
+      ...m,
+      isActive: this.loader.isActive(m.name),
+      failed: failed.find((f) => f.name === m.name)?.message ?? null,
+    }));
+    /*
+     * 파일이 사라진 플러그인은 `discover()` 에 잡히지 않는다 — 목록에서 **통째로
+     * 없어진다.** 켜 두었던 쇼핑몰이 화면에서 사라지면 운영자는 자기가 지웠나
+     * 의심하게 되고, 어디를 고쳐야 하는지 알 수 없다. 이름과 이유를 남긴다.
+     */
+    const vanished = failed
+      .filter((f) => !manifests.some((m) => m.name === f.name))
+      .map((f) => ({
+        name: f.name,
+        displayName: f.name,
+        version: "",
+        description: f.message,
+        isActive: false,
+        failed: f.message,
+      }));
+    return [...rows, ...vanished];
   }
 
   /** plugin.zip 업로드 설치 (관리자) */
@@ -249,6 +270,19 @@ export class PluginsController {
       this.businessInfoMissing(),
     ]);
     const setup = this.setupWarnings();
+    /*
+     * 켜 두었는데 돌지 않는 플러그인 — 볼륨이 안 붙었거나 경로가 어긋났다.
+     *
+     * 이것이야말로 "틀려도 아무 일도 일어나지 않는" 설정이다: 서버는 멀쩡히 뜨고,
+     * 관리 화면도 열리고, **손님 쪽에서만** 상품과 게시판이 통째로 사라진다.
+     */
+    const failed = this.loader.failedPlugins();
+    if (failed.length) {
+      setup.push({
+        id: "pluginNotRunning",
+        docs: "https://github.com/bonjin-app/brick/blob/main/docs/plugin-development.md",
+      });
+    }
     if (businessMissing) {
       setup.push({
         id: "businessInfoMissing",

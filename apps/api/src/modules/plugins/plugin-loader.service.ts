@@ -180,12 +180,29 @@ export class PluginLoaderService implements OnModuleInit {
       try {
         await this.activate(p.name, { skipMigrations: false });
       } catch (err) {
+        /*
+         * **켜 두었다는 사실은 운영자의 뜻이다 — 부팅 실패로 지우지 않는다.**
+         *
+         * 예전에는 여기서 `is_active = false` 로 내렸다. 그러면 볼륨이 아직 안
+         * 붙은 컨테이너, 잘못 잡힌 BRICK_PLUGINS_DIR, 부팅 순간의 DB 딸꾹질
+         * 하나로 **쇼핑몰이 꺼지고, 환경을 고쳐도 돌아오지 않는다.** 운영자가
+         * 알아채고 다시 켜기 전까지 상품도 주문도 회원 메뉴도 전부 사라진 채다.
+         * (개발 중에 실제로 겪었다: API 를 다른 디렉터리에서 띄운 것만으로
+         *  게시판과 쇼핑몰이 DB 에서 꺼졌다)
+         *
+         * 실패는 **지금 이 프로세스의 상태**로만 남긴다. 원인이 사라지면 다음
+         * 부팅에 저절로 돌아오고, 정말 못 쓰는 플러그인이면 운영자가 화면에서
+         * 끈다 — 시스템은 알리고, 사람이 정한다.
+         */
         const missing = (err as { code?: string })?.code === "ENOENT";
-        await this.db.update(installedPlugins).set({ isActive: false }).where(eq(installedPlugins.name, p.name));
+        const message = missing
+          ? "플러그인 파일을 찾지 못했습니다 (설치 경로·볼륨을 확인하세요)"
+          : `활성화에 실패했습니다: ${err instanceof Error ? err.message : String(err)}`;
+        this.bootFailures.set(p.name, { missing, message });
         if (missing) {
-          this.logger.warn(`plugin "${p.name}" files are missing — deactivated. 재설치하거나 삭제하세요.`);
+          this.logger.warn(`plugin "${p.name}" files are missing — 켜 둔 상태는 그대로 둡니다. 경로·볼륨을 확인하세요.`);
         } else {
-          this.logger.error(`plugin "${p.name}" failed to activate on boot — deactivated`, err as Error);
+          this.logger.error(`plugin "${p.name}" failed to activate on boot — 켜 둔 상태는 그대로 둡니다`, err as Error);
         }
       }
     }
@@ -193,6 +210,16 @@ export class PluginLoaderService implements OnModuleInit {
 
   isActive(name: string): boolean {
     return this.instances.has(name);
+  }
+
+  /**
+   * 켜 두었는데 **지금 돌지 않는** 플러그인 — 부팅 때 못 켠 것들.
+   *
+   * DB 의 is_active 는 그대로다(운영자의 뜻). 이 목록은 화면이 "왜 안 보이는지"를
+   * 말하는 데 쓴다 — 아무 말 없이 사라지는 것이 가장 나쁘다.
+   */
+  failedPlugins(): Array<{ name: string; missing: boolean; message: string }> {
+    return [...this.bootFailures.entries()].map(([name, v]) => ({ name, ...v }));
   }
 
   async discover(): Promise<PluginManifest[]> {
@@ -209,6 +236,8 @@ export class PluginLoaderService implements OnModuleInit {
   async activate(name: string, opts = { skipMigrations: false }): Promise<void> {
     if (this.instances.has(name)) return;
     const manifest = await this.readManifest(name);
+    // 다시 켜졌으면 실패 기록은 사라진다 (화면이 옛 이유를 계속 말하면 안 된다)
+    this.bootFailures.delete(name);
 
     // ZIP 으로 설치된 플러그인은 node_modules 가 없다 — 공유 의존성 링크를 보증한다
     await this.ensureSharedDependencies(name);
@@ -328,6 +357,13 @@ export class PluginLoaderService implements OnModuleInit {
     }
     // 번역 카탈로그도 놓아준다 — 다시 켜면 활성화 때 새로 읽는다
     this.pluginCatalogs.delete(name);
+    /*
+     * 운영자가 직접 껐으면 실패 기록도 지운다.
+     *
+     * 파일이 없어 못 켠 확장을 화면에서 끄는 것은 "이제 안 쓴다" 는 뜻이다 —
+     * 그 뒤로도 대시보드가 "켜 둔 확장이 돌지 않습니다" 라고 말하면 거짓말이 된다.
+     */
+    this.bootFailures.delete(name);
     // 꺼진 플러그인 때문에 정책이 계속 넓게 열려 있으면 안 된다
     this.csp.declare(name, undefined);
     this.logger.log(`plugin "${name}" deactivated`);
@@ -338,6 +374,8 @@ export class PluginLoaderService implements OnModuleInit {
   private readonly pluginCatalogs = new Map<string, Partial<Record<Locale, MessageCatalog>>>();
   /** 빠진 키는 한 번만 로그한다 — 렌더마다 찍히면 로그가 로그를 덮는다 */
   private readonly missingKeyLogged = new Set<string>();
+  /** 부팅 때 켜지 못한 플러그인 (프로세스 상태 — DB 에 쓰지 않는다) */
+  private readonly bootFailures = new Map<string, { missing: boolean; message: string }>();
   /**
    * 사이트 locale 캐시 (TTL 10초).
    *

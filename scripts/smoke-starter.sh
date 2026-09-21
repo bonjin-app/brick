@@ -274,6 +274,32 @@ contains "/shop 목록에도 나온다" "$(curl -s "$API/api/render/page?path=sh
 contains "/shop/first 상세도 그려진다 (storefront 라우팅)" \
   "$(curl -s "$API/api/render/page?path=shop/first")" "brick-buy-form"
 
+echo "══ 확장 파일이 사라졌다 돌아오면 ══"
+#
+# 켜 두었다는 사실은 **운영자의 뜻**이다. 예전에는 부팅 때 파일을 못 찾으면 그
+# 자리에서 `is_active = false` 로 내렸다 — 볼륨이 아직 안 붙은 컨테이너,
+# 잘못 잡힌 BRICK_PLUGINS_DIR, 부팅 순간의 딸꾹질 하나로 쇼핑몰이 꺼지고
+# **환경을 고쳐도 돌아오지 않았다.** (개발 중에 실제로 겪었다)
+check "지금은 쇼핑몰이 돌고 있다" "$(code "$API/api/plugins/brick-shop/products")" "200"
+EMPTY_DIR="$TMP/no-plugins"; mkdir -p "$EMPTY_DIR"
+stop_server
+export BRICK_PLUGINS_DIR="$EMPTY_DIR"
+start_server
+check "파일이 없어도 서버는 뜬다" "$(code "$API/readyz")" "200"
+check "켜 둔 상태는 DB 에 그대로 남는다" \
+  "$(psql_q "SELECT is_active FROM installed_plugins WHERE name='brick-shop'")" "true"
+DASH="$(curl -s -b "$CK" "$API/api/admin/dashboard")"
+contains "대시보드가 이유를 말한다" "$DASH" "pluginNotRunning"
+contains "목록에서 사라지지 않고 이유가 붙는다" \
+  "$(curl -s -b "$CK" "$API/api/plugins")" "플러그인 파일을 찾지 못했습니다"
+
+stop_server
+export BRICK_PLUGINS_DIR="$ROOT/plugins"
+start_server
+# 운영자가 아무것도 하지 않아도 돌아와야 한다 — 고친 것은 환경뿐이다
+check "경로를 고치면 저절로 돌아온다" "$(code "$API/api/plugins/brick-shop/products")" "200"
+absent "대시보드 경고도 사라진다" "$(curl -s -b "$CK" "$API/api/admin/dashboard")" "pluginNotRunning"
+
 echo "══ 회사 홈페이지 스타터 ══"
 R="$(fresh_install company "본진테크")"
 contains "설치 성공" "$R" '"ok":true'
