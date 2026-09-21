@@ -371,6 +371,46 @@ contains "지역 추가 배송비를 줄로 보여준다" "$CHECKOUT" "지역 �
 contains "합계를 통째로 다시 그린다" "$CHECKOUT" "totalsHtml"
 
 echo
+echo "── 정기배송 신청 (관리자가 주기를 설정한 상품을 손님이 신청할 수 있는가)"
+#
+# 서버에는 가입 라우트가, 회원 화면에는 카드 등록과 해지가 있었는데 **신청 화면이
+# 없었다.** 관리자가 상품에 배송 주기를 넣어도 상세에는 한 글자도 나오지 않았고,
+# 신청할 주소도 없었다 — 기능 전체가 닿지 않는 곳에 있었다.
+curl -s -b "$CK" -X POST "$SHOP/admin/products" -H 'content-type: application/json' \
+  -d '{"slug":"sub-coffee","name":"정기 원두","price":20000,"stock":30,"status":"selling","sub_interval":"month"}' >/dev/null
+bust_cache
+SUBDETAIL="$(curl -s "$API/api/render/page?path=shop/sub-coffee")"
+contains "상세가 배송 주기를 말한다" "$SUBDETAIL" "매월"
+contains "상세에 신청 링크가 있다" "$SUBDETAIL" '/shop/subscribe/sub-coffee'
+SUBPAGE="$(curl -s "$API/api/render/page?path=shop/subscribe/sub-coffee")"
+contains "신청 화면이 상품을 보여준다" "$SUBPAGE" "정기 원두"
+contains "신청 화면에 배송지 칸이 있다" "$SUBPAGE" 'name=\"postcode\"'
+contains "신청 화면이 가입 견적을 부른다 (일반 견적이 아니라)" "$SUBPAGE" "/subscriptions/quote"
+contains "첫 회차가 지금 결제된다고 말한다" "$SUBPAGE" "첫 회차"
+# 서버가 어차피 거절할 신청서를 채우게 두지 않는다
+curl -s -b "$CK" -X POST "$SHOP/admin/products" -H 'content-type: application/json' \
+  -d '{"slug":"sub-none","name":"한 번 사는 원두","price":9000,"stock":5,"status":"selling"}' >/dev/null
+bust_cache
+NOTSUB="$(curl -s "$API/api/render/page?path=shop/subscribe/sub-none")"
+contains "정기배송 상품이 아니면 폼을 그리지 않는다" "$NOTSUB" "정기배송으로 받을 수 있는 상품이 아닙니다"
+absent "그 화면에는 신청 폼이 없다" "$NOTSUB" 'name=\"billingKeyId\"'
+absent "정기배송이 아닌 상품 상세에는 신청 링크가 없다" \
+  "$(curl -s "$API/api/render/page?path=shop/sub-none")" '/shop/subscribe/'
+# 회원 메뉴가 가리키는 두 화면이 스타터 사이트에서도 살아 있는가.
+#
+# registerScreen 선언은 **페이지가 없을 때만** 쓰인다. 스타터가 만든 shop 페이지가
+# /shop/cards 를 먼저 집어서 "cards" 를 상품 slug 로 읽고 "상품을 찾을 수 없습니다"
+# 를 그렸다 — 카드 등록도 정기배송 해지도 링크만 있고 화면이 없었다.
+CARDSPAGE="$(curl -s "$API/api/render/page?path=shop/cards")"
+contains "회원 메뉴의 결제 카드 화면이 열린다" "$CARDSPAGE" "brick-cards"
+absent "상품 상세로 떨어지지 않는다" "$CARDSPAGE" "상품을 찾을 수 없습니다"
+MYSUBS="$(curl -s "$API/api/render/page?path=shop/subscriptions")"
+contains "회원 메뉴의 정기배송 화면이 열린다" "$MYSUBS" "brick-subs"
+absent "정기배송도 상품 상세로 떨어지지 않는다" "$MYSUBS" "상품을 찾을 수 없습니다"
+contains "카드 등록을 마치면 원래 하려던 곳으로 돌아간다" "$CARDSPAGE" "location.replace(nx)"
+contains "돌아갈 곳은 같은 사이트의 경로만 받는다 (열린 리다이렉트 금지)" "$CARDSPAGE" "n.charAt(1) !== '/'"
+
+echo
 echo "── 상품 목록 페이지 나누기 (limit 를 넘는 상품에 닿을 수 있는가)"
 # 상품을 limit 보다 많이 만든다 — 전에는 25번째 상품부터 사이트에 있어도 볼 방법이 없었다
 node -e "

@@ -235,12 +235,20 @@ PG사 인증 정보(가맹점 ID, 시크릿)는 `ctx.settings` 에 저장하세�
   정합합니다.
 - **해지는 항상, 즉시** — 마이페이지에서 한 클릭입니다. 카드 삭제도 그
   카드의 구독을 즉시 멈춥니다.
+- 손님이 쓰는 화면은 셋입니다: 상품 상세의 **정기배송으로 받기** →
+  신청(`/shop/subscribe/<상품 slug>`) → 내 정기배송(`/shop/subscriptions`).
+  결제 카드는 `/shop/cards` 에서 등록·삭제합니다(회원 메뉴에도 있습니다).
+- 신청 화면이 보여 주는 금액은 **첫 회차에 실제로 청구되는 금액**입니다 —
+  등급 할인·쿠폰·포인트를 얹지 않습니다(청구액이 고정되므로, 얹으면 2회차부터
+  금액이 달라져 구독이 멈춥니다). 그래서 장바구니 견적이 아니라 전용 견적
+  (`POST /subscriptions/quote`)을 씁니다.
 - 결제 실패는 하루 뒤 재시도, 3회 연속이면 중지하고 메일로 알립니다.
 - 관리자 → 쇼핑몰 → 정기배송에서 구독 목록을 보고 해지할 수 있습니다
   (금액·주기 수정은 없습니다 — 회원과의 계약이기 때문입니다).
 
 회원 API: `POST /me/billing-keys/prepare` → PG 위젯 → `POST /me/billing-keys`
-→ `POST /subscriptions` (첫 회차 즉시 결제) → `GET /me/subscriptions`,
+→ `POST /subscriptions/quote` (청구 금액 미리보기) → `POST /subscriptions`
+(첫 회차 즉시 결제) → `GET /me/subscriptions`,
 `POST /me/subscriptions/:id/cancel` · `/resume`.
 
 ## 아직 없는 것

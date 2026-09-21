@@ -27,7 +27,7 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-3483%20passing-2ea043.svg" alt="스모크 테스트 3483개" />
+  <img src="https://img.shields.io/badge/E2E-3507%20passing-2ea043.svg" alt="스모크 테스트 3507개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
   <a href="https://github.com/bonjin-app/brick/pkgs/container/brick">
     <img src="https://img.shields.io/badge/docker-amd64%20%C2%B7%20arm64-2496ed.svg" alt="Docker image (amd64 · arm64)" />
@@ -369,7 +369,7 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 3,483개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 3,507개 항목):
 
 | 수트 | 항목 | 무엇을 못박는가 |
 |---|---:|---|
@@ -378,7 +378,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `smoke-helpdesk.sh` | 116 | 문의 열거 방지 · 비회원 조회 · 사이트맵 유출 · **설정 화면(비회원 문의 스위치 · GET/PUT 모양 일치)** · **비회원이 번호·비밀번호로 자기 문의를 여는 화면** |
 | `smoke-migrate.sh` | 159 | 덤프 파싱 · 레벨 매핑 · **비밀번호 보존** · 영카트 상품·주문 · 멱등성 · **문서가 말하는 크기의 덤프를 실제로 받는다(그 예외는 이전 경로에만)** |
 | `smoke-returns.sh` | 113 | 할인 안분 · 이중 재고 복원 방어 · 청약철회 기간 · 비회원 청약철회 · **신청 뒤 상태가 손님에게 보인다** · **비회원도 자기 신청을 물릴 수 있다** |
-| `smoke-storefront.sh` | 184 | 사업자번호 체크섬 · 위시리스트 격리 · 지역비 실수령 · **샘플 상품** · **NEW·BEST 뱃지** · **정렬** · **쪽나눔** · **가격대·품절 필터** · **주문서가 지역 추가 배송비를 미리 보여준다** · **상품 화면에서 위시리스트에 담을 수 있다** | · **띄어쓰기 없는 긴 이름** |
+| `smoke-storefront.sh` | 199 | 사업자번호 체크섬 · 위시리스트 격리 · 지역비 실수령 · **샘플 상품** · **NEW·BEST 뱃지** · **정렬** · **쪽나눔** · **가격대·품절 필터** · **주문서가 지역 추가 배송비를 미리 보여준다** · **상품 화면에서 위시리스트에 담을 수 있다** · **정기배송 신청 화면** · **회원 메뉴의 결제 카드·정기배송이 실제로 열린다** | · **띄어쓰기 없는 긴 이름** |
 | `smoke-poll.sh` | 103 | 중복 투표 · IP 해시 · 결과 공개 시점 · 집계 오염 · 목록→개별 라우팅 |
 | `smoke-mailing.sh` | 106 | (광고) 강제 표기 · 동의자만 발송 · 발송 직전 동의 재확인 · 실제 발송 내용 · **수신거부 헤더(One-Click)와 그 주소가 정말 POST 를 받는가** | · **메일 미설정을 대시보드가 알린다** |
 | `smoke-reports.sh` | 138 | 부분 환불 차감 · KST 날짜 경계 · 상품별·주문별 합 일치 · 추천에서 반품·미공개 제외 |
@@ -389,7 +389,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `smoke-restock.sh` | 94 | 품절만 신청 · 옵션 단위 · 한 번만 발송 · 광고 아님 · 경로 무관 감지 · **메일의 해지 링크가 실제로 열린다** · **회원 신청 내역 화면** · **운영자의 재입고 대기 화면** |
 | `smoke-starter.sh` | 77 | 유형별 기본 구성 생성 · 홈 렌더 · **모든 메뉴 링크가 404 없이 렌더** · 일반 페이지로 수정 가능 · **청약철회 신청 폼의 칸에 이름이 있다** |
 | `smoke-collections.sh` | 31 | 종료=안내·숨김=404 · 진열 순서 · 원자적 저장 · 캐시 무효화 |
-| `smoke-subscriptions.sh` | 70 | 빌링키만 저장 · 청구액 고정(변경 시 중지) · 해지 즉시 · 멱등키 회수 · 몰아 청구 금지 |
+| `smoke-subscriptions.sh` | 79 | 빌링키만 저장 · 청구액 고정(변경 시 중지) · 해지 즉시 · 멱등키 회수 · 몰아 청구 금지 · **신청 화면이 보여 준 금액과 빠져나가는 금액이 같다** |
 | `smoke-updates.sh` | 33 | Ed25519 서명 검증 · 키 고정(TOFU) · 변조·위조·다운그레이드 거부 |
 | `smoke-grades.sh` | 43 | 순매출 산정(반품 차감) · 견적=주문 금액 · 쿠폰 합산 상한 · 안분 정합 |
 | `smoke-coupons.sh` | 60 | 1인 한도(취소 제외) · 발급형 1장 1회 · 취소 반환/환불 미반환 · 생일 자동 지급(월·일만 수집) · **쿠폰함 화면(코드는 서버 렌더에 없다)** |

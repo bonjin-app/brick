@@ -31,6 +31,7 @@ ${await gatewayScripts()}${cardsScript(t)}${CARDS_CSS}`,
 
   ctx.registerBlock(cardsBlock);
   ctx.registerScreen({ path: "shop/cards", title: "결제 카드", block: "billing-cards", memberMenu: true, order: 20 });
+  return { cardsBlock };
 }
 
 const CARDS_CSS = `
@@ -62,6 +63,20 @@ const cardsScript = (t: (k: string, p?: Record<string, string | number>) => stri
     body.innerHTML = '<p class="brick-shop-empty">' + ${JSON.stringify(t("cards.loginRequired"))} +
       ' <a href="/login?next=' + next + '">' + ${JSON.stringify(t("cards.login"))} + '</a></p>';
     return;
+  }
+
+  /*
+   * 카드를 등록한 뒤 **원래 하려던 일로 돌아간다.**
+   *
+   * 정기배송 신청 화면이 카드가 없으면 여기로 보내는데(주소의 next), 등록을 마치고
+   * 이 화면에 남으면 손님은 자기가 무엇을 하려 했는지부터 다시 찾아야 한다.
+   *
+   * 열린 리다이렉트를 만들지 않는다: 같은 사이트의 경로("/…")만 받는다.
+   * "//evil.example" 은 브라우저에게 다른 사이트이므로 첫 글자만 보면 안 된다.
+   */
+  function safeNext(){
+    var n = new URLSearchParams(location.search).get('next') || '';
+    return n.charAt(0) === '/' && n.charAt(1) !== '/' ? n : '';
   }
 
   function msgBox(){ return document.querySelector('.brick-cards-msg'); }
@@ -126,7 +141,10 @@ const cardsScript = (t: (k: string, p?: Record<string, string | number>) => stri
         fetch(API + '/me/billing-keys/prepare', { method: 'POST' })
           .then(function(r){ return r.json(); })
           .then(function(d){
-            var back = location.origin + location.pathname + '?brickCard=' + encodeURIComponent(provider);
+            // 돌아올 곳을 PG 왕복 너머까지 들고 간다 (복귀 주소에 next 를 실어 보낸다)
+            var nx = safeNext();
+            var back = location.origin + location.pathname + '?brickCard=' + encodeURIComponent(provider) +
+              (nx ? '&next=' + encodeURIComponent(nx) : '');
             return pay.registerCard({ customerKey: d.customerKey, returnUrl: back });
           })
           .catch(function(){ say(${JSON.stringify(t("cards.addFail"))}, true); btn.disabled = false; });
@@ -160,6 +178,11 @@ const cardsScript = (t: (k: string, p?: Record<string, string | number>) => stri
     });
   }
 
-  finishReturn().then(function(note){ load(note); });
+  finishReturn().then(function(note){
+    var nx = safeNext();
+    // 등록에 성공했고 돌아갈 곳이 있으면 곧장 돌려보낸다 (실패했으면 여기서 이유를 읽어야 한다)
+    if (!note && nx) { location.replace(nx); return; }
+    load(note);
+  });
 })();
 </script>`;

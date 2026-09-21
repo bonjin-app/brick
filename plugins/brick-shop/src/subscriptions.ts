@@ -20,6 +20,7 @@ import type { Db, ShopSettings } from "./types.js";
 import { ShopError } from "./types.js";
 import { createOrder, changeOrderStatus, type OrdererInput, type PointsPort } from "./orders.js";
 import { gateways, type PaymentGateway } from "./payments.js";
+import { quote } from "./pricing.js";
 // 메일 문구도 사이트 언어를 따른다 — 메일은 사이트 밖에서 혼자 읽힌다
 import { t, money } from "./i18n.js";
 
@@ -227,6 +228,62 @@ async function chargeOrder(
 
 // ── 가입 ────────────────────────────────────────────
 
+/**
+ * 정기배송으로 팔 수 있는 상품인가 — 가입과 견적이 **같은 판정**을 쓴다.
+ *
+ * 견적이 무른 판정을 쓰면 화면은 금액을 보여 주는데 가입 버튼은 거절한다.
+ */
+async function subscribableProduct(
+  db: Db, slug: string,
+): Promise<{ id: string; name: string; interval: string }> {
+  const { rows } = await db.execute(sql`
+    SELECT id, name, status, sub_interval FROM shop_products WHERE slug = ${slug} LIMIT 1
+  `);
+  const p = rows[0];
+  if (!p) throw new ShopError(404, "상품을 찾을 수 없습니다.");
+  if (!p.sub_interval) throw new ShopError(400, "정기배송 상품이 아닙니다.");
+  if (p.status !== "selling") throw new ShopError(400, "지금은 판매하지 않는 상품입니다.");
+  return { id: String(p.id), name: String(p.name), interval: String(p.sub_interval) };
+}
+
+/**
+ * 가입 전 청구 금액 — **가입이 실제로 계산하는 방식 그대로** 계산한다.
+ *
+ * 일반 견적(`POST /quote`)을 그대로 쓰면 안 된다: 그것은 등급 할인·쿠폰·
+ * 포인트를 얹는데 `subscribe()` 는 그중 무엇도 넣지 않는다(바로 아래 주석의
+ * 이유로). 등급이 있는 회원에게 할인된 금액을 보여 주고 실제로는 정가를
+ * 청구하게 된다 — 정기결제에서 **보여 준 금액과 빠져나가는 금액이 다른 것**은
+ * 가장 나쁜 종류의 버그다.
+ *
+ * 지역 추가 배송비는 우편번호를 받아야 나오므로, 화면은 주소를 넣을 때마다
+ * 다시 묻는다.
+ */
+export async function quoteSubscription(
+  db: Db,
+  params: { productSlug: string; quantity?: number; postcode?: string | null; settings: ShopSettings },
+): Promise<{
+  productName: string; quantity: number; interval: string;
+  subtotal: number; shippingFee: number; zoneFee: number; zoneName: string | null; total: number;
+}> {
+  const quantity = Math.max(1, Math.min(999, Math.floor(Number(params.quantity ?? 1))));
+  const product = await subscribableProduct(db, String(params.productSlug ?? ""));
+  const q = await quote(db, [{ productId: product.id, quantity }], params.settings, null, {
+    postcode: params.postcode ?? null,
+    grade: null,
+    userId: null,
+  });
+  return {
+    productName: product.name,
+    quantity,
+    interval: product.interval,
+    subtotal: q.subtotal,
+    shippingFee: q.shippingFee,
+    zoneFee: q.zoneFee,
+    zoneName: q.zoneName,
+    total: q.total,
+  };
+}
+
 export async function subscribe(
   db: Db,
   params: {
@@ -240,16 +297,8 @@ export async function subscribe(
   },
 ): Promise<{ id: string; orderNo: string; total: number; nextChargeAt: unknown }> {
   const quantity = Math.max(1, Math.floor(Number(params.quantity ?? 1)));
-
-  const { rows: products } = await db.execute(sql`
-    SELECT id, name, status, sub_interval FROM shop_products
-    WHERE slug = ${String(params.productSlug ?? "")} LIMIT 1
-  `);
-  const product = products[0];
-  if (!product) throw new ShopError(404, "상품을 찾을 수 없습니다.");
-  if (!product.sub_interval) throw new ShopError(400, "정기배송 상품이 아닙니다.");
-  if (product.status !== "selling") throw new ShopError(400, "지금은 판매하지 않는 상품입니다.");
-  const interval = String(product.sub_interval);
+  const product = await subscribableProduct(db, String(params.productSlug ?? ""));
+  const interval = product.interval;
 
   const { rows: keys } = await db.execute(sql`
     SELECT id, provider, billing_key, customer_key FROM shop_billing_keys

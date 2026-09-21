@@ -31,6 +31,7 @@ ${subsScript(t)}${SUBS_CSS}`,
 
   ctx.registerBlock(subsBlock);
   ctx.registerScreen({ path: "shop/subscriptions", title: "정기배송", block: "my-subscriptions", memberMenu: true, order: 18 });
+  return { subsBlock };
 }
 
 const SUBS_CSS = `

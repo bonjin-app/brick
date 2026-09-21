@@ -60,7 +60,7 @@ import {
 import {
   SUBSCRIPTION_QUEUE_JOB, cancelSubscription, chargeDueSubscriptions, issueBillingKey,
   listBillingKeys, listBillingProviders, listMySubscriptions, listSubscriptionsAdmin,
-  resumeSubscription, revokeBillingKey, subscribe, subscriptionEvents,
+  quoteSubscription, resumeSubscription, revokeBillingKey, subscribe, subscriptionEvents,
 } from "./subscriptions.js";
 import { BIRTHDAY_QUEUE_JOB, issueBirthdayCoupons } from "./birthday.js";
 
@@ -1714,6 +1714,22 @@ export default definePlugin(async (ctx) => {
   ctx.registerRoute("DELETE", "/me/billing-keys/:id", async (req) => {
     const userId = requireMember(req);
     return await revokeBillingKey(db, { userId, keyId: req.params.id });
+  });
+
+  /**
+   * 가입 전 청구 금액 — 신청 화면이 "얼마가 빠져나가는지" 를 먼저 보여준다.
+   *
+   * 로그인을 요구하지 않는다: 금액은 회원마다 다르지 않기 때문이다(가입은
+   * 등급 할인도 쿠폰도 얹지 않는다). 상품 상세에서 바로 금액을 보여 줄 수 있다.
+   */
+  ctx.registerRoute("POST", "/subscriptions/quote", async (req) => {
+    const b = req.body as Record<string, unknown>;
+    return await quoteSubscription(db, {
+      productSlug: String(b.productSlug ?? b.product_slug ?? ""),
+      quantity: b.quantity === undefined ? 1 : Number(b.quantity),
+      postcode: b.postcode ? String(b.postcode) : null,
+      settings: await settings(),
+    });
   });
 
   /** 가입 — 첫 회차를 즉시 결제한다. 실패하면 가입도 없다 */

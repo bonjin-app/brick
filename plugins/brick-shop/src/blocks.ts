@@ -13,6 +13,7 @@ import { registerCouponsView } from "./coupons-view.js";
 import { registerRestockView } from "./restock-view.js";
 import { registerCardsView } from "./cards-view.js";
 import { registerSubscriptionsView } from "./subscriptions-view.js";
+import { registerSubscribeView, intervalLabel } from "./subscribe-view.js";
 
 /**
  * 스토어프론트 블록.
@@ -316,7 +317,7 @@ export function registerStorefrontBlocks(
 
       const { rows } = await db.execute(sql`
         SELECT id, slug, name, summary, description, image_url, images, price, list_price,
-               stock, status, free_shipping, review_count, rating_sum, inquiry_count
+               stock, status, free_shipping, sub_interval, review_count, rating_sum, inquiry_count
         FROM shop_products WHERE slug = ${slug} AND status IN ('selling', 'soldout') LIMIT 1
       `);
       const p = rows[0];
@@ -423,6 +424,12 @@ export function registerStorefrontBlocks(
       <dd>${p.free_shipping ? escapeHtml(t("detail.freeShipping")) : `${won(s.shippingFee)}${s.freeShippingOver > 0 ? escapeHtml(t("detail.freeOver", { amount: won(s.freeShippingOver) })) : ""}`}</dd>
       <dt>${escapeHtml(t("detail.stock"))}</dt>
       <dd>${p.stock === null ? escapeHtml(t("detail.canBuy")) : soldout ? escapeHtml(t("common.soldout")) : escapeHtml(t("detail.stockLeft", { n: Number(p.stock) }))}</dd>
+      ${/*
+         정기배송 주기 — 관리자가 상품에 설정한 값이 **상세에 한 글자도 나오지
+         않았다.** 정기배송으로 받을 수 있는 상품인지 손님이 알 길이 없었다.
+       */ ""}
+      ${p.sub_interval ? `<dt>${escapeHtml(t("detail.subInterval"))}</dt>
+      <dd>${escapeHtml(intervalLabel(String(p.sub_interval), t))}</dd>` : ""}
     </dl>
     ${/*
        위시리스트 담기.
@@ -466,6 +473,16 @@ export function registerStorefrontBlocks(
         <button type="button" data-act="buy" class="brick-primary">${escapeHtml(t("detail.buyBtn"))}</button>
       </div>
     </form>`}
+    ${/*
+       정기배송으로 받기.
+       **가입 화면이 없어서** 서버의 가입 라우트도, 관리자가 설정한 배송 주기도
+       손님에게 닿지 않았다. 주문 버튼과 나란히 두지 않고 아래에 따로 둔다 —
+       정기적으로 돈이 빠져나가는 계약을 "바로 구매" 옆에서 잘못 누르면 안 된다.
+     */ ""}
+    ${!soldout && p.sub_interval ? `<a class="brick-sub-cta" href="/shop/subscribe/${encodeURIComponent(String(p.slug))}">
+      <strong>${escapeHtml(t("detail.subscribe"))}</strong>
+      <span>${escapeHtml(t("detail.subscribeHint", { cycle: intervalLabel(String(p.sub_interval), t) }))}</span>
+    </a>` : ""}
   </div>
 </div>
 <div class="brick-detail-description">${String(p.description ?? "")}</div>
@@ -563,6 +580,31 @@ ${buyScript(`${shopBaseOf(blockCtx)}/cart`)}${GALLERY_SCRIPT}${restockScript()}$
       if (seg[0] === "orders") {
         blockCtx.setSeo?.({ title: seg[1] ? t("orders.detailTitle") : t("orders.title") });
         return ordersBlock.render({ orderNo: seg[1] ?? "" }, blockCtx);
+      }
+      /*
+       * 결제 카드·내 정기배송.
+       *
+       * **여기에 분기가 없으면 두 화면은 스타터로 만든 사이트에서 통째로
+       * 사라진다.** 회원 메뉴가 /shop/cards 를 가리키는데, 스타터가 만든 shop
+       * 페이지가 그 주소를 먼저 집어서 "cards" 를 상품 slug 로 읽고 "상품을 찾을
+       * 수 없습니다" 를 그렸다 — registerScreen 선언은 페이지가 없을 때만 쓰인다.
+       * 스모크가 잡았다.
+       */
+      if (seg[0] === "cards") {
+        blockCtx.setSeo?.({ title: t("cards.title") });
+        return cardsBlock.render({}, blockCtx);
+      }
+      if (seg[0] === "subscriptions") {
+        blockCtx.setSeo?.({ title: t("subs.title") });
+        return subsBlock.render({}, blockCtx);
+      }
+      /*
+       * 정기배송 신청 — /shop/subscribe/<상품 slug>.
+       * 상품이 정해져야 하는 화면이므로 뒤 조각을 상품 slug 로 읽는다.
+       */
+      if (seg[0] === "subscribe") {
+        blockCtx.setSeo?.({ title: t("subs.signupTitle") });
+        return subscribeBlock.render({ slug: seg[1] ?? "" }, blockCtx);
       }
       if (seg[0] === "wishlist") {
         blockCtx.setSeo?.({ title: t("wish.title") });
@@ -717,8 +759,9 @@ ${cartScript(shopBaseOf(blockCtx))}${STOREFRONT_CSS}`,
   const { couponsBlock } = registerCouponsView(ctx, t);
   const { restockBlock } = registerRestockView(ctx, t);
   // 결제 카드(빌링키)·정기배송 — 화면과 회원 메뉴 등록까지 스스로 한다
-  registerCardsView(ctx, t);
-  registerSubscriptionsView(ctx, t);
+  const { cardsBlock } = registerCardsView(ctx, t);
+  const { subsBlock } = registerSubscriptionsView(ctx, t);
+  const { subscribeBlock } = registerSubscribeView(ctx, db, t);
 
   /*
    * 화면 선언 — 쇼핑몰과 그 안의 회원 화면들.
@@ -1023,6 +1066,10 @@ p.brick-restock-msg.is-error{color:var(--color-danger,#c9342f)}
 .brick-buy-actions{display:flex;gap:10px;margin-top:18px}
 .brick-buy-actions button{flex:1;padding:14px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 8px);background:var(--color-bg, #ffffff);font-size:15px;cursor:pointer}
 .brick-buy-actions .brick-primary{background:var(--color-primary,#d0402c);color:var(--color-on-primary, #ffffff);border-color:transparent;font-weight:700}
+/* 정기배송 — 한 번의 구매와 섞이지 않게 선 아래에 따로 선다 */
+.brick-sub-cta{display:flex;flex-direction:column;gap:2px;margin-top:12px;padding:13px 16px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 8px);text-decoration:none;text-align:center}
+.brick-sub-cta strong{font-size:14.5px}
+.brick-sub-cta span{font-size:12.5px;color:var(--color-muted, #6c6c7a)}
 .brick-buy-msg{min-height:20px;font-size:14px;margin:10px 0 0}
 /* 하단 고정 구매 바 — 좁은 화면에서만. 넓은 화면은 원래 버튼이 늘 보인다 */
 .brick-buybar{display:none}

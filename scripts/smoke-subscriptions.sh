@@ -349,6 +349,40 @@ import sys,json
 d=json.load(sys.stdin)
 print(any(r['name']=='subscriptions' for r in d['resources']))")" "True"
 
+echo "── 신청 화면이 보여 줄 금액 (보여 준 금액과 빠져나가는 금액이 같은가)"
+#
+# 가입은 등급 할인·쿠폰·포인트를 얹지 않는다(청구액을 고정해야 하므로).
+# 그런데 신청 화면이 일반 견적(`POST /quote`)으로 금액을 보여 주면, 등급이 있는
+# 회원은 **할인된 금액을 보고 정가를 청구당한다.** 그래서 가입 전용 견적이 있다.
+SQ="$(curl -s -X POST "$SHOP/subscriptions/quote" -H 'content-type: application/json' \
+  -d '{"productSlug":"milk","quantity":2}')"
+contains "가입 견적: 상품 금액" "$SQ" '"subtotal":24000'
+contains "가입 견적: 주기를 함께 준다" "$SQ" '"interval":"month"'
+check "정기배송이 아닌 상품은 견적도 거절" \
+  "$(code -X POST "$SHOP/subscriptions/quote" -H 'content-type: application/json' -d '{"productSlug":"cup","quantity":1}')" "400"
+check "없는 상품은 404" \
+  "$(code -X POST "$SHOP/subscriptions/quote" -H 'content-type: application/json' -d '{"productSlug":"nope","quantity":1}')" "404"
+
+curl -s -b "$CK" -X POST "$SHOP/admin/grades" -H 'content-type: application/json' \
+  -d '{"name":"골드","min_amount":0,"discount_rate":10}' >/dev/null
+curl -s -b "$CK" -X POST "$SHOP/admin/grades/recompute" >/dev/null
+GRADE_A="$(psql_q "SELECT g.name FROM shop_user_grades ug JOIN shop_grades g ON g.id=ug.grade_id JOIN users u ON u.id=ug.user_id WHERE u.email='a@subs.test'")"
+check "회원 a 에게 10% 할인 등급이 붙었다" "$GRADE_A" "골드"
+MILK_ID="$(psql_q "SELECT id FROM shop_products WHERE slug='milk'")"
+printf '{"items":[{"productId":"%s","quantity":2}]}' "$MILK_ID" > "$TMP/gq.json"
+contains "일반 견적은 등급 할인을 얹는다 (그래서 이것을 쓰면 안 된다)" \
+  "$(curl -s -b "$A" -X POST "$SHOP/quote" -H 'content-type: application/json' --data-binary "@$TMP/gq.json")" '"gradeDiscount":2400'
+contains "가입 견적은 등급 할인을 얹지 않는다" \
+  "$(curl -s -b "$A" -X POST "$SHOP/subscriptions/quote" -H 'content-type: application/json' \
+      -d '{"productSlug":"milk","quantity":2}')" '"total":24000'
+GSUB="$(curl -s -b "$A" -X POST "$SHOP/subscriptions" -H 'content-type: application/json' \
+  -d "{\"productSlug\":\"milk\",\"quantity\":2,\"billingKeyId\":\"$KEY_A_ID\",\"orderer\":$ORDERER}")"
+GSUB_ID="$(echo "$GSUB" | jq_get "['id']")"
+check "실제로 빠져나간 금액이 가입 견적과 같다" \
+  "$(psql_q "SELECT agreed_total FROM shop_subscriptions WHERE id='$GSUB_ID'")" "24000"
+check "PG 로 간 청구액도 같다" "$(pg_last_charge amount)" "24000"
+curl -s -b "$A" -X POST "$SHOP/me/subscriptions/$GSUB_ID/cancel" >/dev/null
+
 echo
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 # 실측을 남긴다(설정됐을 때만) — README 의 표가 실제와 같은지 CI 가 대조한다.
