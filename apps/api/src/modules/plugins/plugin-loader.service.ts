@@ -165,6 +165,16 @@ export class PluginLoaderService implements OnModuleInit {
       void this.refreshLocale();
     });
 
+    /*
+     * 부팅 직후에도 언어를 알고 있어야 한다.
+     *
+     * 캐시는 지금까지 **플러그인 라우트·페이지 렌더가 부를 때** 채워졌다. 그래서
+     * 막 뜬 서버에 첫 요청이 코어 API(로그인 등)라면 오류 문장이 기본 언어(ko)로
+     * 나갔다 — 영어 사이트에서 첫 손님만 한국어를 보는, 재현하기 어려운 종류다.
+     * 읽기 한 번이므로 부팅을 붙잡지 않는다.
+     */
+    await this.refreshLocale();
+
     const actives = await this.db.select().from(installedPlugins).where(eq(installedPlugins.isActive, true));
     for (const p of actives) {
       try {

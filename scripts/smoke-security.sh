@@ -242,7 +242,11 @@ echo
 echo "── 콘텐츠 보안 정책 (CSP) — 저장형 XSS 의 두 번째 방어선"
 CSP="$(curl -s -D - -o /dev/null "$API/api/render/page?path=" | grep -i '^content-security-policy:' | tr -d '\r')"
 contains "공개 화면에 CSP 가 붙는다" "$CSP" "default-src 'self'"
-contains "외부 스크립트를 막는다" "$CSP" "script-src 'self' 'unsafe-inline';"
+# 결제창 SDK 를 선언한 PG 플러그인이 위에서 활성화됐다 — 그 **호스트 하나만** 열려야 한다.
+# (예전 단언은 script-src 가 고정이던 시절의 것이라, 선언 기능이 생긴 뒤 조용히 낡아 있었다)
+contains "선언한 결제창 호스트만 열린다" "$CSP" "script-src 'self' 'unsafe-inline' https://js.tosspayments.com;"
+absent   "와일드카드로 열지 않는다" "$CSP" "script-src 'self' 'unsafe-inline' *"
+absent   "https: 통째로 열지 않는다" "$CSP" "script-src 'self' 'unsafe-inline' https:;"
 contains "플러그인·객체 삽입 차단" "$CSP" "object-src 'none'"
 contains "base 태그 하이재킹 차단" "$CSP" "base-uri 'self'"
 contains "폼 액션 탈취 차단" "$CSP" "form-action 'self'"

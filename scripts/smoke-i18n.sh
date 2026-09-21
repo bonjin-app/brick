@@ -217,9 +217,19 @@ contains "없는 상품 오류가 영어" "$ERR_404" "Product not found."
 absent   "한국어가 남지 않는다" "$ERR_404" "상품을 찾을 수 없습니다"
 ERR_CART="$(curl -s -X POST "$SHOP_API/cart" -H 'content-type: application/json' -d '{"productId":"00000000-0000-0000-0000-000000000000","quantity":1}')"
 contains "장바구니 담기 오류도 영어" "$ERR_CART" "Product not found."
+# 코어가 던지는 문장도 같은 규칙을 탄다 — 플러그인만 고치면 로그인·회원 화면이 남는다
+ERR_LOGIN="$(curl -s -X POST "$API/api/auth/login" -H 'content-type: application/json' \
+  -d '{"email":"nobody@nowhere.test","password":"wrong-password"}')"
+absent "로그인 실패 문장에 한국어가 없다" "$ERR_LOGIN" "올바르지 않습니다"
+ERR_PAGE="$(curl -s -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' \
+  -d '{"title":"x","slug":"BAD SLUG"}')"
+contains "코어 검증 오류도 영어" "$ERR_PAGE" "only lowercase letters"
 # 한국어 사이트로 돌리면 원문이 그대로 나온다 (번역은 덮어쓰기가 아니라 치환이다)
 curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"site.locale":"ko"}' >/dev/null
 contains "ko 로 되돌리면 한국어" "$(curl -s "$SHOP_API/products/no-such-product")" "상품을 찾을 수 없습니다"
+contains "코어 문장도 ko 로 되돌아온다" \
+  "$(curl -s -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' -d '{"title":"x","slug":"BAD SLUG"}')" \
+  "소문자/숫자/하이픈"
 curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"site.locale":"en"}' >/dev/null
 
 echo "── 주문 안내 메일도 언어를 따라간다"

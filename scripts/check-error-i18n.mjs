@@ -17,6 +17,7 @@
  */
 import { readdirSync, statSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { CORE_ERROR_SOURCES } from "../packages/core/dist/index.js";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 const PLUGINS = join(ROOT, "plugins");
@@ -24,6 +25,40 @@ const PLUGINS = join(ROOT, "plugins");
 /** throw new XxxError(400, "…") · throw new XxxException("…") */
 const THROW_RE = /throw new \w*(?:Error|Exception)\(\s*(?:\d{3},\s*)?(["'`])((?:[^\\]|\\.)*?)\1/g;
 const HANGUL = /[가-힣]/;
+
+/**
+ * 던진 문장이 **그 자체로 완결된 원문**인가.
+ *
+ * 값이 박힌 것(템플릿 보간)과 이어 붙인 것("…" + variable)은 실행 시점의 문장이
+ * 코드의 리터럴과 달라서 원문=키가 성립하지 않는다 — 번역을 넣어도 걸리지 않으므로
+ * 요구하지 않는다(그런 문장은 ctx.t 에 파라미터로 넘겨야 한다).
+ */
+/**
+ * 던지는 자리에 **상수 이름**만 있는 경우 — `throw new X(BAD_CREDENTIALS)`.
+ *
+ * 로그인 실패 문장이 이 모양이라 오래 빠져 있었다: 제품 전체에서 가장 많이
+ * 읽히는 오류 문장인데, 리터럴만 보는 검사에는 보이지 않았다.
+ */
+const CONST_RE = /^\s*const ([A-Z][A-Z0-9_]*) = (["'])((?:[^\\]|\\.)*?)\2;/gm;
+const THROW_CONST_RE = /throw new \w*(?:Error|Exception)\(\s*([A-Z][A-Z0-9_]*)\s*[,)]/g;
+
+function constMessages(source) {
+  const map = new Map();
+  for (const m of source.matchAll(CONST_RE)) map.set(m[1], m[3]);
+  const out = [];
+  for (const m of source.matchAll(THROW_CONST_RE)) {
+    const msg = map.get(m[1]);
+    if (msg) out.push(msg);
+  }
+  return out;
+}
+
+function isWholeMessage(match, source) {
+  const [whole, quote, msg] = match;
+  if (quote === "`" && msg.includes("${")) return false;
+  const after = source.slice(match.index + whole.length).trimStart();
+  return !after.startsWith("+");
+}
 
 function walk(dir, out = []) {
   for (const name of readdirSync(dir)) {
@@ -52,8 +87,12 @@ for (const plugin of readdirSync(PLUGINS)) {
     for (const m of code.matchAll(THROW_RE)) {
       const msg = m[2];
       if (!HANGUL.test(msg)) continue;
-      // 값이 박힌 문장은 원문=키가 성립하지 않는다 (ctx.t 로 옮겨야 하는 것들)
-      if (m[1] === "`" && msg.includes("${")) continue;
+      if (!isWholeMessage(m, code)) continue;
+      plain += 1;
+      if (typeof en[msg] !== "string") missing.add(msg);
+    }
+    for (const msg of constMessages(code)) {
+      if (!HANGUL.test(msg)) continue;
       plain += 1;
       if (typeof en[msg] !== "string") missing.add(msg);
     }
@@ -70,9 +109,45 @@ for (const plugin of readdirSync(PLUGINS)) {
   }
 }
 
+/*
+ * 코어·API 는 카탈로그가 코드 안에 있다 (packages/core/src/i18n.ts).
+ * 플러그인처럼 locales/*.json 이 없으므로 그 목록과 대조한다.
+ */
+{
+  const core = new Set(CORE_ERROR_SOURCES);
+  const missing = new Set();
+  let plain = 0;
+  for (const dir of [join(ROOT, "apps/api/src"), join(ROOT, "packages/core/src")]) {
+    for (const file of walk(dir)) {
+      const code = readFileSync(file, "utf8");
+      for (const m of code.matchAll(THROW_RE)) {
+        const msg = m[2];
+        if (!HANGUL.test(msg)) continue;
+        if (!isWholeMessage(m, code)) continue;
+        plain += 1;
+        if (!core.has(msg)) missing.add(msg);
+      }
+      for (const msg of constMessages(code)) {
+        if (!HANGUL.test(msg)) continue;
+        plain += 1;
+        if (!core.has(msg)) missing.add(msg);
+      }
+    }
+  }
+  checked += 1;
+  if (missing.size === 0) {
+    console.log(`  ✅ 코어·API: 오류 문장 ${plain}개가 모두 번역됩니다`);
+  } else {
+    bad += missing.size;
+    console.log(`  ❌ 코어·API: 번역 없는 오류 문장 ${missing.size}개 — packages/core/src/i18n.ts 의 CORE_ERROR_EN 에 원문을 키로 더하세요`);
+    for (const m of [...missing].slice(0, 8)) console.log(`     · ${m}`);
+    if (missing.size > 8) console.log(`     · … 외 ${missing.size - 8}개`);
+  }
+}
+
 console.log();
 if (bad) {
   console.log("영어 사이트의 손님은 가장 중요한 순간에만 한국어를 봅니다 — 오류 문장이 그 자리입니다.");
   process.exit(1);
 }
-console.log(`플러그인 ${checked}개의 오류 문장이 사이트 언어를 따릅니다.`);
+console.log(`${checked}곳의 오류 문장이 사이트 언어를 따릅니다.`);

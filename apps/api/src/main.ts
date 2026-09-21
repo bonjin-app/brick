@@ -8,9 +8,10 @@ import { AppModule } from "./app.module.js";
 import { SetupAppModule } from "./setup.module.js";
 import { loadEnv } from "./config/env.js";
 import { noteProxyHeaders } from "./config/proxy-hint.js";
-import { UploadErrorFilter } from "./common/upload-error.filter.js";
+import { ErrorMessageFilter } from "./common/error-message.filter.js";
 import { runMigrations } from "./config/migrator.js";
 import { CspService } from "./modules/security/csp.service.js";
+import { PluginLoaderService } from "./modules/plugins/plugin-loader.service.js";
 
 /** 보통 JSON 본문의 한도 — API 는 파일을 멀티파트로 받으므로 이 이상이 필요 없다 */
 const DEFAULT_BODY_LIMIT = 2 * 1024 * 1024;
@@ -120,11 +121,17 @@ async function bootstrap() {
   }
 
   /*
-   * 업로드 한도 오류를 한국어로 바꾼다 (자세한 이유는 upload-error.filter.ts).
-   * 전역 필터라 미디어·게시판 첨부·플러그인 업로드가 모두 같은 안내를 받는다.
+   * 오류 응답의 **문장**을 다듬는 전역 필터 (자세한 이유는 error-message.filter.ts).
+   *  - 업로드 한도 오류를 한국어로, 한도를 숫자로 말한다
+   *  - 오류 문장을 사이트 언어로 치환한다 (원문=키, 없으면 원문 그대로)
+   * 전역이라 미디어·게시판 첨부·플러그인 업로드·코어 라우트가 같은 규칙을 쓴다.
+   *
+   * 언어는 **부를 때마다** 읽는다 — 운영자가 설정을 바꾸면 다음 오류부터
+   * 따라와야 한다(플러그인 로더가 그 캐시를 들고 있고, 설정 저장이 무효화한다).
    */
   const httpAdapterHost = app.get(HttpAdapterHost);
-  app.useGlobalFilters(new UploadErrorFilter(httpAdapterHost.httpAdapter));
+  const loader = app.get(PluginLoaderService);
+  app.useGlobalFilters(new ErrorMessageFilter(httpAdapterHost.httpAdapter, () => loader.siteLocale));
 
   // 응답 압축 — 테마 CSS(30KB+)·서버 렌더 HTML 이 Next 프록시를 그대로 통과하므로 여기서 눌러야 한다.
   // (Next 는 자기 페이지만 압축한다.) 이미지·zip 은 threshold 와 MIME 판정으로 건너뛴다.
