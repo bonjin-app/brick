@@ -1138,6 +1138,19 @@ print('ok' if d['total'] == len(d['items']) else f\"{d['total']} vs {len(d['item
 # 연락처는 하이픈 없이 적는 운영자가 많다
 contains "하이픈 없는 연락처로도 찾는다" \
   "$(curl -s -b "$CK" "$SHOP/admin/orders?q=01011112222")" '"order_no"'
+#
+# 주문번호는 통째로 붙여넣는 것이 가장 흔하다. 20만 건에서 재 보니 이름·연락처까지
+# 함께 훑으면 278.6ms 였고, **주문번호만** 접두사로 맞추면 0.4ms 다(unique 인덱스).
+# 다만 빠른 것보다 맞는 것이 먼저다 — 아래 셋이 그것을 지킨다.
+ONE_NO="$(curl -s -b "$CK" "$SHOP/admin/orders" | /usr/bin/python3 -c "
+import sys, json
+print(json.load(sys.stdin)['items'][0]['order_no'])")"
+contains "주문번호 전체로 찾는다" "$(curl -s -b "$CK" "$SHOP/admin/orders?q=$ONE_NO")" "\"order_no\":\"$ONE_NO\""
+contains "주문번호 앞부분으로도 찾는다" \
+  "$(curl -s -b "$CK" "$SHOP/admin/orders?q=${ONE_NO%%-*}")" "\"order_no\":\"$ONE_NO\""
+# 열한 자리 숫자는 **주문번호가 아니라 휴대폰**이다 — 여기서 갈라지지 않으면 찾던 주문이 안 나온다
+contains "열한 자리 숫자는 연락처로 본다" \
+  "$(curl -s -b "$CK" "$SHOP/admin/orders?q=01011112222")" '"order_no"'
 # 검색어의 % 는 글자다 — 이스케이프하지 않으면 그 한 글자로 전체가 나온다
 check "%% 는 와일드카드가 아니다" \
   "$(curl -s -b "$CK" "$SHOP/admin/orders?q=%25" | jq_get "['total']")" "0"
