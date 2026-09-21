@@ -224,6 +224,7 @@
   "pager.label": "Pages",
   "pager.next": "Next",
   "pager.prev": "Prev",
+  "pay.failed": "The payment failed. Please check your card or try another payment method.",
   "receipt.approvalNo": "Approval no.",
   "receipt.fail": "Could not submit the request.",
   "receipt.identifier": "Number",

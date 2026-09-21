@@ -165,7 +165,7 @@ async function chargeOrder(
     idempotencyKey: string;
     pointsPort?: PointsPort | null;
   },
-): Promise<{ ok: true } | { ok: false; reason: string }> {
+): Promise<{ ok: true } | { ok: false; reason: string; customerReason: string }> {
   const paymentId = uuidv7();
   await db.execute(sql`
     INSERT INTO shop_payments (id, order_id, provider, status, amount)
@@ -182,13 +182,21 @@ async function chargeOrder(
   });
 
   if (!result.ok || !result.providerTid) {
+    /*
+     * 자세한 이유는 **기록에만** 남는다.
+     *
+     * 이 값은 곧장 손님에게 갔다: 가입 실패 문장, 멈춤 사유(내 정기배송 화면),
+     * 회차 이력, 실패 알림 메일 — 네 곳이다. PG 가 닿지 않으면 그 자리에
+     * `TypeError: fetch failed` 가 찍혔다. 손님은 자기가 무엇을 해야 하는지 알 수
+     * 없고, 우리는 서버 사정을 밖으로 흘린다.
+     */
     const reason = (result.failureReason ?? "청구 실패").slice(0, 500);
     await db.execute(sql`
       UPDATE shop_payments SET status = 'failed', failure_reason = ${reason},
         raw = ${JSON.stringify(result.raw ?? null)}::jsonb, updated_at = now()
       WHERE id = ${paymentId}
     `);
-    return { ok: false, reason };
+    return { ok: false, reason, customerReason: result.customerReason?.trim() || t("pay.failed") };
   }
 
   // 승인 금액 대조 — 다르면 즉시 취소한다. 청구는 우리가 시작했으므로
@@ -205,7 +213,9 @@ async function chargeOrder(
         raw = ${JSON.stringify(result.raw ?? null)}::jsonb, updated_at = now()
       WHERE id = ${paymentId}
     `);
-    return { ok: false, reason: "승인 금액이 청구 금액과 일치하지 않습니다." };
+    // 이 문장은 손님에게 보여도 된다 — 우리 쪽 대조 결과이고 서버 사정이 없다
+    const mismatch = "승인 금액이 청구 금액과 일치하지 않습니다.";
+    return { ok: false, reason: mismatch, customerReason: mismatch };
   }
 
   await db.execute(sql`
@@ -351,9 +361,10 @@ export async function subscribe(
 
   if (!charged.ok) {
     // 첫 결제 실패 = 가입 실패. 주문을 취소해 재고를 되돌리고 구독을 지운다.
+    // 주문 이력(운영자가 본다)에는 자세한 이유를, 손님에게는 보여도 되는 것만
     await abandonCycleOrder(db, order.id, `정기결제 가입 실패: ${charged.reason}`);
     await db.execute(sql`DELETE FROM shop_subscriptions WHERE id = ${subId}`);
-    throw new ShopError(402, `결제에 실패했습니다: ${charged.reason}`);
+    throw new ShopError(402, charged.customerReason);
   }
 
   const { rows: updated } = await db.execute(sql`
@@ -510,7 +521,9 @@ export async function chargeDueSubscriptions(
 
         if (!result.ok) {
           await abandonCycleOrder(db, order.id, `정기결제 실패: ${result.reason}`);
-          await recordFailure(db, deps, { subId, cycleNo, email, name, reason: result.reason });
+          // 로그에는 자세히, 손님이 읽는 곳(이력·멈춤 사유·메일)에는 보여도 되는 것만
+          deps.log(`정기결제 청구 실패 (${subId}, ${cycleNo}회차): ${result.reason}`);
+          await recordFailure(db, deps, { subId, cycleNo, email, name, reason: result.customerReason });
           failed += 1;
           continue;
         }

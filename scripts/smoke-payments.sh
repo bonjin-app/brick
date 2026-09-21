@@ -416,6 +416,33 @@ console.log(bad.length === 0 ? "모두 통과" : `실패 ${bad.length}건: ${JSO
 ')"
 check "http 는 localhost 만 허용한다" "$BASE_TEST" "모두 통과"
 
+echo "══ PG 가 닿지 않으면 손님에게 무엇을 보여주는가 ══"
+#
+# PG 가 준 실패 이유가 그대로 402 의 문장이었다. 결제 서버가 닿지 않으면
+# 손님 화면에 `TypeError: fetch failed` 가 떴다 — 무엇을 해야 하는지 알 수 없고
+# 서버 사정이 밖으로 샌다. 자세한 이유는 결제 기록에만 남긴다.
+ODOWN="$(mkorder 1)"
+kill "$PG_PID" 2>/dev/null || true; wait "$PG_PID" 2>/dev/null || true
+LEAK="$(curl -s -b "$B" -X POST "$SHOP/payments/confirm" -H 'content-type: application/json' \
+  -d "{\"orderNo\":\"$ODOWN\",\"provider\":\"toss\",\"providerTid\":\"pk_down\",\"amount\":14000}")"
+absent   "내부 오류를 손님에게 보여주지 않는다" "$LEAK" "fetch failed"
+absent   "라이브러리 이름도 흘리지 않는다" "$LEAK" "TypeError"
+absent   "서버 주소도 흘리지 않는다" "$LEAK" "127.0.0.1"
+contains "손님이 할 수 있는 일을 알려준다" "$LEAK" "다시 시도"
+contains "기록에는 자세한 이유가 남는다 (운영자가 원인을 알아야 한다)" \
+  "$(psql_q "SELECT failure_reason FROM shop_payments WHERE provider_tid='pk_down'")" "fetch failed"
+check "주문은 결제대기로 남는다" "$(psql_q "SELECT status FROM shop_orders WHERE order_no='$ODOWN'")" "pending"
+# 이 주문은 결제되지 않았으므로 취소해 재고를 되돌린다 (뒤의 재고 단언이 본다)
+ODOWN_ID="$(psql_q "SELECT id FROM shop_orders WHERE order_no='$ODOWN'")"
+curl -s -b "$CK" -X PUT "$SHOP/admin/orders/$ODOWN_ID" -H 'content-type: application/json' \
+  -d '{"status":"cancelled","note":"PG 미도달 검증"}' >/dev/null
+
+# 스텁을 같은 포트로 되살린다 (BRICK_TOSS_API_BASE 는 프로세스 시작 때 고정된다)
+node "$ROOT/scripts/pg-stub.mjs" --port "$PG_PORT" --out "$PGLOG" > "$TMP/pg2.log" 2>&1 &
+PG_PID=$!
+for i in $(seq 1 20); do grep -q 'listening' "$TMP/pg2.log" 2>/dev/null && break; sleep 0.3; done
+grep -q 'listening' "$TMP/pg2.log" || { bad "PG 스텁 재시작 실패"; exit 1; }
+
 echo "══ PG 가 실패하면 ══"
 O3="$(mkorder 1)"
 # 존재하지 않는 결제를 취소하면 스텁이 404 를 준다

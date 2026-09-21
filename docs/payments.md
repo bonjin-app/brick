@@ -81,6 +81,15 @@ POST /api/plugins/brick-shop/orders
 
 - 시크릿 키는 공개 API로 나가지 않습니다 (설정 여부만 반환)
 - PG 응답은 화이트리스트로 걸러 저장합니다 — 카드번호·영수증 URL 등은 남기지 않습니다
+- **실패 이유는 손님에게 그대로 가지 않습니다.** PG 가 돌려준 문장은 기록
+  (`shop_payments.failure_reason`)과 로그에 남고, 손님에게는 게이트웨이가
+  "보여도 된다"고 표시한 것(`customerReason`)만 보여줍니다. 없으면 일반 안내가
+  나갑니다 — PG 서버가 닿지 않을 때 `TypeError: fetch failed` 가 결제 화면에
+  뜨던 자리입니다. 손님은 무엇을 해야 할지 알 수 없고, 서버 사정이 밖으로 샙니다.
+
+  게이트웨이는 **손님이 고칠 수 있는 사유일 때만** `customerReason` 을 채웁니다
+  (카드 한도·잔액·비밀번호처럼 PG 가 코드와 함께 준 거절 사유). 전송 실패·
+  타임아웃·PG 장애(5xx)·인증 실패(401/403)는 비워 둡니다.
 
 ## 환불
 
@@ -108,7 +117,16 @@ export default definePlugin(async (ctx) => {
 
     async confirm({ orderNo, providerTid, claimedAmount }) {
       const res = await callMyPg(providerTid, claimedAmount);
-      if (!res.ok) return { ok: false, failureReason: res.message };
+      if (!res.ok) {
+        return {
+          // 기록·운영자용 — 그대로 저장되고 로그에 남는다
+          failureReason: res.message,
+          // 손님에게 보여도 되는 이유만 (카드 한도·잔액처럼 PG 의 거절 사유).
+          // 네트워크·타임아웃·PG 장애는 비워 둔다 — 일반 안내가 나간다.
+          customerReason: res.declineCode ? res.message : undefined,
+          ok: false,
+        };
+      }
       return {
         ok: true,
         // 반드시 PG가 확인한 실제 금액을 반환해야 한다.
@@ -143,7 +161,9 @@ PG 인증 정보는 `ctx.settings` 에 저장하고, 공개 API로 시크릿을 
 
 ## 아직 없는 것
 
-정기결제(빌링), 에스크로, 현금영수증·세금계산서 발행, 해외 결제(Stripe/PayPal),
-가상계좌 자동 입금확인 웹훅.
+에스크로, 해외 결제(Stripe/PayPal), 가상계좌 자동 입금확인 웹훅.
+
+(정기결제와 현금영수증·세금계산서는 그 뒤에 생겼습니다 —
+[쇼핑몰 문서](commerce.md)의 "정기결제"와 "세금 증빙" 절을 보세요.)
 
 관련 문서: [쇼핑몰](commerce.md) · [보안](security.md) · [플러그인 개발](plugin-development.md)

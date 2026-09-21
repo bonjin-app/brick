@@ -79,6 +79,14 @@ export default definePlugin(async (ctx) => {
       const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
       return { ok: res.ok, status: res.status, data };
     } catch (err) {
+      /*
+       * 전송 자체가 실패했다(주소를 못 찾음·연결 거부·타임아웃).
+       *
+       * status 0 이 그 표시다 — 호출자는 이것을 보고 **손님에게 보여줄 이유가
+       * 없다**고 판단한다. String(err) 는 기록용이다: "TypeError: fetch failed"
+       * 나 서버 주소가 손님 화면에 뜨면, 손님은 무엇을 해야 할지 알 수 없고
+       * 우리는 인프라 사정을 밖으로 흘린다.
+       */
       const aborted = err instanceof Error && err.name === "AbortError";
       return {
         ok: false,
@@ -222,6 +230,8 @@ export default definePlugin(async (ctx) => {
         return {
           ok: false,
           failureReason: String(res.data.message ?? `승인 실패 (HTTP ${res.status})`),
+          // 손님이 고칠 수 있는 사유(카드 한도·잔액·비밀번호)일 때만 그대로 보여준다
+          customerReason: customerSafe(res),
           raw: sanitize(res.data),
         };
       }
@@ -295,6 +305,7 @@ export default definePlugin(async (ctx) => {
         return {
           ok: false,
           failureReason: String(res.data.message ?? `청구 실패 (HTTP ${res.status})`),
+          customerReason: customerSafe(res),
           raw: sanitize(res.data),
         };
       }
@@ -414,6 +425,28 @@ export default definePlugin(async (ctx) => {
 
   return {};
 });
+
+/**
+ * 손님에게 **그대로 보여도 되는** 실패 사유인가.
+ *
+ * 토스는 거절 사유를 코드와 한국어 문장으로 준다("카드 한도를 초과하였습니다").
+ * 그런 문장은 손님이 바로 행동할 수 있는 정보이므로 그대로 보여주는 것이 낫다.
+ *
+ * 반대로 **우리 쪽 사정**은 손님에게 아무 의미가 없고 흘리면 안 된다:
+ *  - status 0: 전송 실패 — 메시지가 `String(err)` 다(라이브러리·주소가 들어간다)
+ *  - 5xx: PG 장애 — 손님이 할 수 있는 일이 없다
+ *  - 401/403: 우리가 키를 잘못 넣은 것이다 — 손님 탓이 아니고, 설정 상태를 알린다
+ * 이 셋은 비워 둔다. 그러면 호출자가 일반 안내를 보여주고, 자세한 이유는
+ * 결제 기록(shop_payments.failure_reason)과 로그에만 남는다.
+ */
+function customerSafe(res: { status: number; data: Record<string, unknown> }): string | undefined {
+  if (res.status < 400 || res.status >= 500) return undefined;
+  if (res.status === 401 || res.status === 403) return undefined;
+  const message = typeof res.data.message === "string" ? res.data.message.trim() : "";
+  // 코드 없이 온 문장은 PG 의 거절 사유가 아닐 수 있다 (게이트웨이·프록시의 오류 본문)
+  if (!message || typeof res.data.code !== "string") return undefined;
+  return message.slice(0, 200);
+}
 
 /**
  * PG 응답에서 민감정보를 제거한다.

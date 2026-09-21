@@ -211,6 +211,7 @@
   "pager.label": "페이지",
   "pager.next": "다음",
   "pager.prev": "이전",
+  "pay.failed": "결제에 실패했습니다. 카드 상태를 확인하시거나 다른 결제수단으로 다시 시도해주세요.",
   "receipt.approvalNo": "승인번호",
   "receipt.fail": "신청하지 못했습니다.",
   "receipt.identifier": "번호",

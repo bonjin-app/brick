@@ -33,7 +33,22 @@ export interface PaymentGateway {
     approvedAmount?: number;
     method?: string;
     raw?: unknown;
+    /**
+     * 실패 이유 — **기록과 운영자용**이다. 그대로 저장하고 로그에 남긴다.
+     * 손님에게 그대로 보이지 않는다(아래 customerReason 참고).
+     */
     failureReason?: string;
+    /**
+     * 손님에게 **보여도 되는** 실패 이유.
+     *
+     * PG 가 "카드 한도를 초과하였습니다" 처럼 손님이 고칠 수 있는 사유를 준
+     * 경우에만 채운다. 네트워크 오류·타임아웃·설정 누락·PG 장애처럼 손님이
+     * 어쩔 수 없는 것은 **비워 둔다** — 그러면 호출자가 일반 안내를 보여준다.
+     *
+     * 비워 두는 것이 기본이다. 예전에는 failureReason 이 그대로 402 의 문장이
+     * 되어 `TypeError: fetch failed` 나 PG 서버 주소가 손님 화면에 떴다.
+     */
+    customerReason?: string;
   }>;
   /** 취소/환불. amount를 주면 부분 환불 */
   /**
@@ -131,7 +146,10 @@ export interface PaymentGateway {
     approvedAmount?: number;
     method?: string;
     raw?: unknown;
+    /** 기록·운영자용 (confirm 과 같은 규칙) */
     failureReason?: string;
+    /** 손님에게 보여도 되는 이유 — 없으면 호출자가 일반 안내를 쓴다 */
+    customerReason?: string;
   }>;
   cancel(params: {
     providerTid: string;
@@ -234,7 +252,15 @@ export async function confirmPayment(
         raw = ${JSON.stringify(result.raw ?? null)}::jsonb, updated_at = now()
       WHERE id = ${paymentId}
     `);
-    throw new ShopError(402, result.failureReason ?? "결제 승인에 실패했습니다.");
+    /*
+     * 손님에게는 **보여도 되는 것만** 보낸다.
+     *
+     * 예전에는 failureReason 이 그대로 402 의 문장이 되어, PG 가 닿지 않을 때
+     * `TypeError: fetch failed` 가 결제 화면에 떴다 — 손님은 자기가 무엇을
+     * 잘못했는지 알 수 없고, 우리는 서버 사정(주소·라이브러리)을 밖으로 흘린다.
+     * 자세한 이유는 위에서 `shop_payments.failure_reason` 에 남겼다(운영자가 본다).
+     */
+    throw new ShopError(402, result.customerReason?.trim() || t("pay.failed"));
   }
 
   // ── 4. 금액 검증 — 위조 방어의 핵심 ─────────────────

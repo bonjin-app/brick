@@ -383,6 +383,40 @@ check "실제로 빠져나간 금액이 가입 견적과 같다" \
 check "PG 로 간 청구액도 같다" "$(pg_last_charge amount)" "24000"
 curl -s -b "$A" -X POST "$SHOP/me/subscriptions/$GSUB_ID/cancel" >/dev/null
 
+echo "── PG 가 닿지 않을 때 손님에게 무엇을 보여주는가"
+#
+# PG 가 준 실패 이유는 그대로 402 의 문장이 되어 손님에게 갔다. 결제 서버가
+# 닿지 않으면 그 자리에 `TypeError: fetch failed` 가 떴다 — 손님은 자기가 무엇을
+# 해야 하는지 알 수 없고(카드 문제인가? 다시 눌러야 하나?), 우리는 서버 사정을
+# 밖으로 흘린다. 자세한 이유는 **기록에** 남고, 손님은 할 수 있는 일을 듣는다.
+kill "$PG_PID" 2>/dev/null || true; wait "$PG_PID" 2>/dev/null || true
+DOWN="$(curl -s -b "$A" -X POST "$SHOP/subscriptions" -H 'content-type: application/json' \
+  -d "{\"productSlug\":\"milk\",\"billingKeyId\":\"$KEY_A_ID\",\"orderer\":$ORDERER}")"
+absent   "내부 오류를 손님에게 보여주지 않는다" "$DOWN" "fetch failed"
+absent   "라이브러리 이름도 흘리지 않는다" "$DOWN" "TypeError"
+absent   "서버 주소도 흘리지 않는다" "$DOWN" "127.0.0.1"
+contains "손님이 할 수 있는 일을 알려준다" "$DOWN" "다시 시도"
+contains "기록에는 자세한 이유가 남는다 (운영자가 원인을 알아야 한다)" \
+  "$(psql_q "SELECT failure_reason FROM shop_payments WHERE status='failed' ORDER BY created_at DESC LIMIT 1")" "fetch failed"
+check "구독이 만들어지지 않았다" \
+  "$(psql_q "SELECT count(*) FROM shop_subscriptions WHERE status='active' AND product_name='우유 구독'")" "0"
+
+# 스텁을 같은 포트로 되살린다 (BRICK_TOSS_API_BASE 는 프로세스 시작 때 고정된다)
+PG_INFO="$(start_stub scripts/pg-stub.mjs "$PG_PORT" "$TMP/pg2.log" --out "$PGLOG")" \
+  || { bad "PG 스텁 재시작 실패"; exit 1; }
+PG_PID="${PG_INFO#* }"
+
+# 되살린 스텁은 빌링키를 기억하지 못한다(메모리에 있다) — 카드를 다시 등록한다
+CUST_A2="$(curl -s -b "$A" -X POST "$SHOP/me/billing-keys/prepare" | jq_get "['customerKey']")"
+KEY_A2_ID="$(curl -s -b "$A" -X POST "$SHOP/me/billing-keys" -H 'content-type: application/json' \
+  -d "{\"provider\":\"toss\",\"authKey\":\"auth-ok-a2\",\"customerKey\":\"$CUST_A2\"}" | jq_get "['id']")"
+
+# PG 가 **손님이 고칠 수 있는 사유**를 주면 그대로 전한다 — 뭉뚱그리면 정보가 사라진다
+stub_fail_next 1
+DECLINED="$(curl -s -b "$A" -X POST "$SHOP/subscriptions" -H 'content-type: application/json' \
+  -d "{\"productSlug\":\"milk\",\"billingKeyId\":\"$KEY_A2_ID\",\"orderer\":$ORDERER}")"
+contains "카드 거절 사유는 그대로 보여준다" "$DECLINED" "한도 초과"
+
 echo
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 # 실측을 남긴다(설정됐을 때만) — README 의 표가 실제와 같은지 CI 가 대조한다.
