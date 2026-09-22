@@ -61,6 +61,10 @@ export const BOARD_RESOURCE: AdminResource = {
       help: "분류가 있는 게시판에서 분류를 고르지 않으면 글을 올릴 수 없게 합니다." },
     { name: "categories", label: "분류", type: "text",
       help: "쉼표로 구분해 입력하세요. 예: 공지, 질문, 자유 — 비우면 분류를 쓰지 않습니다." },
+    { name: "extra_fields", label: "여분 필드", type: "textarea",
+      help: "한 줄에 하나씩, 칸 이름을 적으세요 (최대 10개). 예: 연락처 / 지역 / 학번. "
+        + "줄 순서가 곧 칸 번호(f1…f10)이므로, 글이 쌓인 뒤에 순서를 바꾸면 값이 어긋납니다. "
+        + "그누보드에서 옮겨 왔다면 그쪽 여분 필드가 이 순서 그대로 들어옵니다." },
     { name: "page_size", label: "페이지당 글 수", type: "number", help: "5~100" },
     { name: "list_style", label: "목록 스킨", type: "select", inList: true,
       options: [

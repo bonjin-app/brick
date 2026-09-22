@@ -157,6 +157,32 @@ contains "옛 절대주소 에디터 이미지도 잡는다" "$IMGPOST" 'src="/u
 absent  "옛 주소가 남지 않는다" "$IMGPOST" "old.example.com"
 contains "남의 CDN 이미지는 건드리지 않는다" "$IMGPOST" 'src="https://cdn.example.net/keep.png"'
 
+echo "── 여분 필드와 관련 링크도 함께 옮긴다"
+#
+# 그누보드는 게시판마다 열 개의 추가 입력칸을 준다(이름은 bo_N_subj, 값은 wr_N).
+# 한국 사이트에서 아주 널리 쓰인다 — 연락처·지역·학번·차량번호가 전부 거기 있다.
+# 예전에는 **통째로 버려졌다**: 글은 옮겨지는데 그 옆의 값만 소리 없이 사라지고,
+# 옮긴 뒤에 알아채면 원본 데이터베이스를 다시 찾아야 한다. wr_link1/2 도 같았다.
+EXTRA_DEF="$(psql_q "SELECT extra_fields::text FROM board_boards WHERE slug='free'")"
+contains "게시판이 칸 이름을 가져온다" "$EXTRA_DEF" '"label": "연락처"'
+contains "두 번째 칸도" "$EXTRA_DEF" '"label": "지역"'
+contains "자리 번호는 그누보드와 같다 (wr_1 → f1)" "$EXTRA_DEF" '"key": "f1"'
+check "이름 없는 칸은 만들지 않는다 (쓰지 않는 게시판이 대부분이다)" \
+  "$(psql_q "SELECT extra_fields::text FROM board_boards WHERE slug='notice'")" "[]"
+EXTRA_VAL="$(psql_q "SELECT extra::text FROM board_posts WHERE title='비회원이 쓴 글'")"
+contains "글의 값이 들어왔다" "$EXTRA_VAL" "010-1234-5678"
+contains "두 번째 값도" "$EXTRA_VAL" "서울"
+check "값이 없는 글은 빈 채로 둔다" \
+  "$(psql_q "SELECT extra::text FROM board_posts WHERE title='비밀글입니다'")" "{}"
+LINKS="$(psql_q "SELECT links::text FROM board_posts WHERE title='비회원이 쓴 글'")"
+contains "관련 링크도 옮긴다 (wr_link1)" "$LINKS" "https://example.com/guide"
+check "빈 링크는 넣지 않는다" \
+  "$(psql_q "SELECT links::text FROM board_posts WHERE title='비밀글입니다'")" "[]"
+# 옮긴 값이 손님 화면에 실제로 나와야 한다 — DB 에만 있으면 없는 것과 같다
+FREE_POST_ID="$(psql_q "SELECT id FROM board_posts WHERE title='비회원이 쓴 글'")"
+DETAIL="$(curl -s -b "$CK" "$API/api/plugins/brick-board/posts/$FREE_POST_ID")"
+contains "상세 응답에 여분 필드 값" "$DETAIL" "010-1234-5678"
+
 echo "── 회원 검증"
 ROLES="$(psql_q "SELECT email, role, is_active FROM users WHERE email LIKE '%old.test' OR email LIKE '%gnuboard.invalid' ORDER BY email")"
 contains "최고관리자 → admin" "$ROLES" "admin@old.test|admin|true"

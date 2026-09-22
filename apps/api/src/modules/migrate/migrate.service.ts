@@ -6,7 +6,8 @@ import { DB } from "../../runtime.module.js";
 import { PluginLoaderService } from "../plugins/plugin-loader.service.js";
 import { detectPrefix, parseTables, readRows, type DumpRow, type DumpTable } from "./dump-parser.js";
 import {
-  DEFAULT_LEVEL_MAPPING, boardLevelToRole, convertContent, levelToRole, normalizeEmail,
+  DEFAULT_LEVEL_MAPPING, boardLevelToRole, convertContent, gnuExtraFields, gnuExtraValues,
+  gnuLinks, levelToRole, normalizeEmail,
   normalizeSlug, parseGnuDate, rewriteLegacyMediaUrls, wrapLegacyHash,
   type LevelMapping, type MigratePlan,
 } from "./gnuboard-map.js";
@@ -554,10 +555,18 @@ export class MigrateService {
         result.boards.skipped += 1;
       } else {
         boardId = uuidv7();
+        /*
+         * 여분 필드 — 그누보드는 칸 이름을 bo_1_subj ~ bo_10_subj 에, 값을 글의
+         * wr_1 ~ wr_10 에 둔다. 연락처·지역·학번처럼 **실제 내용**이 거기 들어
+         * 있는 사이트가 많은데, 예전에는 이 이전에서 통째로 버려졌다 — 글은
+         * 옮겨지고 그 옆의 값만 소리 없이 사라졌다.
+         *
+         * (설명을 sql 템플릿 **밖에** 둔다: 리터럴 안의 백틱 하나가 리터럴을 닫는다)
+         */
         await this.db.execute(sql`
           INSERT INTO board_boards
             (id, slug, title, description, read_role, write_role, comment_role, download_role,
-             page_size, allow_reply, allow_secret, allow_upload, is_visible, created_at)
+             page_size, allow_reply, allow_secret, allow_upload, extra_fields, is_visible, created_at)
           VALUES
             (${boardId}, ${slug}, ${String(row.bo_subject ?? table).slice(0, 200)},
              ${String(row.bo_content_head ?? "").slice(0, 1000) || null},
@@ -569,6 +578,7 @@ export class MigrateService {
              ${Number(row.bo_use_reply ?? 1) !== 0},
              ${Number(row.bo_use_secret ?? 0) !== 0},
              ${Number(row.bo_upload_count ?? 0) > 0},
+             ${JSON.stringify(gnuExtraFields(row))}::jsonb,
              true, now())
         `);
         result.boards.created += 1;
@@ -576,7 +586,9 @@ export class MigrateService {
 
       const writeTable = `${prefix}write_${table}`;
       if (tables.has(writeTable)) {
-        await this.importPosts(dump, tables, writeTable, boardId, memberMap, result, plan);
+        // 게시판이 정의한 여분 필드만 글에서 가져온다 — 이름 없는 칸의 값은 보여줄 자리가 없다
+        await this.importPosts(dump, tables, writeTable, boardId, memberMap, result, plan,
+          gnuExtraFields(row).map((f) => f.key));
       }
     }
   }
@@ -596,6 +608,8 @@ export class MigrateService {
     memberMap: Map<string, string>,
     result: RunResult,
     plan: MigratePlan,
+    /** 이 게시판이 쓰는 여분 필드 키 (`f1`…) — 없으면 글의 wr_N 도 가져오지 않는다 */
+    extraKeys: string[] = [],
   ): Promise<void> {
     // 본문의 /data/ 이미지 주소를 /uploads/ 로 — 안 바꾸면 옮긴 사이트의
     // 이미지가 전부 깨진다. 리버스 프록시를 쓰는 운영자만 끈다.
@@ -618,7 +632,7 @@ export class MigrateService {
         INSERT INTO board_posts
           (id, board_id, author_id, author_name, title, content, category,
            is_notice, is_secret, thread_id, thread_created_at, thread_path, depth,
-           view_count, up_count, comment_count, created_at, updated_at)
+           view_count, up_count, comment_count, links, extra, created_at, updated_at)
         VALUES
           (${id}, ${boardId}::uuid,
            ${authorId ? sql`${authorId}::uuid` : sql`NULL`},
@@ -631,7 +645,10 @@ export class MigrateService {
            ${id}::uuid, ${created}, ${id}, 0,
            ${Math.max(0, Number(row.wr_hit ?? 0) || 0)},
            ${Math.max(0, Number(row.wr_good ?? 0) || 0)},
-           0, ${created}, ${created})
+           0,
+           ${JSON.stringify(gnuLinks(row))}::jsonb,
+           ${JSON.stringify(gnuExtraValues(row, extraKeys))}::jsonb,
+           ${created}, ${created})
       `);
       postMap.set(wrId, id);
       result.posts.created += 1;

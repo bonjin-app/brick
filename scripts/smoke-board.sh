@@ -629,6 +629,42 @@ check "%% 는 와일드카드가 아니다" \
 contains "관리 선언에 검색칸이 있다" \
   "$(curl -s -b "$ADMIN" "$API/api/admin/resources/brick-board/posts")" '"searchable"'
 
+echo "── 여분 필드 (게시판마다 정하는 추가 입력칸)"
+#
+# 그누보드의 wr_1~wr_10 에 해당한다. 연락처·지역·학번처럼 본문이 아닌 항목을
+# 따로 받는 자리다 — 옮겨 오는 사이트의 데이터가 실제로 거기 들어 있다.
+EX_BOARD="$(curl -s -b "$ADMIN" "$BD/admin/boards" | python3 -c "
+import sys,json
+print(next(b['id'] for b in json.load(sys.stdin)['items'] if b['slug'] == 'free'))")"
+printf '{"slug":"free","title":"자유게시판","read_role":"guest","write_role":"guest","comment_role":"guest","download_role":"guest","categories":"공지, 질문, 자유","page_size":20,"max_files":2,"write_interval":0,"extra_fields":"연락처\\n지역"}' > "$TMP/bx.json"
+contains "여분 필드 설정" \
+  "$(curl -s -b "$ADMIN" -X PUT "$BD/admin/boards/$EX_BOARD" -H 'content-type: application/json' --data-binary "@$TMP/bx.json")" '"ok":true'
+EXL="$(curl -s -b "$ADMIN" "$BD/admin/boards")"
+contains "관리 목록은 줄 문자열로 돌려준다 (이름에 쉼표가 들어가므로)" "$EXL" '"extra_fields":"연락처\n지역"'
+
+printf '{"title":"여분 필드 글","content":"<p>본문</p>","guestName":"손님","guestPassword":"pw12345","extra":{"f1":"010-9999-8888","f2":"부산","f9":"정의 밖"}}' > "$TMP/px.json"
+PXR="$(curl -s -X POST "$BD/boards/free/posts" -H 'content-type: application/json' --data-binary "@$TMP/px.json")"
+PX="$(echo "$PXR" | jq_get "['id']")"
+[[ -n "$PX" ]] && ok "여분 필드가 있는 글 작성" || bad "여분 필드가 있는 글 작성 ($PXR)"
+PXD="$(curl -s "$BD/posts/$PX")"
+contains "첫 칸 값이 저장된다" "$PXD" "010-9999-8888"
+contains "둘째 칸도" "$PXD" "부산"
+# 화면이 무엇을 보내든 게시판이 정의한 칸만 저장한다 — 임의 키를 받으면 저장소가 된다
+absent "정의 밖의 칸은 버린다" "$PXD" "정의 밖"
+
+PXH="$(curl -s "$API/api/render/page?path=board%2Ffree%2F$PX" | python3 -c "import sys,json;print(json.load(sys.stdin).get('html',''))")"
+contains "손님 화면에 칸 이름이 나온다" "$PXH" "연락처"
+contains "값도 나온다" "$PXH" "010-9999-8888"
+# 값이 없는 칸까지 그리면 글마다 빈 표가 붙는다
+absent "값 없는 칸은 그리지 않는다" "$PXH" "<dt>지역</dt><dd></dd>"
+
+printf '{"title":"여분 필드 글","content":"<p>고친 본문</p>","guestPassword":"pw12345"}' > "$TMP/pxe.json"
+curl -s -X PUT "$BD/posts/$PX" -H 'content-type: application/json' --data-binary "@$TMP/pxe.json" >/dev/null
+contains "여분 필드를 보내지 않은 수정이 값을 지우지 않는다" "$(curl -s "$BD/posts/$PX")" "010-9999-8888"
+# 여분 필드를 쓰지 않는 게시판에는 폼에 아무것도 늘어나지 않는다
+absent "안 쓰는 게시판의 글쓰기에는 칸이 없다" \
+  "$(curl -s -b "$MEMBER" "$API/api/render/page?path=board%2Fmembers&write=1" | python3 -c "import sys,json;print(json.load(sys.stdin).get('html',''))")" \
+  'name="extra.'
 
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 # 실측을 남긴다(설정됐을 때만) — README 의 표가 실제와 같은지 CI 가 대조한다.

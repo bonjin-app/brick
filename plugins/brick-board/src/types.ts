@@ -53,6 +53,13 @@ export interface BoardRow {
   notify_comment: boolean;
   /** 분류가 있는 게시판에서 분류 선택을 강제한다 */
   category_required?: boolean;
+  /**
+   * 여분 필드 — 게시판마다 정하는 추가 입력칸 (그누보드의 `wr_1`~`wr_10`).
+   *
+   * 칸 이름은 게시판이 갖고 값은 글이 갖는다. 키는 자리 번호다(`f1`…`f10`) —
+   * 그누보드와 같은 방식이라, 옮겨 온 사이트의 운영자가 알던 그대로다.
+   */
+  extra_fields?: ExtraField[];
   /** 소속 그룹 (없으면 null). read_role 은 이미 그룹과 합쳐진 실효 권한이다 */
   group_id?: string | null;
   group_title?: string | null;
@@ -65,6 +72,54 @@ export interface BoardRow {
 export function effectiveReadRole(boardRole: unknown, groupRole: unknown): string {
   const b = String(boardRole ?? "guest"), g = String(groupRole ?? "guest");
   return rankOf(b) >= rankOf(g) ? b : g;
+}
+
+/** 여분 필드 하나 — 자리 번호와 운영자가 붙인 이름 */
+export interface ExtraField {
+  /** `f1` ~ `f10`. 자리 번호이므로 줄 순서를 바꾸면 값이 어긋난다(그누보드와 같다) */
+  key: string;
+  label: string;
+}
+
+/** 열 칸까지 — 그누보드가 정한 수이고, 그보다 많으면 글쓰기 폼이 설문지가 된다 */
+export const MAX_EXTRA_FIELDS = 10;
+/** 한 칸에 담을 수 있는 길이 — 본문이 아니라 항목이다 */
+export const EXTRA_VALUE_MAX = 500;
+
+/**
+ * 줄 단위 이름 목록 → 여분 필드 정의.
+ *
+ * 쉼표가 아니라 **줄**로 나눈다 — "연락처(집, 휴대폰)" 처럼 이름에 쉼표가
+ * 들어가는 일이 흔하다(분류는 쉼표를 쓰지만 그건 짧은 낱말이다).
+ */
+export function parseExtraFields(text: unknown): ExtraField[] {
+  return String(text ?? "")
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, MAX_EXTRA_FIELDS)
+    .map((label, i) => ({ key: `f${i + 1}`, label: label.slice(0, 50) }));
+}
+
+/** 정의된 칸만, 길이를 잘라서 — 화면이 보내지 않은 칸은 빈 값으로 두지 않고 뺀다 */
+export function pickExtraValues(input: unknown, fields: ExtraField[]): Record<string, string> {
+  const src = (input ?? {}) as Record<string, unknown>;
+  const out: Record<string, string> = {};
+  for (const f of fields) {
+    const v = String(src[f.key] ?? "").trim();
+    if (v) out[f.key] = v.slice(0, EXTRA_VALUE_MAX);
+  }
+  return out;
+}
+
+/** 게시판 행에서 여분 필드 정의를 꺼낸다 (jsonb 가 무엇이든 안전하게) */
+export function extraFieldsOf(row: unknown): ExtraField[] {
+  const raw = (row as { extra_fields?: unknown } | null)?.extra_fields;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((f): f is ExtraField => Boolean(f) && typeof (f as ExtraField).key === "string")
+    .map((f) => ({ key: String(f.key), label: String(f.label ?? "") }))
+    .slice(0, MAX_EXTRA_FIELDS);
 }
 
 export const LIST_STYLES = ["basic", "gallery", "webzine"] as const;

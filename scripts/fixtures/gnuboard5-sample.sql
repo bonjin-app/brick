@@ -65,14 +65,16 @@ CREATE TABLE `g5_board` (
   `bo_use_reply` tinyint(4) NOT NULL DEFAULT '0',
   `bo_use_secret` tinyint(4) NOT NULL DEFAULT '0',
   `bo_upload_count` tinyint(4) NOT NULL DEFAULT '0',
+  `bo_1_subj` varchar(255) NOT NULL DEFAULT '',
+  `bo_2_subj` varchar(255) NOT NULL DEFAULT '',
   PRIMARY KEY (`bo_table`)
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8;
 
 INSERT INTO `g5_board` VALUES
-('notice','community','공지사항','공지 안내입니다',1,10,2,2,15,0,0,2),
-('free','community','자유게시판','',1,2,2,2,20,1,1,2),
-('secret_room','community','비밀게시판','',8,8,8,8,20,0,1,0),
-('empty','community','글없는게시판','',1,2,2,2,20,0,0,0);
+('notice','community','공지사항','공지 안내입니다',1,10,2,2,15,0,0,2,'',''),
+('free','community','자유게시판','',1,2,2,2,20,1,1,2,'연락처','지역'),
+('secret_room','community','비밀게시판','',8,8,8,8,20,0,1,0,'',''),
+('empty','community','글없는게시판','',1,2,2,2,20,0,0,0,'','');
 
 -- ─────────────────────────────────────────────────────
 CREATE TABLE `g5_write_notice` (
@@ -118,14 +120,18 @@ CREATE TABLE `g5_write_free` (
   `wr_good` int(11) NOT NULL DEFAULT '0',
   `mb_id` varchar(20) NOT NULL DEFAULT '',
   `wr_name` varchar(255) NOT NULL DEFAULT '',
+  `wr_link1` varchar(1000) NOT NULL DEFAULT '',
+  `wr_link2` varchar(1000) NOT NULL DEFAULT '',
+  `wr_1` varchar(255) NOT NULL DEFAULT '',
+  `wr_2` varchar(255) NOT NULL DEFAULT '',
   PRIMARY KEY (`wr_id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8;
 
 INSERT INTO `g5_write_free` VALUES
-(1,1,'',1,0,0,'잡담','','비회원이 쓴 글','비회원 글입니다.','2021-06-01 12:00:00',5,0,'','손님'),
-(2,2,'',2,0,0,'','secret','비밀글입니다','비밀 내용','2021-06-02 12:00:00',3,0,'hong','길동'),
-(3,3,'',3,0,0,'','','날짜가 이상한 글','0000-00-00 날짜를 가진 글','0000-00-00 00:00:00',0,0,'hong','길동'),
-(4,4,'',4,0,0,'','html1','이미지가 있는 글','<p>첨부: <img src="/data/file/free/photo.jpg"> 에디터: <img src="https://old.example.com/data/editor/pic.png"> 외부: <img src="https://cdn.example.net/keep.png"></p>','2021-06-03 12:00:00',1,0,'hong','길동');
+(1,1,'',1,0,0,'잡담','','비회원이 쓴 글','비회원 글입니다.','2021-06-01 12:00:00',5,0,'','손님','https://example.com/guide','','010-1234-5678','서울'),
+(2,2,'',2,0,0,'','secret','비밀글입니다','비밀 내용','2021-06-02 12:00:00',3,0,'hong','길동','','','',''),
+(3,3,'',3,0,0,'','','날짜가 이상한 글','0000-00-00 날짜를 가진 글','0000-00-00 00:00:00',0,0,'hong','길동','','','',''),
+(4,4,'',4,0,0,'','html1','이미지가 있는 글','<p>첨부: <img src="/data/file/free/photo.jpg"> 에디터: <img src="https://old.example.com/data/editor/pic.png"> 외부: <img src="https://cdn.example.net/keep.png"></p>','2021-06-03 12:00:00',1,0,'hong','길동','','','','');
 
 -- 글 테이블이 없는 게시판(empty)은 게시판만 만들어져야 한다
 

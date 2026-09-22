@@ -5,24 +5,41 @@ import { verifyGuestPassword } from "./guest.js";
 import { t } from "./i18n.js";
 
 /** slug로 게시판을 읽고, 없으면 404 */
-export async function loadBoard(db: Db, slug: string): Promise<BoardRow> {
+/**
+ * 게시판 한 줄 — 없으면 null.
+ *
+ * **loadBoard 와 같은 질의를 두 벌 두지 않는다.** 예전에는 블록 쪽에 복사본이
+ * 있었고, 새 칸(여분 필드)을 더했을 때 한쪽만 고쳐져서 저장은 되는데 손님
+ * 화면에는 나오지 않았다 — 이 저장소가 몇 번이나 겪은 함정이다.
+ */
+export async function selectBoard(db: Db, slug: string): Promise<BoardRow | null> {
+  if (!slug) return null;
   const { rows } = await db.execute(sql`
     SELECT b.id, b.slug, b.title, b.description, b.read_role, b.write_role, b.comment_role, b.download_role,
            b.categories, b.page_size, b.allow_reply, b.allow_secret, b.allow_vote, b.allow_upload,
            b.max_files, b.write_interval, b.list_style, b.notify_email, b.notify_comment, b.category_required,
+           b.extra_fields,
            b.group_id, g.title AS group_title, g.read_role AS group_read_role
     FROM board_boards b LEFT JOIN board_groups g ON g.id = b.group_id
     WHERE b.slug = ${slug} AND b.is_visible = true LIMIT 1
   `);
   const row = rows[0];
-  if (!row) throw new BoardError(404, "게시판을 찾을 수 없습니다.");
+  if (!row) return null;
   return {
     ...(row as unknown as BoardRow),
     categories: Array.isArray(row.categories) ? (row.categories as string[]) : [],
     // 그룹 권한과 합친 실효 읽기 권한 — 이후의 모든 검사가 이 값을 쓴다
     read_role: effectiveReadRole(row.read_role, row.group_read_role),
-    };
+  };
 }
+
+/** 게시판 한 줄 — 없으면 404 로 끝낸다 (라우트가 쓴다) */
+export async function loadBoard(db: Db, slug: string): Promise<BoardRow> {
+  const row = await selectBoard(db, slug);
+  if (!row) throw new BoardError(404, "게시판을 찾을 수 없습니다.");
+  return row;
+}
+
 
 /** 권한 검사 — 부족하면 401(비로그인) 또는 403(권한 부족)으로 구분해 던진다 */
 export function requireRole(

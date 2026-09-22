@@ -206,6 +206,15 @@ ${CAPTCHA_WIDGET_JS}
       if (fd.get('guestPassword')) payload.guestPassword = fd.get('guestPassword');
       if (replyTo) payload.replyTo = replyTo;
       payload.links = [fd.get('link1') || '', fd.get('link2') || ''].filter(function (x) { return String(x).trim(); });
+      // 여분 필드 — 이름이 extra.f1 인 칸들을 모은다. 서버가 정의 밖의 키는 버린다
+      var extra = {};
+      var hasExtra = false;
+      fd.forEach(function (v, k) {
+        if (k.indexOf('extra.') !== 0) return;
+        extra[k.slice(6)] = String(v);
+        hasExtra = true;
+      });
+      if (hasExtra) payload.extra = extra;
       Object.keys(cap.fields).forEach(function (k) { payload[k] = cap.fields[k]; });
 
       submitBtn.disabled = true;
@@ -582,6 +591,14 @@ ${CAPTCHA_WIDGET_CSS}
 .brick-post-meta .brick-author{margin-right:2px}
 /* ── 링크 필드 ─────────────────────────────────── */
 .brick-links-field input{display:block;width:100%;margin-top:6px}
+.brick-post-extra{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;align-items:baseline;
+  padding:12px 14px;margin:6px 0 16px;border:1px solid var(--color-line, #e4e4ea);
+  border-radius:var(--radius, 10px);background:var(--color-bg-soft, #f6f6f9);font-size:14px}
+.brick-post-extra dt{color:var(--color-muted, #6c6c7a);font-weight:600;font-size:13px;white-space:nowrap}
+.brick-post-extra dd{margin:0;word-break:break-word}
+/* 폰에서는 이름과 값을 위아래로 — 긴 이름이 값을 한 글자씩 접는다 */
+@media (max-width:480px){.brick-post-extra{grid-template-columns:1fr;gap:2px 0}
+  .brick-post-extra dd{margin-bottom:8px}}
 .brick-post-links{list-style:none;padding:12px 14px;margin:6px 0 16px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 10px);background:var(--color-bg-soft, #f6f6f9);display:flex;flex-direction:column;gap:6px}
 .brick-post-links li{display:flex;align-items:center;gap:8px}.brick-post-links li::before{content:"";flex:none;width:6px;height:6px;border-radius:50%;background:var(--color-primary, #cf4437)}
 .brick-post-links a{word-break:break-all;color:var(--color-primary-text, #b63a2e)}

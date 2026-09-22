@@ -1,7 +1,10 @@
 import { definePlugin, searchExcerpt, isUniqueViolation, rawResponse, SITE_TZ } from "@brick/plugin-sdk";
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
-import { BoardError, asListStyle, effectiveReadRole, escapeHtml, hasRole, pgArray, rankOf, type Db, type SessionUser } from "./types.js";
+import {
+  BoardError, asListStyle, effectiveReadRole, escapeHtml, extraFieldsOf, hasRole,
+  parseExtraFields, pgArray, pickExtraValues, rankOf, type Db, type SessionUser,
+} from "./types.js";
 import { t } from "./i18n.js";
 import { hashGuestPassword } from "./guest.js";
 import { assertCanModify, canModifyPost, canReadSecret, checkWriteInterval, loadBoard, requireRole } from "./access.js";
@@ -207,7 +210,8 @@ export default definePlugin(async (ctx) => {
   ctx.registerRoute("PUT", "/posts/:id", async (req) => {
     const body = req.body as WritePostInput & { guestPassword?: string };
     const { rows } = await db.execute(sql`
-      SELECT p.id, p.author_id, p.guest_password, b.categories, b.allow_secret, b.category_required
+      SELECT p.id, p.author_id, p.guest_password, b.categories, b.allow_secret, b.category_required,
+             b.extra_fields
       FROM board_posts p JOIN board_boards b ON b.id = p.board_id
       WHERE p.id = ${req.params.id}::uuid LIMIT 1
     `);
@@ -231,10 +235,13 @@ export default definePlugin(async (ctx) => {
     if (post.category_required === true && cats.length && !category) throw new BoardError(400, "분류를 선택해주세요.");
 
     const links = body.links === undefined ? null : normalizeLinks(body.links);
+    // 여분 필드를 아예 보내지 않은 화면(옛 스킨·API 호출)이 있던 값을 지우지 않게 한다
+    const extra = body.extra === undefined ? null : pickExtraValues(body.extra, extraFieldsOf(post));
     await db.execute(sql`
       UPDATE board_posts SET title = ${title}, content = ${content}, category = ${category},
         is_secret = ${Boolean(body.isSecret) && Boolean(post.allow_secret)}, updated_at = now(),
-        links = COALESCE(${links === null ? null : JSON.stringify(links)}::jsonb, links)
+        links = COALESCE(${links === null ? null : JSON.stringify(links)}::jsonb, links),
+        extra = COALESCE(${extra === null ? null : JSON.stringify(extra)}::jsonb, extra)
       WHERE id = ${req.params.id}::uuid
     `);
     await refreshThumb(db, ctx.storage, req.params.id, content);
@@ -635,7 +642,7 @@ ${items}
       SELECT id, slug, title, description, read_role, write_role, comment_role, download_role,
              categories, page_size, allow_reply, allow_secret, allow_vote, allow_upload,
              max_files, write_interval, sort_order, is_visible,
-             list_style, notify_email, notify_comment, group_id, category_required,
+             list_style, notify_email, notify_comment, group_id, category_required, extra_fields,
              (SELECT count(*) FROM board_posts p WHERE p.board_id = b.id) AS post_count
       FROM board_boards b ORDER BY sort_order, title
     `);
@@ -644,6 +651,8 @@ ${items}
       items: rows.map((r) => ({
         ...r,
         categories: Array.isArray(r.categories) ? (r.categories as string[]).join(", ") : "",
+        // 여분 필드는 한 줄에 하나 — 이름에 쉼표가 들어가는 일이 흔하다
+        extra_fields: extraFieldsOf(r).map((f) => f.label).join("\n"),
       })),
       total: rows.length,
     };
@@ -678,6 +687,7 @@ ${items}
 
     return {
       slug,
+      extraFields: parseExtraFields(b.extra_fields),
       title: String(b.title).trim().slice(0, 200),
       description: String(b.description ?? "").trim() || null,
       readRole: role(b.read_role, "guest"),
@@ -719,13 +729,14 @@ ${items}
           id, slug, title, description, read_role, write_role, comment_role, download_role,
           categories, page_size, allow_reply, allow_secret, allow_vote, allow_upload,
           max_files, write_interval, sort_order, is_visible,
-          list_style, notify_email, notify_comment, group_id, category_required
+          list_style, notify_email, notify_comment, group_id, category_required, extra_fields
         ) VALUES (
           ${id}, ${v.slug}, ${v.title}, ${v.description}, ${v.readRole}, ${v.writeRole},
           ${v.commentRole}, ${v.downloadRole}, ${JSON.stringify(v.categories)}::jsonb, ${v.pageSize},
           ${v.allowReply}, ${v.allowSecret}, ${v.allowVote}, ${v.allowUpload},
           ${v.maxFiles}, ${v.writeInterval}, ${v.sortOrder}, ${v.isVisible},
-          ${v.listStyle}, ${v.notifyEmail}, ${v.notifyComment}, ${v.groupId}::uuid, ${v.categoryRequired}
+          ${v.listStyle}, ${v.notifyEmail}, ${v.notifyComment}, ${v.groupId}::uuid, ${v.categoryRequired},
+          ${JSON.stringify(v.extraFields)}::jsonb
         )
       `);
     } catch (err) {
@@ -753,7 +764,8 @@ ${items}
           max_files = ${v.maxFiles}, write_interval = ${v.writeInterval},
           sort_order = ${v.sortOrder}, is_visible = ${v.isVisible},
           list_style = ${v.listStyle}, notify_email = ${v.notifyEmail}, notify_comment = ${v.notifyComment},
-          group_id = ${v.groupId}::uuid, category_required = ${v.categoryRequired}
+          group_id = ${v.groupId}::uuid, category_required = ${v.categoryRequired},
+          extra_fields = ${JSON.stringify(v.extraFields)}::jsonb
         WHERE id = ${req.params.id}::uuid RETURNING id
       `);
       if (!rows.length) throw new BoardError(404, "게시판을 찾을 수 없습니다.");

@@ -1,6 +1,15 @@
 import { sql } from "drizzle-orm";
 import { captchaFieldHtml, type BlockRenderContext } from "@brick/plugin-sdk";
-import { asListStyle, escapeHtml, fullDate, hasRole, humanSize, shortDate, type BoardRow, type Db } from "./types.js";
+import {
+  asListStyle, escapeHtml, extraFieldsOf, EXTRA_VALUE_MAX, fullDate, hasRole, humanSize,
+  shortDate, type BoardRow, type Db,
+} from "./types.js";
+
+/** 글의 여분 필드 값 (jsonb 가 무엇이든 안전하게) */
+function extraOf(post: Record<string, unknown>): Record<string, unknown> {
+  const raw = post.extra;
+  return raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+}
 import { t } from "./i18n.js";
 import { canModifyPost } from "./access.js";
 
@@ -300,7 +309,7 @@ export async function renderDetail(
   const { rows } = await db.execute(sql`
     SELECT p.id, p.title, p.content, p.category, p.author_id, p.author_name, p.created_at, p.updated_at,
            p.view_count, p.up_count, p.down_count, p.comment_count, p.file_count, p.scrap_count,
-           p.is_secret, p.is_notice, p.depth, p.thread_created_at, p.thread_path, p.links,
+           p.is_secret, p.is_notice, p.depth, p.thread_created_at, p.thread_path, p.links, p.extra,
            u.avatar_url AS author_avatar
     FROM board_posts p LEFT JOIN users u ON u.id = p.author_id
     WHERE p.id = ${postId}::uuid AND p.board_id = ${board.id}::uuid LIMIT 1
@@ -492,6 +501,22 @@ ${filesHtml}
   <article class="brick-post-content">${contentHtml}</article>
 ${imagesHtml}
 ${(() => {
+    /*
+     * 여분 필드 — 값이 있는 칸만 그린다. 비어 있는 항목까지 줄줄이 그리면
+     * 글마다 빈 표가 붙는다(그누보드 스킨들이 흔히 그렇게 되어 있다).
+     */
+    const fields = extraFieldsOf(board).filter((f) => String(extraOf(post)[f.key] ?? "").trim());
+    if (!fields.length) return "";
+    const values = extraOf(post);
+    return `  <dl class="brick-post-extra">
+${fields
+  .map(
+    (f) => `    <dt>${escapeHtml(f.label)}</dt><dd>${escapeHtml(String(values[f.key]))}</dd>`,
+  )
+  .join("\n")}
+  </dl>`;
+  })()}
+${(() => {
     const links = Array.isArray(post.links) ? (post.links as unknown[]).map(String).filter(Boolean) : [];
     if (!links.length) return "";
     // 외부 링크: 새 창 + nofollow(스팸 링크에 검색 가치를 주지 않는다) + noopener
@@ -584,7 +609,7 @@ export async function renderWrite(
   let editing: Record<string, unknown> | null = null;
   if (editPostId) {
     const { rows } = await db.execute(sql`
-      SELECT id, title, content, category, is_secret, author_id, links
+      SELECT id, title, content, category, is_secret, author_id, links, extra
       FROM board_posts WHERE id = ${editPostId}::uuid AND board_id = ${board.id}::uuid LIMIT 1
     `);
     editing = rows[0] ?? null;
@@ -688,6 +713,24 @@ export async function renderWrite(
       <input type="url" name="link1" placeholder="https://" value="${escapeHtml(links[0] ?? "")}" />
       <input type="url" name="link2" placeholder="https://" value="${escapeHtml(links[1] ?? "")}" />
     </div>`;
+    })()}
+
+    ${(() => {
+      /*
+       * 여분 필드 — 게시판이 정한 추가 입력칸(그누보드의 wr_1~wr_10).
+       * 정의가 없으면 아무것도 그리지 않는다: 대부분의 게시판은 쓰지 않는다.
+       */
+      const fields = extraFieldsOf(board);
+      if (!fields.length) return "";
+      const values = (editing?.extra ?? {}) as Record<string, unknown>;
+      return fields
+        .map(
+          (f) => `<label class="brick-field">${escapeHtml(f.label)}
+      <input type="text" name="extra.${escapeHtml(f.key)}" maxlength="${EXTRA_VALUE_MAX}"
+             value="${escapeHtml(String(values[f.key] ?? ""))}" />
+    </label>`,
+        )
+        .join("\n    ");
     })()}
 
     ${

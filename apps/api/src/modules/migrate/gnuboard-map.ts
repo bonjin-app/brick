@@ -207,3 +207,55 @@ export interface MigratePlan {
   /** 옛 사이트 주소 — 본문의 절대주소 이미지도 잡는다 (예: https://old.example.com) */
   oldBaseUrl?: string;
 }
+
+/** 여분 필드 하나 — Brick 게시판이 갖는 모양 그대로 */
+export interface GnuExtraField {
+  key: string;
+  label: string;
+}
+
+/**
+ * 게시판의 여분 필드 이름 — `bo_1_subj` ~ `bo_10_subj`.
+ *
+ * 그누보드는 칸 이름을 게시판에, 값을 글의 `wr_1`~`wr_10` 에 둔다. 한국
+ * 사이트에서 아주 널리 쓰인다: 연락처·지역·학번·차량번호·행사 신청 항목이
+ * 전부 거기 들어 있다. **이름이 비어 있는 칸은 쓰지 않는 칸이다** — 그누보드
+ * 스킨도 이름이 있을 때만 그린다.
+ */
+export function gnuExtraFields(boardRow: Record<string, unknown>): GnuExtraField[] {
+  const out: GnuExtraField[] = [];
+  for (let i = 1; i <= 10; i++) {
+    const label = String(boardRow[`bo_${i}_subj`] ?? "").trim();
+    if (!label) continue;
+    out.push({ key: `f${i}`, label: label.slice(0, 50) });
+  }
+  return out;
+}
+
+/** 글의 여분 필드 값 — 게시판이 이름을 붙인 칸만 */
+export function gnuExtraValues(
+  writeRow: Record<string, unknown>,
+  keys: readonly string[],
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const key of keys) {
+    const n = Number(key.replace(/^f/, ""));
+    if (!Number.isInteger(n) || n < 1 || n > 10) continue;
+    const value = String(writeRow[`wr_${n}`] ?? "").trim();
+    if (value) out[key] = value.slice(0, 500);
+  }
+  return out;
+}
+
+/**
+ * 관련 링크 — `wr_link1`, `wr_link2`.
+ *
+ * 우리에게 같은 자리(`board_posts.links`)가 있는데도 가져오지 않고 있었다.
+ * http(s) 가 아닌 것은 버린다 — 옛 데이터에 `javascript:` 가 섞여 있기도 하다.
+ */
+export function gnuLinks(writeRow: Record<string, unknown>): string[] {
+  return [writeRow.wr_link1, writeRow.wr_link2]
+    .map((v) => String(v ?? "").trim())
+    .filter((v) => /^https?:\/\//i.test(v))
+    .map((v) => v.slice(0, 2000));
+}

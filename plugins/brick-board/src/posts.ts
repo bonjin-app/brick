@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import type { BoardRow, Db, SessionUser } from "./types.js";
-import { BoardError, hasRole } from "./types.js";
+import { BoardError, extraFieldsOf, hasRole, pickExtraValues } from "./types.js";
 import { t } from "./i18n.js";
 import { hashGuestPassword } from "./guest.js";
 import { sanitizeHtml } from "./sanitize.js";
@@ -9,6 +9,8 @@ import { sanitizeHtml } from "./sanitize.js";
 export interface WritePostInput {
   /** 관련 링크 (최대 2개, http/https 만) — 그누보드의 wr_link1/2 */
   links?: unknown;
+  /** 여분 필드 값 — 게시판이 정한 칸만 저장된다 (그누보드의 wr_1~wr_10) */
+  extra?: unknown;
   title: string;
   content: string;
   category?: string | null;
@@ -84,6 +86,8 @@ export async function createPost(
   const id = uuidv7();
   const authorName = user ? user.displayName : guestName;
   const links = normalizeLinks(input.links);
+  // 게시판이 정의한 칸만 남긴다 — 화면이 무엇을 보내든 정의 밖의 값은 저장하지 않는다
+  const extra = pickExtraValues(input.extra, extraFieldsOf(board));
 
   return db.transaction(async (tx) => {
     let threadId = id;
@@ -124,13 +128,14 @@ export async function createPost(
       INSERT INTO board_posts (
         id, board_id, author_id, author_name, title, content, category,
         is_notice, is_secret, thread_id, thread_created_at, thread_path, depth,
-        guest_name, guest_password, author_ip, thumb_url, links
+        guest_name, guest_password, author_ip, thumb_url, links, extra
       ) VALUES (
         ${id}, ${board.id}::uuid, ${user?.id ?? null}::uuid, ${authorName}, ${title}, ${content}, ${category},
         ${isNotice}, ${isSecret}, ${threadId}::uuid,
         ${threadCreatedAt ? threadCreatedAt.toISOString() : null}::timestamptz,
         ${threadPath}, ${depth},
-        ${guestName}, ${guestPasswordHash}, ${ip}, ${extractThumb(content)}, ${JSON.stringify(links)}::jsonb
+        ${guestName}, ${guestPasswordHash}, ${ip}, ${extractThumb(content)},
+        ${JSON.stringify(links)}::jsonb, ${JSON.stringify(extra)}::jsonb
       )
     `);
     // 원글이면 thread_created_at을 자기 created_at으로 채운다
