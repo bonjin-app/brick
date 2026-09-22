@@ -125,6 +125,9 @@ jobs:
       - name: 손님 화면을 그리는 코드에 한국어가 박혀 있지 않다 (영어 사이트에서 튀어나온다)
         run: node scripts/check-screen-i18n.mjs
 
+      - name: 관리 화면 라벨이 사이트 언어를 따른다 (운영자는 이 화면을 하루 종일 본다)
+        run: node scripts/check-admin-i18n.mjs
+
       - name: 서버 오류 메시지가 사이트 언어를 따른다 (가장 중요한 순간에만 못 읽는 글자가 뜬다)
         run: node scripts/check-error-i18n.mjs
 

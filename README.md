@@ -514,7 +514,7 @@ themes/
   boutique/       부티크 — 여백 위주
   corporate/      회사 홈페이지 — 히어로·특징 카드
 docs-site/        GitHub Pages 랜딩페이지
-scripts/          스모크 테스트 38종 + 정적 검사 32종 + OIDC 스텁 + 배포본 생성(build-release.sh)
+scripts/          스모크 테스트 38종 + 정적 검사 33종 + OIDC 스텁 + 배포본 생성(build-release.sh)
 docker/           Dockerfile, entrypoint
 ```
 

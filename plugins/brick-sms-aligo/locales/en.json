@@ -1,3 +1,13 @@
 {
-  "err.senderRequired": "Enter the sender number. It must be pre-registered with the provider."
+  "err.senderRequired": "Enter the sender number. It must be pre-registered with the provider.",
+  "문자 발송": "SMS",
+  "설정": "Settings",
+  "알리고(aligo.in)에서 발급한 API 키를 입력하세요. 발신번호는 한국의 발신번호 사전등록제에 따라 알리고에 미리 등록한 번호여야 합니다. 문자는 건당 요금이 나가므로, 어떤 안내를 문자로 보낼지는 각 기능의 설정에서 켭니다.": "Enter the API key issued by Aligo (aligo.in). Under Korean law the sender number must be pre-registered with the provider. SMS is billed per message, so each feature decides separately whether to use it.",
+  "알리고 아이디": "Aligo account ID",
+  "API 키": "API key",
+  "비워두고 저장하면 기존 값이 유지됩니다.": "Leave blank to keep the stored value.",
+  "발신번호": "Sender number",
+  "알리고에 사전 등록한 번호만 쓸 수 있습니다 (전기통신사업법).": "Only a number pre-registered with the provider can be used (Korean Telecommunications Business Act).",
+  "API 키 설정됨": "API key is set",
+  "문자 사용": "Enable SMS"
 }

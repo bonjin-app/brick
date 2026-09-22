@@ -60,5 +60,9 @@
   "팝업을 찾을 수 없습니다.": "Popup not found.",
   "표시 (inline | box)": "Display (inline | box)",
   "표시 개수": "How many to show",
-  "현재 창": "Same window"
+  "현재 창": "Same window",
+  "오늘": "Today",
+  "어제": "Yesterday",
+  "전체": "All time",
+  "최고": "Peak"
 }
