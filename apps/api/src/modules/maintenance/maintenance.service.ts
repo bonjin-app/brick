@@ -7,6 +7,7 @@ import { AuditService } from "../audit/audit.service.js";
 import { SearchService } from "../search/search.service.js";
 import { EmailVerifyService } from "../members/email-verify.service.js";
 import { PasswordResetService } from "../auth/password-reset.service.js";
+import { NotificationsService } from "../notifications/notifications.service.js";
 
 /**
  * 주기 정리 작업.
@@ -36,6 +37,7 @@ export class MaintenanceService implements OnModuleInit, OnModuleDestroy {
     private readonly search: SearchService,
     private readonly emailVerify: EmailVerifyService,
     private readonly passwordReset: PasswordResetService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   onModuleInit(): void {
@@ -65,6 +67,8 @@ export class MaintenanceService implements OnModuleInit, OnModuleDestroy {
       ["audit-logs", () => this.audit.prune()],
       ["search-logs", () => this.search.prune()],
       ["email-verifications", () => this.emailVerify.purgeExpired()],
+      // 알림은 댓글·주문·재입고마다 한 줄씩 쌓인다 — 치우지 않으면 본문보다 커진다
+      ["notifications", () => this.notifications.prune()],
     ];
     for (const [name, run] of jobs) {
       try {

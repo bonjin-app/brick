@@ -507,7 +507,17 @@ ${eyebrow ? `    <span class="brick-eyebrow">${esc(eyebrow)}</span>
         ctx.setSeo?.({ title: t("noti.title") });
         if (!ctx.user) return `<p>${esc(t("noti.loginRequired"))}</p>`;
 
-        const items = await this.notifications.list(ctx.user.id, { limit: Number(props.limit) || 30 });
+        /*
+         * `before` 로 이어 읽는다 — 서른 건이 넘는 사람이 옛 알림에 닿을 길이
+         * 있어야 한다(자바스크립트 없이 링크 하나로).
+         */
+        const limit = Number(props.limit) || 30;
+        const beforeRaw = String(ctx.query?.before ?? "").trim();
+        const items = await this.notifications.list(ctx.user.id, {
+          limit,
+          // id(uuid) 로 이어 읽는다 — 형식이 아니면 처음부터
+          before: /^[0-9a-f-]{36}$/i.test(beforeRaw) ? beforeRaw : undefined,
+        });
         if (!items.length) return `<p>${esc(t("noti.empty"))}</p>`;
 
         const rows = items
@@ -528,9 +538,22 @@ ${eyebrow ? `    <span class="brick-eyebrow">${esc(eyebrow)}</span>
           })
           .join("");
 
-        // 보여준 뒤에 읽음으로 넘긴다 — 순서가 바뀌면 "새 알림" 표시가 한 번도 안 보인다
-        await this.notifications.markRead(ctx.user.id);
-        return `<ul class="brick-noti-list">${rows}</ul>`;
+        /*
+         * 보여준 뒤에 읽음으로 넘긴다 — 순서가 바뀌면 "새 알림" 표시가 한 번도 안 보인다.
+         *
+         * **화면에 보여준 것만** 넘긴다. 전에는 안 읽은 것을 전부 읽음 처리했는데,
+         * 서른 건만 보여주므로 서른다섯 건이 쌓여 있으면 다섯 건은 보지도 못한 채
+         * 사라졌다(주문이 몰리는 사이트에서 바로 일어난다).
+         */
+        await this.notifications.markRead(ctx.user.id, items.filter((n) => !n.read).map((n) => n.id));
+
+        // 더 있으면 이어 읽는 길을 준다 (마지막 것보다 오래된 것들)
+        const oldest = items[items.length - 1]?.id;
+        const more =
+          items.length === limit && oldest
+            ? `<p class="brick-noti-more"><a href="?before=${esc(oldest)}">${esc(t("noti.older"))}</a></p>`
+            : "";
+        return `<ul class="brick-noti-list">${rows}</ul>${more}`;
       },
     });
 

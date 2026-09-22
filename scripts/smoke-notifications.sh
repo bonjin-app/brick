@@ -151,6 +151,62 @@ LIST2="$(render -b "$MEMBER" "$API/api/render/page?path=notifications")"
 absent "두 번째로 열면 새 표시가 없다" "$LIST2" "새 알림"
 contains "그래도 목록에는 남는다 (읽은 것이 사라지면 다시 찾을 수 없다)" "$LIST2" "알림 시험 글"
 
+echo "── 많이 쌓여도 보지 못한 것이 사라지지 않는다"
+#
+# 화면은 서른 건만 보여주는데 예전에는 **안 읽은 것을 전부** 읽음 처리했다.
+# 서른다섯 건이 쌓여 있으면 다섯 건은 보지도 못한 채 사라졌다 — 주문이 몰리는
+# 쇼핑몰에서 바로 일어나고, 사라진 뒤에는 무엇이 있었는지 알 길도 없다.
+MID="$(psql_q "SELECT id FROM users WHERE email = 'member@nt.test'")"
+# 앞 절이 만든 알림을 치우고 센다 — 숫자가 정확해야 "다섯 건이 남았다" 가 뜻을 갖는다
+psql_q "DELETE FROM notifications WHERE user_id = '$MID'" >/dev/null
+for i in $(seq 1 35); do
+  psql_q "INSERT INTO notifications (id, user_id, kind, title, url, created_at)
+          VALUES (gen_random_uuid(), '$MID', 'test', '쌓인 알림 $i', '/x', now() - make_interval(mins => $((40 - i))))" >/dev/null
+done
+check "서른다섯 건이 안 읽음" \
+  "$(curl -s -b "$MEMBER" "$API/api/notifications?limit=1" | jget "['unread']")" "35"
+LIST3="$(render -b "$MEMBER" "$API/api/render/page?path=notifications")"
+check "화면에는 서른 건" "$(grep -o 'brick-noti-item' <<< "$LIST3" | wc -l | tr -d ' ')" "30"
+check "보여준 것만 읽음으로 넘어간다 (다섯 건은 그대로)" \
+  "$(curl -s -b "$MEMBER" "$API/api/notifications?limit=1" | jget "['unread']")" "5"
+contains "이어 읽는 길이 있다 (자바스크립트 없이)" "$LIST3" "이전 알림 보기"
+# 이어 읽으면 나머지가 나오고, 그것도 읽음이 된다
+OLDEST="$(python3 -c "
+import re,sys
+m = re.search(r'\?before=([0-9a-f-]{36})', sys.argv[1])
+print(m.group(1) if m else '')" "$LIST3")"
+[[ -n "$OLDEST" ]] && ok "이전 알림 링크에 이어 읽을 지점이 붙어 있다" || bad "이전 알림 링크에 지점이 없다"
+render -b "$MEMBER" "$API/api/render/page?path=notifications&before=$OLDEST" >/dev/null
+check "이어 읽으면 나머지도 읽음이 된다" \
+  "$(curl -s -b "$MEMBER" "$API/api/notifications?limit=1" | jget "['unread']")" "0"
+
+echo "── 같은 순간에 들어온 알림도 정확히 이어 읽는다"
+#
+# 재입고 알림처럼 한 번에 여러 건을 넣는 경로가 있고, 그때 created_at 은
+# 트랜잭션 안에서 **같은 값**이다. 시각 하나로 자르면 경계에 걸린 한 건이
+# 건너뛰거나 두 번 나온다. (시각, id) 쌍으로 자른다.
+psql_q "DELETE FROM notifications WHERE user_id = '$MID'" >/dev/null
+psql_q "INSERT INTO notifications (id, user_id, kind, title, url, created_at)
+        SELECT gen_random_uuid(), '$MID', 'test', '같은 순간 ' || g, '/x', now()
+        FROM generate_series(1, 2) g" >/dev/null
+P1="$(curl -s -b "$MEMBER" "$API/api/notifications?limit=1")"
+FIRST="$(echo "$P1" | jget "['items'][0]['id']")"
+P2="$(curl -s -b "$MEMBER" "$API/api/notifications?limit=1&before=$FIRST")"
+check "두 번째 쪽에 나머지 한 건이 나온다" "$(echo "$P2" | python3 -c "import sys,json;print(len(json.load(sys.stdin)['items']))")" "1"
+SECOND="$(echo "$P2" | jget "['items'][0]['id']")"
+[[ -n "$SECOND" && "$SECOND" != "$FIRST" ]] && ok "같은 건이 두 번 나오지 않는다" \
+  || bad "같은 건이 두 번 나온다 ($FIRST)"
+check "세 번째 쪽은 비어 있다 (건너뛴 것이 없다)" \
+  "$(curl -s -b "$MEMBER" "$API/api/notifications?limit=1&before=$SECOND" | python3 -c "import sys,json;print(len(json.load(sys.stdin)['items']))")" "0"
+# 없는 지점을 주면 처음부터 — 빈 목록을 주면 "알림이 없다" 는 거짓말이 된다
+check "모르는 지점은 처음부터 읽는다" \
+  "$(curl -s -b "$MEMBER" "$API/api/notifications?before=00000000-0000-0000-0000-000000000000" \
+      | python3 -c "import sys,json;print(len(json.load(sys.stdin)['items']))")" "2"
+# 남의 알림 id 를 지점으로 줘도 남의 목록으로 넘어갈 수 없다
+check "남의 id 를 지점으로 줘도 내 목록만 본다" \
+  "$(curl -s -b "$OTHER" "$API/api/notifications?before=$FIRST" \
+      | python3 -c "import sys,json;print(len(json.load(sys.stdin)['items']))")" "0"
+
 echo "── 비로그인은 목록 대신 로그인 길을 받는다"
 GUEST="$(render "$API/api/render/page?path=notifications")"
 contains "왜 못 보는지 말한다" "$GUEST" "로그인한 뒤"

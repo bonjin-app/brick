@@ -495,6 +495,19 @@ psql_q "INSERT INTO audit_logs (id, action, created_at)
 # 오늘 것도 하나 심는다 — 무차별 삭제라면 이것까지 사라진다
 psql_q "INSERT INTO search_logs (id, query, raw_query, result_count, created_at)
         VALUES (gen_random_uuid(), '오늘 검색어', '오늘 검색어', 3, now())" >/dev/null
+#
+# 알림도 같은 집안이다 — 댓글·주문·재입고마다 한 줄씩 쌓이는데 아무도 치우지
+# 않으면 이 테이블이 본문보다 커진다. 읽은 것은 30일, 안 읽은 것도 180일.
+psql_q "INSERT INTO notifications (id, user_id, kind, title, url, created_at)
+        VALUES (gen_random_uuid(), '$UID1', 'test', '아주 오래된 안읽은 알림', '/x', now() - interval '400 days')" >/dev/null
+psql_q "INSERT INTO notifications (id, user_id, kind, title, url, read_at, created_at)
+        VALUES (gen_random_uuid(), '$UID1', 'test', '오래전에 읽은 알림', '/x',
+                now() - interval '60 days', now() - interval '61 days')" >/dev/null
+psql_q "INSERT INTO notifications (id, user_id, kind, title, url, read_at, created_at)
+        VALUES (gen_random_uuid(), '$UID1', 'test', '얼마 전에 읽은 알림', '/x',
+                now() - interval '10 days', now() - interval '11 days')" >/dev/null
+psql_q "INSERT INTO notifications (id, user_id, kind, title, url, created_at)
+        VALUES (gen_random_uuid(), '$UID1', 'test', '오늘 온 알림', '/x', now())" >/dev/null
 check "심은 직후 오래된 행 3건" \
   "$(psql_q "SELECT (SELECT count(*) FROM search_logs WHERE created_at < now() - interval '365 days')
                   + (SELECT count(*) FROM email_verifications WHERE created_at < now() - interval '365 days')
@@ -514,6 +527,15 @@ check "보관 기간이 지난 감사 기록이 지워졌다" \
   "$(psql_q "SELECT count(*) FROM audit_logs WHERE created_at < now() - interval '365 days'")" "0"
 check "오늘 검색어는 남아 있다" \
   "$(psql_q "SELECT count(*) FROM search_logs WHERE query = '오늘 검색어'")" "1"
+check "반년 넘게 안 읽은 알림은 지워졌다" \
+  "$(psql_q "SELECT count(*) FROM notifications WHERE title = '아주 오래된 안읽은 알림'")" "0"
+check "한 달 전에 읽은 알림도 지워졌다" \
+  "$(psql_q "SELECT count(*) FROM notifications WHERE title = '오래전에 읽은 알림'")" "0"
+# 무차별 삭제라면 아래 둘이 함께 사라진다 — 읽은 지 얼마 안 된 것과 오늘 온 것
+check "얼마 전에 읽은 알림은 남아 있다" \
+  "$(psql_q "SELECT count(*) FROM notifications WHERE title = '얼마 전에 읽은 알림'")" "1"
+check "오늘 온 알림은 남아 있다" \
+  "$(psql_q "SELECT count(*) FROM notifications WHERE title = '오늘 온 알림'")" "1"
 
 echo
 echo "── 회원 목록 검색 (운영자는 대개 한 사람을 찾으려고 이 화면을 연다)"

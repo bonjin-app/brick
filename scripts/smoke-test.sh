@@ -331,6 +331,31 @@ contains "누가 열었는지 기록이 남는다 (사람이 아니라 시각이
 check "때가 안 된 것이 없으면 아무것도 열지 않는다" \
   "$(curl -s -b "$COOKIES" -X POST "$API/api/admin/pages/publish-due" | jq_get "['published']")" "0"
 
+echo "── 서버가 여럿이어도 한 번만 열린다 (docs/operations.md 의 스케일링)"
+#
+# 예약 확인은 **모든 인스턴스**에서 30초마다 돈다. 두 서버가 같은 예약을 동시에
+# 집으면 감사 로그가 두 줄 남고, 알림을 붙이는 날에는 손님이 같은 안내를 두 번
+# 받는다. 상태를 조건에 넣은 UPDATE 하나로 처리하므로 뒤에 온 쪽은 0건을 본다.
+curl -s -b "$COOKIES" -X POST "$API/api/pages" -H 'content-type: application/json' -d '{
+  "slug":"smoke-race","title":"동시에 열릴 페이지","status":"scheduled","publishedAt":"2099-01-01T00:00:00.000Z",
+  "blocks":[]}' >/dev/null
+cat > "$TMP/due2.cjs" <<'JS'
+const { Client } = require(process.env.PG_PATH);
+(async () => {
+  const c = new Client(process.env.DATABASE_URL);
+  await c.connect();
+  await c.query("UPDATE pages SET published_at = now() - make_interval(mins => 1) WHERE slug = $1", ["smoke-race"]);
+  await c.end();
+})().catch((e) => { console.error(e.message); process.exit(1); });
+JS
+PG_PATH="$ROOT/apps/api/node_modules/pg" node "$TMP/due2.cjs"
+# 동시에 두 번 부른다 — 두 인스턴스가 같은 순간에 확인하는 것과 같다
+R1="$(curl -s -b "$COOKIES" -X POST "$API/api/admin/pages/publish-due" &       curl -s -b "$COOKIES" -X POST "$API/api/admin/pages/publish-due" & wait)"
+check "둘이 합쳐 한 번만 연다" "$(grep -o '"published":[0-9]*' <<< "$R1" | awk -F: '{s+=$2} END {print s}')" "1"
+check "감사 기록도 한 줄뿐이다" \
+  "$(curl -s -b "$COOKIES" "$API/api/audit?action=page.publish.scheduled" \
+      | python3 -c "import sys,json;print(sum(1 for i in json.load(sys.stdin)['items'] if '동시에' in (i.get('summary') or '')))")" "1"
+
 echo "── 공개 시각은 한 번 정해지면 밀리지 않는다"
 # 다시 저장할 때마다 오늘로 밀리면 그 값은 아무 뜻도 없어진다
 WAS="$(curl -s -b "$COOKIES" "$API/api/pages/$SCHED_ID" | jq_get "['publishedAt']")"
