@@ -45,6 +45,7 @@ ok()  { PASS=$((PASS+1)); echo "  ✅ $1"; }
 bad() { FAIL=$((FAIL+1)); echo "  ❌ $1"; }
 check()    { [[ "$2" == "$3" ]] && ok "$1" || bad "$1 (기대 $3, 실제 $2)"; }
 contains() { [[ "$2" == *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 없음: ${2:0:200})"; }
+absent()   { [[ "$2" != *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 가 있음)"; }
 code()     { curl -s -o /dev/null -w "%{http_code}" "$@"; }
 
 psql_q() {
@@ -60,6 +61,67 @@ psql_q() {
 }
 
 echo "▶ 백업·복원 스모크 테스트 (덤프를 뜨고 실제로 되돌린다)"
+
+# ── 망가진 덤프를 성공이라고 말하지 않는가 ──────────
+#
+# `pg_dump` 가 0 으로 끝났다는 것은 "명령이 성공했다" 일 뿐이다. 디스크가 찼거나
+# 도중에 끊긴 덤프도 파일은 남고, 그 사실은 **정말 필요한 순간에** 알게 된다.
+# 매일 새벽 4시에 도는 cron 이 몇 달째 빈 파일을 쓰고 있었다는 것은 흔한 사고다.
+#
+# 이 절은 진짜 pg_dump 를 쓰지 않는다 — 망가진 덤프를 **일부러** 만들어야 하기
+# 때문이다. 가짜 명령을 PATH 앞에 두고 우리 코드가 그것을 알아채는지만 본다
+# (진짜 덤프로 하는 왕복은 아래에서 한다).
+FAKEBIN="$TMP/fakebin"
+mkdir -p "$FAKEBIN"
+cat > "$FAKEBIN/pg_dump" <<'FAKE'
+#!/usr/bin/env bash
+out=""; prev=""
+for a in "$@"; do [[ "$prev" == "-f" ]] && out="$a"; prev="$a"; done
+: > "$out"
+[[ "${FAKE_DUMP_BYTES:-100}" -gt 0 ]] && head -c "${FAKE_DUMP_BYTES:-100}" /dev/zero > "$out"
+exit 0
+FAKE
+cat > "$FAKEBIN/pg_restore" <<'FAKE'
+#!/usr/bin/env bash
+if [[ "$1" == "--list" ]]; then
+  [[ "${FAKE_TOC:-ok}" == "unreadable" ]] && { echo "pg_restore: error: did not find magic string" >&2; exit 1; }
+  echo "; Archive created at 2026-09-22"
+  [[ "${FAKE_TOC:-ok}" == "notables" ]] && { echo "215; 1259 16456 SEQUENCE public seq brick"; exit 0; }
+  echo "3001; 0 16400 TABLE DATA public users brick"
+  echo "3002; 0 16410 TABLE DATA public pages brick"
+  exit 0
+fi
+exit 0
+FAKE
+chmod +x "$FAKEBIN/pg_dump" "$FAKEBIN/pg_restore"
+fake_dump() {  # fake_dump <환경설정> — 출력과 종료코드를 "코드|출력" 으로
+  local out rc
+  out="$(PATH="$FAKEBIN:$PATH" DATABASE_URL="${DATABASE_URL}" env "$@" \
+    node "$ROOT/apps/api/dist/backup.js" dump "$TMP/fake.dump" 2>&1)" && rc=0 || rc=$?
+  echo "${rc}|${out}"
+}
+
+GOOD="$(fake_dump FAKE_DUMP_BYTES=2500000)"
+check "정상 덤프는 성공한다" "${GOOD%%|*}" "0"
+contains "얼마나 떴는지 숫자로 말한다" "$GOOD" "테이블 2개"
+contains "크기도" "$GOOD" "2.4MB"
+# 아래 셋은 전부 파일이 남지만 **복원할 수 없는** 백업이다
+EMPTY="$(fake_dump FAKE_DUMP_BYTES=0)"
+check "빈 덤프는 실패로 끝난다 (cron 이 알아챈다)" "${EMPTY%%|*}" "1"
+contains "무엇을 볼지 알려준다" "$EMPTY" "디스크 공간"
+BROKEN="$(fake_dump FAKE_TOC=unreadable)"
+check "읽히지 않는 덤프도 실패" "${BROKEN%%|*}" "1"
+contains "이 파일로는 복원할 수 없다고 말한다" "$BROKEN" "복원할 수 없습니다"
+NODATA="$(fake_dump FAKE_TOC=notables)"
+check "테이블이 없는 덤프도 실패" "${NODATA%%|*}" "1"
+contains "되돌릴 것이 없다고 말한다" "$NODATA" "되돌릴 것이 없는"
+# 문서가 예로 드는 자리가 하필 업로드 볼륨이다 — 백업이 백업 대상을 채운다
+INSIDE="$(mkdir -p "$TMP/up" && PATH="$FAKEBIN:$PATH" BRICK_UPLOADS_DIR="$TMP/up" \
+  node "$ROOT/apps/api/dist/backup.js" dump "$TMP/up/db.dump" 2>&1)"
+contains "업로드 폴더 안에 두면 경고한다" "$INSIDE" "업로드 폴더 안에"
+OUTSIDE="$(PATH="$FAKEBIN:$PATH" BRICK_UPLOADS_DIR="$TMP/up" \
+  node "$ROOT/apps/api/dist/backup.js" dump "$TMP/elsewhere.dump" 2>&1)"
+absent "다른 곳에 두면 잔소리하지 않는다" "$OUTSIDE" "업로드 폴더 안에"
 
 # ── 도구 확인 ──────────────────────────────────────
 # 없으면 건너뛰지 않고 **실패한다**. 건너뛴 검사는 검사가 아니고, 하필 이 수트가

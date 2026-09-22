@@ -157,8 +157,17 @@ const MSG_KEY_RE = /\bmsg\(\s*"([\w.]+)"/g;
   const interpolated = new Set();
   const missingKeys = new Set();
   let plain = 0;
+  /*
+   * 요청을 처리하는 코드만 본다.
+   *
+   * `backup.ts` 는 운영자가 터미널에서 직접 돌리는 CLI 다 — 사이트 언어라는
+   * 것이 없고(DB 설정을 읽지도 않는다), 그 자리의 문장은 손님이 볼 일이 없다.
+   * 번역 카탈로그에 넣으면 실제로는 쓰이지 않는 항목만 늘어난다.
+   */
+  const CLI_ONLY = ["/backup.ts"];
   for (const dir of [join(ROOT, "apps/api/src"), join(ROOT, "packages/core/src")]) {
     for (const file of walk(dir)) {
+      if (CLI_ONLY.some((suffix) => file.endsWith(suffix))) continue;
       const code = stripComments(readFileSync(file, "utf8"));
       for (const m of code.matchAll(THROW_RE)) {
         const msg = m[2];
