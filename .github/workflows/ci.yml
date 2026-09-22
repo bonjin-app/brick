@@ -128,6 +128,9 @@ jobs:
       - name: 관리 화면 라벨이 사이트 언어를 따른다 (운영자는 이 화면을 하루 종일 본다)
         run: node scripts/check-admin-i18n.mjs
 
+      - name: 그누보드 덤프의 테이블을 말없이 버리지 않는다 (옮기거나, 안 옮긴다고 말하거나)
+        run: node scripts/check-migrate-coverage.mjs
+
       - name: 서버 오류 메시지가 사이트 언어를 따른다 (가장 중요한 순간에만 못 읽는 글자가 뜬다)
         run: node scripts/check-error-i18n.mjs
 

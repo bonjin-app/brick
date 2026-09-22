@@ -55,6 +55,58 @@ INSERT INTO `g5_member` (`mb_no`,`mb_id`,`mb_password`,`mb_name`,`mb_nick`,`mb_e
 -- ─────────────────────────────────────────────────────
 -- 게시판 그룹 · 첨부파일 · 내용관리 · 메뉴
 -- (예전에는 이 넷이 이전에서 조용히 사라졌다)
+CREATE TABLE `g5_auth` (
+  `mb_id` varchar(20) NOT NULL DEFAULT '',
+  `au_menu` varchar(20) NOT NULL DEFAULT '',
+  `au_auth` set('r','w','d') NOT NULL,
+  PRIMARY KEY (`mb_id`,`au_menu`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+
+INSERT INTO `g5_auth` VALUES
+('staff','100100','r,w');
+
+CREATE TABLE `g5_config` (
+  `cf_title` varchar(255) NOT NULL DEFAULT '',
+  `cf_company_name` varchar(255) NOT NULL DEFAULT '',
+  `cf_ceo_name` varchar(255) NOT NULL DEFAULT '',
+  `cf_company_saupja_no` varchar(255) NOT NULL DEFAULT '',
+  `cf_company_tongsin_no` varchar(255) NOT NULL DEFAULT '',
+  `cf_company_addr` varchar(255) NOT NULL DEFAULT '',
+  `cf_company_tel` varchar(255) NOT NULL DEFAULT '',
+  `cf_admin_email` varchar(255) NOT NULL DEFAULT '',
+  `cf_privacy_officer` varchar(255) NOT NULL DEFAULT '',
+  PRIMARY KEY (`cf_title`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+
+INSERT INTO `g5_config` VALUES
+('옛 사이트','달빛상회','김대표','123-45-67890','제2020-서울강남-0001호','서울시 강남구 테헤란로 1','02-123-4567','admin@old.test','김보호');
+
+CREATE TABLE `g5_board_good` (
+  `bg_id` int(11) NOT NULL AUTO_INCREMENT,
+  `bo_table` varchar(20) NOT NULL DEFAULT '',
+  `wr_id` int(11) NOT NULL DEFAULT '0',
+  `mb_id` varchar(20) NOT NULL DEFAULT '',
+  `bg_flag` varchar(255) NOT NULL DEFAULT '',
+  `bg_datetime` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
+  PRIMARY KEY (`bg_id`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+
+INSERT INTO `g5_board_good` VALUES
+(1,'free',1,'hong','good','2021-06-05 10:00:00'),
+(2,'free',2,'staff','nogood','2021-06-06 10:00:00');
+
+CREATE TABLE `g5_shop_wish` (
+  `wi_id` int(11) NOT NULL AUTO_INCREMENT,
+  `mb_id` varchar(20) NOT NULL DEFAULT '',
+  `it_id` varchar(20) NOT NULL DEFAULT '',
+  `wi_time` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
+  PRIMARY KEY (`wi_id`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+
+INSERT INTO `g5_shop_wish` VALUES
+(1,'hong','20200101120000','2021-07-01 09:00:00'),
+(2,'hong','20200202130000','2021-07-02 09:00:00');
+
 CREATE TABLE `g5_group` (
   `gr_id` varchar(10) NOT NULL DEFAULT '',
   `gr_subject` varchar(255) NOT NULL DEFAULT '',

@@ -80,6 +80,9 @@ export interface RunResult {
   attachments: { created: number };
   groups: { created: number };
   contents: { created: number };
+  /** 추천 기록 · 위시리스트 */
+  votes: { created: number };
+  wishlist: { created: number };
   points: { granted: number; total: number };
   shop: {
     categories: number;
@@ -286,6 +289,14 @@ export class MigrateService {
       }
 
       let orderItems = 0;
+      if (tables.has(`${prefix}shop_coupon`)) {
+        skipped.push(
+          `${prefix}shop_coupon — 쿠폰 · 발급 조건(대상 회원·상품·기간)의 구조가 달라 수동 이전을 권합니다`,
+        );
+      }
+      if (tables.has(`${prefix}shop_event`)) {
+        skipped.push(`${prefix}shop_event — 기획전 · 진열 구성이 달라 관리자에서 새로 만드는 편이 빠릅니다`);
+      }
       if (tables.has(`${prefix}${YC_TABLES.cart}`)) {
         for (const row of readRows(dump, `${prefix}${YC_TABLES.cart}`, tables)) {
           // 영카트는 장바구니와 주문 항목을 같은 테이블에 둔다.
@@ -350,6 +361,11 @@ export class MigrateService {
       ["qa_content", "1:1 문의 — 구조가 달라 자동 변환이 위험하다"],
       ["faq", "FAQ — 분류 구조가 달라 수동 이전을 권한다"],
       ["popular", "인기검색어"],
+      ["group_member", "그룹 접근 회원 — 그누보드는 회원을 하나씩 지정하지만 Brick 의 그룹 권한은 등급으로 정합니다"],
+      ["faq_master", "FAQ 분류 — FAQ 본문과 함께 수동 이전을 권합니다"],
+      ["auth", "관리 권한 — 그누보드는 메뉴마다 권한을 주지만 Brick 은 역할(관리자·운영자)로 정합니다"],
+      ["config", "기본 설정 — 값의 뜻이 서로 달라 옮기면 틀린 설정이 됩니다 (사업자정보만 가져옵니다)"],
+      ["mail", "회원 메일 발송 이력 — 지난 발송 기록이고 이어받을 대상이 아닙니다"],
       /*
        * 메뉴는 옮기지 않는다.
        *
@@ -375,6 +391,14 @@ export class MigrateService {
       }
       if (tables.has(`${prefix}${YC_TABLES.itemQa}`)) {
         skipped.push(`${prefix}${YC_TABLES.itemQa} — 상품 문의 · 개인정보가 포함되어 있습니다`);
+      }
+      if (tables.has(`${prefix}shop_coupon`)) {
+        skipped.push(
+          `${prefix}shop_coupon — 쿠폰 · 발급 조건(대상 회원·상품·기간)의 구조가 달라 수동 이전을 권합니다`,
+        );
+      }
+      if (tables.has(`${prefix}shop_event`)) {
+        skipped.push(`${prefix}shop_event — 기획전 · 진열 구성이 달라 관리자에서 새로 만드는 편이 빠릅니다`);
       }
       if (tables.has(`${prefix}${YC_TABLES.cart}`)) {
         skipped.push(`${prefix}${YC_TABLES.cart} 중 주문되지 않은 장바구니 — 옮길 의미가 없습니다`);
@@ -425,6 +449,8 @@ export class MigrateService {
       attachments: { created: 0 },
       groups: { created: 0 },
       contents: { created: 0 },
+      votes: { created: 0 },
+      wishlist: { created: 0 },
       points: { granted: 0, total: 0 },
       shop: { categories: 0, products: 0, options: 0, orders: 0, orderItems: 0, skipped: 0 },
       warnings,
@@ -458,6 +484,19 @@ export class MigrateService {
      */
     if (tables.has(`${prefix}content`)) {
       await this.importContents(dump, tables, prefix, result, warnings);
+    }
+
+    /*
+     * 기본설정(`g5_config`)에서 **사업자정보만** 가져온다.
+     *
+     * 나머지 설정(회원가입 정책·스킨·메일 서버)은 뜻이 서로 달라 옮기면 오히려
+     * 틀린 값이 들어간다. 그런데 사업자정보는 다르다 — 전자상거래법 제13조가
+     * 초기 화면에 표시하라고 정한 항목이고, 우리에게 **같은 자리**가 있으며,
+     * 비어 있으면 대시보드가 경고하는 값이다. 옛 사이트에 이미 적혀 있는 것을
+     * 두고 운영자에게 다시 치라고 할 이유가 없다.
+     */
+    if (tables.has(`${prefix}config`)) {
+      await this.importBusinessInfo(dump, tables, prefix, warnings);
     }
 
     if (plan.points && tables.has(`${prefix}point`)) {
@@ -738,6 +777,45 @@ export class MigrateService {
     }
 
     await this.importAttachments(dump, tables, prefix, boTable, boardId, postMap, result);
+    await this.importVotes(dump, tables, prefix, boTable, memberMap, postMap, result);
+  }
+
+  /**
+   * 추천·비추천 기록(`g5_board_good`).
+   *
+   * 글의 추천 **수**는 이미 옮긴다(`wr_good`). 하지만 누가 눌렀는지를 옮기지
+   * 않으면 "추천 12" 인 글에 같은 회원이 또 추천할 수 있고, 화면은 "추천함"
+   * 표시를 못 한다 — 숫자는 이월됐는데 내 기록만 사라진 상태다.
+   */
+  private async importVotes(
+    dump: string,
+    tables: Map<string, DumpTable>,
+    prefix: string,
+    boTable: string,
+    memberMap: Map<string, string>,
+    postMap: Map<string, string>,
+    result: RunResult,
+  ): Promise<void> {
+    const table = `${prefix}board_good`;
+    if (!boTable || !postMap.size || !tables.has(table)) return;
+    if (!(await this.tableExists("board_votes"))) return;
+    let created = 0;
+    for (const row of readRows(dump, table, tables)) {
+      if (String(row.bo_table ?? "") !== boTable) continue;
+      const postId = postMap.get(String(row.wr_id ?? ""));
+      const userId = memberMap.get(String(row.mb_id ?? "").trim());
+      if (!postId || !userId) continue;
+      // 그누보드는 good / nogood 두 값을 문자열로 둔다
+      const value = String(row.bg_flag ?? "good").trim() === "nogood" ? -1 : 1;
+      const { rows } = await this.db.execute(sql`
+        INSERT INTO board_votes (post_id, user_id, value, created_at)
+        VALUES (${postId}::uuid, ${userId}::uuid, ${value}, ${parseGnuDate(row.bg_datetime) ?? new Date()})
+        ON CONFLICT (post_id, user_id) DO NOTHING
+        RETURNING post_id
+      `);
+      if (rows.length) created += 1;
+    }
+    if (created) result.votes.created += created;
   }
 
   /* ── 첨부파일 ────────────────────────────────────── */
@@ -817,6 +895,53 @@ export class MigrateService {
    * **현재 잔액 하나를 이월 적립으로 넣는다** — 금액이 맞는 것이 이력이
    * 맞는 것보다 중요하다. 이력은 그누보드 쪽에 남아 있다.
    */
+  /* ── 사업자정보 ──────────────────────────────────── */
+
+  /**
+   * `g5_config` 의 사업자정보 → `site.business_info`.
+   *
+   * 이미 채워져 있으면 덮지 않는다 — 설치하면서 적었을 수 있고, 그쪽이 더 최신이다.
+   */
+  private async importBusinessInfo(
+    dump: string,
+    tables: Map<string, DumpTable>,
+    prefix: string,
+    warnings: string[],
+  ): Promise<void> {
+    const [row] = readRows(dump, `${prefix}config`, tables);
+    if (!row) return;
+    const pick = (key: string) => String(row[key] ?? "").trim();
+    const next = {
+      companyName: pick("cf_company_name"),
+      representative: pick("cf_ceo_name"),
+      businessNo: pick("cf_company_saupja_no"),
+      mailOrderNo: pick("cf_company_tongsin_no"),
+      address: pick("cf_company_addr"),
+      phone: pick("cf_company_tel"),
+      email: pick("cf_admin_email"),
+      privacyOfficer: pick("cf_privacy_officer"),
+    };
+    if (!Object.values(next).some(Boolean)) return;
+
+    const { rows: cur } = await this.db.execute(sql`
+      SELECT value FROM site_settings WHERE key = 'site.business_info' LIMIT 1
+    `);
+    const existing = (cur[0]?.value ?? {}) as Record<string, unknown>;
+    if (Object.values(existing).some((v) => String(v ?? "").trim())) return;
+
+    // 비어 있는 항목은 넣지 않는다 — 빈 문자열로 덮으면 "적었는데 안 보인다" 가 된다
+    const value = Object.fromEntries(Object.entries(next).filter(([, v]) => v));
+    await this.db.execute(sql`
+      INSERT INTO site_settings (key, value, updated_at)
+      VALUES ('site.business_info', ${JSON.stringify(value)}::jsonb, now())
+      ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = now()
+    `);
+    warnings.push(
+      `사업자정보를 옛 설정에서 가져왔습니다(${Object.keys(value).length}개 항목). ` +
+        "관리자 → 설정에서 확인하세요 — 법이 정한 표시 항목입니다.",
+    );
+  }
+
   /* ── 게시판 그룹 ─────────────────────────────────── */
 
   /**
@@ -1229,6 +1354,46 @@ export class MigrateService {
       ) AS agg
       WHERE p.id = agg.product_id
     `);
+
+    await this.importWishlist(dump, tables, prefix, memberMap, itemMap, result, warnings);
+  }
+
+  /**
+   * 위시리스트(`g5_shop_wish`).
+   *
+   * 옮기지 않으면 회원이 몇 년 담아 둔 목록이 로그인하는 순간 비어 있다 —
+   * 사이트를 옮겼다는 사실을 손님이 가장 먼저 알아채는 자리다.
+   * 비회원이 담은 것은 옮기지 않는다(그누보드도 회원만 담는다).
+   */
+  private async importWishlist(
+    dump: string,
+    tables: Map<string, DumpTable>,
+    prefix: string,
+    memberMap: Map<string, string>,
+    itemMap: Map<string, string>,
+    result: RunResult,
+    warnings: string[],
+  ): Promise<void> {
+    const table = `${prefix}shop_wish`;
+    if (!tables.has(table) || !(await this.tableExists("shop_wishlist"))) return;
+    let created = 0;
+    for (const row of readRows(dump, table, tables)) {
+      const userId = memberMap.get(String(row.mb_id ?? "").trim());
+      const productId = itemMap.get(String(row.it_id ?? "").trim());
+      if (!userId || !productId) continue;
+      const { rows } = await this.db.execute(sql`
+        INSERT INTO shop_wishlist (id, user_id, product_id, created_at)
+        VALUES (${uuidv7()}, ${userId}::uuid, ${productId}::uuid,
+                ${parseGnuDate(row.wi_time) ?? new Date()})
+        ON CONFLICT DO NOTHING
+        RETURNING id
+      `);
+      if (rows.length) created += 1;
+    }
+    if (created) {
+      result.wishlist.created += created;
+      warnings.push(`위시리스트 ${created}건을 옮겼습니다.`);
+    }
   }
 
   private async tableExists(table: string): Promise<boolean> {

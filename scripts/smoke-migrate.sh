@@ -209,8 +209,32 @@ check "바로 공개 상태다 (옮겨 놓고 안 보이면 옮긴 것이 아니
 contains "평문 내용은 줄바꿈을 살린다" "$(psql_q "SELECT blocks::text FROM pages WHERE slug='privacy'")" "제1조"
 contains "손님이 실제로 열 수 있다" "$(curl -s "$API/api/render/page?path=company")" "우리 회사"
 
+echo "── 추천 기록 · 위시리스트 · 사업자정보"
+#
+# 추천 **수**는 옮기면서 누가 눌렀는지는 버리고 있었다 — "추천 12" 인 글에 같은
+# 회원이 또 추천할 수 있고, 화면은 "추천함" 표시를 못 한다.
+contains "추천 기록을 옮긴다" "$RUN" '"votes":{"created":2}'
+check "추천은 +1 로" \
+  "$(psql_q "SELECT value FROM board_votes v JOIN board_posts p ON p.id = v.post_id WHERE p.title='비회원이 쓴 글'")" "1"
+check "비추천은 -1 로" \
+  "$(psql_q "SELECT value FROM board_votes v JOIN board_posts p ON p.id = v.post_id WHERE p.title='비밀글입니다'")" "-1"
+# 몇 년 담아 둔 목록이 로그인하는 순간 비어 있으면, 손님이 가장 먼저 알아챈다
+contains "위시리스트를 옮긴다" "$RUN" '"wishlist":{"created":2}'
+check "회원의 목록으로 들어간다" \
+  "$(psql_q "SELECT count(*) FROM shop_wishlist w JOIN users u ON u.id = w.user_id WHERE u.email='hong@old.test'")" "2"
+# 전자상거래법 제13조 표시 항목 — 옛 사이트에 이미 적혀 있는 것을 다시 치게 할 이유가 없다
+BIZ="$(psql_q "SELECT value::text FROM site_settings WHERE key='site.business_info'")"
+contains "사업자정보를 가져온다" "$BIZ" "달빛상회"
+contains "대표자" "$BIZ" "김대표"
+contains "사업자등록번호" "$BIZ" "123-45-67890"
+contains "통신판매업 신고번호" "$BIZ" "제2020-서울강남-0001호"
+contains "개인정보 보호책임자" "$BIZ" "김보호"
+contains "가져왔다고 알려 준다 (법이 정한 표시 항목이다)" "$RUN" "사업자정보를 옛 설정에서"
+
 echo "── 안 옮기는 것은 말해 준다 (없다고 착각하고 나중에 발견하는 것이 최악이다)"
 contains "메뉴는 옮기지 않는 이유를 적는다" "$AN" "끊긴 링크"
+contains "기본 설정도 (사업자정보만 가져온다고 적는다)" "$AN" "사업자정보만 가져옵니다"
+contains "관리 권한도" "$AN" "역할(관리자·운영자)로 정합니다"
 
 echo "── 회원 검증"
 ROLES="$(psql_q "SELECT email, role, is_active FROM users WHERE email LIKE '%old.test' OR email LIKE '%gnuboard.invalid' ORDER BY email")"
