@@ -183,6 +183,35 @@ FREE_POST_ID="$(psql_q "SELECT id FROM board_posts WHERE title='비회원이 쓴
 DETAIL="$(curl -s -b "$CK" "$API/api/plugins/brick-board/posts/$FREE_POST_ID")"
 contains "상세 응답에 여분 필드 값" "$DETAIL" "010-1234-5678"
 
+echo "── 첨부파일 · 게시판 그룹 · 내용관리도 함께 옮긴다"
+#
+# 이 셋은 옮기지도 않고 "안 옮긴다" 는 목록에도 없었다 — 이전 도구가 스스로
+# 적어 둔 규칙("있는데 안 옮기는 것은 명시한다")을 스스로 어기고 있었다.
+# 그중 첨부파일이 가장 아프다: 글은 그대로인데 자료실이 빈 껍데기가 된다.
+contains "첨부 기록을 옮긴다" "$RUN" '"attachments":{"created":3}'
+ATT="$(psql_q "SELECT file_name, storage_key, size, download_count FROM board_attachments ORDER BY file_name")"
+contains "원본 파일 이름을 지킨다" "$ATT" "모임 안내문.hwp"
+contains "저장 위치는 복사할 자리를 가리킨다 (data/file/ → uploads/)" "$ATT" "free/1622520000_abc123.hwp"
+contains "크기와 내려받은 수도" "$ATT" "204800|17"
+check "글의 첨부 수를 다시 센다 (목록의 클립 표시가 본다)" \
+  "$(psql_q "SELECT file_count FROM board_posts WHERE title='비회원이 쓴 글'")" "2"
+contains "파일 내용은 DB 에 없다고 말해 준다" "$RUN" "data/file/"
+
+contains "게시판 그룹을 만든다" "$RUN" '"groups":{"created":2}'
+check "게시판이 그룹에 붙는다" \
+  "$(psql_q "SELECT g.title FROM board_boards b JOIN board_groups g ON g.id = b.group_id WHERE b.slug='free'")" "커뮤니티"
+
+contains "내용관리를 페이지로 옮긴다" "$RUN" '"contents":{"created":2}'
+check "제목" "$(psql_q "SELECT title FROM pages WHERE slug='company'")" "회사소개"
+contains "HTML 본문이 살아 있다" "$(psql_q "SELECT blocks::text FROM pages WHERE slug='company'")" "2012년에 시작했습니다"
+check "바로 공개 상태다 (옮겨 놓고 안 보이면 옮긴 것이 아니다)" \
+  "$(psql_q "SELECT status FROM pages WHERE slug='company'")" "published"
+contains "평문 내용은 줄바꿈을 살린다" "$(psql_q "SELECT blocks::text FROM pages WHERE slug='privacy'")" "제1조"
+contains "손님이 실제로 열 수 있다" "$(curl -s "$API/api/render/page?path=company")" "우리 회사"
+
+echo "── 안 옮기는 것은 말해 준다 (없다고 착각하고 나중에 발견하는 것이 최악이다)"
+contains "메뉴는 옮기지 않는 이유를 적는다" "$AN" "끊긴 링크"
+
 echo "── 회원 검증"
 ROLES="$(psql_q "SELECT email, role, is_active FROM users WHERE email LIKE '%old.test' OR email LIKE '%gnuboard.invalid' ORDER BY email")"
 contains "최고관리자 → admin" "$ROLES" "admin@old.test|admin|true"

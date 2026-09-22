@@ -52,6 +52,60 @@ INSERT INTO `g5_member` (`mb_no`,`mb_id`,`mb_password`,`mb_name`,`mb_nick`,`mb_e
 (7,'left','5f4dcc3b5aa765d61d8327deb882cf99','탈퇴자','떠남','left@old.test',1,0,'2017-01-01 00:00:00','20210301');
 
 -- ─────────────────────────────────────────────────────
+-- ─────────────────────────────────────────────────────
+-- 게시판 그룹 · 첨부파일 · 내용관리 · 메뉴
+-- (예전에는 이 넷이 이전에서 조용히 사라졌다)
+CREATE TABLE `g5_group` (
+  `gr_id` varchar(10) NOT NULL DEFAULT '',
+  `gr_subject` varchar(255) NOT NULL DEFAULT '',
+  `gr_order` int(11) NOT NULL DEFAULT '0',
+  PRIMARY KEY (`gr_id`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+
+INSERT INTO `g5_group` VALUES
+('community','커뮤니티',1),
+('archive','자료실',2);
+
+CREATE TABLE `g5_board_file` (
+  `bo_table` varchar(20) NOT NULL DEFAULT '',
+  `wr_id` int(11) NOT NULL DEFAULT '0',
+  `bf_no` int(11) NOT NULL DEFAULT '0',
+  `bf_source` varchar(255) NOT NULL DEFAULT '',
+  `bf_file` varchar(255) NOT NULL DEFAULT '',
+  `bf_download` int(11) NOT NULL DEFAULT '0',
+  `bf_filesize` int(11) NOT NULL DEFAULT '0',
+  PRIMARY KEY (`bo_table`,`wr_id`,`bf_no`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+
+INSERT INTO `g5_board_file` VALUES
+('free',1,0,'모임 안내문.hwp','1622520000_abc123.hwp',17,204800),
+('free',1,1,'사진.jpg','1622520000_def456.jpg',3,51200),
+('notice',1,0,'이용약관.pdf','1583049600_xyz789.pdf',402,1048576);
+
+CREATE TABLE `g5_content` (
+  `co_id` varchar(20) NOT NULL DEFAULT '',
+  `co_html` tinyint(4) NOT NULL DEFAULT '0',
+  `co_subject` varchar(255) NOT NULL DEFAULT '',
+  `co_content` text NOT NULL,
+  `co_hit` int(11) NOT NULL DEFAULT '0',
+  PRIMARY KEY (`co_id`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+
+INSERT INTO `g5_content` VALUES
+('company',1,'회사소개','<h2>우리 회사</h2><p>2012년에 시작했습니다.</p>',120),
+('privacy',0,'개인정보처리방침','제1조 (목적)\n이 방침은 …',44);
+
+CREATE TABLE `g5_menu` (
+  `me_id` int(11) NOT NULL AUTO_INCREMENT,
+  `me_code` varchar(255) NOT NULL DEFAULT '',
+  `me_name` varchar(255) NOT NULL DEFAULT '',
+  `me_link` varchar(255) NOT NULL DEFAULT '',
+  PRIMARY KEY (`me_id`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+
+INSERT INTO `g5_menu` VALUES
+(1,'10','커뮤니티','/bbs/board.php?bo_table=free');
+
 CREATE TABLE `g5_board` (
   `bo_table` varchar(20) NOT NULL DEFAULT '',
   `gr_id` varchar(255) NOT NULL DEFAULT '',

@@ -259,3 +259,40 @@ export function gnuLinks(writeRow: Record<string, unknown>): string[] {
     .filter((v) => /^https?:\/\//i.test(v))
     .map((v) => v.slice(0, 2000));
 }
+
+/**
+ * 첨부파일의 저장 키.
+ *
+ * 그누보드는 파일을 `data/file/<게시판>/<저장이름>` 에 두고, 우리 이전 안내는
+ * 그 폴더를 통째로 `uploads/` 로 복사하라고 한다(본문 이미지 주소를 그렇게
+ * 바꾸고 있다). 그래서 키도 같은 규칙이면 복사한 파일이 그대로 열린다.
+ */
+export function gnuAttachmentKey(boTable: string, storedName: string): string {
+  const safe = String(storedName).replace(/^\/+/, "").replace(/\.\./g, "");
+  return `${boTable}/${safe}`;
+}
+
+/**
+ * 확장자로 짐작한 내용 유형.
+ *
+ * 그누보드는 내용 유형을 저장하지 않는다(`bf_type` 은 이미지 종류를 나타내는
+ * 숫자다). 모르면 `application/octet-stream` 으로 둔다 — 내려받기는 되고,
+ * 이미지 미리보기만 안 될 뿐이다. 틀린 유형을 지어내는 쪽이 더 나쁘다.
+ */
+export function guessContentType(fileName: string): string {
+  const ext = String(fileName).toLowerCase().match(/\.([a-z0-9]+)$/)?.[1] ?? "";
+  const map: Record<string, string> = {
+    png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif",
+    webp: "image/webp", svg: "image/svg+xml", bmp: "image/bmp",
+    pdf: "application/pdf", txt: "text/plain", csv: "text/csv",
+    zip: "application/zip", hwp: "application/x-hwp", hwpx: "application/hwp+zip",
+    doc: "application/msword",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    xls: "application/vnd.ms-excel",
+    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ppt: "application/vnd.ms-powerpoint",
+    pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    mp4: "video/mp4", mp3: "audio/mpeg",
+  };
+  return map[ext] ?? "application/octet-stream";
+}

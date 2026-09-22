@@ -6,8 +6,8 @@ import { DB } from "../../runtime.module.js";
 import { PluginLoaderService } from "../plugins/plugin-loader.service.js";
 import { detectPrefix, parseTables, readRows, type DumpRow, type DumpTable } from "./dump-parser.js";
 import {
-  DEFAULT_LEVEL_MAPPING, boardLevelToRole, convertContent, gnuExtraFields, gnuExtraValues,
-  gnuLinks, levelToRole, normalizeEmail,
+  DEFAULT_LEVEL_MAPPING, boardLevelToRole, convertContent, gnuAttachmentKey, gnuExtraFields,
+  gnuExtraValues, gnuLinks, guessContentType, levelToRole, normalizeEmail,
   normalizeSlug, parseGnuDate, rewriteLegacyMediaUrls, wrapLegacyHash,
   type LevelMapping, type MigratePlan,
 } from "./gnuboard-map.js";
@@ -76,6 +76,10 @@ export interface RunResult {
   boards: { created: number; skipped: number };
   posts: { created: number };
   comments: { created: number };
+  /** 첨부파일 · 게시판 그룹 · 내용관리(페이지) */
+  attachments: { created: number };
+  groups: { created: number };
+  contents: { created: number };
   points: { granted: number; total: number };
   shop: {
     categories: number;
@@ -323,6 +327,17 @@ export class MigrateService {
       );
     }
 
+    /*
+     * 첨부파일은 기록만 옮길 수 있다 — 파일 내용은 DB 에 없다.
+     * 이 말을 안 하면 운영자는 목록에 보이는 파일이 왜 안 열리는지 알 수 없다.
+     */
+    if (tables.has(`${prefix}board_file`)) {
+      warnings.push(
+        "게시글 첨부파일은 DB에 기록만 있습니다. 옛 서버의 data/file/ 을 uploads/ 로 " +
+          "복사해야 실제로 내려받을 수 있습니다 (docs/migrate-gnuboard.md).",
+      );
+    }
+
     // ── 옮기지 않는 것 ──
     // 있는데 안 옮기는 것을 명시한다. 없다고 착각하고 나중에 발견하는 것이 최악이다.
     const skipCandidates: Array<[string, string]> = [
@@ -335,6 +350,15 @@ export class MigrateService {
       ["qa_content", "1:1 문의 — 구조가 달라 자동 변환이 위험하다"],
       ["faq", "FAQ — 분류 구조가 달라 수동 이전을 권한다"],
       ["popular", "인기검색어"],
+      /*
+       * 메뉴는 옮기지 않는다.
+       *
+       * 그누보드 메뉴는 옛 사이트의 주소(`/bbs/board.php?bo_table=free`)를 가리키고,
+       * 우리 주소 체계는 다르다. 자동으로 바꾸면 끊긴 링크가 메뉴에 남는데,
+       * 그건 없는 것보다 나쁘다 — 손님이 먼저 누른다.
+       * (게시판·페이지는 이미 옮겨졌으므로 관리자 → 메뉴에서 고르기만 하면 된다)
+       */
+      ["menu", "메뉴 — 옛 주소를 가리켜 그대로 옮기면 끊긴 링크가 됩니다 (관리자 → 메뉴에서 새로 만드세요)"],
       ["visit", "방문 기록 — IP 원문이 들어 있어 옮기지 않는다"],
       ["login", "접속 기록"],
       ["autosave", "자동저장"],
@@ -398,6 +422,9 @@ export class MigrateService {
       boards: { created: 0, skipped: 0 },
       posts: { created: 0 },
       comments: { created: 0 },
+      attachments: { created: 0 },
+      groups: { created: 0 },
+      contents: { created: 0 },
       points: { granted: 0, total: 0 },
       shop: { categories: 0, products: 0, options: 0, orders: 0, orderItems: 0, skipped: 0 },
       warnings,
@@ -411,8 +438,26 @@ export class MigrateService {
       await this.importMembers(dump, tables, prefix, plan, memberMap, result, warnings);
     }
 
+    /*
+     * 게시판 그룹을 먼저 만든다 — 게시판이 `gr_id` 로 여기를 가리킨다.
+     * 그룹이 없으면 옮긴 사이트의 게시판이 전부 한 덩어리로 평평해진다.
+     */
+    const groupMap = new Map<string, string>();
+    if (tables.has(`${prefix}group`)) {
+      await this.importGroups(dump, tables, prefix, groupMap, result, warnings);
+    }
+
     if (tables.has(`${prefix}board`)) {
-      await this.importBoards(dump, tables, prefix, plan, memberMap, result, warnings);
+      await this.importBoards(dump, tables, prefix, plan, memberMap, result, warnings, groupMap);
+    }
+
+    /*
+     * 내용관리 — 그누보드의 `g5_content` 는 회사소개·이용안내 같은 **정적 페이지**다.
+     * 우리 페이지와 같은 것인데 옮기지 않아서, 이전한 사이트는 회사소개가
+     * 통째로 사라진 채 시작했다(그리고 사라졌다는 말도 없었다).
+     */
+    if (tables.has(`${prefix}content`)) {
+      await this.importContents(dump, tables, prefix, result, warnings);
     }
 
     if (plan.points && tables.has(`${prefix}point`)) {
@@ -528,6 +573,7 @@ export class MigrateService {
     memberMap: Map<string, string>,
     result: RunResult,
     warnings: string[],
+    groupMap: Map<string, string>,
   ): Promise<void> {
     // 게시판 플러그인이 없으면 게시판을 만들 수 없다
     const hasBoard = await this.tableExists("board_boards");
@@ -566,7 +612,8 @@ export class MigrateService {
         await this.db.execute(sql`
           INSERT INTO board_boards
             (id, slug, title, description, read_role, write_role, comment_role, download_role,
-             page_size, allow_reply, allow_secret, allow_upload, extra_fields, is_visible, created_at)
+             page_size, allow_reply, allow_secret, allow_upload, extra_fields, group_id,
+             is_visible, created_at)
           VALUES
             (${boardId}, ${slug}, ${String(row.bo_subject ?? table).slice(0, 200)},
              ${String(row.bo_content_head ?? "").slice(0, 1000) || null},
@@ -579,6 +626,7 @@ export class MigrateService {
              ${Number(row.bo_use_secret ?? 0) !== 0},
              ${Number(row.bo_upload_count ?? 0) > 0},
              ${JSON.stringify(gnuExtraFields(row))}::jsonb,
+             ${groupMap.get(String(row.gr_id ?? "")) ?? null}::uuid,
              true, now())
         `);
         result.boards.created += 1;
@@ -588,7 +636,7 @@ export class MigrateService {
       if (tables.has(writeTable)) {
         // 게시판이 정의한 여분 필드만 글에서 가져온다 — 이름 없는 칸의 값은 보여줄 자리가 없다
         await this.importPosts(dump, tables, writeTable, boardId, memberMap, result, plan,
-          gnuExtraFields(row).map((f) => f.key));
+          gnuExtraFields(row).map((f) => f.key), table, prefix);
       }
     }
   }
@@ -608,8 +656,11 @@ export class MigrateService {
     memberMap: Map<string, string>,
     result: RunResult,
     plan: MigratePlan,
-    /** 이 게시판이 쓰는 여분 필드 키 (`f1`…) — 없으면 글의 wr_N 도 가져오지 않는다 */
+    /** 이 게시판이 쓰는 여분 필드 키 (f1…) — 없으면 글의 wr_N 도 가져오지 않는다 */
     extraKeys: string[] = [],
+    /** 그누보드 쪽 게시판 이름 (첨부파일이 `g5_board_file` 에서 이 이름으로 묶여 있다) */
+    boTable = "",
+    prefix = "",
   ): Promise<void> {
     // 본문의 /data/ 이미지 주소를 /uploads/ 로 — 안 바꾸면 옮긴 사이트의
     // 이미지가 전부 깨진다. 리버스 프록시를 쓰는 운영자만 끈다.
@@ -685,6 +736,75 @@ export class MigrateService {
         ) WHERE p.board_id = ${boardId}::uuid
       `);
     }
+
+    await this.importAttachments(dump, tables, prefix, boTable, boardId, postMap, result);
+  }
+
+  /* ── 첨부파일 ────────────────────────────────────── */
+
+  /**
+   * 게시글 첨부파일(`g5_board_file`).
+   *
+   * **옮기지 않으면 자료실 게시판이 빈 껍데기가 된다.** 글은 그대로 있는데
+   * 내려받을 것이 하나도 없고, 없어졌다는 말조차 없었다.
+   *
+   * 파일 **내용**은 DB 에 없다 — 옛 서버의 `data/file/` 을 `uploads/` 로 복사해야
+   * 한다(본문 이미지 주소를 이미 그 규칙으로 바꾸고 있고, 안내에도 적혀 있다).
+   * 여기서는 그 파일을 가리키는 기록만 만든다. 복사를 안 하면 목록에는 보이고
+   * 누르면 없다 — 그래도 "있었다는 사실" 이 남는 편이 통째로 사라지는 것보다 낫다.
+   */
+  private async importAttachments(
+    dump: string,
+    tables: Map<string, DumpTable>,
+    prefix: string,
+    boTable: string,
+    boardId: string,
+    postMap: Map<string, string>,
+    result: RunResult,
+  ): Promise<void> {
+    const fileTable = `${prefix}board_file`;
+    if (!boTable || !postMap.size || !tables.has(fileTable)) return;
+    if (!(await this.tableExists("board_attachments"))) return;
+
+    let created = 0;
+    for (const row of readRows(dump, fileTable, tables)) {
+      if (String(row.bo_table ?? "") !== boTable) continue;
+      const postId = postMap.get(String(row.wr_id ?? ""));
+      if (!postId) continue;
+      const stored = String(row.bf_file ?? "").trim();
+      if (!stored) continue;
+      const source = String(row.bf_source ?? stored).slice(0, 500);
+      await this.db.execute(sql`
+        INSERT INTO board_attachments
+          (id, post_id, storage_key, file_name, content_type, size, download_count, sort_order)
+        VALUES (${uuidv7()}, ${postId}::uuid, ${gnuAttachmentKey(boTable, stored)},
+                ${source}, ${guessContentType(source)},
+                ${Math.max(0, Math.floor(Number(row.bf_filesize ?? 0)) || 0)},
+                ${Math.max(0, Math.floor(Number(row.bf_download ?? 0)) || 0)},
+                ${Math.floor(Number(row.bf_no ?? 0)) || 0})
+      `);
+      created += 1;
+    }
+    if (!created) return;
+    result.attachments.created += created;
+    /*
+     * 옮긴 뒤에도 한 번 더 말한다.
+     *
+     * 분석 단계의 안내는 실행 전에 읽고 잊는다. 정작 "목록에는 보이는데 눌러도
+     * 안 열린다" 를 만나는 것은 옮긴 **뒤**이고, 그때 눈앞에 있는 것은 이 결과다.
+     */
+    if (!result.warnings.some((w) => w.includes("data/file/"))) {
+      result.warnings.push(
+        `첨부 기록 ${created}건을 옮겼습니다. 파일 내용은 DB 에 없으므로 옛 서버의 ` +
+          "data/file/ 을 uploads/ 로 복사해야 실제로 내려받을 수 있습니다.",
+      );
+    }
+    // 첨부 수는 다시 센다 — 글 목록의 클립 표시가 이 값을 본다
+    await this.db.execute(sql`
+      UPDATE board_posts p SET file_count = (
+        SELECT count(*) FROM board_attachments a WHERE a.post_id = p.id
+      ) WHERE p.board_id = ${boardId}::uuid
+    `);
   }
 
   /* ── 포인트 ──────────────────────────────────────── */
@@ -697,6 +817,88 @@ export class MigrateService {
    * **현재 잔액 하나를 이월 적립으로 넣는다** — 금액이 맞는 것이 이력이
    * 맞는 것보다 중요하다. 이력은 그누보드 쪽에 남아 있다.
    */
+  /* ── 게시판 그룹 ─────────────────────────────────── */
+
+  /**
+   * 그누보드의 게시판 그룹(`g5_group`).
+   *
+   * 옮기지 않으면 게시판 스무 개가 한 덩어리로 늘어선다 — 원래 사이트의
+   * 구조가 사라지고, 운영자가 화면에서 하나씩 다시 묶어야 한다.
+   */
+  private async importGroups(
+    dump: string,
+    tables: Map<string, DumpTable>,
+    prefix: string,
+    groupMap: Map<string, string>,
+    result: RunResult,
+    warnings: string[],
+  ): Promise<void> {
+    if (!(await this.tableExists("board_groups"))) return;
+    for (const row of readRows(dump, `${prefix}group`, tables)) {
+      const grId = String(row.gr_id ?? "").trim();
+      if (!grId) continue;
+      const slug = normalizeSlug(grId);
+      const id = uuidv7();
+      const { rows } = await this.db.execute(sql`
+        INSERT INTO board_groups (id, slug, title, sort_order)
+        VALUES (${id}, ${slug}, ${String(row.gr_subject ?? grId).slice(0, 200)},
+                ${Math.floor(Number(row.gr_order ?? 0)) || 0})
+        ON CONFLICT (slug) DO UPDATE SET slug = board_groups.slug
+        RETURNING id
+      `);
+      // 이미 있는 슬러그면 그 그룹에 붙인다 — 두 번 돌려도 그룹이 늘어나지 않는다
+      const groupId = String(rows[0]?.id ?? id);
+      groupMap.set(grId, groupId);
+      if (groupId === id) result.groups.created += 1;
+    }
+    if (result.groups.created) warnings.push(`게시판 그룹 ${result.groups.created}개를 만들었습니다.`);
+  }
+
+  /* ── 내용관리(정적 페이지) ───────────────────────── */
+
+  /**
+   * 그누보드의 내용관리(`g5_content`) → Brick 페이지.
+   *
+   * 회사소개·이용안내·오시는길처럼 **글이 아닌 페이지**가 여기 있다. 우리에게
+   * 같은 것(pages)이 있는데도 옮기지 않아서, 이전한 사이트는 그 페이지들이
+   * 통째로 사라진 채 시작했다.
+   *
+   * 본문은 `core/rich-text` 블록 하나로 넣는다 — 원문이 HTML 이고, 그것을
+   * 블록으로 쪼개는 일은 사람이 보면서 할 일이다. 평문이면 줄바꿈을 살린다.
+   */
+  private async importContents(
+    dump: string,
+    tables: Map<string, DumpTable>,
+    prefix: string,
+    result: RunResult,
+    warnings: string[],
+  ): Promise<void> {
+    for (const row of readRows(dump, `${prefix}content`, tables)) {
+      const coId = String(row.co_id ?? "").trim();
+      if (!coId) continue;
+      const slug = normalizeSlug(coId);
+      const title = String(row.co_subject ?? coId).slice(0, 500);
+      const html = convertContent(row.co_content, String(row.co_html ?? "") === "0" ? "" : "html1");
+      const blocks = [{ block: "core/rich-text", props: { html: rewriteLegacyMediaUrls(html) } }];
+      const plain = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 10000);
+      const { rows } = await this.db.execute(sql`
+        INSERT INTO pages (id, slug, title, blocks, plain_text, status, seo, published_at)
+        VALUES (${uuidv7()}, ${slug}, ${title}, ${JSON.stringify(blocks)}::jsonb,
+                ${plain}, 'published', '{}'::jsonb, now())
+        ON CONFLICT (slug) DO NOTHING
+        RETURNING id
+      `);
+      // 이미 그 주소에 페이지가 있으면 덮지 않는다 — 운영자가 만든 것이 우선이다
+      if (rows.length) result.contents.created += 1;
+    }
+    if (result.contents.created) {
+      warnings.push(
+        `내용관리 ${result.contents.created}개를 페이지로 옮겼습니다. 원문 HTML 을 그대로 넣었으니 ` +
+          "관리자 → 페이지에서 확인하세요.",
+      );
+    }
+  }
+
   private async importPoints(
     dump: string,
     tables: Map<string, DumpTable>,
