@@ -66,15 +66,14 @@ if [[ "${BRICK_SMOKE_KEEP_DB:-}" != "1" ]]; then
   node "$ROOT/scripts/reset-test-db.mjs" || exit 1
 fi
 
-node "$ROOT/scripts/oidc-stub.mjs" --port "$STUB_PORT" > "$TMP/stub.log" 2>&1 &
-STUB_PID=$!
-for i in $(seq 1 30); do
-  curl -fsS -X PUT "$STUB/_profile" -H 'content-type: application/json' -d '{}' >/dev/null 2>&1 && break
-  sleep 0.3
-done
-# 응답한 것이 **우리 스텁인지** 확인한다 — 남이 그 포트를 쥐고 있으면 소셜 로그인
-# 단언 전부가 남의 서버를 향한다 (scripts/lib-smoke.sh 의 설명 참고)
-assert_own_stub "$STUB_PID" "$STUB_PORT" "OIDC" "$TMP/stub.log"
+# 응답한 것이 **우리 스텁인지** 확인하고, 남이 그 포트를 쥐고 있으면 옆으로
+# 비킨다 — 남의 서버에 붙으면 소셜 로그인 단언 전부가 그리로 간다
+# (start_stub 은 scripts/lib-smoke.sh 에 있다)
+STUB_INFO="$(start_stub scripts/oidc-stub.mjs "$STUB_PORT" "$TMP/stub.log")" \
+  || { echo "❌ OIDC 스텁 시작 실패: $(tail -5 "$TMP/stub.log" 2>/dev/null)"; exit 1; }
+STUB_PORT="${STUB_INFO% *}"; STUB_PID="${STUB_INFO#* }"
+# 포트가 비켰을 수 있으므로 주소를 다시 만든다 — 이 값이 설정으로 서버에 들어간다
+STUB="http://127.0.0.1:${STUB_PORT}"
 
 export BRICK_PLUGINS_DIR="$ROOT/plugins"
 export BRICK_THEMES_DIR="$ROOT/themes"

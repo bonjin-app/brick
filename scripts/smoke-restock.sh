@@ -115,15 +115,10 @@ if [[ "${BRICK_SMOKE_KEEP_DB:-}" != "1" ]]; then
 fi
 
 echo "── SMTP 스텁 시작 (실제로 무엇이 발송되는지 본다)"
-for p in $(pids_on_port "$SMTP_PORT"); do kill -9 "$p" 2>/dev/null || true; done
-node "$ROOT/scripts/smtp-sink.mjs" --port "$SMTP_PORT" --out "$MAILBOX" > "$TMP/sink.log" 2>&1 &
-SINK_PID=$!
-for i in $(seq 1 30); do
-  grep -q 'listening' "$TMP/sink.log" 2>/dev/null && break
-  kill -0 "$SINK_PID" 2>/dev/null || break
-  sleep 0.3
-done
-assert_own_stub "$SINK_PID" "$SMTP_PORT" "SMTP" "$TMP/sink.log"
+# 포트를 남이 쥐고 있으면 옆으로 비킨다 — start_stub 은 scripts/lib-smoke.sh 에 있다
+SMTP_INFO="$(start_stub scripts/smtp-sink.mjs "$SMTP_PORT" "$TMP/sink.log" --out "$MAILBOX")" \
+  || { bad "SMTP 스텁 시작 실패: $(tail -5 "$TMP/sink.log" 2>/dev/null)"; exit 1; }
+SMTP_PORT="${SMTP_INFO% *}"; SINK_PID="${SMTP_INFO#* }"
 ok "SMTP 스텁 시작 (우리 프로세스가 듣고 있다)"
 
 export BRICK_PLUGINS_DIR="$ROOT/plugins"

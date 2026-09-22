@@ -121,6 +121,32 @@ for (const name of readdirSync(join(ROOT, "scripts"))) {
   }
 }
 
+/*
+ * 4. 스텁(PG·SMTP·OIDC)을 **맨손으로 띄우지 않았는가**.
+ *
+ * 고정 포트 하나에 직접 `node scripts/pg-stub.mjs --port …` 하던 시절, 그 포트가
+ * 막힌 날 스텁은 뜨지 못했는데 수트는 계속 달려 **59개가 무의미하게 실패**했다.
+ * 진짜 원인 한 줄은 그 목록 맨 위에 묻혔다. `start_stub`(scripts/lib-smoke.sh)은
+ * 옆 포트로 비키고, 우리 프로세스가 그 포트를 잡았는지 확인하고, 못 잡으면
+ * 부르는 쪽이 멈출 수 있게 0 이 아닌 값을 준다.
+ *
+ * 수트 중간에 **같은 포트로** 되살릴 때는 `restart_stub` 을 쓴다 — API 는 스텁
+ * 주소를 시작할 때 고정하므로 그 자리에서는 비킬 수 없다.
+ */
+for (const name of readdirSync(join(ROOT, "scripts"))) {
+  if (!name.startsWith("smoke-") || !name.endsWith(".sh")) continue;
+  // 주석은 지우고 본다 (위 3번과 같은 이유 — 주석의 이름으로 통과하면 검사가 거짓말이다)
+  const src = readFileSync(join(ROOT, "scripts", name), "utf8")
+    .split("\n").map((l) => l.replace(/^\s*#.*$/, "")).join("\n");
+  src.split("\n").forEach((line, i) => {
+    const m = /node\s+"?\$\{?ROOT\}?\/?"?\/?scripts\/([\w-]+(?:stub|sink)\.mjs)/.exec(line);
+    if (!m) return;
+    checked++;
+    bad.push([`scripts/${name}:${i + 1}`, m[1],
+      "스텁을 맨손으로 띄웁니다 — start_stub/restart_stub 을 쓰세요 (포트가 막히면 수트 전체가 헛돕니다)"]);
+  });
+}
+
 console.log("▶ 스모크가 스스로 함정을 만들지 않았다");
 if (!checked) { console.log("  ❌ 날짜 리터럴을 하나도 찾지 못했습니다 (검사가 고장났을 수 있습니다)"); process.exit(1); }
 const todayLabel = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;

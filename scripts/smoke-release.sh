@@ -16,6 +16,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# 포트 주인 찾기(pids_on_port) 등 수트 공용 도구
+# shellcheck source=scripts/lib-smoke.sh
+source "$ROOT/scripts/lib-smoke.sh"
 PORT="${BRICK_RELEASE_TEST_PORT:-4310}"
 BASE="http://127.0.0.1:$PORT"
 WORK="$(mktemp -d)"
@@ -82,24 +85,6 @@ start_app() {
   echo "앱이 시작되지 않았습니다 (조건: $condition, log: $WORK/run-$tag.log):"
   sed 's/\x1b\[[0-9;]*m//g' "$WORK/run-$tag.log" | tail -25 || true
   return 1
-}
-
-# 포트를 점유한 PID 를 찾는다.
-#
-# lsof 는 매칭이 없으면 종료코드 1을 낸다. `set -euo pipefail` 아래에서는
-# 그 파이프라인 하나가 스크립트 전체를 죽인다 — CI 에서 "고아 프로세스 정리"
-# 항목이 실행조차 되지 않고 조용히 중단됐다.
-# 그리고 lsof 가 없는 리눅스 이미지도 있으므로 ss · fuser 로 물러난다.
-pids_on_port() {
-  local port="$1"
-  if command -v lsof >/dev/null 2>&1; then
-    lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | awk 'NR>1 {print $2}' | sort -u || true
-  elif command -v ss >/dev/null 2>&1; then
-    ss -lptnH "sport = :$port" 2>/dev/null | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u || true
-  elif command -v fuser >/dev/null 2>&1; then
-    fuser -n tcp "$port" 2>/dev/null | tr -s ' ' '\n' | grep -E '^[0-9]+$' | sort -u || true
-  fi
-  return 0
 }
 
 stop_app() {

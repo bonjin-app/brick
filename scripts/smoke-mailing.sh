@@ -301,23 +301,16 @@ wait "$API_PID" 2>/dev/null || true
 MAILBOX="$TMP/mails.jsonl"
 SMTP_PORT=42527
 
-# 이전 실행에서 살아남은 스텁을 먼저 정리한다.
-#
-# 이것을 빠뜨렸을 때 **테스트가 조용히 통과할 수도 있었다**: 옛 스텁이 포트를
-# 잡고 있으면 새 스텁은 bind 에 실패하고 죽는데, `nc -z` 는 (옛 스텁이 듣고
-# 있으니) 성공한다. 메일은 옛 스텁의 우편함으로 가고 우리 파일은 빈 채로
-# 남는다. 그래서 정리하고, **우리가 띄운 프로세스가 실제로 듣고 있는지**
-# 확인한다 — 포트가 열렸는지가 아니라.
-for p in $(pids_on_port "$SMTP_PORT"); do kill -9 "$p" 2>/dev/null || true; done
-
-node "$ROOT/scripts/smtp-sink.mjs" --port "$SMTP_PORT" --out "$MAILBOX" > "$TMP/sink.log" 2>&1 &
-SINK_PID=$!
-for i in $(seq 1 30); do
-  grep -q 'listening' "$TMP/sink.log" 2>/dev/null && break
-  kill -0 "$SINK_PID" 2>/dev/null || break
-  sleep 0.3
-done
-assert_own_stub "$SINK_PID" "$SMTP_PORT" "SMTP" "$TMP/sink.log"
+# start_stub 은 세 가지를 한다 (scripts/lib-smoke.sh):
+#   - 이전 실행에서 살아남은 스텁을 먼저 정리한다. 이것을 빠뜨렸을 때
+#     **테스트가 조용히 통과할 수도 있었다**: 옛 스텁이 포트를 잡고 있으면
+#     새 스텁은 bind 에 실패하고 죽는데 포트는 열려 있으니, 메일은 옛 스텁의
+#     우편함으로 가고 우리 파일은 빈 채로 남는다.
+#   - **우리가 띄운 프로세스가 실제로 듣고 있는지** 확인한다 (포트가 열렸는지가 아니라)
+#   - 남이 그 포트를 쥐고 있으면 옆 포트로 비킨다
+SMTP_INFO="$(start_stub scripts/smtp-sink.mjs "$SMTP_PORT" "$TMP/sink.log" --out "$MAILBOX")" \
+  || { bad "SMTP 스텁 시작 실패: $(tail -5 "$TMP/sink.log" 2>/dev/null)"; exit 1; }
+SMTP_PORT="${SMTP_INFO% *}"; SINK_PID="${SMTP_INFO#* }"
 ok "SMTP 스텁 시작 (우리 프로세스가 듣고 있다)"
 
 export SMTP_HOST=127.0.0.1
@@ -331,6 +324,8 @@ for i in $(seq 1 60); do
 done
 curl -fsS "$API/readyz" >/dev/null 2>&1 && ok "SMTP 설정으로 서버 재시작" \
   || bad "SMTP 설정으로 서버 재시작 ($(tail -3 "$TMP/api2.log" 2>/dev/null))"
+# 재시작 사이에 남이 포트를 채갔을 수 있다 — readyz 는 그 남의 서버도 통과시킨다
+assert_own_api "$API_PID" "$API_PORT" "$TMP/api2.log"
 curl -s -c "$CK" -X POST "$API/api/auth/login" -H 'content-type: application/json' \
   -d '{"email":"admin@ml.test","password":"adminpass123"}' >/dev/null
 absent "SMTP 를 설정하면 그 경고가 사라진다" "$(setup_ids)" "mailOff"

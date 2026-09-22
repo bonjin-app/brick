@@ -105,19 +105,43 @@ if [[ "${BRICK_SMOKE_KEEP_DB:-}" != "1" ]]; then
   node "$ROOT/scripts/reset-test-db.mjs" || exit 1
 fi
 
-echo "── 스텁 PG 시작"
-# 이전 실행의 스텁이 포트를 잡고 있으면 우리 기록이 비어 있는데도 통과한다
-for p in $(pids_on_port "$PG_PORT"); do kill -9 "$p" 2>/dev/null || true; done
+# ════════════════════════════════════════════════════
+#
+# 스텁을 띄우는 일 자체를 먼저 못박는다 (scripts/lib-smoke.sh).
+#
+# 고정 포트 하나만 시도하던 시절, 그 포트가 막힌 날 스텁은 뜨지 못했는데 수트는
+# 계속 달려 **59개가 무의미하게 실패**했다. 진짜 원인 한 줄은 그 목록 맨 위에
+# 묻혔다. 지금은 옆 포트로 비키고, 비킬 수 없는 자리(API 가 주소를 이미 고정한
+# 뒤)에서는 그 자리에서 멈춘다.
+echo "── 스텁 포트를 남이 쥐고 있을 때"
+BUSY_PORT=$((PG_PORT + 20))
+node -e 'require("net").createServer().listen(Number(process.argv[1]), "127.0.0.1", () => setInterval(() => {}, 1e9))' \
+  "$BUSY_PORT" > "$TMP/busy.log" 2>&1 &
+BUSY_PID=$!
+for i in $(seq 1 20); do [[ -n "$(pids_on_port "$BUSY_PORT")" ]] && break; sleep 0.3; done
+SHIFT_INFO="$(start_stub scripts/pg-stub.mjs "$BUSY_PORT" "$TMP/shift.log" --out "$TMP/shift.jsonl")" \
+  || SHIFT_INFO="실패"
+check "막힌 포트를 만나면 옆으로 비킨다" "${SHIFT_INFO%% *}" "$((BUSY_PORT + 1))"
+kill -0 "$BUSY_PID" 2>/dev/null && ok "남의 프로세스를 죽이지 않는다" \
+  || bad "남의 프로세스를 죽였다 (포트를 쥐었다는 이유로 kill 하면 안 된다)"
+kill "${SHIFT_INFO#* }" 2>/dev/null || true
 
-node "$ROOT/scripts/pg-stub.mjs" --port "$PG_PORT" --out "$PGLOG" > "$TMP/pg.log" 2>&1 &
-PG_PID=$!
-for i in $(seq 1 30); do
-  grep -q 'listening' "$TMP/pg.log" 2>/dev/null && break
-  kill -0 "$PG_PID" 2>/dev/null || break
-  sleep 0.3
-done
-assert_own_stub "$PG_PID" "$PG_PORT" "PG" "$TMP/pg.log"
-ok "스텁 PG 시작 (우리 프로세스가 듣고 있다)"
+# 되살리기는 비킬 수 없다 — API 는 스텁 주소를 프로세스 시작 때 고정하므로,
+# 다른 포트에 되살리면 API 는 계속 빈 포트를 두드린다. 예전에는 되살릴 때도
+# 비키는 쪽을 썼고, "같은 포트로 되살린다"고 적힌 주석과 다른 일을 할 수 있었다.
+restart_stub scripts/pg-stub.mjs "$BUSY_PORT" "$TMP/pin.log" --out "$TMP/pin.jsonl" >/dev/null 2>&1 \
+  && bad "고정 포트에 못 붙었는데 성공했다고 한다" \
+  || ok "고정 포트를 못 되찾으면 멈춘다"
+check "옆 포트에 몰래 되살아나지 않는다" "$(pids_on_port "$((BUSY_PORT + 1))" | grep -c . || true)" "0"
+kill "$BUSY_PID" 2>/dev/null || true
+wait "$BUSY_PID" 2>/dev/null || true
+
+echo "── 스텁 PG 시작"
+# 포트를 남이 쥐고 있으면 옆으로 비킨다 — start_stub 은 scripts/lib-smoke.sh 에 있다
+PG_INFO="$(start_stub scripts/pg-stub.mjs "$PG_PORT" "$TMP/pg.log" --out "$PGLOG")" \
+  || { bad "PG 스텁 시작 실패: $(tail -5 "$TMP/pg.log" 2>/dev/null)"; exit 1; }
+PG_PORT="${PG_INFO% *}"; PG_PID="${PG_INFO#* }"
+ok "스텁 PG 시작 (:$PG_PORT — 우리 프로세스가 듣고 있다)"
 
 export BRICK_PLUGINS_DIR="$ROOT/plugins"
 export BRICK_THEMES_DIR="$ROOT/themes"
@@ -421,11 +445,10 @@ ODOWN_ID="$(psql_q "SELECT id FROM shop_orders WHERE order_no='$ODOWN'")"
 curl -s -b "$CK" -X PUT "$SHOP/admin/orders/$ODOWN_ID" -H 'content-type: application/json' \
   -d '{"status":"cancelled","note":"PG 미도달 검증"}' >/dev/null
 
-# 스텁을 같은 포트로 되살린다 (BRICK_TOSS_API_BASE 는 프로세스 시작 때 고정된다)
-node "$ROOT/scripts/pg-stub.mjs" --port "$PG_PORT" --out "$PGLOG" > "$TMP/pg2.log" 2>&1 &
-PG_PID=$!
-for i in $(seq 1 20); do grep -q 'listening' "$TMP/pg2.log" 2>/dev/null && break; sleep 0.3; done
-grep -q 'listening' "$TMP/pg2.log" || { bad "PG 스텁 재시작 실패"; exit 1; }
+# 스텁을 **같은 포트로** 되살린다 (BRICK_TOSS_API_BASE 는 프로세스 시작 때 고정된다).
+# 옆 포트로 비키면 API 는 계속 빈 포트를 두드린다 — restart_stub 이 그것을 막는다.
+PG_PID="$(restart_stub scripts/pg-stub.mjs "$PG_PORT" "$TMP/pg2.log" --out "$PGLOG")" \
+  || { bad "PG 스텁 재시작 실패"; exit 1; }
 
 echo "══ PG 가 실패하면 ══"
 O3="$(mkorder 1)"

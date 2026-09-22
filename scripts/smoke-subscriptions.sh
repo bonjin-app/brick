@@ -108,30 +108,7 @@ fi
 
 
 echo "── 스텁 시작 (PG · SMTP)"
-# 고정 포트가 리눅스 임시포트 범위(32768–60999) 안이라 드물게 다른 프로세스의
-# 나가는 소켓과 충돌한다 — CI 에서 실제로 났다. 죽으면 다음 포트로 재시도한다.
-start_stub() {  # start_stub <스크립트> <시작포트> <로그> <out인자...> → "포트 PID" 를 stdout 으로
-  local script="$1" base="$2" log="$3"; shift 3
-  local port pid
-  for offset in 0 1 2 3 4; do
-    port=$((base + offset))
-    for p in $(pids_on_port "$port"); do kill -9 "$p" 2>/dev/null || true; done
-    node "$ROOT/$script" --port "$port" "$@" > "$log" 2>&1 &
-    pid=$!
-    for i in $(seq 1 20); do
-      grep -q 'listening' "$log" 2>/dev/null && break
-      kill -0 "$pid" 2>/dev/null || break
-      sleep 0.3
-    done
-    if kill -0 "$pid" 2>/dev/null && [[ "$(pids_on_port "$port")" == *"$pid"* ]]; then
-      echo "$port $pid"
-      return 0
-    fi
-    kill "$pid" 2>/dev/null || true
-  done
-  return 1
-}
-
+# 포트를 남이 쥐고 있으면 옆으로 비킨다 — start_stub 은 scripts/lib-smoke.sh 에 있다
 PG_INFO="$(start_stub scripts/pg-stub.mjs "$PG_PORT" "$TMP/pg.log" --out "$PGLOG")" \
   || { bad "PG 스텁 시작 실패: $(tail -5 "$TMP/pg.log" 2>/dev/null)"; exit 1; }
 PG_PORT="${PG_INFO% *}"; PG_PID="${PG_INFO#* }"
@@ -398,10 +375,10 @@ contains "기록에는 자세한 이유가 남는다 (운영자가 원인을 알
 check "구독이 만들어지지 않았다" \
   "$(psql_q "SELECT count(*) FROM shop_subscriptions WHERE status='active' AND product_name='우유 구독'")" "0"
 
-# 스텁을 같은 포트로 되살린다 (BRICK_TOSS_API_BASE 는 프로세스 시작 때 고정된다)
-PG_INFO="$(start_stub scripts/pg-stub.mjs "$PG_PORT" "$TMP/pg2.log" --out "$PGLOG")" \
+# 스텁을 **같은 포트로** 되살린다 (BRICK_TOSS_API_BASE 는 프로세스 시작 때 고정된다).
+# 옆 포트로 비키면 API 는 계속 빈 포트를 두드린다 — restart_stub 이 그것을 막는다.
+PG_PID="$(restart_stub scripts/pg-stub.mjs "$PG_PORT" "$TMP/pg2.log" --out "$PGLOG")" \
   || { bad "PG 스텁 재시작 실패"; exit 1; }
-PG_PID="${PG_INFO#* }"
 
 # 되살린 스텁은 빌링키를 기억하지 못한다(메모리에 있다) — 카드를 다시 등록한다
 CUST_A2="$(curl -s -b "$A" -X POST "$SHOP/me/billing-keys/prepare" | jq_get "['customerKey']")"
