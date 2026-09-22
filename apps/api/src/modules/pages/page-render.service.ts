@@ -63,7 +63,19 @@ export class PageRenderService {
 
   async renderPath(
     rawPath: string,
-    opts: { query?: Record<string, string>; user?: RequestUser | null; previewTheme?: string | null } = {},
+    opts: {
+      query?: Record<string, string>;
+      user?: RequestUser | null;
+      previewTheme?: string | null;
+      /**
+       * 아직 공개되지 않은 페이지도 그린다 (관리자 미리보기 전용).
+       *
+       * 예약해 둔 페이지를 열기 전에 확인할 방법이 없었다 — 자정 공개를
+       * 예약해 놓고 자정에 처음 본다면, 오타 하나도 손님이 먼저 본다.
+       * **이 값을 공개 경로에서 켜면 임시저장이 통째로 새어 나간다.**
+       */
+      includeUnpublished?: boolean;
+    } = {},
   ): Promise<RenderedPage> {
     const path = rawPath.replace(/^\/+|\/+$/g, "") || "home";
     const query = opts.query ?? {};
@@ -79,7 +91,8 @@ export class PageRenderService {
      */
     // 미리보기는 캐시하지 않는다 — 활성 테마의 캐시를 오염시키지 않고, 관리자 1회성 요청이다
     const preview = opts.previewTheme ?? null;
-    const cacheable = !user && !preview;
+    // 미공개 미리보기는 절대 캐시하지 않는다 — 캐시에 들어가면 손님에게 나간다
+    const cacheable = !user && !preview && !opts.includeUnpublished;
     const queryKey = Object.keys(query).length
       ? `?${new URLSearchParams(Object.entries(query).sort()).toString()}`
       : "";
@@ -96,7 +109,7 @@ export class PageRenderService {
       if (cached) return cached;
     }
 
-    const result = await this.compute(path, query, user, preview);
+    const result = await this.compute(path, query, user, preview, opts.includeUnpublished === true);
     // 페이지 slug 기준으로 태그를 달아야 무효화가 정확하다 (하위 경로 포함)
     if (cacheable) {
       await this.cache.setWithTags(cacheKey, result, ["pages", `page:${result.slug ?? path}`], 300);
@@ -115,6 +128,8 @@ export class PageRenderService {
     user: RequestUser | null,
     /** 관리자 미리보기 테마 — 없으면 활성 테마로 그린다 */
     preview: string | null = null,
+    /** 아직 공개되지 않은 페이지도 찾는다 (관리자 미리보기) */
+    includeUnpublished = false,
   ): Promise<RenderedPage> {
     const [site, rawNav] = await Promise.all([this.siteInfo(), this.menu("header")]);
     const nav = markCurrent(rawNav, path);
@@ -191,7 +206,11 @@ export class PageRenderService {
       const [found] = await this.db
         .select()
         .from(pages)
-        .where(and(eq(pages.slug, candidate), eq(pages.status, "published")))
+        .where(
+          includeUnpublished
+            ? eq(pages.slug, candidate)
+            : and(eq(pages.slug, candidate), eq(pages.status, "published")),
+        )
         .limit(1);
       if (found) {
         page = found;

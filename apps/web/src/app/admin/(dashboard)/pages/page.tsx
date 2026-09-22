@@ -6,7 +6,7 @@ import { useAdminT } from "../../../../lib/i18n-admin";
 import { useLocaleTag } from "../../../../lib/i18n";
 
 /* ── 타입 ─────────────────────────────────────────── */
-interface PageRow { id: string; slug: string; title: string; status: string; updatedAt: string }
+interface PageRow { id: string; slug: string; title: string; status: string; updatedAt: string; publishedAt?: string | null }
 interface BlockNode { block: string; props: Record<string, unknown>; children?: BlockNode[] }
 interface BlockDef {
   name: string;
@@ -18,8 +18,26 @@ interface PageDraft {
   slug: string;
   title: string;
   status: string;
+  /** 예약 발행이면 공개할 시각 (ISO). 다른 상태에서는 쓰지 않는다 */
+  publishedAt?: string | null;
   blocks: BlockNode[];
   seo: { title?: string; description?: string };
+}
+
+/** ISO → datetime-local 입력값 (브라우저 시간대). 값이 없으면 빈 칸 */
+function toLocalInput(iso?: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** 목록에 보여줄 짧은 시각 */
+function formatWhen(iso?: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : toLocalInput(iso).replace("T", " ");
 }
 
 const EMPTY: PageDraft = { slug: "", title: "", status: "draft", blocks: [], seo: {} };
@@ -140,7 +158,14 @@ export default function AdminPagesPage() {
                 </button>
               </td>
               <td data-label={t("pages.colSlug")}><code>/{p.slug}</code></td>
-              <td data-label={t("common.status")}>{p.status === "published" ? t("pages.published") : p.status === "draft" ? t("pages.draft") : t("pages.archived")}</td>
+              <td data-label={t("common.status")}>
+                {p.status === "scheduled"
+                  /* 예약은 **언제**가 곧 상태다 — 시각 없이 "예약" 만 보이면 확인하러 들어가야 한다 */
+                  ? `${t("pages.statusScheduled")} · ${formatWhen(p.publishedAt)}`
+                  : p.status === "published" ? t("pages.published")
+                  : p.status === "draft" ? t("pages.draft")
+                  : t("pages.archived")}
+              </td>
               <td data-label={t("pages.colUpdated")} style={{ color: "var(--color-muted)", fontSize: 13 }}>{new Date(p.updatedAt).toLocaleString(localeTag)}</td>
             </tr>
           ))}
@@ -197,6 +222,16 @@ function PageEditor(props: {
         {draft.status === "published" && draft.slug && (
           <a href={`/${draft.slug === "home" ? "" : draft.slug}`} target="_blank" style={{ fontSize: 14 }}>
             {t("pages.viewOnSite")}
+          </a>
+        )}
+        {/*
+          * 아직 공개 전인 페이지는 사이트 주소로 열면 404 다 — 그래서 예약해 둔
+          * 화면을 열기 전에 확인할 방법이 없었다. 관리자 미리보기로 연결한다.
+          * (저장하지 않은 수정은 보이지 않는다 — 서버가 저장된 것을 그린다)
+          */}
+        {draft.status !== "published" && draft.id && (
+          <a href={`/api/admin/pages/${draft.id}/preview`} target="_blank" rel="noopener" style={{ fontSize: 14 }}>
+            {t("pages.previewUnpublished")}
           </a>
         )}
         {props.onDelete && <button onClick={props.onDelete} style={{ cursor: "pointer", color: "var(--color-danger)" }}>{t("common.delete")}</button>}
@@ -258,10 +293,31 @@ function PageEditor(props: {
           <label style={{ display: "block", marginTop: 12 }}>{t("common.status")}
             <select style={input} value={draft.status} onChange={(e) => onChange({ ...draft, status: e.target.value })}>
               <option value="draft">{t("pages.statusDraft")}</option>
+              <option value="scheduled">{t("pages.statusScheduled")}</option>
               <option value="published">{t("pages.statusPublished")}</option>
               <option value="archived">{t("pages.statusArchived")}</option>
             </select>
           </label>
+          {/*
+            * 예약을 고른 뒤에야 시각을 묻는다 — 늘 보이면 다른 상태에서
+            * 아무 뜻도 없는 칸이 하나 늘어난다.
+            *
+            * datetime-local 은 **브라우저의 시간대**로 읽고 쓴다. 운영자가 보는
+            * 시계가 곧 예약 시각이어야 하므로 그것이 맞다 — 저장할 때 ISO 로
+            * 바꾸면서 시간대가 함께 실린다.
+            */}
+          {draft.status === "scheduled" && (
+            <label style={{ display: "block", marginTop: 12 }}>{t("pages.publishAt")}
+              <input type="datetime-local" style={input}
+                value={toLocalInput(draft.publishedAt)}
+                min={toLocalInput(new Date().toISOString())}
+                onChange={(e) => onChange({
+                  ...draft,
+                  publishedAt: e.target.value ? new Date(e.target.value).toISOString() : null,
+                })} />
+              <span style={{ fontSize: 12, color: "var(--color-muted)" }}>{t("pages.publishAtHint")}</span>
+            </label>
+          )}
           <hr style={{ margin: "16px 0", border: "none", borderTop: "1px solid var(--color-line)" }} />
           <strong style={{ fontSize: 13, color: "var(--color-muted)" }}>SEO</strong>
           <label style={{ display: "block", marginTop: 8 }}>{t("pages.seoTitle")}<input style={input} value={draft.seo.title ?? ""}

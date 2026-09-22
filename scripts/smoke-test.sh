@@ -180,6 +180,114 @@ AFTER="$(curl -s "$API/api/render/page?path=smoke-page")"
 contains "수정 내용 반영" "$AFTER" "수정된 본문"
 if [[ "$AFTER" != *"제목입니다"* ]]; then ok "이전 캐시 제거"; else bad "이전 캐시 제거"; fi
 
+echo "── 예약 발행 (때가 되면 저절로 열린다)"
+#
+# `published_at` 은 지금까지 "발행한 순간" 을 적는 칸일 뿐이었다. 그래서 공지·이벤트
+# 페이지를 정해진 시각에 여는 방법이 없었고, 운영자가 그 시각에 깨어 있어야 했다.
+#
+# 예약된 페이지는 **published 가 아니므로** 손님·검색·사이트맵 어디에도 나오지
+# 않는다 — 공개 여부를 보는 곳이 전부 그 한 값을 본다.
+SCHED_ID="$(curl -s -b "$COOKIES" -X POST "$API/api/pages" -H 'content-type: application/json' -d '{
+  "slug":"smoke-soon","title":"곧 열릴 페이지","status":"scheduled","publishedAt":"2099-01-01T00:00:00.000Z",
+  "blocks":[{"block":"core/paragraph","props":{"text":"예약된 본문입니다"}}]
+}' | jq_get "['id']")"
+[[ -n "$SCHED_ID" ]] && ok "예약 페이지 생성" || bad "예약 페이지 생성"
+check "예약 상태로 저장된다" \
+  "$(curl -s -b "$COOKIES" "$API/api/pages/$SCHED_ID" | jq_get "['status']")" "scheduled"
+check "때가 되기 전에는 손님에게 없는 페이지다" \
+  "$(curl -s "$API/api/render/page?path=smoke-soon" | jq_get "['status']")" "404"
+absent "검색에도 걸리지 않는다" "$(curl -s "$API/api/search?q=예약된+본문")" "곧 열릴 페이지"
+# /sitemap.xml 은 조각 목록이다 — 실제 주소는 조각(/sitemap-1.xml) 안에 있다
+absent "사이트맵에도 없다" "$(curl -s "$API/sitemap-1.xml")" "smoke-soon"
+contains "목록은 언제 열리는지 알려준다" \
+  "$(curl -s -b "$COOKIES" "$API/api/pages")" '"slug":"smoke-soon"'
+contains "링크 고르는 자리에서도 임시저장과 구분된다" \
+  "$(curl -s -b "$COOKIES" "$API/api/admin/link-targets?q=smoke-soon")" "예약 발행"
+
+echo "── 공개 전에 확인할 수 있다 (자정 공개를 자정에 처음 보면 오타도 손님이 먼저 본다)"
+PV="$(curl -s -b "$COOKIES" "$API/api/admin/pages/$SCHED_ID/preview")"
+contains "예약된 페이지를 관리자가 미리 본다" "$PV" "예약된 본문입니다"
+contains "완성된 화면 그대로 (테마가 감싼다)" "$PV" "doctype html"
+check "미리보기는 HTML 로 준다" \
+  "$(curl -s -o /dev/null -w '%{content_type}' -b "$COOKIES" "$API/api/admin/pages/$SCHED_ID/preview")" "text/html; charset=utf-8"
+check "검색엔진에 올리지 않는다" \
+  "$(curl -s -o /dev/null -w '%header{x-robots-tag}' -b "$COOKIES" "$API/api/admin/pages/$SCHED_ID/preview")" "noindex"
+check "캐시하지 않는다 (미공개 화면이 캐시에 남으면 안 된다)" \
+  "$(curl -s -o /dev/null -w '%header{cache-control}' -b "$COOKIES" "$API/api/admin/pages/$SCHED_ID/preview")" "no-store"
+check "비로그인은 미리볼 수 없다" "$(code "$API/api/admin/pages/$SCHED_ID/preview")" "401"
+# 미리보기가 공개 경로를 열어 주면 안 된다 — 손님에게는 여전히 없는 페이지다
+check "미리본 뒤에도 손님에게는 없다" \
+  "$(curl -s "$API/api/render/page?path=smoke-soon" | jq_get "['status']")" "404"
+
+echo "── 잘못된 예약은 저장되지 않는다 (조용히 안 열리는 것이 가장 나쁘다)"
+check "시각 없는 예약은 거절" \
+  "$(code -b "$COOKIES" -X POST "$API/api/pages" -H 'content-type: application/json' \
+      -d '{"slug":"smoke-nodate","title":"시각없음","status":"scheduled"}')" "400"
+# 연도를 잘못 적은 예약이 조용히 즉시 공개되면, 예약을 쓰는 이유가 사라진다
+check "이미 지난 시각은 거절" \
+  "$(code -b "$COOKIES" -X POST "$API/api/pages" -H 'content-type: application/json' \
+      -d '{"slug":"smoke-past","title":"지난시각","status":"scheduled","publishedAt":"2020-01-01T00:00:00.000Z"}')" "400"
+contains "왜 안 되는지 말해 준다" \
+  "$(curl -s -b "$COOKIES" -X POST "$API/api/pages" -H 'content-type: application/json' \
+      -d '{"slug":"smoke-past","title":"지난시각","status":"scheduled","publishedAt":"2020-01-01T00:00:00.000Z"}')" "이미 지났습니다"
+# 상태에 오타가 나면 저장은 성공하는데 페이지는 어디에도 안 나왔다
+check "모르는 상태는 거절" \
+  "$(code -b "$COOKIES" -X POST "$API/api/pages" -H 'content-type: application/json' \
+      -d '{"slug":"smoke-typo","title":"오타","status":"publishd"}')" "400"
+
+echo "── 때가 되면 열린다"
+# 시각을 당겨 놓고 **주기 확인과 같은 코드**를 부른다 (30초를 기다리지 않는다)
+curl -s -b "$COOKIES" -X PUT "$API/api/pages/$SCHED_ID" -H 'content-type: application/json' -d '{
+  "slug":"smoke-soon","title":"곧 열릴 페이지","status":"scheduled","publishedAt":"2099-01-01T00:00:00.000Z",
+  "blocks":[{"block":"core/paragraph","props":{"text":"예약된 본문입니다"}}]
+}' >/dev/null
+cat > "$TMP/due.cjs" <<'JS'
+const { Client } = require(process.env.PG_PATH);
+(async () => {
+  const c = new Client(process.env.DATABASE_URL);
+  await c.connect();
+  // 시각을 당겨 "때가 지난 예약" 을 만든다 (30초 주기를 기다리지 않으려고)
+  await c.query("UPDATE pages SET published_at = now() - make_interval(mins => 1) WHERE slug = $1", ["smoke-soon"]);
+  await c.end();
+})().catch((e) => { console.error(e.message); process.exit(1); });
+JS
+PG_PATH="$ROOT/apps/api/node_modules/pg" node "$TMP/due.cjs"
+check "한 건이 열렸다" \
+  "$(curl -s -b "$COOKIES" -X POST "$API/api/admin/pages/publish-due" | jq_get "['published']")" "1"
+OPENED="$(curl -s "$API/api/render/page?path=smoke-soon")"
+check "이제 손님이 볼 수 있다" "$(echo "$OPENED" | jq_get "['status']")" "200"
+contains "본문이 나온다" "$OPENED" "예약된 본문입니다"
+check "상태도 공개로 바뀐다" \
+  "$(curl -s -b "$COOKIES" "$API/api/pages/$SCHED_ID" | jq_get "['status']")" "published"
+contains "사이트맵에도 들어온다" "$(curl -s "$API/sitemap-1.xml")" "smoke-soon"
+contains "누가 열었는지 기록이 남는다 (사람이 아니라 시각이 열었다)" \
+  "$(curl -s -b "$COOKIES" "$API/api/audit?action=page.publish.scheduled")" "곧 열릴 페이지"
+check "때가 안 된 것이 없으면 아무것도 열지 않는다" \
+  "$(curl -s -b "$COOKIES" -X POST "$API/api/admin/pages/publish-due" | jq_get "['published']")" "0"
+
+echo "── 공개 시각은 한 번 정해지면 밀리지 않는다"
+# 다시 저장할 때마다 오늘로 밀리면 그 값은 아무 뜻도 없어진다
+WAS="$(curl -s -b "$COOKIES" "$API/api/pages/$SCHED_ID" | jq_get "['publishedAt']")"
+# 값이 실제로 있어야 "그대로" 라는 비교에 뜻이 생긴다 (둘 다 비어 있으면 늘 통과한다)
+[[ -n "$WAS" && "$WAS" != "None" ]] && ok "열린 페이지에는 공개 시각이 있다" \
+  || bad "열린 페이지에 공개 시각이 없다 ($WAS)"
+curl -s -b "$COOKIES" -X PUT "$API/api/pages/$SCHED_ID" -H 'content-type: application/json' -d '{
+  "slug":"smoke-soon","title":"곧 열릴 페이지 (수정)","status":"published",
+  "blocks":[{"block":"core/paragraph","props":{"text":"예약된 본문입니다"}}]
+}' >/dev/null
+check "수정해도 공개 시각은 그대로" \
+  "$(curl -s -b "$COOKIES" "$API/api/pages/$SCHED_ID" | jq_get "['publishedAt']")" "$WAS"
+# 임시저장으로 만든 뒤 공개한 페이지는 공개 시각이 영원히 비어 있었다
+DRAFT_ID="$(curl -s -b "$COOKIES" -X POST "$API/api/pages" -H 'content-type: application/json' \
+  -d '{"slug":"smoke-later","title":"나중에 공개","status":"draft"}' | jq_get "['id']")"
+check "임시저장은 공개 시각이 없다" \
+  "$(curl -s -b "$COOKIES" "$API/api/pages/$DRAFT_ID" | jq_get "['publishedAt']")" "None"
+curl -s -b "$COOKIES" -X PUT "$API/api/pages/$DRAFT_ID" -H 'content-type: application/json' \
+  -d '{"slug":"smoke-later","title":"나중에 공개","status":"published"}' >/dev/null
+LATER="$(curl -s -b "$COOKIES" "$API/api/pages/$DRAFT_ID" | jq_get "['publishedAt']")"
+[[ -n "$LATER" && "$LATER" != "None" ]] && ok "공개로 바꾸면 그때가 적힌다" \
+  || bad "공개로 바꿔도 공개 시각이 비어 있다 ($LATER)"
+
 echo "── 미디어"
 printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82' > "$TMP/t.png"
 cp "$TMP/t.png" "$TMP/evil.php"

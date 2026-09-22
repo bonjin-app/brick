@@ -27,7 +27,7 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-3673%20passing-2ea043.svg" alt="스모크 테스트 3673개" />
+  <img src="https://img.shields.io/badge/E2E-3702%20passing-2ea043.svg" alt="스모크 테스트 3702개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
   <a href="https://github.com/bonjin-app/brick/pkgs/container/brick">
     <img src="https://img.shields.io/badge/docker-amd64%20%C2%B7%20arm64-2496ed.svg" alt="Docker image (amd64 · arm64)" />
@@ -369,11 +369,11 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 3,673개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 3,702개 항목):
 
 | 수트 | 항목 | 무엇을 못박는가 |
 |---|---:|---|
-| `smoke-test.sh` | 90 | 설치 · 인증 · 페이지 · 미디어 · 플러그인 로드 · **공유 이미지·immutable 캐시·압축** · **이미지 최적화·EXIF 제거** · **썸네일 백필** · **og 1200×630 자동 변형** · **업로드 immutable·ETag·304** · **DB 순단 회복** | · **압축 폭탄** · **업로드 한도를 한국어로·숫자로 알린다** · **거절 문구가 한국어이고, 없는 계정과 같은 말을 한다** · **개인화된 응답은 공유 캐시에 담기지 않는다** |
+| `smoke-test.sh` | 119 | 설치 · 인증 · 페이지 · **예약 발행** · 미디어 · 플러그인 로드 · **공유 이미지·immutable 캐시·압축** · **이미지 최적화·EXIF 제거** · **썸네일 백필** · **og 1200×630 자동 변형** · **업로드 immutable·ETag·304** · **DB 순단 회복** | · **압축 폭탄** · **업로드 한도를 한국어로·숫자로 알린다** · **거절 문구가 한국어이고, 없는 계정과 같은 말을 한다** · **개인화된 응답은 공유 캐시에 담기지 않는다** |
 | `smoke-member.sh` | 151 | 약관 강제 · 동의 이력 · 개인정보 파기 · 주문 보존 · 프로필 이미지·공개 카드·닉네임 변경 주기 · **관리자 메모·이메일 변경** · **가입 오류 칸 안내** · **인증 링크 화면** · **보관 기간이 지난 기록이 실제로 지워진다(검색어·인증 토큰·감사)** · **이메일 변경은 재인증을 요구하고, 옛 주소에 알리고, 세션을 끊는다** |
 | `smoke-helpdesk.sh` | 120 | 문의 열거 방지 · 비회원 조회 · 사이트맵 유출 · **설정 화면(비회원 문의 스위치 · GET/PUT 모양 일치)** · **비회원이 번호·비밀번호로 자기 문의를 여는 화면** |
 | `smoke-migrate.sh` | 159 | 덤프 파싱 · 레벨 매핑 · **비밀번호 보존** · 영카트 상품·주문 · 멱등성 · **문서가 말하는 크기의 덤프를 실제로 받는다(그 예외는 이전 경로에만)** |

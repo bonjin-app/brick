@@ -16,9 +16,21 @@ export const pages = pgTable(
     blocks: jsonb("blocks").notNull().default([]),
     /** SEO: 렌더된 본문 텍스트 캐시 (검색 색인용) */
     plainText: text("plain_text").notNull().default(""),
-    status: varchar("status", { length: 20 }).notNull().default("draft"), // draft | published | archived
+    /**
+     * draft | scheduled | published | archived
+     *
+     * `scheduled` 는 "published_at 이 되면 공개한다" 는 뜻이다 — 그때까지는
+     * published 가 아니므로 손님·검색·사이트맵 어디에도 나오지 않는다.
+     */
+    status: varchar("status", { length: 20 }).notNull().default("draft"),
     seo: jsonb("seo").notNull().default({}), // { title, description, ogImage, noindex }
     authorId: uuid("author_id").references(() => users.id, { onDelete: "set null" }),
+    /**
+     * 공개 시각.
+     *
+     * `published` 면 **공개된 순간**, `scheduled` 면 **공개할 순간**이다.
+     * 한 칸이 두 뜻을 갖는 것이 아니라 같은 뜻이다 — 이 페이지가 세상에 나오는 때.
+     */
     publishedAt: timestamp("published_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
