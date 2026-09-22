@@ -180,6 +180,72 @@ AFTER="$(curl -s "$API/api/render/page?path=smoke-page")"
 contains "수정 내용 반영" "$AFTER" "수정된 본문"
 if [[ "$AFTER" != *"제목입니다"* ]]; then ok "이전 캐시 제거"; else bad "이전 캐시 제거"; fi
 
+echo "── 이전 버전 (덮어쓴 뒤에 되돌릴 수 있는가)"
+#
+# 블록 열 개를 지우고 저장한 뒤에야 잘못을 알아채도, 예전에는 기억을 더듬어
+# 다시 만드는 수밖에 없었다. 저장할 때마다 그때 내용을 한 판 남긴다.
+REVS="$(curl -s -b "$COOKIES" "$API/api/pages/$PAGE_ID/revisions")"
+check "만든 것도 한 판이다 (없으면 원래 모습을 잃는다)" \
+  "$(echo "$REVS" | jq_get "['items'][-1]['revNo']")" "1"
+check "수정하면 판이 늘어난다" "$(echo "$REVS" | jq_get "['items'][0]['revNo']")" "2"
+contains "1판에는 처음 제목이 남아 있다" "$REVS" "스모크 페이지"
+contains "2판은 수정한 제목" "$REVS" "수정된 제목"
+contains "누가 저장했는지 남는다" "$REVS" '"authorName"'
+check "블록 수로 무엇이 얼마나 바뀌었는지 짐작한다" \
+  "$(echo "$REVS" | jq_get "['items'][-1]['blockCount']")" "2"
+# 목록에 서른 판의 블록 JSON 을 모두 실어 보내면 큰 페이지에서 몇 MB 가 된다
+absent "목록에는 내용을 싣지 않는다" "$REVS" '"blocks"'
+
+echo "── 같은 내용을 다시 저장해도 판을 만들지 않는다"
+# 저장을 두 번 눌렀다고 판이 두 개 생기면 목록이 금세 의미를 잃는다
+curl -s -b "$COOKIES" -X PUT "$API/api/pages/$PAGE_ID" -H 'content-type: application/json' -d '{
+  "slug":"smoke-page","title":"수정된 제목","status":"published",
+  "blocks":[{"block":"core/heading","props":{"text":"수정된 본문","level":1}}]
+}' >/dev/null
+check "판 수는 그대로" \
+  "$(curl -s -b "$COOKIES" "$API/api/pages/$PAGE_ID/revisions" | jq_get "['items'][0]['revNo']")" "2"
+
+echo "── 되돌리기"
+contains "옛 판의 내용을 볼 수 있다" \
+  "$(curl -s -b "$COOKIES" "$API/api/pages/$PAGE_ID/revisions/1")" "제목입니다"
+check "없는 판은 404" "$(code -b "$COOKIES" "$API/api/pages/$PAGE_ID/revisions/99")" "404"
+check "없는 페이지의 판도 404" "$(code -b "$COOKIES" "$API/api/pages/00000000-0000-0000-0000-000000000000/revisions")" "404"
+check "비로그인은 판을 볼 수 없다" "$(code "$API/api/pages/$PAGE_ID/revisions")" "401"
+RESTORE="$(curl -s -b "$COOKIES" -X POST "$API/api/pages/$PAGE_ID/revisions/1/restore")"
+contains "1판으로 되돌린다" "$RESTORE" '"restoredFrom":1'
+AFTER_R="$(curl -s -b "$COOKIES" "$API/api/pages/$PAGE_ID")"
+contains "제목이 돌아온다" "$AFTER_R" "스모크 페이지"
+contains "본문도 돌아온다" "$AFTER_R" "제목입니다"
+contains "손님 화면에도 반영된다 (캐시를 비운다)" \
+  "$(curl -s "$API/api/render/page?path=smoke-page")" "제목입니다"
+# 되돌리기도 하나의 저장이다 — 되돌리기를 되돌릴 수 있어야 한다
+REVS2="$(curl -s -b "$COOKIES" "$API/api/pages/$PAGE_ID/revisions")"
+check "되돌린 것도 판으로 남는다" "$(echo "$REVS2" | jq_get "['items'][0]['revNo']")" "3"
+contains "무엇을 했는지 적혀 있다" "$REVS2" "1판으로 되돌림"
+check "지금 내용을 되돌리기 전으로 다시 되돌릴 수 있다" \
+  "$(curl -s -b "$COOKIES" -X POST "$API/api/pages/$PAGE_ID/revisions/2/restore" | jq_get "['restoredFrom']")" "2"
+contains "다시 수정본이 된다" "$(curl -s -b "$COOKIES" "$API/api/pages/$PAGE_ID")" "수정된 제목"
+contains "되돌린 기록이 감사 로그에 남는다" \
+  "$(curl -s -b "$COOKIES" "$API/api/audit?action=page.revision.restore")" "되돌림"
+
+echo "── 되돌려도 주소와 공개 상태는 건드리지 않는다"
+# 주소를 되돌리면 그 사이에 걸어 둔 링크·메뉴가 끊기고, 다른 페이지가 그 주소를
+# 가져갔으면 저장 자체가 실패한다. 공개 상태는 내용이 아니다.
+curl -s -b "$COOKIES" -X PUT "$API/api/pages/$PAGE_ID" -H 'content-type: application/json' -d '{
+  "slug":"smoke-page-moved","title":"주소 바뀐 제목","status":"draft",
+  "blocks":[{"block":"core/heading","props":{"text":"옮긴 뒤 본문","level":1}}]
+}' >/dev/null
+curl -s -b "$COOKIES" -X POST "$API/api/pages/$PAGE_ID/revisions/1/restore" >/dev/null
+MOVED="$(curl -s -b "$COOKIES" "$API/api/pages/$PAGE_ID")"
+check "주소는 지금 것 그대로" "$(echo "$MOVED" | jq_get "['slug']")" "smoke-page-moved"
+check "공개 상태도 그대로" "$(echo "$MOVED" | jq_get "['status']")" "draft"
+contains "내용만 돌아온다" "$MOVED" "제목입니다"
+# 뒤 절(예약 발행)이 쓰는 상태로 되돌려 둔다
+curl -s -b "$COOKIES" -X PUT "$API/api/pages/$PAGE_ID" -H 'content-type: application/json' -d '{
+  "slug":"smoke-page","title":"수정된 제목","status":"published",
+  "blocks":[{"block":"core/heading","props":{"text":"수정된 본문","level":1}}]
+}' >/dev/null
+
 echo "── 예약 발행 (때가 되면 저절로 열린다)"
 #
 # `published_at` 은 지금까지 "발행한 순간" 을 적는 칸일 뿐이었다. 그래서 공지·이벤트

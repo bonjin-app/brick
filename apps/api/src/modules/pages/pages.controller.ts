@@ -9,6 +9,7 @@ import { AuditService } from "../audit/audit.service.js";
 import { AuthService } from "../auth/auth.service.js";
 import { PageRenderService, type BlockNode } from "./page-render.service.js";
 import { PublishSchedulerService } from "./publish-scheduler.service.js";
+import { RevisionsService } from "./revisions.service.js";
 import { HookBus } from "@brick/core";
 import { DB, HOOKS } from "../../runtime.module.js";
 import { isUniqueViolation } from "@brick/core";
@@ -29,6 +30,8 @@ interface PageDto {
    * 다른 상태에서는 무시한다(공개 시각은 서버가 정한다).
    */
   publishedAt?: string | null;
+  /** 이 저장에 붙일 한 줄 (되돌리기가 쓴다 — 사람은 보통 비워 둔다) */
+  revisionNote?: string;
 }
 
 const PAGE_STATUS = ["draft", "scheduled", "published", "archived"] as const;
@@ -40,6 +43,7 @@ export class PagesController {
     @Inject(DB) private readonly db: BrickDb,
     private readonly renderer: PageRenderService,
     private readonly scheduler: PublishSchedulerService,
+    private readonly revisions: RevisionsService,
     private readonly audit: AuditService,
     private readonly auth: AuthService,
     @Inject(HOOKS) private readonly hooks: HookBus,
@@ -163,6 +167,89 @@ export class PagesController {
       .send(result.html);
   }
 
+  // ── 이전 버전 (리비전) ───────────────────────────
+  //
+  // 덮어쓰면 되돌릴 길이 없었다. 블록 열 개를 지우고 저장한 뒤에야 잘못을
+  // 알아채도 운영자가 할 수 있는 일은 기억을 더듬어 다시 만드는 것뿐이었다.
+
+  /** 판 목록 (내용은 빼고) */
+  @Get("pages/:id/revisions")
+  @UseGuards(AdminGuard)
+  async revisionList(@Param("id") id: string) {
+    await this.mustExist(id);
+    return { items: await this.revisions.list(id) };
+  }
+
+  /** 판 하나 — 내용까지. 편집기가 "이 판은 이랬다" 를 보여줄 때 쓴다 */
+  @Get("pages/:id/revisions/:revNo")
+  @UseGuards(AdminGuard)
+  async revisionGet(@Param("id") id: string, @Param("revNo") revNo: string) {
+    await this.mustExist(id);
+    const rev = await this.revisions.get(id, Number(revNo));
+    if (!rev) throw new NotFoundException(msg("err.revisionNotFound", { no: String(revNo) }));
+    return rev;
+  }
+
+  /**
+   * 이 판으로 되돌린다.
+   *
+   * 되돌리기도 **하나의 저장**이다 — 되돌린 내용이 새 판으로 남으므로 되돌리기를
+   * 되돌릴 수 있다. 판을 지우거나 번호를 되감지 않는다.
+   *
+   * 주소(slug)와 공개 상태는 되돌리지 않는다. 주소를 되돌리면 그 사이에 걸어 둔
+   * 링크·메뉴가 끊기고 다른 페이지가 그 주소를 가져갔으면 저장 자체가 실패한다.
+   * 공개 상태는 내용이 아니다 — 본문을 되돌리는 일이 사이트를 공개하거나
+   * 내려서는 안 된다.
+   */
+  @Post("pages/:id/revisions/:revNo/restore")
+  @UseGuards(AdminGuard)
+  async revisionRestore(@Param("id") id: string, @Param("revNo") revNo: string, @Req() req: FastifyRequest) {
+    const page = await this.mustExist(id);
+    const rev = await this.revisions.get(id, Number(revNo));
+    if (!rev) throw new NotFoundException(msg("err.revisionNotFound", { no: String(revNo) }));
+
+    await this.db
+      .update(pages)
+      .set({
+        title: rev.title,
+        blocks: rev.blocks as never,
+        plainText: await this.toPlainText((rev.blocks ?? []) as BlockNode[]),
+        seo: rev.seo as never,
+        updatedAt: new Date(),
+      })
+      .where(eq(pages.id, id));
+
+    const newRev = await this.revisions.snapshot({
+      pageId: id,
+      title: rev.title,
+      slug: page.slug,
+      blocks: rev.blocks,
+      seo: rev.seo,
+      status: page.status,
+      authorId: (req as { user?: { id: string } }).user?.id ?? null,
+      note: `${rev.revNo}판으로 되돌림`,
+    });
+    await this.renderer.invalidate();
+    await this.audit.fromRequest(req as never, {
+      action: "page.revision.restore",
+      targetType: "page",
+      targetId: id,
+      summary: `${page.title} (/${page.slug}) — ${rev.revNo}판으로 되돌림`,
+    });
+    return { ok: true, restoredFrom: rev.revNo, revNo: newRev };
+  }
+
+  /** 있는 페이지인가 — 없는 페이지의 판을 묻는 것은 404 다 */
+  private async mustExist(id: string) {
+    const [row] = await this.db
+      .select({ slug: pages.slug, title: pages.title, status: pages.status })
+      .from(pages)
+      .where(eq(pages.id, id))
+      .limit(1);
+    if (!row) throw new NotFoundException();
+    return row;
+  }
+
   @Post("admin/pages/publish-due")
   @UseGuards(AdminGuard)
   async publishDue() {
@@ -191,6 +278,16 @@ export class PagesController {
       if (isUniqueViolation(err, "pages_slug")) throw new ConflictException(msg("err.slugTaken", { slug: String(dto.slug) }));
       throw err;
     }
+    // 처음 만든 내용도 한 판이다 — 없으면 두 번째 저장 뒤에 원래 모습을 잃는다
+    await this.revisions.snapshot({
+      pageId: id,
+      title: dto.title,
+      slug: dto.slug,
+      blocks: dto.blocks ?? [],
+      seo: dto.seo ?? {},
+      status: dto.status ?? "draft",
+      authorId: (req as { user?: { id: string } }).user?.id ?? null,
+    });
     await this.renderer.invalidate();
     await this.audit.fromRequest(req as never, {
       action: "page.create",
@@ -242,6 +339,16 @@ export class PagesController {
       if (isUniqueViolation(err, "pages_slug")) throw new ConflictException(msg("err.slugTaken", { slug: String(dto.slug) }));
       throw err;
     }
+    await this.revisions.snapshot({
+      pageId: id,
+      title: dto.title,
+      slug: dto.slug,
+      blocks: dto.blocks ?? [],
+      seo: dto.seo ?? {},
+      status: dto.status ?? "draft",
+      authorId: (req as { user?: { id: string } }).user?.id ?? null,
+      note: dto.revisionNote,
+    });
     // 전체 무효화: slug 변경, 다른 페이지에 포함된 블록 갱신 등을 안전하게 커버
     await this.renderer.invalidate();
     await this.audit.fromRequest(req as never, {

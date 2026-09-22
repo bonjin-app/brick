@@ -24,6 +24,18 @@ interface PageDraft {
   seo: { title?: string; description?: string };
 }
 
+/** 판 하나 (내용은 빼고 — 목록에 서른 판의 블록 JSON 을 실어 보내지 않는다) */
+interface Revision {
+  revNo: number;
+  title: string;
+  slug: string;
+  status: string;
+  note: string;
+  createdAt: string;
+  authorName: string | null;
+  blockCount: number;
+}
+
 /** ISO → datetime-local 입력값 (브라우저 시간대). 값이 없으면 빈 칸 */
 function toLocalInput(iso?: string | null): string {
   if (!iso) return "";
@@ -122,6 +134,13 @@ export default function AdminPagesPage() {
         onSave={save}
         onDelete={draft.id ? () => remove(draft.id!) : undefined}
         onClose={closeEditor}
+        onRestored={async () => {
+          // 서버가 내용을 바꿨다 — 편집기를 다시 읽지 않으면 화면은 옛 내용을 들고 있다
+          await open(draft.id!);
+          setFailed(false);
+          setMessage(t("pages.revRestored"));
+          reload();
+        }}
       />
     );
   }
@@ -186,10 +205,38 @@ function PageEditor(props: {
   onSave: () => void;
   onDelete?: () => void;
   onClose: () => void;
+  /** 되돌린 뒤 편집기를 다시 읽는다 — 서버가 바꾼 내용을 화면이 알아야 한다 */
+  onRestored: () => void;
 }) {
   const t = useAdminT();
   const { draft, catalog, onChange } = props;
   const [picker, setPicker] = useState(false);
+  const [revisions, setRevisions] = useState<Revision[]>([]);
+  const [revBusy, setRevBusy] = useState(0);
+
+  /*
+   * 판 목록은 저장할 때마다 달라진다 — draft.id 와 함께 마지막 저장 시각을
+   * 의존성에 넣어, 저장 뒤에 목록이 옛것으로 남지 않게 한다.
+   */
+  useEffect(() => {
+    if (!draft.id) { setRevisions([]); return; }
+    fetch(`/api/pages/${draft.id}/revisions`)
+      .then((r) => (r.ok ? r.json() : { items: [] }))
+      .then((d) => setRevisions(d.items ?? []))
+      .catch(() => setRevisions([]));
+  }, [draft.id, props.message]);
+
+  async function restore(revNo: number) {
+    if (!draft.id) return;
+    if (!confirm(t("pages.revConfirm", { no: revNo }))) return;
+    setRevBusy(revNo);
+    try {
+      const res = await fetch(`/api/pages/${draft.id}/revisions/${revNo}/restore`, { method: "POST" });
+      if (res.ok) props.onRestored();
+    } finally {
+      setRevBusy(0);
+    }
+  }
 
   function updateBlock(i: number, node: BlockNode) {
     const blocks = [...draft.blocks];
@@ -325,6 +372,41 @@ function PageEditor(props: {
           <label style={{ display: "block", marginTop: 12 }}>{t("common.description")}<textarea style={{ ...input, height: 60 }}
             value={draft.seo.description ?? ""}
             onChange={(e) => onChange({ ...draft, seo: { ...draft.seo, description: e.target.value } })} /></label>
+          {/*
+            * 이전 버전 — 덮어쓴 뒤에 잘못을 알아채도 되돌릴 수 있게.
+            * 새 페이지(아직 저장 전)에는 보여주지 않는다: 되돌릴 것이 없다.
+            */}
+          {draft.id && (
+            <>
+              <hr style={{ margin: "16px 0", border: "none", borderTop: "1px solid var(--color-line)" }} />
+              <strong style={{ fontSize: 13, color: "var(--color-muted)" }}>{t("pages.revisions")}</strong>
+              {revisions.length === 0 ? (
+                <p style={{ fontSize: 12, color: "var(--color-muted)", marginTop: 8 }}>{t("pages.revNone")}</p>
+              ) : (
+                <ul style={{ listStyle: "none", padding: 0, margin: "8px 0 0", display: "grid", gap: 8 }}>
+                  {revisions.map((r, i) => (
+                    <li key={r.revNo} style={{ fontSize: 12.5, lineHeight: 1.5 }}>
+                      <span style={{ color: "var(--color-muted)" }}>{formatWhen(r.createdAt)}</span>{" "}
+                      <b>{t("pages.revNo", { no: r.revNo })}</b>
+                      {/* 맨 위가 지금 화면의 내용이다 — 되돌릴 것이 없으므로 버튼 대신 표시한다 */}
+                      {i === 0 ? <span style={{ color: "var(--color-success)" }}> {t("pages.revCurrent")}</span> : (
+                        <button onClick={() => restore(r.revNo)} disabled={revBusy === r.revNo}
+                          style={{ cursor: "pointer", marginLeft: 6, fontSize: 12 }}>
+                          {revBusy === r.revNo ? t("pages.revRestoring") : t("pages.revRestore")}
+                        </button>
+                      )}
+                      <br />
+                      <span style={{ color: "var(--color-text-soft)" }}>
+                        {r.title} · {t("pages.revBlocks", { n: r.blockCount })}
+                        {r.authorName ? ` · ${r.authorName}` : ""}
+                      </span>
+                      {r.note ? <><br /><span style={{ color: "var(--color-muted)" }}>{r.note}</span></> : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
         </aside>
       </div>
     </div>

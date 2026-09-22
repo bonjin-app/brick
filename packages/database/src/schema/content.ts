@@ -70,3 +70,35 @@ export const mediaFiles = pgTable(
   },
   (t) => [index("media_uploader_idx").on(t.uploaderId)],
 );
+
+/**
+ * 페이지 이전 버전.
+ *
+ * 저장할 때마다 그때 저장한 내용을 한 판 남긴다 — 덮어쓴 뒤에 잘못을 알아채도
+ * 되돌릴 수 있게. (packages/database/migrations/0014_page_revisions.sql 에 이유를 적어 두었다)
+ */
+export const pageRevisions = pgTable(
+  "page_revisions",
+  {
+    id: uuid("id").primaryKey(),
+    pageId: uuid("page_id")
+      .notNull()
+      .references(() => pages.id, { onDelete: "cascade" }),
+    /** 페이지 안에서의 판 번호 (1부터) — 시각이 아니라 번호로 부른다 */
+    revNo: integer("rev_no").notNull(),
+    title: varchar("title", { length: 500 }).notNull(),
+    /** 그때의 주소. 되돌릴 때 쓰지는 않는다(링크가 끊긴다) */
+    slug: varchar("slug", { length: 255 }).notNull(),
+    blocks: jsonb("blocks").notNull().default([]),
+    seo: jsonb("seo").notNull().default({}),
+    /** 그때의 공개 상태. 되돌릴 때 쓰지 않는다 */
+    status: varchar("status", { length: 20 }).notNull().default("draft"),
+    authorId: uuid("author_id").references(() => users.id, { onDelete: "set null" }),
+    note: varchar("note", { length: 200 }).notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("page_revisions_no_uniq").on(t.pageId, t.revNo),
+    index("page_revisions_page_idx").on(t.pageId, t.revNo),
+  ],
+);
