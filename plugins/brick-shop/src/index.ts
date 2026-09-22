@@ -186,7 +186,7 @@ export default definePlugin(async (ctx) => {
       LEFT JOIN shop_categories c ON c.id = p.category_id
       WHERE p.status IN ('selling', 'soldout')
         AND (${category} = '' OR c.slug = ${category})
-        AND (${q} = '' OR p.name ILIKE ${like} OR coalesce(p.summary,'') ILIKE ${like})
+        AND (${q} = '' OR p.name ILIKE ${like} OR p.summary ILIKE ${like})
       ORDER BY p.sort_order, p.created_at DESC
       LIMIT ${size} OFFSET ${(page - 1) * size}
     `);
@@ -195,7 +195,7 @@ export default definePlugin(async (ctx) => {
       LEFT JOIN shop_categories c ON c.id = p.category_id
       WHERE p.status IN ('selling', 'soldout')
         AND (${category} = '' OR c.slug = ${category})
-        AND (${q} = '' OR p.name ILIKE ${like} OR coalesce(p.summary,'') ILIKE ${like})
+        AND (${q} = '' OR p.name ILIKE ${like} OR p.summary ILIKE ${like})
     `);
     return { items: rows, total: Number(cnt[0]?.n ?? 0), page, pageSize: size };
   });

@@ -157,17 +157,25 @@ PostgreSQL의 기본 전문 검색(`to_tsvector('simple', ...)`)은 한국어에
 1. DB 로케일이 `C` 이면 한글을 토큰으로 인식하지 못합니다 (공식 postgres 이미지는 UTF-8이라 괜찮습니다)
 2. 조사·어미가 붙는 교착어 특성상 `simple` 사전으로는 "수정된" ↔ "수정" 이 매칭되지 않습니다
 
-### 권장: pg_trgm
+### pg_trgm 인덱스 — 설치가 만듭니다
+
+`ILIKE '%검색어%'` 를 가속하는 trigram 인덱스는 **마이그레이션이 자동으로**
+만듭니다(페이지 제목·본문, 게시글 제목·본문·글쓴이, 상품 이름·요약). 확장을
+만들 권한이 없는 환경에서는 조용히 건너뛰고, 검색은 인덱스 없이도 동작합니다 —
+그때는 로그에 `pg_trgm 을 만들 수 없어 …` 가 남습니다.
+
+직접 확인하려면:
 
 ```sql
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
-
-CREATE INDEX pages_title_trgm_idx ON pages USING gin (title gin_trgm_ops);
-CREATE INDEX pages_text_trgm_idx  ON pages USING gin (plain_text gin_trgm_ops);
-CREATE INDEX board_posts_trgm_idx ON board_posts USING gin (title gin_trgm_ops);
+SELECT indexname FROM pg_indexes WHERE indexname LIKE '%_trgm%';
 ```
 
-trigram 인덱스는 `ILIKE '%검색어%'` 를 가속하므로 코드 변경 없이 즉시 효과가 있습니다.
+**주의 — 조건을 함수로 감싸면 인덱스가 무용지물이 됩니다.** 플러그인을 만들 때
+`coalesce(col,'') ILIKE …` 처럼 컬럼을 감싸면 그 조각은 컬럼이 아니라 식이 되어
+인덱스를 못 쓰고, `OR` 로 묶인 나머지 조각까지 함께 순차 스캔으로 떨어집니다.
+상품 12만 건에서 재어 보니 **24.5ms 대 0.14ms** 였고 결과는 완전히 같았습니다
+(NULL 을 ILIKE 로 비교하면 NULL 이고, WHERE 의 OR 안에서 NULL 은 참이 아닙니다).
+`check-search-sargable` 이 이것을 막습니다.
 
 ### 대안
 

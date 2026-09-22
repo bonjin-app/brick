@@ -131,6 +131,9 @@ jobs:
       - name: 그누보드 덤프의 테이블을 말없이 버리지 않는다 (옮기거나, 안 옮긴다고 말하거나)
         run: node scripts/check-migrate-coverage.mjs
 
+      - name: 검색 조건이 인덱스를 쓸 수 있는 모양이다 (데이터가 쌓인 뒤에야 느려진다)
+        run: node scripts/check-search-sargable.mjs
+
       - name: 서버 오류 메시지가 사이트 언어를 따른다 (가장 중요한 순간에만 못 읽는 글자가 뜬다)
         run: node scripts/check-error-i18n.mjs
 

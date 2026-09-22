@@ -27,7 +27,7 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-3841%20passing-2ea043.svg" alt="스모크 테스트 3841개" />
+  <img src="https://img.shields.io/badge/E2E-3846%20passing-2ea043.svg" alt="스모크 테스트 3846개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
   <a href="https://github.com/bonjin-app/brick/pkgs/container/brick">
     <img src="https://img.shields.io/badge/docker-amd64%20%C2%B7%20arm64-2496ed.svg" alt="Docker image (amd64 · arm64)" />
@@ -369,7 +369,7 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 3,841개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 3,846개 항목):
 
 | 수트 | 항목 | 무엇을 못박는가 |
 |---|---:|---|
@@ -385,7 +385,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `smoke-tax.sh` | 121 | 카드 이중 발급 거부 · 금액 분해 합 일치 · 면세 스냅샷 · 반품 시 증빙 취소 · **손님이 신청할 수 있는가(주문 상세가 폼을 낼지 정한다)** · **비회원도 토큰으로 받는다** |
 | `smoke-account-security.sh` | 119 | RFC 6238 벡터 · 코드 재사용 차단 · 위험 작업 재인증(세션 단위) · IP 제한 자기잠금 방지 · **2FA 강제 설정 자기잠금 방지(등록하지 않은 관리자는 켤 수 없다)** |
 | `smoke-payments.sh` | 152 | 스텁 PG로 실제 나가는 금액 검증 · 멱등키 · 개인결제가 매출에 포함되는가 · **개인결제 손님도 결제 안내를 받는가** · **PG 가 닿지 않아도 손님에게 내부 오류를 보여주지 않는다** · **스텁 포트가 막히면 옆으로 비킨다** |
-| `smoke-search.sh` | 126 | 비밀글·비공개 게시판 미노출 · ILIKE 이스케이프 · total 정확성 · 0건 기록 · **블록 CSS 미색인** · **결과 사진** |
+| `smoke-search.sh` | 131 | 비밀글·비공개 게시판 미노출 · ILIKE 이스케이프 · total 정확성 · 0건 기록 · **블록 CSS 미색인** · **결과 사진** |
 | `smoke-restock.sh` | 94 | 품절만 신청 · 옵션 단위 · 한 번만 발송 · 광고 아님 · 경로 무관 감지 · **메일의 해지 링크가 실제로 열린다** · **회원 신청 내역 화면** · **운영자의 재입고 대기 화면** |
 | `smoke-starter.sh` | 84 | 유형별 기본 구성 생성 · 홈 렌더 · **모든 메뉴 링크가 404 없이 렌더** · 일반 페이지로 수정 가능 · **청약철회 신청 폼의 칸에 이름이 있다** |
 | `smoke-collections.sh` | 31 | 종료=안내·숨김=404 · 진열 순서 · 원자적 저장 · 캐시 무효화 |
@@ -514,7 +514,7 @@ themes/
   boutique/       부티크 — 여백 위주
   corporate/      회사 홈페이지 — 히어로·특징 카드
 docs-site/        GitHub Pages 랜딩페이지
-scripts/          스모크 테스트 38종 + 정적 검사 34종 + OIDC 스텁 + 배포본 생성(build-release.sh)
+scripts/          스모크 테스트 38종 + 정적 검사 35종 + OIDC 스텁 + 배포본 생성(build-release.sh)
 docker/           Dockerfile, entrypoint
 ```
 

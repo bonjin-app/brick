@@ -533,6 +533,19 @@ contains "제목 감싸개" "$SPAGES" 'class="brick-search-body"'
 contains "제목 링크에 터치 영역" "$SPAGES" "min-height: 28px"
 
 echo
+echo "── 검색 인덱스는 설치가 만든다 (운영자 숙제가 아니다)"
+#
+# 운영 문서는 pg_trgm 인덱스를 **운영자가 손으로** 만들라고 안내했는데, 게시판
+# 플러그인은 같은 것을 마이그레이션에서 스스로 만들고 있었다. 한쪽은 자동이고
+# 한쪽은 숙제일 이유가 없다 — 문서를 읽지 않은 사이트만 느려진다.
+IDX="$(psql_q "SELECT indexname FROM pg_indexes WHERE indexname LIKE '%_trgm%' ORDER BY indexname")"
+contains "페이지 제목" "$IDX" "pages_title_trgm"
+contains "페이지 본문" "$IDX" "pages_plain_text_trgm"
+contains "게시글 제목" "$IDX" "board_posts_title_trgm"
+# 기본 검색은 제목·본문·글쓴이를 함께 훑는다 — 하나라도 인덱스가 없으면 OR 전체가 순차 스캔이다
+contains "게시글 본문" "$IDX" "board_posts_content_trgm"
+contains "게시글 글쓴이" "$IDX" "board_posts_author_name_trgm"
+
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 # 실측을 남긴다(설정됐을 때만) — README 의 표가 실제와 같은지 CI 가 대조한다.
 # 표의 숫자는 조용히 썩는다: 단언을 더해도 아무도 그 줄을 고치지 않는다.
