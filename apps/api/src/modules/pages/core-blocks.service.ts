@@ -2,6 +2,7 @@ import { Injectable, OnModuleInit } from "@nestjs/common";
 import { CORE_CATALOGS, makeTranslator } from "@brick/core";
 import { PluginLoaderService } from "../plugins/plugin-loader.service.js";
 import { SearchService } from "../search/search.service.js";
+import { NotificationsService } from "../notifications/notifications.service.js";
 
 const esc = (s: unknown) =>
   String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -15,6 +16,7 @@ export class CoreBlocksService implements OnModuleInit {
   constructor(
     private readonly loader: PluginLoaderService,
     private readonly search: SearchService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   onModuleInit(): void {
@@ -479,6 +481,57 @@ ${eyebrow ? `    <span class="brick-eyebrow">${esc(eyebrow)}</span>
         properties: { height: { type: "number", title: "높이(px)", default: 40 } },
       },
       render: async (props) => `<div style="height:${Number(props.height ?? 40)}px"></div>`,
+    });
+
+    /**
+     * 알림함 — 내게 온 알림 목록.
+     *
+     * 알림은 지금까지 메일 한 통로뿐이었고, SMTP 미설정은 설치 직후의 기본값이라
+     * 기본 사이트에서는 댓글도 주문 안내도 조용히 사라졌다. 이 화면이 그 두 번째
+     * 통로다 — 메일이 안 되어도 로그인한 사람은 여기서 본다.
+     *
+     * **목록을 연 순간이 곧 읽은 순간이다.** 따로 "읽음" 버튼을 두면 자바스크립트가
+     * 필요하고(이 블록은 서버에서 그린다), 버튼을 누르지 않은 사람의 머리에는
+     * 배지가 영원히 남는다. 대신 이번에 새로 온 것은 표시해서 보여준 뒤 읽음으로
+     * 넘긴다 — 무엇이 새것이었는지 모른 채 사라지지 않게.
+     */
+    b.set("core/notifications", {
+      name: "core/notifications",
+      displayName: "알림함",
+      propsSchema: {
+        type: "object",
+        properties: { limit: { type: "number", title: "표시 개수", default: 30 } },
+      },
+      render: async (props, ctx) => {
+        const t = makeTranslator({ locale: this.loader.siteLocale, catalogs: CORE_CATALOGS });
+        ctx.setSeo?.({ title: t("noti.title") });
+        if (!ctx.user) return `<p>${esc(t("noti.loginRequired"))}</p>`;
+
+        const items = await this.notifications.list(ctx.user.id, { limit: Number(props.limit) || 30 });
+        if (!items.length) return `<p>${esc(t("noti.empty"))}</p>`;
+
+        const rows = items
+          .map((n) => {
+            const when = n.createdAt instanceof Date ? n.createdAt.toISOString().slice(0, 16).replace("T", " ") : "";
+            const title = n.url
+              ? `<a href="${esc(n.url)}">${esc(n.title)}</a>`
+              : esc(n.title);
+            return `
+    <li class="brick-noti-item${n.read ? "" : " is-new"}">
+      <span class="brick-noti-head">${title}${
+        // 표시는 CSS 없이도 보여야 한다 — 테마는 이 목록을 따로 꾸미지 않는다
+        n.read ? "" : ` <strong class="brick-noti-new">${esc(t("noti.new"))}</strong>`
+      }</span>
+      ${n.body ? `<p class="brick-noti-body">${esc(n.body)}</p>` : ""}
+      <time class="brick-noti-time">${esc(when)}</time>
+    </li>`;
+          })
+          .join("");
+
+        // 보여준 뒤에 읽음으로 넘긴다 — 순서가 바뀌면 "새 알림" 표시가 한 번도 안 보인다
+        await this.notifications.markRead(ctx.user.id);
+        return `<ul class="brick-noti-list">${rows}</ul>`;
+      },
     });
 
     /**

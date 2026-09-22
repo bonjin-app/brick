@@ -1,4 +1,5 @@
 import { Injectable, Inject, Logger, OnModuleInit } from "@nestjs/common";
+import { NotificationsService } from "../notifications/notifications.service.js";
 import { ModerationService } from "../moderation/moderation.service.js";
 import { readFile, readdir, mkdir, symlink, stat, lstat, rm, readlink, realpath } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -137,6 +138,7 @@ export class PluginLoaderService implements OnModuleInit {
     @Inject(QUEUE) private readonly queue: QueueProvider,
     @Inject(STORAGE) private readonly storage: StorageProvider,
     @Inject(MAIL) private readonly mail: MailProvider,
+    private readonly notifications: NotificationsService,
     @Inject(CAPTCHA) private readonly captcha: CaptchaProvider,
     @Inject(ENV) private readonly env: BrickEnv,
     private readonly moderation: ModerationService,
@@ -611,6 +613,7 @@ export class PluginLoaderService implements OnModuleInit {
       queue: this.queue,
       storage: this.storage,
       mail: this.mail,
+      notify: (input) => this.notifications.notify(input),
       captcha: this.captcha,
       logger: {
         log: (m: string) => this.logger.log(`[${pluginName}] ${m}`),

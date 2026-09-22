@@ -14,6 +14,26 @@ import type { HookBus } from "../hooks/hook-bus.js";
  * 플러그인은 이 컨텍스트를 통해서만 Brick과 상호작용한다.
  * (직접 DB 커넥션을 만들거나 포트를 여는 것은 금지)
  */
+/** ctx.notify 의 입력 */
+export interface NotifyInput {
+  /** 받는 회원. 있으면 알림함에 남는다 */
+  userId?: string | null;
+  /**
+   * 받는 주소. 없으면 회원의 가입 주소로 보낸다.
+   * 비회원 손님에게는 이것만 있다 — 알림함을 볼 수 없으므로 메일이 유일한 길이다.
+   */
+  email?: string | null;
+  /** 무엇에 대한 알림인가 — `board.comment` 처럼 플러그인 이름 없이 종류만 */
+  kind: string;
+  /** 사이트 언어로 이미 그린 문구 (ctx.t 를 쓴다) */
+  title: string;
+  body?: string;
+  /** 눌러서 갈 사이트 안 경로. 갈 곳이 없으면 읽은 사람이 할 수 있는 일이 없다 */
+  url?: string;
+  /** 메일은 보내지 않는다 (사이트 안에서만 뜻이 있는 알림) */
+  mail?: false;
+}
+
 export interface PluginContext {
   readonly pluginName: string;
   readonly hooks: HookBus;
@@ -22,6 +42,19 @@ export interface PluginContext {
   readonly storage: StorageProvider;
   /** 메일 발송 (SMTP 미설정 시 콘솔 출력으로 폴백) */
   readonly mail: MailProvider;
+  /**
+   * 알림 — **메일과 사이트 안 알림함 두 통로로 같은 말을 보낸다.**
+   *
+   * 회원에게 무언가를 알릴 때는 `mail` 이 아니라 이것을 쓴다. 메일만 보내면
+   * SMTP 가 설정되지 않은 사이트에서(그것이 설치 직후의 기본값이다) 알림이
+   * 조용히 사라진다 — 손님은 답이 없다고 느끼고 운영자는 보냈다고 믿는다.
+   *
+   * `mail` 을 직접 쓰는 것이 옳은 경우는 **로그인 전**의 메일뿐이다
+   * (비밀번호 재설정·가입 인증 — 받는 사람이 알림함을 열 수 없다).
+   *
+   * 절대 던지지 않는다. 알림 실패가 댓글 등록이나 주문을 실패시켜서는 안 된다.
+   */
+  readonly notify: (input: NotifyInput) => Promise<void>;
   /**
    * 캡차. 비회원 글쓰기·댓글 같은 스팸 표적 경로에서 검증한다.
    * `enabled` 가 false면 검사가 비활성이므로 UI도 숨겨야 한다.

@@ -32,7 +32,12 @@ const RETRY_DELAY_HOURS = 24;
 const INTERVAL_LABEL: Record<string, string> = { week: "매주", month: "매월" };
 
 export interface SubscriptionNotifier {
-  (params: { email: string; subject: string; text: string }): Promise<boolean>;
+  /**
+   * `userId` 는 **사이트 안 알림함**용이다 — 정기배송은 회원만 하므로 항상 있다.
+   * 메일만 보내던 시절에는 SMTP 가 없는 사이트에서 "결제가 실패했습니다" 도
+   * "정기배송이 멈췄습니다" 도 아무에게도 닿지 않았다.
+   */
+  (params: { userId: string; email: string; subject: string; text: string }): Promise<boolean>;
 }
 
 /** 두 메서드를 모두 구현한 게이트웨이만 정기결제를 지원한다 */
@@ -438,6 +443,7 @@ export async function chargeDueSubscriptions(
         await pauseSubscription(db, subId, cycleNo, reason);
         paused += 1;
         await deps.notify({
+          userId: String(sub.user_id),
           email,
           subject: t("subsmail.pausedSubject", { name }),
           text: `${t("subsmail.pausedBody")}\n\n${t("subsmail.product", { name })}\n` +
@@ -480,7 +486,7 @@ export async function chargeDueSubscriptions(
         });
       } catch (err) {
         const reason = err instanceof ShopError ? err.message : "주문 생성 실패";
-        await recordFailure(db, deps, { subId, cycleNo, email, name, reason });
+        await recordFailure(db, deps, { subId, cycleNo, userId: String(sub.user_id), email, name, reason });
         failed += 1;
         continue;
       }
@@ -523,7 +529,9 @@ export async function chargeDueSubscriptions(
           await abandonCycleOrder(db, order.id, `정기결제 실패: ${result.reason}`);
           // 로그에는 자세히, 손님이 읽는 곳(이력·멈춤 사유·메일)에는 보여도 되는 것만
           deps.log(`정기결제 청구 실패 (${subId}, ${cycleNo}회차): ${result.reason}`);
-          await recordFailure(db, deps, { subId, cycleNo, email, name, reason: result.customerReason });
+          await recordFailure(db, deps, {
+            subId, cycleNo, userId: String(sub.user_id), email, name, reason: result.customerReason,
+          });
           failed += 1;
           continue;
         }
@@ -563,7 +571,7 @@ export async function chargeDueSubscriptions(
 async function recordFailure(
   db: Db,
   deps: { notify: SubscriptionNotifier },
-  params: { subId: string; cycleNo: number; email: string; name: string; reason: string },
+  params: { subId: string; cycleNo: number; userId: string; email: string; name: string; reason: string },
 ): Promise<void> {
   const { rows } = await db.execute(sql`
     UPDATE shop_subscriptions
@@ -591,6 +599,7 @@ async function recordFailure(
               ${`${MAX_FAILS}회 연속 실패`})
     `);
     await deps.notify({
+      userId: params.userId,
       email: params.email,
       subject: t("subsmail.pausedSubject", { name: params.name }),
       text: `${t("subsmail.pausedFailBody", { n: MAX_FAILS })}\n\n` +
@@ -599,6 +608,7 @@ async function recordFailure(
     }).catch(() => false);
   } else {
     await deps.notify({
+      userId: params.userId,
       email: params.email,
       subject: t("subsmail.failSubject", { name: params.name }),
       text: `${t("subsmail.failBody", { hours: RETRY_DELAY_HOURS })}\n\n` +

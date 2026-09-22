@@ -423,26 +423,31 @@ export default definePlugin(async (ctx) => {
     /**
      * 댓글 알림 — 원글 작성자(회원)에게. 자기 글에 자기가 단 댓글은 알리지 않는다.
      * 비밀댓글이라도 "댓글이 달렸다"는 사실은 작성자가 볼 수 있으므로 내용을 빼고 알린다.
-     * 메일 실패는 댓글 등록을 막지 않는다.
+     *
+     * `ctx.notify` 는 메일과 **사이트 안 알림함** 두 곳으로 간다. 메일만 보내던
+     * 시절에는 SMTP 가 없는 사이트에서(기본값이다) 이 알림이 통째로 사라졌다 —
+     * 작성자는 자기 글에 댓글이 달린 줄 몰랐다. 실패는 댓글 등록을 막지 않는다.
      */
     if (post.notify_comment && post.author_id && post.author_id !== (user?.id ?? null)) {
       void (async () => {
         const { rows: u } = await db.execute(sql`
-          SELECT email FROM users WHERE id = ${String(post.author_id)}::uuid
+          SELECT id FROM users WHERE id = ${String(post.author_id)}::uuid
             AND is_active = true AND withdrawn_at IS NULL LIMIT 1
         `);
-        const to = u[0]?.email ? String(u[0].email) : null;
-        if (!to) return;
+        if (!u[0]) return; // 탈퇴·정지한 회원에게는 보내지 않는다
         const title = String(post.title ?? "").slice(0, 200);
-        await ctx.mail.send({
-          to,
-          subject: ctx.t("mail.commentSubject", { board: String(post.board_title), title }),
-          text: ctx.t("mail.commentBody", {
+        const path = `/board/${encodeURIComponent(String(post.slug))}/${String(post.id)}#comments`;
+        await ctx.notify({
+          userId: String(post.author_id),
+          kind: "board.comment",
+          title: ctx.t("mail.commentSubject", { board: String(post.board_title), title }),
+          body: ctx.t("mail.commentBody", {
             author: user ? user.displayName : (guestName ?? ""),
             title,
             excerpt: Boolean(body.isSecret) ? "(비밀댓글)" : content.slice(0, 200),
-            url: `${ctx.site.url}/board/${encodeURIComponent(String(post.slug))}/${String(post.id)}#comments`,
+            url: `${ctx.site.url}${path}`,
           }),
+          url: path,
         });
       })().catch(() => undefined);
     }

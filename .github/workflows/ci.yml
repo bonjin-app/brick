@@ -249,6 +249,9 @@ jobs:
       - name: E2E 스모크 테스트 (사이트 스타터)
         run: bash scripts/smoke-starter.sh
 
+      - name: E2E 스모크 테스트 (알림 · 메일이 꺼져 있어도)
+        run: bash scripts/smoke-notifications.sh
+
       - name: E2E 스모크 테스트 (테마 · 랜딩 · 화면 제목)
         run: bash scripts/smoke-theme.sh
 

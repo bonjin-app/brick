@@ -27,7 +27,7 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-3640%20passing-2ea043.svg" alt="스모크 테스트 3640개" />
+  <img src="https://img.shields.io/badge/E2E-3673%20passing-2ea043.svg" alt="스모크 테스트 3673개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
   <a href="https://github.com/bonjin-app/brick/pkgs/container/brick">
     <img src="https://img.shields.io/badge/docker-amd64%20%C2%B7%20arm64-2496ed.svg" alt="Docker image (amd64 · arm64)" />
@@ -369,7 +369,7 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 3,640개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 3,673개 항목):
 
 | 수트 | 항목 | 무엇을 못박는가 |
 |---|---:|---|
@@ -406,6 +406,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `smoke-create-plugin.sh` | 45 | 템플릿 생성→빌드→ZIP 설치→계약 전부 실사용 · escapeHtml · 실제 탈퇴로 파기 검증 |
 | `smoke-openapi.sh` | 24 | 실제 라우트에서 생성 · 플러그인 켜고 끄면 문서도 변함 · 자체 완결 문서 페이지 |
 | `smoke-registry.sh` | 23 | 서명 통과해야 설치 · 키·주소 고정(TOFU) · 레지스트리 키 바꿔치기 방어 |
+| `smoke-notifications.sh` | 33 | **메일이 꺼져 있어도 알림이 닿는가** · 댓글·문의 답변이 알림함에 남는가 · 머리의 개수 · 열면 읽음 · **남의 알림은 보이지 않는다** |
 | `smoke-theme.sh` | 249 | 라이트·다크 두 벌 · 토큰 CSS 주입 차단 · 테마 고치면 캐시 갱신 · 랜딩 블록 · **글 상세의 문서 제목** · **두 번째 테마(editorial) 같은 계약** · **Storefront** · **Boutique** · **미리보기** · **배너 슬라이드** · 퀵메뉴 · **Corporate** · **2단 메뉴** · **띠배너** · **테마가 깨져도 사이트는 나간다** |
 | `smoke-moderation.sh` | 31 | 금지 단어(우회 포함)·사칭 이름·금지 도메인·차단 IP(자기잠금)·분류 필수 |
 | `smoke-i18n.sh` | 104 | 언어가 실제 렌더를 바꿈 · 즉시 반영 · ko 폴백+로그 · 값은 번역 안 함 · 관리 선언 라벨 · **카드 제목 전수** · **리소스 선언 문자열 전수** · **회원 메뉴·결제수단 이름(손님이 읽는다)** · **금액·날짜 표기와 주문 메일도 언어를 따라간다(손님·관리 화면 모두)** · **코어 경로가 쓰는 플러그인 문구도** · **서버 오류 메시지도 — 플러그인과 코어 양쪽(어느 칸인지는 코드 그대로)** · **페이지 빌더의 블록 서랍(속성 키는 데이터라 그대로)** · **값이 들어가는 문장과 그 안의 낱말까지(코어는 키+값을 실어 경계에서 조립)** · 템플릿 잔해 금지 | · **코어·플러그인 메일 전부(재설정·인증·문의 답변·재입고)** |
@@ -512,7 +513,7 @@ themes/
   boutique/       부티크 — 여백 위주
   corporate/      회사 홈페이지 — 히어로·특징 카드
 docs-site/        GitHub Pages 랜딩페이지
-scripts/          스모크 테스트 37종 + 정적 검사 32종 + OIDC 스텁 + 배포본 생성(build-release.sh)
+scripts/          스모크 테스트 38종 + 정적 검사 32종 + OIDC 스텁 + 배포본 생성(build-release.sh)
 docker/           Dockerfile, entrypoint
 ```
 
@@ -550,6 +551,7 @@ docker/           Dockerfile, entrypoint
 | [플러그인 개발](docs/plugin-development.md) | manifest, API, 마이그레이션, 배포 |
 | [테마 개발](docs/theme-development.md) | 템플릿 문법, 스코프, 배포 |
 | [로드맵](docs/roadmap.md) | 남은 격차와 순서 |
+| [남들은 무엇을 갖추고 있나](docs/benchmark.md) | 그누보드·영카트·카페24·라이믹스·워드프레스 대조와 우리 순서 |
 | [기여 가이드](CONTRIBUTING.md) | 개발 환경, 구조 규칙, PR 규칙, 테스트 함정 |
 | [행동 규범](CODE_OF_CONDUCT.md) | 이슈·PR에서 지켜주셨으면 하는 것 |
 | [보안 신고](SECURITY.md) | 취약점 신고 절차와 대응 약속 |

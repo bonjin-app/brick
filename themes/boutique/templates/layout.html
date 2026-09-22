@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{{ pageTitle }}</title>
   {{#if seo.description}}<meta name="description" content="{{ seo.description }}" />{{/if}}
+  {{!-- 색인하지 말라는 화면(알림함 등). 이 표시가 없으면 로그인해야 보이는 자리가 검색 결과에 남는다 --}}
+  {{#if seo.noindex}}<meta name="robots" content="noindex" />{{/if}}
   <meta property="og:title" content="{{ pageTitle }}" />
   <meta property="og:site_name" content="{{ site.name }}" />
   {{#if seo.description}}<meta property="og:description" content="{{ seo.description }}" />{{/if}}

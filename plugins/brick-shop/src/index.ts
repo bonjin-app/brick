@@ -121,7 +121,16 @@ export default definePlugin(async (ctx) => {
       const s = await settings();
       if (!s.notifyOrderMail) return;
       await sendOrderMail(db, {
-        send: (msg) => ctx.mail.send(msg),
+        // 메일과 사이트 안 알림함 두 곳으로 간다 (SMTP 가 없어도 회원은 본다)
+        send: (msg) =>
+          ctx.notify({
+            userId: msg.userId,
+            email: msg.to,
+            kind: "shop.order",
+            title: msg.subject,
+            body: msg.text,
+            url: msg.url,
+          }).then(() => true),
         siteUrl: ctx.site.url,
         siteName: await ctx.site.name(),
         bankAccount: s.bankAccount,
@@ -1727,7 +1736,16 @@ export default definePlugin(async (ctx) => {
         optionId: t.optionId,
         siteUrl: ctx.site.url,
         siteName,
-        send: (msg) => ctx.mail.send(msg),
+        // 메일과 알림함 두 곳으로 (기다리던 사람에게 가장 중요한 알림이다)
+        send: (msg) =>
+          ctx.notify({
+            userId: msg.userId,
+            email: msg.to,
+            kind: "shop.restock",
+            title: msg.subject,
+            body: msg.text,
+            url: msg.url,
+          }).then(() => true),
         log: (m) => ctx.logger.warn(m),
       });
       sent += result.sent;
@@ -1908,7 +1926,16 @@ export default definePlugin(async (ctx) => {
     return await chargeDueSubscriptions(db, {
       settings: await settings(),
       pointsPort: pointsPort(),
-      notify: (msg) => ctx.mail.send({ to: msg.email, subject: msg.subject, text: msg.text }),
+      // 메일과 알림함 두 곳으로 — 정기배송은 회원만 하므로 알림함이 항상 닿는다
+      notify: (msg) =>
+        ctx.notify({
+          userId: msg.userId,
+          email: msg.email,
+          kind: "shop.subscription",
+          title: msg.subject,
+          body: msg.text,
+          url: "/shop/subscriptions",
+        }).then(() => true),
       log: (m) => ctx.logger.warn(m),
     });
   };

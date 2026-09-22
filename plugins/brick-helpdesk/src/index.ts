@@ -393,18 +393,29 @@ export default definePlugin(async (ctx) => {
     if (!ticketId) return;
 
     const { rows } = await db.execute(sql`
-      SELECT ticket_no, title, author_email, author_name FROM help_tickets
+      SELECT ticket_no, title, author_email, author_name, user_id FROM help_tickets
       WHERE id = ${ticketId}::uuid LIMIT 1
     `);
     const t = rows[0];
-    if (!t?.author_email) return;
+    if (!t) return;
 
-    // 메일 문구도 사이트 언어를 따른다 — 메일은 사이트 밖에서 혼자 읽힌다
+    /*
+     * 문구도 사이트 언어를 따른다 — 메일은 사이트 밖에서 혼자 읽힌다.
+     *
+     * 회원이 남긴 문의면 **알림함에도** 남는다. 비회원 손님은 알림함을 볼 수
+     * 없으므로 메일이 유일한 길이고, 그래서 주소가 있으면 그대로 보낸다.
+     * 예전에는 메일뿐이어서, SMTP 가 없는 사이트에서는 답을 달아도 손님이
+     * 알 방법이 없었다 — 물어본 사람은 그대로 기다린다.
+     */
     const no = String(t.ticket_no);
-    await ctx.mail.send({
-      to: String(t.author_email),
-      subject: ctx.t("mail.answeredSubject", { no }),
-      text:
+    await ctx.notify({
+      userId: t.user_id ? String(t.user_id) : null,
+      email: t.author_email ? String(t.author_email) : null,
+      kind: "helpdesk.answered",
+      title: ctx.t("mail.answeredSubject", { no }),
+      // 알림함에서 누르면 문의 화면으로 (registerScreen 이 그 주소를 보장한다)
+      url: "/support",
+      body:
         `${ctx.t("mail.answeredBody", { name: String(t.author_name) })}\n\n` +
         `${ctx.t("mail.answeredNo", { no })}\n${ctx.t("mail.answeredTitle", { title: String(t.title) })}\n\n` +
         `${ctx.t("mail.answeredVisit")}`,

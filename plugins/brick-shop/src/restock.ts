@@ -205,7 +205,14 @@ export async function sendRestockNotifications(
     optionId: string | null;
     siteUrl: string;
     siteName: string;
-    send: (msg: { to: string; subject: string; text: string }) => Promise<boolean>;
+    /** `userId` 는 사이트 안 알림함용 — 회원이 건 알림은 메일과 함께 알림함에도 남는다 */
+    send: (msg: {
+      to: string;
+      subject: string;
+      text: string;
+      userId?: string | null;
+      url?: string;
+    }) => Promise<boolean>;
     log?: (message: string) => void;
   },
 ): Promise<{ sent: number; failed: number }> {
@@ -245,7 +252,7 @@ export async function sendRestockNotifications(
         LIMIT ${BATCH}
         FOR UPDATE SKIP LOCKED
       )
-      RETURNING id, email, token
+      RETURNING id, email, token, user_id
     `);
     if (!batch.length) break;
 
@@ -275,6 +282,9 @@ export async function sendRestockNotifications(
           to: String(row.email),
           subject: t("restock.mailSubject", { label }),
           text,
+          userId: row.user_id ? String(row.user_id) : null,
+          // 알림함에서 누르면 그 상품으로 — 기다리던 물건이 왔다는 알림이다
+          url: `/shop/${String(product.slug)}`,
         });
         if (ok) sent += 1;
         else failed += 1;

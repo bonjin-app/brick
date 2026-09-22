@@ -14,6 +14,7 @@ import {
 import type { BlockRenderContext, CacheProvider } from "@brick/core";
 import { PluginLoaderService } from "../plugins/plugin-loader.service.js";
 import { ThemesService } from "../themes/themes.service.js";
+import { NotificationsService } from "../notifications/notifications.service.js";
 import { DB, CACHE } from "../../runtime.module.js";
 
 /** 페이지 빌더 저장 단위: 블록 트리 노드 */
@@ -57,6 +58,7 @@ export class PageRenderService {
     @Inject(CACHE) private readonly cache: CacheProvider,
     private readonly loader: PluginLoaderService,
     private readonly themes: ThemesService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async renderPath(
@@ -127,6 +129,11 @@ export class PageRenderService {
       catalogs: CORE_CATALOGS,
       onMissing: (key, locale) => this.logger.warn(`번역 없음: ${key} (${locale})`),
     });
+    /*
+     * 안 읽은 알림 수. 로그인한 요청에서만 센다 — 비로그인 렌더만 캐시되므로
+     * 다른 사람의 개수가 캐시에 섞이지 않는다(부분 인덱스로 세는 질의다).
+     */
+    const unreadNotifications = user ? await this.notifications.unreadCount(user.id).catch(() => 0) : 0;
     const themeCommon = {
       // 미리보기 테마 (없으면 활성 테마) — ThemesService.render 가 읽는다
       ...(preview ? { __theme: preview } : {}),
@@ -147,7 +154,26 @@ export class PageRenderService {
        * 로그인 전용 항목은 여기서 걸러진다 — 비로그인 렌더만 캐시되므로
        * 회원용 링크가 캐시에 섞이지 않는다.
        */
-      headerActions: this.loader.headerActionsFor(Boolean(user)),
+      /**
+       * 플러그인이 등록한 헤더 링크 + **코어의 알림함**.
+       *
+       * 테마 다섯을 모두 고치는 대신 이미 있는 통로를 쓴다 — 테마는 이 목록을
+       * 반복해 그리고 아이콘도 지원한다. 읽지 않은 개수를 라벨에 넣는다:
+       * 배지를 따로 두려면 테마 계약을 늘려야 하는데, 알림 하나 때문에 다섯
+       * 테마가 같이 바뀌어야 하는 구조가 되면 다음 것은 더 어려워진다.
+       */
+      headerActions: [
+        ...this.loader.headerActionsFor(Boolean(user)),
+        ...(user
+          ? [{
+              label: unreadNotifications
+                ? t("noti.headerN", { n: unreadNotifications })
+                : t("noti.header"),
+              url: "/notifications",
+              icon: "bell",
+            }]
+          : []),
+      ],
     };
 
     /**
@@ -181,6 +207,28 @@ export class PageRenderService {
       if (path === "home") {
         const html = await this.themes.render("home", { ...themeCommon, site, menu: nav, pageTitle: site.name, seo: {} });
         return { html, status: 200, slug: "home" };
+      }
+      /*
+       * /notifications 는 페이지가 없어도 알림함으로 폴백한다.
+       *
+       * 머리의 "알림" 링크가 어느 사이트에서든 404 로 떨어지지 않게 — 운영자가
+       * 알림함 페이지를 만들 것을 기대할 수는 없다(있는 줄도 모른다).
+       * 로그인하지 않았으면 로그인 길을 준다 — 남의 알림함은 없다. 빈 목록을
+       * 보여주면 "알림이 없다"는 거짓말이 된다.
+       */
+      if (path === "notifications") {
+        const title = t("noti.title");
+        const blocksHtml = user
+          ? await this.renderNodes([{ block: "core/notifications", props: {} }], blockCtx)
+          : `<p>${escapeHtml(t("noti.loginRequired"))}</p>` +
+            `<div class="brick-hero-actions" style="justify-content:flex-start">` +
+            `<a class="brick-btn brick-btn-primary" href="/login?next=/notifications">${escapeHtml(t("header.login"))}</a>` +
+            `</div>`;
+        const html = await this.themes.render("page", {
+          ...themeCommon, site, menu: nav,
+          title, pageTitle: `${title} — ${site.name}`, blocksHtml, seo: { noindex: true },
+        });
+        return { html, status: 200, slug: "notifications" };
       }
       // /search 는 페이지가 없어도 통합검색으로 폴백한다 — 테마 헤더의
       // 검색폼이 어느 사이트에서든 404 로 떨어지지 않게. search slug 로

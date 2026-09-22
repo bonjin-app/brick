@@ -20,6 +20,7 @@ import { PluginsModule } from "./modules/plugins/plugins.module.js";
 import { SeoModule } from "./modules/seo/seo.module.js";
 import { SiteModule } from "./modules/site/site.module.js";
 import { SearchModule } from "./modules/search/search.module.js";
+import { NotificationsModule } from "./modules/notifications/notifications.module.js";
 import { StaticModule } from "./modules/static/static.module.js";
 import { SystemModule } from "./modules/system/system.module.js";
 import { ThemesModule } from "./modules/themes/themes.module.js";
@@ -48,6 +49,7 @@ import { UsersModule } from "./modules/users/users.module.js";
     SeoModule,
     SiteModule,
     SearchModule,
+    NotificationsModule,
     PluginsModule,
     ThemesModule,
     PagesModule,

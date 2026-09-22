@@ -34,7 +34,20 @@ import { t } from "./i18n.js";
 const MAILED: readonly OrderStatus[] = ["pending", "paid", "shipped", "cancelled", "refunded"];
 
 export interface OrderMailPort {
-  send: (msg: { to: string; subject: string; text: string }) => Promise<boolean>;
+  /**
+   * 한 통 보낸다.
+   *
+   * `userId` 는 **사이트 안 알림함**을 위한 것이다 — 회원 주문이면 메일과 함께
+   * 알림함에도 남는다. 메일만 보내던 시절에는 SMTP 가 없는 사이트에서(기본값이다)
+   * 결제·배송 안내가 통째로 사라졌다.
+   */
+  send: (msg: {
+    to: string;
+    subject: string;
+    text: string;
+    userId?: string | null;
+    url?: string;
+  }) => Promise<boolean>;
   siteUrl: string;
   siteName: string;
   /** 무통장입금 안내 계좌 (비어 있으면 안내 문구를 넣지 않는다) */
@@ -68,7 +81,7 @@ export async function sendOrderMail(
 
   const { rows } = await db.execute(sql`
     SELECT o.order_no, o.total, o.status, o.tracking_no, o.guest_token, o.payment_method,
-           o.orderer_name, coalesce(nullif(o.orderer_email, ''), u.email) AS email
+           o.orderer_name, o.user_id, coalesce(nullif(o.orderer_email, ''), u.email) AS email
     FROM shop_orders o
     LEFT JOIN users u ON u.id = o.user_id
     WHERE o.id = ${params.orderId}::uuid
@@ -78,7 +91,12 @@ export async function sendOrderMail(
   if (!order) return false;
 
   const to = String(order.email ?? "").trim();
-  if (!to) return false;
+  /*
+   * 주소도 없고 회원도 아니면 보낼 곳이 없다 — 이메일은 선택 입력이다.
+   * 회원이면 주소가 없어도 알림함에는 남는다. 주소를 안 적었다는 것이
+   * "아무 소식도 받지 않겠다" 는 뜻은 아니다.
+   */
+  if (!to && !order.user_id) return false;
 
   const { rows: items } = await db.execute(sql`
     SELECT product_name, option_name, quantity, line_total
@@ -132,6 +150,9 @@ export async function sendOrderMail(
       to,
       subject: `[${port.siteName}] ${subject} (${String(order.order_no)})`,
       text: body.join("\n"),
+      userId: order.user_id ? String(order.user_id) : null,
+      // 회원은 주문 내역에서 바로 본다 (비회원 조회 주소는 본문의 링크가 안내한다)
+      url: order.user_id ? "/shop/orders" : "",
     });
   } catch (err) {
     // 메일 실패가 주문 흐름을 막아서는 안 된다 — 기록만 남기고 넘어간다

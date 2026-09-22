@@ -13,6 +13,7 @@ import { AuthService } from "../auth/auth.service.js";
 import { ExtensionInstallerService } from "../extensions/extension-installer.service.js";
 import { ExtensionUpdaterService } from "../extensions/extension-updater.service.js";
 import { AuditService } from "../audit/audit.service.js";
+import { CORE_CATALOGS, makeTranslator } from "@brick/core";
 import { ThemesService } from "../themes/themes.service.js";
 import { DB, MAIL } from "../../runtime.module.js";
 import { isLocalUrl, loadEnv } from "../../config/env.js";
@@ -503,7 +504,12 @@ export class PluginsController {
   @Get("member/menu")
   async memberMenu() {
     await this.loader.refreshLocale();
-    return { items: this.loader.memberMenu() };
+    /*
+     * 알림함은 코어가 가진 회원 화면이다 — 플러그인이 없는 사이트에도 있어야
+     * 하므로 여기서 얹는다. 머리의 종 아이콘만으로는 마이페이지에서 찾을 수 없다.
+     */
+    const t = makeTranslator({ locale: this.loader.siteLocale, catalogs: CORE_CATALOGS });
+    return { items: [{ label: t("noti.title"), path: "/notifications" }, ...this.loader.memberMenu()] };
   }
 
   /**

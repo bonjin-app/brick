@@ -80,3 +80,30 @@ export const passwordResets = pgTable(
   },
   (t) => [index("password_resets_user_idx").on(t.userId)],
 );
+
+/**
+ * 사이트 안 알림함.
+ *
+ * 알림이 메일 한 통로뿐이었고, SMTP 미설정이 기본값이라 기본 설치에서는 모든
+ * 알림이 조용히 사라졌다. 알림함은 메일과 **함께** 간다 — 대체가 아니다.
+ * (packages/database/migrations/0012_notifications.sql 에 이유를 적어 두었다)
+ */
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: uuid("id").primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** board.comment · helpdesk.answered · shop.order … 문구가 아니라 종류로 나눈다 */
+    kind: varchar("kind", { length: 50 }).notNull(),
+    /** 사이트 언어로 이미 그려진 문구 — 메일과 같은 시점에 같은 말을 만든다 */
+    title: varchar("title", { length: 300 }).notNull(),
+    body: text("body").notNull().default(""),
+    /** 눌러서 가는 곳. 갈 곳이 없으면 읽은 사람이 할 수 있는 일이 없다 */
+    url: varchar("url", { length: 1000 }).notNull().default(""),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("notifications_user_idx").on(t.userId, t.createdAt)],
+);
