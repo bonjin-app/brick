@@ -154,6 +154,36 @@ function loadEnvUncached(): BrickEnv {
     };
   }
 
+  /*
+   * **아직 없는 것을 설정하면 조용히 지나가지 않는다.**
+   *
+   * 운영 문서의 스케일링 표가 `STORAGE_DRIVER=s3` 와 `REDIS_URL` 을 안내했는데
+   * 둘 다 읽는 곳이 없었다 — 설정해도 아무 일도 일어나지 않는다. 그런데
+   * 운영자는 **그것을 설정했기 때문에** 인스턴스를 둘로 늘린다. 업로드가
+   * 공유되지 않는다는 사실은 절반의 요청이 이미지 404 를 받은 뒤에 알게 된다.
+   *
+   * 저장소는 **맞지 않으면 아예 뜨지 않는다**: 로컬 디스크로 조용히 돌아가는
+   * 것이 그 배포에서는 고장이다.
+   */
+  const storageDriver = (process.env.STORAGE_DRIVER || "local").trim().toLowerCase();
+  if (storageDriver !== "local") {
+    errors.push(
+      `STORAGE_DRIVER="${storageDriver}" 는 아직 구현되지 않았습니다. 지금은 local 만 있습니다 — ` +
+        "여러 인스턴스로 늘리려면 업로드 폴더를 공유 볼륨으로 붙이세요 (docs/operations.md 의 스케일링).",
+    );
+  }
+  /*
+   * 캐시는 막지 않는다 — PostgreSQL 캐시는 **이미 인스턴스 사이에서 공유된다**.
+   * REDIS_URL 을 무시해도 동작은 옳고 다만 더 느릴 뿐이라, 뜨지 못하게 할 이유는 없다.
+   * 대신 "설정했으니 Redis 를 쓰고 있다" 는 오해만 걷어낸다.
+   */
+  if (process.env.REDIS_URL) {
+    console.warn(
+      "[brick] REDIS_URL 이 설정되어 있지만 아직 Redis 구현이 없습니다 — PostgreSQL 캐시를 씁니다. " +
+        "여러 인스턴스에서도 그 캐시는 공유되므로 동작은 정상입니다.",
+    );
+  }
+
   if (errors.length) {
     console.error("[brick] invalid configuration:\n" + errors.map((e) => `  - ${e}`).join("\n"));
     process.exit(1);

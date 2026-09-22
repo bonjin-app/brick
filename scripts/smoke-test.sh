@@ -379,6 +379,28 @@ LATER="$(curl -s -b "$COOKIES" "$API/api/pages/$DRAFT_ID" | jq_get "['publishedA
 [[ -n "$LATER" && "$LATER" != "None" ]] && ok "공개로 바꾸면 그때가 적힌다" \
   || bad "공개로 바꿔도 공개 시각이 비어 있다 ($LATER)"
 
+echo "── 아직 없는 설정은 조용히 지나가지 않는다"
+#
+# 운영 문서의 스케일링 표가 `STORAGE_DRIVER=s3` 와 `REDIS_URL` 을 안내했는데 둘 다
+# 읽는 곳이 없었다 — 설정해도 아무 일도 일어나지 않는다. 그런데 운영자는 **그것을
+# 설정했기 때문에** 인스턴스를 늘린다. 업로드가 공유되지 않는다는 사실은 절반의
+# 요청이 이미지 404 를 받은 뒤에 알게 된다.
+CFGOUT="$TMP/cfg.log"
+# `set -e` 가 의도된 실패에서 수트를 끊지 않게 종료코드를 직접 받는다
+STORAGE_DRIVER=s3 node "$ROOT/apps/api/dist/main.js" > "$CFGOUT" 2>&1 && CFGRC=0 || CFGRC=$?
+# 종료코드만 보면 포트 충돌 같은 다른 실패도 1 이라 통과해 버린다 — 뜨지 **않았다**는 것까지 본다
+check "없는 저장소 드라이버면 뜨지 않는다" \
+  "$CFGRC|$(grep -c 'Bootstrap' "$CFGOUT" || true)" "1|0"
+contains "무엇이 없는지 말한다" "$(cat "$CFGOUT")" "아직 구현되지 않았습니다"
+contains "대신 무엇을 할지도 말한다" "$(cat "$CFGOUT")" "공유 볼륨"
+# 캐시는 막지 않는다 — PostgreSQL 캐시는 이미 인스턴스 사이에서 공유된다
+REDIS_URL=redis://localhost:6379 node "$ROOT/apps/api/dist/main.js" > "$TMP/redis.log" 2>&1 &
+REDIS_PID=$!
+for i in $(seq 1 30); do grep -q "REDIS_URL" "$TMP/redis.log" 2>/dev/null && break; sleep 0.3; done
+kill "$REDIS_PID" 2>/dev/null || true; wait "$REDIS_PID" 2>/dev/null || true
+contains "REDIS_URL 은 막지 않고 알려만 준다" "$(cat "$TMP/redis.log")" "아직 Redis 구현이 없습니다"
+contains "동작은 정상이라고 말한다" "$(cat "$TMP/redis.log")" "동작은 정상"
+
 echo "── 미디어"
 printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82' > "$TMP/t.png"
 cp "$TMP/t.png" "$TMP/evil.php"
