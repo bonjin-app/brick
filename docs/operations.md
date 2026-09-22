@@ -110,12 +110,8 @@ readinessProbe:
 렌더 결과는 PostgreSQL 기반 태그 캐시에 저장됩니다 (기본 TTL 300초).
 페이지·테마·플러그인·설정이 변경되면 자동 무효화됩니다.
 
-트래픽이 커지면 Redis로 전환하세요:
-
-```yaml
-environment:
-  REDIS_URL: redis://redis:6379
-```
+캐시가 PostgreSQL에 있으므로 **인스턴스를 늘려도 그대로 공유됩니다** — 따로 할 일이
+없습니다. Redis 전환은 아직 없습니다(`REDIS_URL` 을 넣어도 읽지 않습니다).
 
 ### 정리 작업
 

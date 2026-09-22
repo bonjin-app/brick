@@ -215,13 +215,30 @@ example.com {
 | `NODE_ENV` | | `development` | `production` 이면 보안 검증이 강화됩니다 |
 | `PORT` | | `3000` | 공개 웹 포트 |
 | `BRICK_API_PORT` | | `3001` | 내부 API 포트 (외부 노출 금지) |
+| `BRICK_API_URL` | | `http://127.0.0.1:3001` | 웹이 API 를 찾는 주소. 웹과 API 를 다른 컨테이너로 나눌 때만 |
+| `BRICK_SITE_URL` | | `http://localhost:3000` | 메일 링크·소셜 로그인 콜백에 쓰는 **공개** 주소 |
 | `BRICK_TRUST_PROXY` | | `false` | 프록시 뒤에 있으면 `true` |
-| `BRICK_MAX_UPLOAD_MB` | | `50` | 업로드 최대 크기 |
-| `BRICK_AUTO_MIGRATE` | | `true` | 부팅 시 자동 마이그레이션 |
+| `BRICK_TIMEZONE` | | `Asia/Seoul` | 통계의 하루·주·달 경계 기준 → [reports.md](reports.md) |
+| `BRICK_MAX_UPLOAD_MB` | | `50` | 파일 하나의 최대 크기 |
+| `BRICK_MAX_UPLOAD_FILES` | | `10` | 한 번에 올릴 수 있는 파일 개수 (1–50) |
+| `BRICK_AUTO_MIGRATE` | | `true` | 부팅 시 자동 마이그레이션. `false` 면 `pnpm migrate` 를 직접 돌립니다 |
 | `BRICK_PLUGINS_DIR` | | `plugins` | 플러그인 디렉터리 |
 | `BRICK_THEMES_DIR` | | `themes` | 테마 디렉터리 |
 | `BRICK_UPLOADS_DIR` | | `uploads` | 업로드 디렉터리 |
-| `REDIS_URL` | | — | 설정 시 Redis 캐시/큐 사용 (선택) |
+| `BRICK_CONFIG_PATH` | | `data/brick.config.json` | 설정 파일 위치 (아래) |
+| `BRICK_ADMIN_IP_LIMIT` | | — | `off` 면 관리자 IP 허용 목록을 무시 → [account-security.md](account-security.md) |
+| `BRICK_CAPTCHA` | | — | `off`·`test` 는 **개발·테스트 전용**. 프로덕션에서는 비워 둡니다 |
+| `STORAGE_DRIVER` | | `local` | **`local` 만 구현되어 있습니다** — 다른 값이면 서버가 뜨지 않습니다 |
+| `REDIS_URL` | | — | **아직 어디서도 쓰지 않습니다** — 설정해 두면 부팅 로그가 그렇게 알려 줍니다 |
+| `SMTP_HOST` | | — | 비우면 메일을 보내지 않고 로그에만 남깁니다 → [mailing.md](mailing.md) |
+| `SMTP_PORT` | | `587` | |
+| `SMTP_SECURE` | | 포트가 `465` 면 `true` | |
+| `SMTP_USER` / `SMTP_PASS` | | — | 한쪽만 넣으면 부팅을 거부합니다 |
+| `SMTP_FROM` | | — | `SMTP_HOST` 를 설정했다면 필수 |
+
+이 표는 **Brick이 실제로 읽는 환경변수 전부**입니다. `scripts/check-env-documented.mjs`
+가 코드의 `process.env` 와 이 표를 맞춰 보므로, 한쪽만 늘어나면 CI가 막습니다 —
+없는 설정을 쓰라고 안내하는 문서(예전의 `REDIS_URL` 행)를 다시 만들지 않기 위함입니다.
 
 `NODE_ENV=production` 인데 `BRICK_SECRET` 이 비었거나 약한 값이면 **부팅을 거부합니다.**
 잘못된 설정으로 조용히 뜨는 것보다 안전하기 때문입니다.
