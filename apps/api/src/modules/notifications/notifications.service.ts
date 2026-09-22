@@ -4,6 +4,8 @@ import { uuidv7 } from "uuidv7";
 import type { BrickDb } from "@brick/database";
 import { notifications, users } from "@brick/database";
 import type { MailProvider } from "@brick/core";
+import { normalizePhone } from "@brick/core";
+import type { SmsProvider } from "@brick/core";
 import { DB, MAIL } from "../../runtime.module.js";
 
 /** 읽은 알림을 얼마나 들고 있나 */
@@ -35,6 +37,15 @@ export interface NotifyInput {
    * 성가심이 된다. 기본은 보내는 쪽이다(알림을 놓치는 쪽이 더 나쁘다).
    */
   mail?: false;
+  /** 문자 받을 번호 (`sms: true` 일 때만 쓰인다) */
+  phone?: string | null;
+  /**
+   * 문자로도 보낸다 — **옵트인**이다.
+   *
+   * 문자는 건당 요금이 나간다. 그래서 메일과 반대로, 부르는 쪽이 명시적으로
+   * 켠 알림만 나간다(주문 접수·발송처럼 손님이 기다리는 것).
+   */
+  sms?: true;
 }
 
 /**
@@ -57,6 +68,29 @@ export class NotificationsService {
     @Inject(MAIL) private readonly mail: MailProvider,
   ) {}
 
+  /*
+   * 문자 발송기.
+   *
+   * 플러그인이 등록하면 **로더가 여기에 넣어 준다**(우리가 로더를 읽으러 가지
+   * 않는다 — 로더는 이미 우리를 쓰고 있어서, 서로를 읽으면 모듈이 순환한다).
+   * 하나만 둔다: 둘이 등록하면 같은 안내가 두 번 나가고 요금도 두 배다.
+   */
+  private smsGateway: { plugin: string; gateway: SmsProvider } | null = null;
+
+  setSmsGateway(plugin: string, gateway: SmsProvider): void {
+    this.smsGateway = { plugin, gateway };
+  }
+
+  /** 그 플러그인이 등록한 발송기를 치운다 (꺼진 확장이 계속 요금을 쓰면 안 된다) */
+  clearSmsGateway(plugin: string): void {
+    if (this.smsGateway?.plugin === plugin) this.smsGateway = null;
+  }
+
+  /** 지금 문자를 보낼 수 있는가 (설정 화면·대시보드가 읽는다) */
+  smsEnabled(): boolean {
+    return Boolean(this.smsGateway?.gateway.enabled);
+  }
+
   /**
    * 알림 보내기.
    *
@@ -78,6 +112,23 @@ export class NotificationsService {
           // 탈퇴로 회원이 사라진 뒤 도착한 알림 등 — 주 흐름을 막지 않는다
           this.logger.warn(`알림함 기록 실패 (${input.kind}): ${e instanceof Error ? e.message : String(e)}`);
         });
+    }
+
+    /*
+     * 문자.
+     *
+     * 메일보다 먼저 보낸다 — 둘 다 나가는 알림이라면 손님이 먼저 보는 쪽이 문자다.
+     * 발송기가 없으면(플러그인 미설치) 조용히 지나간다: 문자는 있으면 좋은 통로이지
+     * 없다고 알림이 실패해야 할 것은 아니다.
+     */
+    if (input.sms) {
+      const gateway = this.smsGateway?.gateway ?? null;
+      const phone = normalizePhone(input.phone);
+      if (gateway?.enabled && phone) {
+        await gateway
+          .send({ to: phone, title, text: body ? `${title}\n\n${body}` : title })
+          .catch(() => false);
+      }
     }
 
     if (input.mail === false) return;

@@ -47,11 +47,17 @@ export interface OrderMailPort {
     text: string;
     userId?: string | null;
     url?: string;
+    /** 주문서에 적힌 연락처 — 문자로도 보낼 때 쓴다 */
+    phone?: string | null;
+    /** 문자로도 보낼까 (설정이 켜져 있고 이 상태가 손님이 기다리는 것일 때) */
+    sms?: true;
   }) => Promise<boolean>;
   siteUrl: string;
   siteName: string;
   /** 무통장입금 안내 계좌 (비어 있으면 안내 문구를 넣지 않는다) */
   bankAccount: string;
+  /** 주문 안내를 문자로도 보낼까 (설정) */
+  sms?: boolean;
   log?: (message: string) => void;
 }
 
@@ -81,7 +87,8 @@ export async function sendOrderMail(
 
   const { rows } = await db.execute(sql`
     SELECT o.order_no, o.total, o.status, o.tracking_no, o.guest_token, o.payment_method,
-           o.orderer_name, o.user_id, coalesce(nullif(o.orderer_email, ''), u.email) AS email
+           o.orderer_name, o.user_id, o.orderer_phone,
+           coalesce(nullif(o.orderer_email, ''), u.email) AS email
     FROM shop_orders o
     LEFT JOIN users u ON u.id = o.user_id
     WHERE o.id = ${params.orderId}::uuid
@@ -153,6 +160,8 @@ export async function sendOrderMail(
       userId: order.user_id ? String(order.user_id) : null,
       // 회원은 주문 내역에서 바로 본다 (비회원 조회 주소는 본문의 링크가 안내한다)
       url: order.user_id ? "/shop/orders" : "",
+      phone: String(order.orderer_phone ?? ""),
+      ...(port.sms ? { sms: true as const } : {}),
     });
   } catch (err) {
     // 메일 실패가 주문 흐름을 막아서는 안 된다 — 기록만 남기고 넘어간다

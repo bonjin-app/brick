@@ -347,6 +347,8 @@ export class PluginLoaderService implements OnModuleInit {
     for (let i = this.headerActions.length - 1; i >= 0; i--) {
       if (this.headerActions[i].plugin === name) this.headerActions.splice(i, 1);
     }
+    // 끈 플러그인의 발송기를 남겨 두면 꺼진 확장이 계속 요금을 쓴다
+    this.notifications.clearSmsGateway(name);
     /*
      * 선언 화면도 걷어낸다.
      *
@@ -710,6 +712,11 @@ export class PluginLoaderService implements OnModuleInit {
       registerHeaderAction: (action) => {
         this.headerActions.push({ ...action, plugin: pluginName });
         this.logger.log(`plugin "${pluginName}" registers header action "${action.label}"`);
+      },
+      registerSmsGateway: (gateway) => {
+        // 하나만 둔다 — 둘이 등록하면 같은 안내가 두 번 나가고 요금도 두 배다
+        this.notifications.setSmsGateway(pluginName, gateway);
+        this.logger.log(`plugin "${pluginName}" registers the SMS gateway`);
       },
       registerScreen: (screen) => {
         const path = screen.path.replace(/^\/+|\/+$/g, "");

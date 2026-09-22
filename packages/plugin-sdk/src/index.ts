@@ -19,13 +19,15 @@ export type {
   AdminResource, AdminField, PluginDb,
   StorageProvider, StoredFile, CacheProvider, QueueProvider, MailProvider, HookBus,
   PluginUploadedFile, PluginRawResponse, BlockRenderContext,
-  CaptchaProvider, CaptchaChallenge,
+  CaptchaProvider, CaptchaChallenge, SmsProvider, SmsMessage,
   PersonalDataEraser, SitemapSource, SitemapUrl, DashboardCard,
 } from "@brick/core";
 // 값(함수)으로 재수출 — 플러그인이 원본 응답을 만들 때 쓴다
 export { rawResponse } from "@brick/core";
 // 한국 전용 검증 — 코어와 플러그인이 같은 규칙을 쓴다 (체크섬을 복제하면 갈라진다)
 export { isValidBusinessNo, formatBusinessNo } from "@brick/core";
+// 전화번호 정리·가리기 — 문자 발송 플러그인이 쓴다. 규칙을 베끼면 한쪽만 고쳐진다
+export { normalizePhone, maskPhone } from "@brick/core";
 // 조사(을/를·이/가) — 이름이 값에서 오므로 화면마다 "을(를)"을 적어 두게 된다
 export { josa, hasJongseong } from "@brick/core";
 // 권한 등급 — 권한 비교를 베끼면 한쪽만 고쳐지고 그것이 권한 구멍이 된다

@@ -97,6 +97,14 @@ export interface ShopSettings {
    */
   returnShippingFee: number;
   /**
+   * 주문 안내를 **문자로도** 보낼까.
+   *
+   * 기본은 꺼짐이다 — 메일과 반대다. 문자는 건당 요금이 나가므로, 켜는 것은
+   * 운영자가 값을 알고 내리는 결정이어야 한다. (문자 발송 플러그인을 설치하고
+   * 설정해야 실제로 나간다)
+   */
+  notifyOrderSms: boolean;
+  /**
    * 주문서에서 **우편번호·주소를 검색**할 수 있게 한다.
    *
    * 기본은 켜짐이다 — 한국에서 자기 우편번호를 외우는 사람은 거의 없고, 이
@@ -113,6 +121,7 @@ export const DEFAULT_SETTINGS: ShopSettings = {
   bankAccount: "",
   pageSize: 20,
   notifyOrderMail: true,
+  notifyOrderSms: false,
   returnShippingFee: 3000,
   addressSearch: true,
 };

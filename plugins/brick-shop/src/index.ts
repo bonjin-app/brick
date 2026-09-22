@@ -119,13 +119,17 @@ export default definePlugin(async (ctx) => {
   ): Promise<void> => {
     try {
       const s = await settings();
-      if (!s.notifyOrderMail) return;
+      // 문자만 켜 둔 가게도 있다 — 둘 다 꺼져 있을 때만 건너뛴다
+      if (!s.notifyOrderMail && !s.notifyOrderSms) return;
       await sendOrderMail(db, {
         // 메일과 사이트 안 알림함 두 곳으로 간다 (SMTP 가 없어도 회원은 본다)
         send: (msg) =>
           ctx.notify({
             userId: msg.userId,
-            email: msg.to,
+            // 메일을 꺼 둔 가게에서는 주소를 넘기지 않는다 (문자만 나간다)
+            email: s.notifyOrderMail ? msg.to : null,
+            phone: msg.phone,
+            ...(msg.sms ? { sms: true as const } : {}),
             kind: "shop.order",
             title: msg.subject,
             body: msg.text,
@@ -134,6 +138,7 @@ export default definePlugin(async (ctx) => {
         siteUrl: ctx.site.url,
         siteName: await ctx.site.name(),
         bankAccount: s.bankAccount,
+        sms: s.notifyOrderSms,
         log: (m) => ctx.logger.warn(m),
       }, { orderId, status, kind });
     } catch (err) {
@@ -2664,6 +2669,8 @@ export default definePlugin(async (ctx) => {
       freeShippingOver: Math.max(0, Math.floor(Number(b.freeShippingOver ?? DEFAULT_SETTINGS.freeShippingOver))),
       bankAccount: String(b.bankAccount ?? "").slice(0, 200),
       notifyOrderMail: b.notifyOrderMail !== false,
+      // 문자는 요금이 나간다 — 명시적으로 켠 경우에만 참이다(기본 꺼짐)
+      notifyOrderSms: b.notifyOrderSms === true,
       pageSize: Math.min(60, Math.max(4, Math.floor(Number(b.pageSize ?? DEFAULT_SETTINGS.pageSize)))),
       returnShippingFee: Math.max(0, Math.floor(Number(b.returnShippingFee ?? DEFAULT_SETTINGS.returnShippingFee))),
       addressSearch: b.addressSearch !== false,

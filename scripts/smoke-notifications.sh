@@ -236,6 +236,90 @@ check "문의 화면은 페이지를 만들지 않아도 열린다" "$(code "$AP
 contains "회원 메뉴에도 1:1 문의" "$(curl -s "$API/api/member/menu")" '"path":"/support"'
 
 # ════════════════════════════════════════════════════
+echo "── 문자 (주문 안내는 한국에서 문자가 기본이다)"
+#
+# 메일은 안 열어 보는 사람이 많고 알림함은 다시 들어와야 보인다. "언제 오나요"
+# 전화를 줄이는 것은 문자뿐이다. 다만 **건당 요금이 나가므로** 메일과 반대로
+# 옵트인이다: 켜지 않으면 한 통도 나가지 않는다.
+SMS_OUT="$TMP/sms.jsonl"
+SMS_INFO="$(start_stub scripts/sms-stub.mjs 42900 "$TMP/sms.log" --out "$SMS_OUT")" \
+  || { bad "문자 스텁 시작 실패: $(tail -5 "$TMP/sms.log" 2>/dev/null)"; exit 1; }
+SMS_PORT="${SMS_INFO% *}"; SMS_PID="${SMS_INFO#* }"
+ok "문자 스텁 시작 (:$SMS_PORT)"
+
+# 발송기는 플러그인이 등록한다 — API 주소는 스텁으로 돌린다
+stop_server 2>/dev/null || { kill "$API_PID" 2>/dev/null || true; wait "$API_PID" 2>/dev/null || true; }
+export BRICK_ALIGO_API_BASE="http://127.0.0.1:${SMS_PORT}"
+node "$ROOT/apps/api/dist/main.js" > "$TMP/api2.log" 2>&1 &
+API_PID=$!
+for i in $(seq 1 60); do curl -fsS "$API/readyz" >/dev/null 2>&1 && break; sleep 1; done
+assert_own_api "$API_PID" "$API_PORT" "$TMP/api2.log"
+curl -s -b "$ADMIN" -c "$ADMIN" -X POST "$API/api/auth/login" -H 'content-type: application/json' \
+  -d '{"email":"admin@nt.test","password":"ntpass1234"}' -o /dev/null
+
+contains "문자 확장 활성화" "$(curl -s -b "$ADMIN" -X POST "$API/api/plugins/brick-sms-aligo/activate")" '"ok":true'
+SMSCFG="$API/api/plugins/brick-sms-aligo/admin/config"
+check "설정 전에는 키가 없다고 말한다" \
+  "$(curl -s -b "$ADMIN" "$SMSCFG" | jget "['apiKeyConfigured']")" "False"
+# 발신번호 사전등록제 — 번호 없이 켜는 것은 막는다 (공급자가 어차피 거절한다)
+check "발신번호 없이 켤 수 없다" \
+  "$(code -b "$ADMIN" -X PUT "$SMSCFG" -H 'content-type: application/json' \
+      -d '{"enabled":true,"userId":"brick","apiKey":"testkey"}')" "400"
+contains "왜 안 되는지 말해 준다" \
+  "$(curl -s -b "$ADMIN" -X PUT "$SMSCFG" -H 'content-type: application/json' \
+      -d '{"enabled":true,"userId":"brick","apiKey":"testkey"}')" "발신번호"
+contains "설정 저장" \
+  "$(curl -s -b "$ADMIN" -X PUT "$SMSCFG" -H 'content-type: application/json' \
+      -d '{"enabled":true,"userId":"brick","apiKey":"testkey","sender":"02-123-4567"}')" '"ok":true'
+absent "API 키는 돌려주지 않는다" "$(curl -s -b "$ADMIN" "$SMSCFG")" "testkey"
+check "설정됐다는 사실만 알려준다" \
+  "$(curl -s -b "$ADMIN" "$SMSCFG" | jget "['apiKeyConfigured']")" "True"
+
+echo "── 켜지 않으면 한 통도 나가지 않는다"
+curl -s -b "$MEMBER" -X POST "$API/api/notifications/read" -H 'content-type: application/json' -d '{}' >/dev/null
+MID2="$(psql_q "SELECT id FROM users WHERE email = 'member@nt.test'")"
+# 문자를 요청하지 않은 알림 — 메일·알림함만 간다
+psql_q "DELETE FROM notifications WHERE user_id = '$MID2'" >/dev/null
+check "옵트인하지 않은 알림은 문자로 안 간다" "$( [[ -s "$SMS_OUT" ]] && wc -l < "$SMS_OUT" || echo 0 | tr -d ' ')" "0"
+
+echo "── 주문 안내를 문자로 (켠 가게만)"
+contains "쇼핑몰 활성화" "$(curl -s -b "$ADMIN" -X POST "$API/api/plugins/brick-shop/activate")" '"ok":true'
+SHOP="$API/api/plugins/brick-shop"
+curl -s -b "$ADMIN" -X PUT "$SHOP/admin/settings" -H 'content-type: application/json' \
+  -d '{"notifyOrderSms":true,"notifyOrderMail":true,"shippingFee":3000,"freeShippingOver":50000,"pageSize":20,"returnShippingFee":3000}' >/dev/null
+check "문자 안내가 켜졌다" \
+  "$(curl -s -b "$ADMIN" "$SHOP/admin/settings" | jget "['notifyOrderSms']")" "True"
+
+echo "── 실제로 나가는 내용" 
+# 주문 하나를 만들고 상태를 바꾼다 — 그때 안내가 나간다
+PRODUCT_ID="$(curl -s -b "$ADMIN" -X POST "$SHOP/admin/products" -H 'content-type: application/json' \
+  -d '{"name":"문자시험 상품","slug":"sms-test","price":15000,"stock":5,"status":"selling"}' | jget "['id']")"
+printf '{"items":[{"productId":"%s","quantity":1}],"orderer":{"ordererName":"김손님","ordererPhone":"010-1234-5678","ordererEmail":"guest@nt.test","postcode":"06236","address1":"서울시 중구","address2":"101호"}}' \
+  "$PRODUCT_ID" > "$TMP/order.json"
+ORDER_RES="$(curl -s -X POST "$SHOP/orders" -H 'content-type: application/json' --data-binary "@$TMP/order.json")"
+ORDER_NO="$(echo "$ORDER_RES" | jget "['orderNo']")"
+[[ -n "$ORDER_NO" ]] && ok "주문 생성" || bad "주문 생성 ($ORDER_RES)"
+sleep 1
+SENT="$(cat "$SMS_OUT" 2>/dev/null || true)"
+contains "문자가 나갔다" "$SENT" '"receiver"'
+contains "번호는 숫자만 남겨 보낸다" "$SENT" '"receiver":"01012345678"'
+contains "사전 등록한 발신번호로" "$SENT" '"sender":"021234567"'
+[[ -n "$ORDER_NO" && "$SENT" == *"$ORDER_NO"* ]] && ok "주문번호가 본문에 있다" \
+  || bad "주문번호가 본문에 없다 ($ORDER_NO)"
+# 90바이트가 넘으면 LMS 다 — 잘라 보내면 안내가 반쪽이 된다
+contains "긴 안내는 LMS 로 보낸다" "$SENT" '"msg_type":"LMS"'
+absent "전화번호를 로그에 그대로 남기지 않는다" "$(cat "$TMP/api2.log")" "01012345678"
+contains "로그에는 가린 번호가 남는다" "$(cat "$SMS_OUT")" '"msg"'
+
+echo "── 문자가 실패해도 주문은 성공한다"
+curl -s -X PUT "http://127.0.0.1:${SMS_PORT}/_fail" -H 'content-type: application/json' -d '{"n":5}' >/dev/null
+printf '{"items":[{"productId":"%s","quantity":1}],"orderer":{"ordererName":"이손님","ordererPhone":"010-2222-3333","ordererEmail":"guest2@nt.test","postcode":"06236","address1":"서울시 중구","address2":"101호"}}' \
+  "$PRODUCT_ID" > "$TMP/order2.json"
+ORDER2="$(curl -s -X POST "$SHOP/orders" -H 'content-type: application/json' --data-binary "@$TMP/order2.json" | jget "['orderNo']")"
+[[ -n "$ORDER2" ]] && ok "문자가 실패해도 주문은 만들어진다" || bad "문자 실패가 주문을 막았다"
+curl -s -X PUT "http://127.0.0.1:${SMS_PORT}/_fail" -H 'content-type: application/json' -d '{"n":0}' >/dev/null
+kill "$SMS_PID" 2>/dev/null || true
+
 echo
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 [[ -n "${BRICK_SMOKE_LOG:-}" ]] && echo "$(basename "${BASH_SOURCE[0]}") ${PASS} ${FAIL}" >> "$BRICK_SMOKE_LOG"

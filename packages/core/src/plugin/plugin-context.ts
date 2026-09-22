@@ -2,6 +2,7 @@ import type { CacheProvider } from "../providers/cache.js";
 import type { QueueProvider } from "../providers/queue.js";
 import type { StorageProvider } from "../providers/storage.js";
 import type { MailProvider } from "../providers/mail.js";
+import type { SmsProvider } from "../providers/sms.js";
 import type { CaptchaProvider } from "../providers/captcha.js";
 import type { HookBus } from "../hooks/hook-bus.js";
 
@@ -32,6 +33,19 @@ export interface NotifyInput {
   url?: string;
   /** 메일은 보내지 않는다 (사이트 안에서만 뜻이 있는 알림) */
   mail?: false;
+  /**
+   * 문자 받을 번호. `sms: true` 일 때만 쓰인다.
+   *
+   * 회원 정보에는 전화번호가 없다 — 주문서처럼 **그 자리에서 받은 번호**를 넘긴다.
+   */
+  phone?: string | null;
+  /**
+   * 문자로도 보낸다.
+   *
+   * 메일과 반대로 **옵트인**이다: 문자는 건당 요금이 나가므로, 주문·발송 안내처럼
+   * 손님이 기다리는 것만 켠다. 댓글 알림을 문자로 보내면 요금과 성가심이 함께 는다.
+   */
+  sms?: true;
 }
 
 export interface PluginContext {
@@ -279,6 +293,18 @@ export interface PluginContext {
    * 남의 값이 새어 나간다. 배지는 블록이 클라이언트에서 채운다.
    */
   registerHeaderAction(action: HeaderAction): void;
+
+  /**
+   * 문자(SMS) 발송기를 등록한다.
+   *
+   * 코어는 문자 공급자를 모른다 — 한국에는 알리고·솔라피·NHN·네이버 클라우드가
+   * 있고, 어느 쪽을 쓸지는 운영자가 정한다(결제 게이트웨이와 같은 판단이다).
+   * 플러그인이 하나 등록하면 `ctx.notify({ phone, sms: true })` 가 그리로 나간다.
+   *
+   * **하나만 등록된다.** 두 플러그인이 등록하면 나중 것이 이긴다 — 같은 안내가
+   * 두 번 나가는 것(요금이 두 배다)보다 한 곳으로 나가는 편이 낫다.
+   */
+  registerSmsGateway(gateway: SmsProvider): void;
 
   /**
    * 플러그인이 **자기 화면**을 가진다.
