@@ -195,6 +195,30 @@ export default definePlugin(async (ctx) => {
     return next;
   });
 
+  /*
+   * 탈퇴 시 방문 기록에서 회원 연결을 끊는다.
+   *
+   * `site_visits` 는 하루가 지나면 정리 작업이 지우므로 길어야 하루치지만,
+   * 그 하루 동안은 "탈퇴한 회원이 오늘 언제 어느 기기로 들어왔는지"가
+   * 남는다 — 접속 IP 축약과 브라우저 문자열이 한 행에 같이 있다.
+   *
+   * 지우지 않고 NULL 로 두는 이유: 행을 지우면 오늘 방문자 수가 **과거로
+   * 거슬러 줄어든다.** 통계가 탈퇴로 흔들리면 안 되고, 회원 연결이 끊긴
+   * 방문 기록은 이 테이블이 원래 담으려던 익명 집계 그 자체다.
+   */
+  ctx.registerDataEraser({
+    label: "방문 기록",
+    order: 90,
+    async erase({ tx, userId }) {
+      const { rows } = await tx.execute(sql`
+        UPDATE site_visits SET user_id = NULL
+        WHERE user_id = ${userId}::uuid
+        RETURNING id
+      `);
+      return rows.length ? [`방문 기록 ${rows.length}건에서 회원 연결 해제`] : [];
+    },
+  });
+
   ctx.registerAdminResource(POPUP_RESOURCE);
   ctx.registerAdminResource(SITE_SETTINGS_RESOURCE);
   registerSiteBlocks(ctx, db);

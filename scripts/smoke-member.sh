@@ -48,6 +48,29 @@ psql_q() {
   ' "$1"
 }
 
+# TOTP 코드를 만든다 — 인증 앱이 하는 일을 테스트가 대신한다
+# (표준 벡터 검증은 smoke-account-security.sh 가 한다; 여기서는 켜기 위한 도구다).
+totp_code() {
+  node -e '
+    const { createHmac } = require("node:crypto");
+    const A = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    function dec(input) {
+      const clean = String(input).toUpperCase().replace(/[\s=]/g, "");
+      let bits = 0, value = 0; const out = [];
+      for (const ch of clean) { const i = A.indexOf(ch); if (i < 0) throw new Error(ch);
+        value = (value << 5) | i; bits += 5;
+        if (bits >= 8) { out.push((value >>> (bits - 8)) & 255); bits -= 8; } }
+      return Buffer.from(out);
+    }
+    const step = Math.floor(Date.now() / 30000);
+    const c = Buffer.alloc(8); c.writeBigUInt64BE(BigInt(step));
+    const d = createHmac("sha1", dec(process.argv[1])).update(c).digest();
+    const o = d[d.length - 1] & 0x0f;
+    const bin = ((d[o] & 0x7f) << 24) | ((d[o+1] & 0xff) << 16) | ((d[o+2] & 0xff) << 8) | (d[o+3] & 0xff);
+    console.log(String(bin % 1000000).padStart(6, "0"));
+  ' "$1"
+}
+
 echo "▶ 회원 생애주기 스모크 테스트"
 
 if [[ "${BRICK_SMOKE_KEEP_DB:-}" != "1" ]]; then
@@ -256,6 +279,32 @@ printf '{"items":[{"productId":"%s","quantity":1}],"orderer":{"ordererName":"회
 ORDER_NO="$(curl -s -b "$CK1" -X POST "$API/api/plugins/brick-shop/orders" -H 'content-type: application/json' --data-binary "@$TMP/order.json" | jq_get "['orderNo']")"
 [[ -n "$ORDER_NO" ]] && ok "탈퇴 전 주문 생성" || bad "탈퇴 전 주문 생성"
 
+# 탈퇴가 **인증 수단을 전부** 파기하는지 보려면 먼저 켜 놓아야 한다.
+# 비밀번호·세션·소셜 연결은 지우면서 2단계 인증만 남던 자리다.
+BEGIN2FA="$(curl -s -b "$CK1" -X POST "$API/api/me/security/2fa/begin" -H 'content-type: application/json' \
+  -d '{"password":"password123"}')"
+SECRET1="$(printf '%s' "$BEGIN2FA" | jq_get "['secret']")"
+curl -s -b "$CK1" -X POST "$API/api/me/security/2fa/complete" -H 'content-type: application/json' \
+  -d "{\"code\":\"$(totp_code "$SECRET1")\"}" -o /dev/null
+check "탈퇴 전 2단계 인증이 켜져 있다" "$(psql_q "SELECT is_enabled FROM user_totp WHERE user_id='$U1'")" "true"
+RC1="$(psql_q "SELECT count(*) FROM user_recovery_codes WHERE user_id='$U1'")"
+[[ "$RC1" -gt 0 ]] && ok "탈퇴 전 복구 코드가 있다 ($RC1개)" || bad "탈퇴 전 복구 코드가 있다"
+
+# 알림함과 수신거부 토큰 — 둘 다 이 사람이 무엇을 했는지 남긴다.
+# 어떤 사건이 알림을 만드는지에 기대지 않고 직접 넣는다(파기를 검증하는 자리다).
+psql_q "INSERT INTO notifications (id, user_id, kind, title, body)
+        VALUES (gen_random_uuid(), '$U1', 'shop.order', '주문이 접수되었습니다', '주문번호 $ORDER_NO')" >/dev/null
+psql_q "INSERT INTO mail_unsubscribe_tokens (user_id, token)
+        VALUES ('$U1', repeat('a', 64))" >/dev/null
+# 로그인 중간에 2단계 인증 화면까지 갔다가 탈퇴하는 경우다 — 그 도전은
+# ip_hash 까지 들고 있고, 남으면 만료 전까지 유효한 로그인 관문이 된다.
+psql_q "INSERT INTO totp_challenges (id, user_id, token_hash, expires_at, ip_hash)
+        VALUES (gen_random_uuid(), '$U1', repeat('b', 64), now() + interval '5 minutes', repeat('c', 64))" >/dev/null
+CHAL_BEFORE="$(psql_q "SELECT count(*) FROM totp_challenges WHERE user_id='$U1'")"
+check "탈퇴 전 진행 중인 인증 도전이 있다" "$CHAL_BEFORE" "1"
+NOTI_BEFORE="$(psql_q "SELECT count(*) FROM notifications WHERE user_id='$U1'")"
+[[ "$NOTI_BEFORE" -gt 0 ]] && ok "탈퇴 전 알림함에 기록이 있다" || bad "탈퇴 전 알림함에 기록이 있다"
+
 WD="$(curl -s -b "$CK1" -X POST "$API/api/me/withdraw" -H 'content-type: application/json' \
   -d '{"password":"password123","reason":"스모크 테스트"}')"
 contains "탈퇴 성공" "$WD" '"ok":true'
@@ -272,6 +321,16 @@ PWH="$(psql_q "SELECT password_hash LIKE 'withdrawn:%' FROM users WHERE id='$U1'
 check "비밀번호 해시를 쓸 수 없는 값으로 덮음" "$PWH" "true"
 SESS="$(psql_q "SELECT count(*) FROM sessions WHERE user_id='$U1'")"
 check "세션 즉시 삭제" "$SESS" "0"
+# 비밀번호만 죽이고 2단계 인증을 남기면, 탈퇴한 계정의 인증 수단이 회원의
+# 휴대폰과 종이에 그대로 남는다. 개인정보보호법 제21조의 파기 대상이다.
+check "2단계 인증 비밀 파기" "$(psql_q "SELECT count(*) FROM user_totp WHERE user_id='$U1'")" "0"
+check "복구 코드 파기" "$(psql_q "SELECT count(*) FROM user_recovery_codes WHERE user_id='$U1'")" "0"
+check "진행 중이던 인증 도전 파기" "$(psql_q "SELECT count(*) FROM totp_challenges WHERE user_id='$U1'")" "0"
+contains "탈퇴 응답이 2단계 인증 파기를 알려준다" "$WD" "2단계 인증"
+# 알림 본문에는 주문번호와 글 제목이 그대로 있고 보관 기간이 최대 180일이다
+check "알림함 삭제" "$(psql_q "SELECT count(*) FROM notifications WHERE user_id='$U1'")" "0"
+# 옛 메일의 링크로 사라진 계정의 설정을 바꿀 수 있으면 안 된다
+check "수신거부 토큰 폐기" "$(psql_q "SELECT count(*) FROM mail_unsubscribe_tokens WHERE user_id='$U1'")" "0"
 
 echo "── 탈퇴 후 접근 차단"
 check "기존 쿠키로 내 정보 접근 불가" "$(code -b "$CK1" "$API/api/me/profile")" "401"

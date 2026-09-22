@@ -100,6 +100,42 @@ export class WithdrawalService {
       await tx.execute(sql`DELETE FROM password_resets WHERE user_id = ${params.userId}::uuid`);
       await tx.execute(sql`DELETE FROM email_verifications WHERE user_id = ${params.userId}::uuid`);
 
+      /*
+       * ── 3-1. 2단계 인증 폐기 ──
+       *
+       * 비밀번호는 아래에서 쓸 수 없는 값으로 덮고 세션과 소셜 연결도 끊는데,
+       * **인증 수단 중 이것만 남아 있었다.** TOTP 비밀은 암호화하지 않고 두기로
+       * 한 값이고(0005 마이그레이션에 이유가 적혀 있다), 복구 코드는 회원이
+       * 종이에 적어 둔 것이다. 탈퇴는 "계정을 쓸 수 없게 한다"가 아니라
+       * "개인정보를 파기한다"(개인정보보호법 제21조)이므로, 다시 쓸 일이
+       * 없는 자격증명을 남길 이유가 없다.
+       *
+       * 2단계 인증 해제가 이미 똑같은 두 줄을 지운다(two-factor.service.ts) —
+       * 탈퇴만 부르지 않고 있었다.
+       */
+      await tx.execute(sql`DELETE FROM user_totp WHERE user_id = ${params.userId}::uuid`);
+      await tx.execute(sql`DELETE FROM user_recovery_codes WHERE user_id = ${params.userId}::uuid`);
+      await tx.execute(sql`DELETE FROM totp_challenges WHERE user_id = ${params.userId}::uuid`);
+      effects.push("2단계 인증 정보 삭제");
+
+      /*
+       * ── 3-2. 알림함 비우기 ──
+       *
+       * 알림 본문에는 주문번호·글 제목처럼 **이 사람이 무엇을 했는지**가 그대로
+       * 적혀 있고, 보관 기간이 최대 180일이다. 계정 이름만 익명화하면 알림함은
+       * 그대로 남아, 탈퇴 반년 뒤까지 그 사람의 활동이 문장으로 남는다.
+       */
+      await tx.execute(sql`DELETE FROM notifications WHERE user_id = ${params.userId}::uuid`);
+      effects.push("알림함 삭제");
+
+      /*
+       * ── 3-3. 수신거부 토큰 폐기 ──
+       *
+       * 메일 하단 링크에 실려 나간 토큰이다. 계정이 사라진 뒤에도 살아 있으면,
+       * 옛 메일을 가진 누구든 그 링크로 이 계정의 설정을 바꿀 수 있다.
+       */
+      await tx.execute(sql`DELETE FROM mail_unsubscribe_tokens WHERE user_id = ${params.userId}::uuid`);
+
       // ── 4. 개인정보 익명화 ──
       // 비밀번호 해시는 쓸 수 없는 값으로 덮는다. NULL 로 두지 않는 이유는
       // "비밀번호 없는 계정"이라는 상태를 인증 코드 전체에 퍼뜨리지 않기 위해서다
