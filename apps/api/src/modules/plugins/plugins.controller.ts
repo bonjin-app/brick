@@ -1,6 +1,6 @@
 import {
   All, BadRequestException, Body, Controller, ForbiddenException, Get, HttpException, Inject, Logger,
-  NotFoundException, Param, Post, Req, Res, UseGuards,
+  NotFoundException, Param, Post, Req, Res, ServiceUnavailableException, UseGuards,
 } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { eq, sql } from "drizzle-orm";
@@ -15,6 +15,8 @@ import { ExtensionUpdaterService } from "../extensions/extension-updater.service
 import { AuditService } from "../audit/audit.service.js";
 import { CORE_CATALOGS, makeTranslator } from "@brick/core";
 import { ThemesService } from "../themes/themes.service.js";
+import { MaintenanceModeService } from "../site/maintenance-mode.service.js";
+import { bypassesMaintenance, isWrite } from "../site/maintenance-mode.js";
 import { DB, MAIL } from "../../runtime.module.js";
 import { isLocalUrl, loadEnv } from "../../config/env.js";
 import { sawProxyHeaders } from "../../config/proxy-hint.js";
@@ -32,6 +34,7 @@ export class PluginsController {
     @Inject(DB) private readonly db: BrickDb,
     @Inject(MAIL) private readonly mail: MailProvider,
     private readonly themes: ThemesService,
+    private readonly maintenance: MaintenanceModeService,
   ) {}
 
   @Get("plugins")
@@ -153,6 +156,17 @@ export class PluginsController {
       throw new ForbiddenException("권한이 없습니다.");
     }
 
+    /*
+     * 점검 중에는 **쓰기를 막는다.**
+     *
+     * 화면만 가리면 열어 둔 탭에서 댓글·주문이 계속 들어온다 — 복원 중에 들어온
+     * 그 글이 정확히 사라지는 글이다. 읽기는 막지 않는다: 관리 화면이 이 API 로
+     * 돌아가고, 점검 중에 운영자가 보는 것이 그 화면이다.
+     */
+    if (isWrite(req.method) && !bypassesMaintenance(user?.role) && (await this.maintenance.isOn())) {
+      throw new ServiceUnavailableException(msg("err.maintenance"));
+    }
+
     try {
       const result = await match.handler({
         params: match.params,
@@ -267,11 +281,12 @@ export class PluginsController {
   @Get("admin/dashboard")
   @UseGuards(AdminGuard)
   async adminDashboard() {
-    const [core, cards, businessMissing, themeProblem] = await Promise.all([
+    const [core, cards, businessMissing, themeProblem, maintenanceOn] = await Promise.all([
       this.coreStats(),
       this.loader.collectDashboardCards(),
       this.businessInfoMissing(),
       this.themes.problem(),
+      this.maintenance.isOn(),
     ]);
     const setup = this.setupWarnings();
     /*
@@ -292,6 +307,18 @@ export class PluginsController {
      * 디자인이 아니다. 500 으로 죽지 않으니 아무도 신고하지 않고, 운영자는
      * "왜 이렇게 허전하지" 하고 지나간다.
      */
+    /*
+     * 점검 모드가 켜져 있다.
+     *
+     * 이 기능의 진짜 위험은 켜는 것이 아니라 **끄는 것을 잊는 것**이다. 운영자는
+     * 관리 화면으로 들어오므로 점검 화면을 보지 못한다 — 손님만 며칠째 503 을 본다.
+     */
+    if (maintenanceOn) {
+      setup.push({
+        id: "maintenanceOn",
+        docs: "https://github.com/bonjin-app/brick/blob/main/docs/operations.md",
+      });
+    }
     if (themeProblem) {
       setup.push({
         id: "themeNotRendering",

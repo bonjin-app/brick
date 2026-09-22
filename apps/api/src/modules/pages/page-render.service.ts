@@ -15,6 +15,8 @@ import type { BlockRenderContext, CacheProvider } from "@brick/core";
 import { PluginLoaderService } from "../plugins/plugin-loader.service.js";
 import { ThemesService } from "../themes/themes.service.js";
 import { NotificationsService } from "../notifications/notifications.service.js";
+import { bypassesMaintenance } from "../site/maintenance-mode.js";
+import { MaintenanceModeService } from "../site/maintenance-mode.service.js";
 import { DB, CACHE } from "../../runtime.module.js";
 
 /** 페이지 빌더 저장 단위: 블록 트리 노드 */
@@ -59,6 +61,7 @@ export class PageRenderService {
     private readonly loader: PluginLoaderService,
     private readonly themes: ThemesService,
     private readonly notifications: NotificationsService,
+    private readonly maintenance: MaintenanceModeService,
   ) {}
 
   async renderPath(
@@ -80,6 +83,17 @@ export class PageRenderService {
     const path = rawPath.replace(/^\/+|\/+$/g, "") || "home";
     const query = opts.query ?? {};
     const user = opts.user ?? null;
+
+    /*
+     * 점검 모드 — 손님에게는 여기서 끝난다.
+     *
+     * 렌더 캐시보다 **앞**이다: 캐시된 정상 페이지가 점검 중에 나가면 막은
+     * 의미가 없고, 반대로 점검 화면이 캐시에 들어가 점검이 끝난 뒤에도
+     * 남아서도 안 된다(아래에서 캐시하지 않는다).
+     */
+    if (!bypassesMaintenance(user?.role) && (await this.maintenance.isOn())) {
+      return this.renderMaintenance();
+    }
 
     /**
      * 캐시 정책 — 유출을 막는 것이 성능보다 우선이다.
@@ -115,6 +129,35 @@ export class PageRenderService {
       await this.cache.setWithTags(cacheKey, result, ["pages", `page:${result.slug ?? path}`], 300);
     }
     return result;
+  }
+
+  /**
+   * 점검 화면.
+   *
+   * 테마로 그린다 — 손님이 보던 사이트의 얼굴 그대로가 낫다. 테마가 깨져
+   * 있으면 내장 레이아웃이 받는다(ThemesService 의 폴백).
+   * **캐시하지 않는다**: 점검을 끄는 순간 손님이 정상 화면을 봐야 한다.
+   */
+  private async renderMaintenance(): Promise<RenderedPage> {
+    const site = await this.siteInfo();
+    const t = makeTranslator({ locale: site.locale, catalogs: CORE_CATALOGS });
+    const custom = await this.maintenance.message();
+    const title = t("maintenance.title");
+    const html = await this.themes.render("page", {
+      locale: site.locale,
+      t: catalogToTree(t, CORE_MESSAGE_KEYS),
+      guest: true,
+      user: null,
+      headerActions: [],
+      site,
+      // 점검 중에는 메뉴를 그리지 않는다 — 눌러도 전부 같은 화면이다
+      menu: [],
+      title,
+      pageTitle: `${title} — ${site.name}`,
+      blocksHtml: `<p>${escapeHtml(custom || t("maintenance.body"))}</p>`,
+      seo: { noindex: true },
+    });
+    return { html, status: 503 };
   }
 
   /** 페이지/테마/플러그인 변경 시 호출 — 렌더 캐시 무효화 */

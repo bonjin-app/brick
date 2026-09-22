@@ -53,6 +53,14 @@ const EDITABLE_SETTINGS: Record<string, "string" | "boolean"> = {
   "site.registration_open": "boolean",
   // 검색 노출 차단 — robots.txt 가 읽는다 (SeoService)
   "site.seo_noindex": "boolean",
+  /*
+   * 점검 모드 — 손님에게 503, 운영자는 통과.
+   *
+   * 복원·대규모 이전·판올림처럼 "지금 들어오면 그 글이 사라지는" 동안 쓴다.
+   * 운영 문서가 복원 절차에서 이것을 쓰라고 안내한다(docs/operations.md).
+   */
+  "site.maintenance": "boolean",
+  "site.maintenance_message": "string",
   // 관리자·운영자에게 2단계 인증을 요구한다.
   // 켜면 그 역할은 스스로 해제할 수 없다 — 해제할 수 있으면 강제가 아니다.
   "security.require_2fa_for_staff": "boolean",

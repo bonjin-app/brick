@@ -96,7 +96,7 @@ export default function AdminSettingsPage() {
     <div style={{ maxWidth: 760 }}>
       <h1>{t("settings.title")}</h1>
 
-      <Card id="general" title={t("settings.general")} keys={["site.topbar", "site.topbar_url", "site.name", "site.description", "site.og_image", "site.locale", "site.seo_noindex"]}>
+      <Card id="general" title={t("settings.general")} keys={["site.topbar", "site.topbar_url", "site.name", "site.description", "site.og_image", "site.locale", "site.seo_noindex", "site.maintenance", "site.maintenance_message"]}>
         <Field label={t("settings.siteName")}>
           <input style={input} value={str("site.name")} onChange={(e) => set("site.name", e.target.value)} />
         </Field>
@@ -129,6 +129,11 @@ export default function AdminSettingsPage() {
           </select>
         </Field>
         <Check k="site.seo_noindex" label={t("settings.noindex")} hint={t("settings.noindexHint")} />
+        <Check k="site.maintenance" label={t("settings.maintenance")} hint={t("settings.maintenanceHint")} />
+        <Field label={t("settings.maintenanceMessage")} hint={t("settings.maintenanceMessageHint")}>
+          <input style={input} value={str("site.maintenance_message")}
+            onChange={(e) => set("site.maintenance_message", e.target.value)} />
+        </Field>
       </Card>
 
       <Card id="members" title={t("settings.members")} desc={t("settings.membersDesc")}
@@ -185,4 +190,4 @@ export default function AdminSettingsPage() {
 }
 
 /** 서버가 boolean 으로 검증하는 키 — 미설정이면 false 로 보낸다 ("" 를 보내면 400) */
-const BOOLEAN_KEYS = new Set(["site.registration_open", "site.seo_noindex", "security.require_2fa_for_staff", "system.update_check"]);
+const BOOLEAN_KEYS = new Set(["site.registration_open", "site.seo_noindex", "site.maintenance", "security.require_2fa_for_staff", "system.update_check"]);

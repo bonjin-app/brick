@@ -328,6 +328,51 @@ check "끄면 더 세지 않음" \
   "$(psql_one "SELECT total FROM site_visit_daily WHERE visit_day = ${TODAY_SQL}")" "$BEFORE_OFF"
 
 echo
+echo "── 점검 모드 (복원·판올림 동안 손님을 들이지 않는다)"
+#
+# 운영 문서가 복원 절차에서 "가능하면 점검 모드로 돌리거나" 라고 안내하는데
+# **그런 기능이 없었다.** 운영자는 관리 화면을 뒤지다 못 찾고, 결국 손님이 글을
+# 쓰는 중에 복원을 한다 — 그 글은 사라지고, 사라졌다는 사실은 아무도 모른다.
+contains "점검 모드를 켠다" \
+  "$(curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' \
+      -d '{"site.maintenance":true,"site.maintenance_message":"오늘 밤 12시까지 손보고 있습니다."}')" '"ok":true'
+sleep 6  # 점검 여부는 공개 렌더 핫패스라 5초 메모한다
+GUEST_HOME="$(curl -s -o "$TMP/m.json" -w '%{http_code}' "$API/api/render/page?path=")"
+check "손님에게는 페이지가 열리지 않는다" "$(python3 -c "
+import json,sys;print(json.load(open('$TMP/m.json'))['status'])")" "503"
+MHTML="$(python3 -c "import json;print(json.load(open('$TMP/m.json'))['html'])")"
+contains "운영자가 적은 문구가 나온다" "$MHTML" "오늘 밤 12시까지"
+contains "사이트 얼굴 그대로 (테마로 그린다)" "$MHTML" "doctype html"
+# 200 에 점검 문구를 담으면 검색엔진이 그것을 사이트 내용으로 색인한다
+contains "검색엔진에 올리지 않는다" "$MHTML" 'name="robots"'
+absent "점검 중에는 메뉴를 그리지 않는다 (눌러도 전부 같은 화면이다)" "$MHTML" 'aria-current'
+
+echo "── 운영자는 통과한다 (점검 중에 고치러 들어가는 사람이다)"
+check "관리자는 평소처럼 본다" \
+  "$(curl -s -b "$CK" "$API/api/render/page?path=" | jq_get "['status']")" "200"
+
+echo "── 화면만 가리면 열어 둔 탭에서 계속 들어온다"
+# 복원 중에 들어온 그 글이 정확히 사라지는 글이다
+# 없는 경로는 점검과 무관하게 404 다 — 실제로 있는 쓰기 경로로 확인한다
+check "손님의 쓰기는 막힌다" \
+  "$(code -X POST "$API/api/plugins/brick-site/popups/00000000-0000-0000-0000-000000000000/click" \
+      -H 'content-type: application/json' -d '{}')" "503"
+check "읽기는 막지 않는다 (관리 화면이 이 API 로 돈다)" \
+  "$(code -b "$CK" "$API/api/plugins/brick-site/admin/visits")" "200"
+
+echo "── 켜 두고 잊는 것이 이 기능의 진짜 위험이다"
+contains "대시보드가 알려 준다" "$(curl -s -b "$CK" "$API/api/admin/dashboard")" '"maintenanceOn"'
+
+echo "── 끄면 곧바로 돌아온다"
+curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' \
+  -d '{"site.maintenance":false}' >/dev/null
+sleep 6
+check "손님이 다시 볼 수 있다" \
+  "$(curl -s "$API/api/render/page?path=" | jq_get "['status']")" "200"
+contains "대시보드 경고도 사라진다" \
+  "$(curl -s -b "$CK" "$API/api/admin/dashboard" | python3 -c "
+import sys,json;print([w['id'] for w in json.load(sys.stdin).get('setup',[])])")" "["
+
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 # 실측을 남긴다(설정됐을 때만) — README 의 표가 실제와 같은지 CI 가 대조한다.
 # 표의 숫자는 조용히 썩는다: 단언을 더해도 아무도 그 줄을 고치지 않는다.

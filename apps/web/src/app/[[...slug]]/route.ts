@@ -76,6 +76,17 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ slug?: stri
     const value = res.headers.get(name);
     if (value) headers.set(name, value);
   }
+  /*
+   * 점검 모드(503)에는 `Retry-After` 를 붙인다.
+   *
+   * 503 만 보내면 크롤러는 "언제 다시 올지" 를 스스로 정한다 — 그 사이 색인이
+   * 흔들릴 수 있다. "삼십 분 뒤" 라고 말해 주면 색인을 건드리지 않고 기다린다.
+   * 점검 화면은 어떤 캐시에도 담기면 안 된다: 끄는 순간 정상 화면이 나가야 한다.
+   */
+  if (status === 503) {
+    headers.set("retry-after", "1800");
+    headers.set("cache-control", "no-store");
+  }
   return compressedResponse(req, Buffer.from(html, "utf8"), { status, headers });
 }
 

@@ -24,7 +24,7 @@ interface Dashboard {
    * 번역이 없는 경고를 **빌드가 막는다** — 배너가 키 이름을 그대로 보여주는 일이 없다.
    */
   setup?: Array<{
-    id: "mailOff" | "siteUrlLocal" | "trustProxyOff" | "businessInfoMissing" | "pluginNotRunning" | "themeNotRendering";
+    id: "mailOff" | "siteUrlLocal" | "trustProxyOff" | "businessInfoMissing" | "pluginNotRunning" | "themeNotRendering" | "maintenanceOn";
     docs: string;
   }>;
 }
