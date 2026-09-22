@@ -141,6 +141,15 @@ LIST="$(render -b "$MEMBER" "$API/api/render/page?path=notifications")"
 contains "새로 온 것은 표시해서 보여준다" "$LIST" "새 알림"
 contains "내용이 나온다" "$LIST" "알림 시험 글"
 contains "누르면 갈 곳이 있다" "$LIST" "/board/free/$POST_ID#comments"
+# 줄 **전체**가 누르는 자리여야 한다.
+#
+# 제목만 링크로 두었더니 폰에서 높이가 19px 이었다 — 저장소의 화면 점검
+# 도구(scripts/ui-audit.js)가 28px 미만으로 잡았다. 알림함은 "눌러서 가는 것"
+# 이 전부인 화면이라 이게 곧 기능이다.
+contains "줄 전체가 누르는 자리다" "$LIST" 'class="brick-noti-link"'
+contains "그 안에 본문과 시각이 함께 들어 있다" "$LIST" 'brick-noti-link"'
+# 테마는 이 목록을 꾸미지 않는다 — 블록이 자기 스타일을 들고 온다
+contains "목록이 자기 스타일을 들고 온다" "$LIST" ".brick-noti-item"
 check "검색엔진에 올리지 않는다 (남의 알림함이 색인되면 안 된다)" \
   "$(echo "$LIST" | grep -c 'name="robots"' || true)" "1"
 
@@ -166,7 +175,8 @@ done
 check "서른다섯 건이 안 읽음" \
   "$(curl -s -b "$MEMBER" "$API/api/notifications?limit=1" | jget "['unread']")" "35"
 LIST3="$(render -b "$MEMBER" "$API/api/render/page?path=notifications")"
-check "화면에는 서른 건" "$(grep -o 'brick-noti-item' <<< "$LIST3" | wc -l | tr -d ' ')" "30"
+# 클래스 이름만 세면 **스타일 안의 같은 이름까지** 함께 세어진다(실제로 34가 나왔다)
+check "화면에는 서른 건" "$(grep -o '<li class="brick-noti-item' <<< "$LIST3" | wc -l | tr -d ' ')" "30"
 check "보여준 것만 읽음으로 넘어간다 (다섯 건은 그대로)" \
   "$(curl -s -b "$MEMBER" "$API/api/notifications?limit=1" | jget "['unread']")" "5"
 contains "이어 읽는 길이 있다 (자바스크립트 없이)" "$LIST3" "이전 알림 보기"

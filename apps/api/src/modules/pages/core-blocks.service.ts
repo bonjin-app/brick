@@ -520,20 +520,26 @@ ${eyebrow ? `    <span class="brick-eyebrow">${esc(eyebrow)}</span>
         });
         if (!items.length) return `<p>${esc(t("noti.empty"))}</p>`;
 
+        /*
+         * **한 항목 전체가 누르는 자리다.**
+         *
+         * 제목만 링크로 두었더니 폰에서 높이가 19px 이었다 — 손가락으로 누르기에
+         * 얇다(저장소의 화면 점검 도구가 28px 미만을 잡는다). 알림함은 "눌러서
+         * 가는 것" 이 전부인 화면이라, 줄 전체를 링크로 만들고 여백으로 키운다.
+         */
         const rows = items
           .map((n) => {
             const when = n.createdAt instanceof Date ? n.createdAt.toISOString().slice(0, 16).replace("T", " ") : "";
-            const title = n.url
-              ? `<a href="${esc(n.url)}">${esc(n.title)}</a>`
-              : esc(n.title);
-            return `
-    <li class="brick-noti-item${n.read ? "" : " is-new"}">
-      <span class="brick-noti-head">${title}${
-        // 표시는 CSS 없이도 보여야 한다 — 테마는 이 목록을 따로 꾸미지 않는다
+            const inner = `
+      <span class="brick-noti-head">${esc(n.title)}${
+        // 표시는 CSS 없이도 보여야 한다 — 테마는 이 목록을 꾸미지 않는다
         n.read ? "" : ` <strong class="brick-noti-new">${esc(t("noti.new"))}</strong>`
       }</span>
-      ${n.body ? `<p class="brick-noti-body">${esc(n.body)}</p>` : ""}
-      <time class="brick-noti-time">${esc(when)}</time>
+      ${n.body ? `<span class="brick-noti-body">${esc(n.body)}</span>` : ""}
+      <time class="brick-noti-time">${esc(when)}</time>`;
+            return `
+    <li class="brick-noti-item${n.read ? "" : " is-new"}">
+      ${n.url ? `<a class="brick-noti-link" href="${esc(n.url)}">${inner}\n      </a>` : inner}
     </li>`;
           })
           .join("");
@@ -553,7 +559,32 @@ ${eyebrow ? `    <span class="brick-eyebrow">${esc(eyebrow)}</span>
           items.length === limit && oldest
             ? `<p class="brick-noti-more"><a href="?before=${esc(oldest)}">${esc(t("noti.older"))}</a></p>`
             : "";
-        return `<ul class="brick-noti-list">${rows}</ul>${more}`;
+        return `<ul class="brick-noti-list">${rows}</ul>${more}
+<style>
+.brick-noti-list { list-style: none; padding: 0; margin: 0; }
+.brick-noti-item { border-bottom: 1px solid var(--color-line, #e4e4ea); }
+/* 줄 전체가 누르는 자리 — 폰에서 제목 한 줄만 누르게 두면 19px 이다 */
+.brick-noti-link, .brick-noti-item > .brick-noti-head {
+  display: block; padding: 14px 4px; text-decoration: none; color: inherit;
+}
+.brick-noti-link:hover { background: var(--color-bg-soft, #f6f6f9); }
+.brick-noti-head { display: block; font-weight: 600; line-height: 1.5; }
+.brick-noti-link .brick-noti-head { color: var(--color-primary-text, #b63a2e); }
+/* 안 읽은 것은 왼쪽 선으로도 알린다 — 색과 글자 둘 다에 기대지 않는다 */
+.brick-noti-item.is-new { border-left: 3px solid var(--color-primary, #cf4437); }
+.brick-noti-item.is-new .brick-noti-link { padding-left: 12px; }
+.brick-noti-new {
+  display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 700; vertical-align: 2px;
+  background: var(--color-primary-soft, #fdeeec); color: var(--color-primary-text, #b63a2e);
+}
+.brick-noti-body {
+  display: block; margin: 4px 0 0; color: var(--color-text-soft, #45454f);
+  font-size: 14px; line-height: 1.6; white-space: pre-line;
+}
+.brick-noti-time { display: block; margin-top: 6px; color: var(--color-muted, #6c6c7a); font-size: 12.5px; }
+.brick-noti-more { margin: 16px 0 0; }
+</style>`;
       },
     });
 
