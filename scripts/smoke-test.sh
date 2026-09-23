@@ -34,6 +34,19 @@ absent()   { [[ "$2" != *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 가 있음)"; }
 code() { curl -s -o /dev/null -w "%{http_code}" "$@"; }
 jq_get() { python3 -c "import sys,json;d=json.load(sys.stdin);print(d$1)" 2>/dev/null || echo ""; }
 
+psql_q() {
+  node -e '
+    const { Client } = require("'"$ROOT"'/apps/api/node_modules/pg");
+    (async () => {
+      const c = new Client(process.env.DATABASE_URL);
+      await c.connect();
+      const r = await c.query(process.argv[1]);
+      console.log(r.rows.map((x) => Object.values(x).join("|")).join("\n"));
+      await c.end();
+    })().catch((e) => { console.error(e.message); process.exit(1); });
+  ' "$1"
+}
+
 echo "▶ Brick 스모크 테스트"
 
 # 매번 빈 DB에서 시작한다 — 스모크 테스트는 "설치 전" 상태를 전제로 한다.
@@ -542,6 +555,62 @@ check "업로드 파일도 그대로 immutable" \
   "$(curl -s -o /dev/null -w '%header{cache-control}' "$API$MEDIA_URL")" "public, max-age=31536000, immutable"
 check "스탬프 없는 자산은 1시간" "$(curl -s -o /dev/null -w '%header{cache-control}' "$API/themes/default/assets/style.css")" "public, max-age=3600"
 check "텍스트 응답은 br 로 압축된다" "$(curl -s -o /dev/null -w '%header{content-encoding}' -H 'Accept-Encoding: br, gzip' "$API/themes/default/assets/style.css")" "br"
+
+echo "── 중단된 작업을 되찾는가 (재시작 한 번에 메일 캠페인이 영구히 멈추면 안 된다)"
+#
+# 작업을 집으면 status 가 'running' 이 되는데 되돌리는 곳이 없었다. 프로세스가
+# 그 사이에 죽으면 그 행은 영원히 'running' 이고, 폴링은 'pending' 만 보므로
+# 아무도 다시 집지 않는다. 캠페인은 '발송중'에서 멈춘 채 한 통도 안 나가고
+# 다시 시작하려 하면 "이미 발송 중입니다" 로 거절당한다 — 오류도 경고도 없이.
+#
+# 프로세스를 죽이는 대신 **죽은 워커가 남긴 것과 같은 행**을 직접 넣는다.
+# (1) 살아 있는 워커의 작업부터 본다. **혼자** 두고, 차례도 가장 앞에 둔다 —
+#     다른 행들과 같이 넣으면 폴링이 한 번에 하나만 집으므로 "아직 차례가 오지
+#     않았을 뿐"인 것을 "보호했다"로 잘못 읽는다(실제로 처음에 그랬다: 임대를
+#     0초로 망가뜨려도 이 단언이 통과했다).
+ALIVE="$(node -e 'console.log(require("node:crypto").randomUUID())')"
+psql_q "INSERT INTO queue_jobs (id, name, payload, status, attempts, max_attempts, run_at, locked_at)
+        VALUES ('$ALIVE', 'mailing.send', '{\"campaignId\":\"00000000-0000-0000-0000-000000000000\"}',
+                'running', 1, 3, now() - interval '1 hour', now())" >/dev/null
+sleep 5   # 폴링 주기(1초)의 다섯 배 — 임대가 제 역할을 못 하면 이 사이에 빼앗긴다
+check "살아 있는 워커의 작업은 빼앗지 않는다 (같은 메일이 두 번 나간다)" \
+  "$(psql_q "SELECT status FROM queue_jobs WHERE id='$ALIVE'")" "running"
+
+# (2) 죽은 워커가 남긴 것과 같은 행 — 임대가 만료된 running.
+#     캠페인 id 는 없는 값이라 핸들러가 곧바로 돌아온다 — 검증 대상은 발송이
+#     아니라 **되찾는가** 이다.
+STUCK="$(node -e 'console.log(require("node:crypto").randomUUID())')"
+psql_q "INSERT INTO queue_jobs (id, name, payload, status, attempts, max_attempts, run_at, locked_at)
+        VALUES ('$STUCK', 'mailing.send', '{\"campaignId\":\"00000000-0000-0000-0000-000000000000\"}',
+                'running', 1, 3, now() - interval '10 minutes', now() - interval '10 minutes')" >/dev/null
+# (3) 되살릴 수 없는 작업 — 시도 횟수를 다 썼다. 되찾지 못한다고 running 에
+#     두면 고치려던 문제로 되돌아간다.
+DEAD="$(node -e 'console.log(require("node:crypto").randomUUID())')"
+psql_q "INSERT INTO queue_jobs (id, name, payload, status, attempts, max_attempts, run_at, locked_at)
+        VALUES ('$DEAD', 'mailing.send', '{}', 'running', 3, 3, now() - interval '10 minutes', now() - interval '10 minutes')" >/dev/null
+
+for i in $(seq 1 40); do
+  ST="$(psql_q "SELECT status FROM queue_jobs WHERE id='$STUCK'")"
+  [[ "$ST" == "done" ]] && break
+  sleep 1
+done
+check "임대가 끊긴 작업을 되찾아 끝냈다" "$ST" "done"
+ATT="$(psql_q "SELECT attempts FROM queue_jobs WHERE id='$STUCK'")"
+check "되찾을 때 시도 횟수를 센다 (작업이 워커를 죽이면 무한히 되살지 않는다)" "$ATT" "2"
+for i in $(seq 1 40); do
+  DS="$(psql_q "SELECT status FROM queue_jobs WHERE id='$DEAD'")"
+  [[ "$DS" == "failed" ]] && break
+  sleep 1
+done
+check "되살릴 수 없는 작업은 실패로 끝낸다 (running 에 갇히지 않는다)" "$DS" "failed"
+contains "실패 이유를 남긴다 (운영자가 무슨 일이 났는지 볼 수 있어야 한다)" \
+  "$(psql_q "SELECT last_error FROM queue_jobs WHERE id='$DEAD'")" "워커가 중단된"
+
+# (4) 하트비트 — 살아서 **오래** 일하는 작업을 지키는가. 위의 핸들러는 즉시 끝나서
+#     이것을 드러내지 못한다. 임대를 1초로 줄이고 4초짜리 작업을 두 워커에 건다.
+#     하트비트가 없으면 이 작업은 네 번 실행된다 — 수만 명 발송이 네 번 나가는 것이다.
+check "오래 걸리는 작업도 한 번만 실행된다 (하트비트가 임대를 지킨다)" \
+  "$(node "$ROOT/scripts/queue-lease-probe.mjs" 300 1000)" "runs=1 status=done"
 
 echo "── DB 순단을 견디는가 (PostgreSQL 재시작·풀 순단에 사이트가 내려가면 안 된다)"
 # 작업 큐는 1초마다 DB 를 폴링한다. 그 질의가 던지는 오류를 흘리면 미처리 프로미스 거부가

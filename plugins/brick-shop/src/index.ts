@@ -1769,7 +1769,9 @@ export default definePlugin(async (ctx) => {
     if (result.sent > 0 || result.failed > 0) {
       ctx.logger.log(`재입고 알림: ${result.sent}건 발송, ${result.failed}건 실패`);
     }
-    // 다음 스윕을 예약한다. 실패해도 큐가 재시도하므로 사슬이 끊기지 않는다.
+    // 다음 스윕을 예약한다. 실패하면 큐가 재시도하고(3회), 워커가 중단되면
+    // 임대가 끊긴 뒤 다른 워커가 되찾는다. 그래도 사슬이 끊기면 다음 부팅이
+    // 아래에서 다시 씨를 뿌린다 — 정기 작업은 멈춘 것이 보이지 않기 때문이다.
     await ctx.queue.enqueue(RESTOCK_QUEUE_JOB, {}, { delaySeconds: 300, maxAttempts: 3 });
   });
   // 활성화 직후 한 번 예약한다 (이미 예약된 것이 있어도 스윕은 멱등하다)

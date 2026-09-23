@@ -1,8 +1,8 @@
 import { pgTable, varchar, jsonb, timestamp, integer, text, index, uuid } from "drizzle-orm/pg-core";
 
 /**
- * Redis 없이 동작하기 위한 인프라 테이블들.
- * REDIS_URL이 설정되면 이 테이블들 대신 Redis 구현이 쓰인다.
+ * Redis 없이 동작하기 위한 인프라 테이블들 — 캐시·큐·잠금이 전부 여기 있다.
+ * (Redis 구현은 아직 없다. `REDIS_URL` 을 설정해도 이 테이블들이 쓰인다.)
  */
 
 /** PostgresCacheProvider 백엔드. UNLOGGED로 생성해 WAL 부하를 없앤다(마이그레이션에서 처리) */
@@ -29,9 +29,14 @@ export const queueJobs = pgTable(
     maxAttempts: integer("max_attempts").notNull().default(3),
     runAt: timestamp("run_at", { withTimezone: true }).notNull().defaultNow(),
     lastError: text("last_error"),
+    /** 임대 시각 — 일하는 워커가 주기적으로 갱신한다. 끊기면 다른 워커가 되찾는다 */
+    lockedAt: timestamp("locked_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("queue_poll_idx").on(t.status, t.name, t.runAt)],
+  (t) => [
+    index("queue_poll_idx").on(t.status, t.name, t.runAt),
+    index("queue_lease_idx").on(t.status, t.lockedAt),
+  ],
 );
 
 /**

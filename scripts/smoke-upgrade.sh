@@ -69,12 +69,21 @@ MIG_OLD="$TMP/migrations-old"
 mkdir -p "$MIG_OLD"
 
 # ── "옛 버전" 만들기 ────────────────────────────────
-# 최신 마이그레이션 셋을 빼고 복사한다. 그것이 이 검사가 재현하려는 상황이다:
-# 손님의 사이트는 늘 **한두 버전 뒤**에 있고, 그 위로 새 파일이 올라간다.
-HOLD_BACK="${BRICK_UPGRADE_HOLD_BACK:-3}"
+# 기준 마이그레이션까지만 복사한다. 그것이 이 검사가 재현하려는 상황이다:
+# 손님의 사이트는 늘 **몇 버전 뒤**에 있고, 그 위로 새 파일이 올라간다.
+#
+# 경계를 **개수**가 아니라 **이름**으로 둔다. 전에는 "마지막 3개" 였는데, 아래의
+# 데이터 이관 검사는 0011 이 **새 쪽**에 있어야 의미가 있다 — 0011 이 옛 쪽에서
+# 먼저 돌면 이관할 옛 값이 없다. 그래서 마이그레이션을 하나 더할 때마다 창이
+# 밀려 0011 이 옛 쪽으로 넘어갔고(0014 를 더한 날), 수트는 그날부터 이관 검사
+# 하나를 조용히 실패하고 있었다. 이름으로 고정하면 새 마이그레이션은 전부 새
+# 쪽에 들어가므로, **앞으로 추가되는 것도 매번 업그레이드 경로로 검증된다.**
+OLD_UNTIL="${BRICK_UPGRADE_OLD_UNTIL:-0010}"
 ALL_FILES=$(ls "$MIG_ALL"/*.sql | sort)
 TOTAL=$(echo "$ALL_FILES" | wc -l | tr -d ' ')
-KEEP=$(( TOTAL - HOLD_BACK ))
+# "0010_" 로 시작하는 파일까지 포함한다 ('~' 는 ASCII 에서 영문·밑줄보다 뒤다)
+KEEP=$(echo "$ALL_FILES" | xargs -n1 basename | awk -v u="$OLD_UNTIL" '$0 <= u "~"' | wc -l | tr -d ' ')
+HOLD_BACK=$(( TOTAL - KEEP ))
 [[ "$KEEP" -lt 1 ]] && { echo "마이그레이션이 너무 적어 시험할 수 없습니다"; exit 1; }
 echo "$ALL_FILES" | head -n "$KEEP" | xargs -I{} cp {} "$MIG_OLD/"
 NEW_FILES=$(echo "$ALL_FILES" | tail -n "$HOLD_BACK" | xargs -n1 basename | tr '\n' ' ')
@@ -138,6 +147,15 @@ check "동의 이력 1건" "$BEFORE_AGREE" "1"
 # 0011 이 그것을 고치는가이므로, 그 시점의 값으로 되돌려 놓는다.
 psql_q "UPDATE agreements SET title='광고성 정보 수신 동의 (선택)' WHERE kind='marketing'" >/dev/null
 check "옛 약관 제목" "$(psql_q "SELECT title FROM agreements WHERE kind='marketing'")" "광고성 정보 수신 동의 (선택)"
+# 옛 버전에서 **이미 멈춰 있던** 작업을 재현한다 — 발송 도중 재시작되어 'running' 에
+# 갇힌 캠페인. 옛 스키마에는 임대 시각(locked_at)이 없다. 0016 이 그것을 채우지 않으면
+# 임대 만료 조건(locked_at < now() - 임대)이 NULL 이라 거짓이 되어, 고친 코드로 올려도
+# **바로 그 행**은 영원히 갇힌다 — 업그레이드를 기다린 사람의 캠페인이 정확히 그것이다.
+STUCK_OLD="$(node -e 'console.log(require("node:crypto").randomUUID())')"
+psql_q "INSERT INTO queue_jobs (id, name, payload, status, attempts, max_attempts, run_at, created_at)
+        VALUES ('$STUCK_OLD', 'mailing.send', '{\"campaignId\":\"00000000-0000-0000-0000-000000000000\"}',
+                'running', 1, 3, now() - interval '1 day', now() - interval '1 day')" >/dev/null
+check "옛 버전에서 갇힌 작업" "$(psql_q "SELECT status FROM queue_jobs WHERE id='$STUCK_OLD'")" "running"
 
 # ── 새 버전을 올린다 ───────────────────────────────
 echo "── 새 버전으로 재시작 (마이그레이션 자동 적용)"
@@ -180,6 +198,12 @@ echo "── 새 마이그레이션이 실제로 무언가 했는가"
 # 기존 행에 실제로 적용되는지를 이 한 건으로 확인한다.
 check "데이터 이관도 적용됨 (약관 제목)" \
   "$(psql_q "SELECT title FROM agreements WHERE kind='marketing'")" "광고성 정보 수신 동의"
+for i in $(seq 1 40); do
+  SO="$(psql_q "SELECT status FROM queue_jobs WHERE id='$STUCK_OLD'")"
+  [[ "$SO" == "done" ]] && break
+  sleep 1
+done
+check "업그레이드 전에 갇혀 있던 작업도 올린 뒤 되찾는다 (0016 보정)" "$SO" "done"
 
 echo "── 두 번 올려도 안전한가 (재시작·재배포)"
 stop_api
