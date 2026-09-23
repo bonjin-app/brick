@@ -96,6 +96,10 @@ stub_fail_next() {  # stub_fail_next <n> — 다음 n 건의 청구를 실패시
     -d "{\"failNextCharges\":$1}" >/dev/null
 }
 sweep() { curl -s -b "$CK" -X POST "$SHOP/admin/subscriptions/sweep"; }
+stub_delay() {  # stub_delay <ms> — 빌링 청구 응답을 늦춘다 (실제 PG 는 1~3초 걸린다)
+  curl -s -X POST "http://127.0.0.1:$PG_PORT/__control" -H 'content-type: application/json' \
+    -d "{\"chargeDelayMs\":$1}" >/dev/null
+}
 time_travel() {  # time_travel <slug 무관: 구독 id> <interval SQL>
   psql_q "UPDATE shop_subscriptions SET next_charge_at = now() - interval '$2' WHERE id = '$1'" >/dev/null
 }
@@ -237,6 +241,40 @@ check "청구는 1건뿐" "$(pg_charge_count)" "$((B2 + 1))"
 NEXT_FUTURE="$(psql_q "SELECT (next_charge_at > now()) FROM shop_subscriptions WHERE id='$SUB_ID'")"
 check "다음 결제일이 미래다" "$NEXT_FUTURE" "true"
 
+echo "── 청구가 동시에 두 번 돌아도 회차는 한 번만 전진한다"
+# 겹치는 길은 흔하다: 관리자의 "지금 청구" 버튼과 10분 주기 작업, 서버 두 대,
+# 그리고 부팅할 때마다 하나씩 늘어나던 주기 작업 사슬. 멱등키 덕분에 카드는 한 번만
+# 긁히지만, 그 뒤가 문제다 — 두 번째 스윕은 같은 구독을 이미 읽어 두었으므로 회차를
+# **한 번 더** 전진시킨다(다음 결제일이 두 주기 뒤로 간다 = 손님이 한 달을 건너뛴다).
+# 실제 PG 호출은 1~3초가 걸리므로 그만큼 늦춰 겹침을 확실히 만든다.
+time_travel "$SUB_ID" "1 hour"
+B_NEXT="$(psql_q "SELECT next_charge_at::text FROM shop_subscriptions WHERE id='$SUB_ID'")"
+B_CYCLE="$(psql_q "SELECT cycle_no FROM shop_subscriptions WHERE id='$SUB_ID'")"
+B_OK="$(psql_q "SELECT count(*) FROM shop_orders WHERE user_id=(SELECT id FROM users WHERE email='a@subs.test') AND payment_status='paid'")"
+stub_delay 1500
+sweep > "$TMP/sweep-a.json" & SW_A=$!
+sleep 0.3
+sweep > "$TMP/sweep-b.json" & SW_B=$!
+wait "$SW_A" "$SW_B"
+stub_delay 0
+check "회차는 한 번만 전진한다" \
+  "$(psql_q "SELECT cycle_no FROM shop_subscriptions WHERE id='$SUB_ID'")" "$((B_CYCLE + 1))"
+check "다음 결제일도 한 주기만 밀린다 (한 달을 건너뛰지 않는다)" \
+  "$(psql_q "SELECT next_charge_at = '$B_NEXT'::timestamptz + CASE interval_unit WHEN 'week' THEN interval '7 days' ELSE interval '1 month' END FROM shop_subscriptions WHERE id='$SUB_ID'")" "true"
+check "겹친 쪽을 실패로 세지 않는다 (구독이 멈추지 않는다)" \
+  "$(psql_q "SELECT status, fail_count FROM shop_subscriptions WHERE id='$SUB_ID'")" "active|0"
+check "결제된 회차 주문이 정확히 하나 늘었다" \
+  "$(psql_q "SELECT count(*) FROM shop_orders WHERE user_id=(SELECT id FROM users WHERE email='a@subs.test') AND payment_status='paid'")" "$((B_OK + 1))"
+CYC_ORDER="$(psql_q "SELECT order_no FROM shop_subscription_events WHERE subscription_id='$SUB_ID' AND kind='charged' AND cycle_no=$((B_CYCLE + 1))")"
+check "그 회차 주문은 결제 완료 상태 그대로 (겹친 쪽이 취소하지 않는다)" \
+  "$(psql_q "SELECT payment_status FROM shop_orders WHERE order_no='$CYC_ORDER'")" "paid"
+# 가장 중요한 불변식 — 돈이 움직였으면 주문도 결제되어 있어야 한다. 이번 사고는
+# 정확히 이것을 깼다: PG 승인 기록(shop_payments.paid)은 있는데 주문은 취소·미결제였고
+# 환불도 없었다. 어느 층의 방어가 뚫리더라도 이 줄은 남아야 한다.
+check "승인된 결제인데 주문이 결제되지 않은 기록이 없다 (긁혔는데 받을 것이 없는 손님)" \
+  "$(psql_q "SELECT count(*) FROM shop_payments p JOIN shop_orders o ON o.id = p.order_id
+             WHERE p.status = 'paid' AND o.payment_status <> 'paid'")" "0"
+
 echo "── 청구액이 달라지면 결제하지 않고 멈춘다"
 PRODUCT_ID="$(psql_q "SELECT id FROM shop_products WHERE slug='milk'")"
 curl -s -b "$CK" -X PUT "$SHOP/admin/products/$PRODUCT_ID" -H 'content-type: application/json' \
@@ -258,7 +296,8 @@ curl -s -b "$CK" -X PUT "$SHOP/admin/products/$PRODUCT_ID" -H 'content-type: app
   -d '{"slug":"milk","name":"우유 구독","price":12000,"stock":50,"status":"selling","free_shipping":true,"sub_interval":"month"}' >/dev/null
 contains "재개" "$(curl -s -b "$A" -X POST "$SHOP/me/subscriptions/$SUB_ID/resume" -H 'content-type: application/json' -d '{}')" '"ok":true'
 contains "재개 즉시 청구 대상이 된다" "$(sweep)" '"charged":1'
-check "회차 4" "$(psql_q "SELECT cycle_no FROM shop_subscriptions WHERE id='$SUB_ID'")" "4"
+# 가입(1) · 스윕(2) · 밀린 회차(3) · 겹친 청구(4) · 재개(5)
+check "회차 5" "$(psql_q "SELECT cycle_no FROM shop_subscriptions WHERE id='$SUB_ID'")" "5"
 
 echo "── 결제 실패: 재시도 → 3연속이면 중지"
 stub_fail_next 9

@@ -612,6 +612,12 @@ contains "실패 이유를 남긴다 (운영자가 무슨 일이 났는지 볼 �
 check "오래 걸리는 작업도 한 번만 실행된다 (하트비트가 임대를 지킨다)" \
   "$(node "$ROOT/scripts/queue-lease-probe.mjs" 300 1000)" "runs=1 status=done"
 
+echo "── 잠금은 잡은 연결에서 풀린다 (한 번에 하나만 돌아야 하는 일 — 정기결제 청구 등)"
+# advisory lock 은 연결 단위다. 풀에 대고 잡고 풀면, 사이에 쿼리가 하나만 끼어도 해제가
+# 다른 연결로 가서 잠금이 남는다 — 플러그인 마이그레이션 잠금이 실제로 그랬다.
+check "잠금 중에 다른 쿼리가 끼어도 해제되고, 잡혀 있는 동안 두 번째는 못 들어온다" \
+  "$(node "$ROOT/scripts/lock-probe.mjs")" "released=true second=blocked after=ok"
+
 echo "── DB 순단을 견디는가 (PostgreSQL 재시작·풀 순단에 사이트가 내려가면 안 된다)"
 # 작업 큐는 1초마다 DB 를 폴링한다. 그 질의가 던지는 오류를 흘리면 미처리 프로미스 거부가
 # 되어 **Node 가 프로세스를 죽인다** — 실제로 그랬다. DB 는 살아 있는데 연결만 끊어 본다.

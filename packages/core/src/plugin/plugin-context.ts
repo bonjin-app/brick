@@ -1,5 +1,6 @@
 import type { CacheProvider } from "../providers/cache.js";
 import type { QueueProvider } from "../providers/queue.js";
+import type { LockProvider } from "../providers/lock.js";
 import type { StorageProvider } from "../providers/storage.js";
 import type { MailProvider } from "../providers/mail.js";
 import type { SmsProvider } from "../providers/sms.js";
@@ -53,6 +54,12 @@ export interface PluginContext {
   readonly hooks: HookBus;
   readonly cache: CacheProvider;
   readonly queue: QueueProvider;
+  /**
+   * 클러스터 전체에서 **한 번에 하나만** 돌아야 하는 일에 쓴다 (정기결제 청구 등).
+   * 큐는 "한 워커가 집는다" 까지만 보장한다 — 같은 작업이 두 개 예약돼 있거나,
+   * 관리자의 "지금 실행" 버튼이 주기 작업과 겹치면 둘 다 돈다.
+   */
+  readonly lock: LockProvider;
   readonly storage: StorageProvider;
   /** 메일 발송 (SMTP 미설정 시 콘솔 출력으로 폴백) */
   readonly mail: MailProvider;

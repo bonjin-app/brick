@@ -150,6 +150,15 @@ export interface PaymentGateway {
     failureReason?: string;
     /** 손님에게 보여도 되는 이유 — 없으면 호출자가 일반 안내를 쓴다 */
     customerReason?: string;
+    /**
+     * PG 가 **같은 멱등키의 요청을 아직 처리 중**이라며 거절했다. 성공도 실패도 아니다.
+     *
+     * 이 세 번째 경우가 계약에 없어서 실패로 뭉뚱그려졌고, 겹쳐 돈 청구 중 늦은 쪽이
+     * 그 회차 주문을 취소했다 — 먼저 간 쪽의 청구는 그 뒤에 승인되었으므로 **카드는
+     * 긁혔는데 주문은 취소되고 환불도 없었다.** 호출자는 이것을 받으면 아무것도
+     * 건드리지 말고 물러나야 한다(먼저 간 쪽이 끝낸다).
+     */
+    pending?: boolean;
   }>;
   cancel(params: {
     providerTid: string;

@@ -170,7 +170,11 @@ async function chargeOrder(
     idempotencyKey: string;
     pointsPort?: PointsPort | null;
   },
-): Promise<{ ok: true } | { ok: false; reason: string; customerReason: string }> {
+): Promise<
+  | { ok: true }
+  | { ok: false; pending: true }
+  | { ok: false; pending?: false; reason: string; customerReason: string }
+> {
   const paymentId = uuidv7();
   await db.execute(sql`
     INSERT INTO shop_payments (id, order_id, provider, status, amount)
@@ -185,6 +189,13 @@ async function chargeOrder(
     orderName: params.orderName,
     idempotencyKey: params.idempotencyKey,
   });
+
+  if (!result.ok && result.pending) {
+    // PG 에 거래가 생기지 않았다 — 이 시도의 기록은 남길 것이 없다. 'failed' 로 두면
+    // 대사(對査) 때 "실패한 결제" 로 읽히고, 'requested' 로 두면 끝나지 않은 결제로 읽힌다.
+    await db.execute(sql`DELETE FROM shop_payments WHERE id = ${paymentId}`);
+    return { ok: false, pending: true };
+  }
 
   if (!result.ok || !result.providerTid) {
     /*
@@ -233,11 +244,42 @@ async function chargeOrder(
     UPDATE shop_orders SET payment_method = ${params.gateway.provider}, updated_at = now()
     WHERE id = ${params.orderId}::uuid
   `);
-  await changeOrderStatus(db, params.orderId, "paid", {
-    // 이력 note 는 저장되는 데이터다 — 번역하지 않는다 (payments.ts 의 같은 주석 참고)
-    note: `정기결제 승인 (${approved.toLocaleString("ko-KR")}원)`,
-    pointsPort: params.pointsPort ?? null,
-  });
+  try {
+    await changeOrderStatus(db, params.orderId, "paid", {
+      // 이력 note 는 저장되는 데이터다 — 번역하지 않는다 (payments.ts 의 같은 주석 참고)
+      note: `정기결제 승인 (${approved.toLocaleString("ko-KR")}원)`,
+      pointsPort: params.pointsPort ?? null,
+    });
+  } catch (err) {
+    /*
+     * **돈은 움직였는데 주문이 결제 상태가 될 수 없다.**
+     *
+     * 청구 도중 그 주문이 취소되면(겹쳐 돈 청구, 운영자의 수동 취소) PG 는 승인했는데
+     * 주문은 취소 상태다. 그대로 두면 손님은 결제되고 받을 것이 없으며, 우리 쪽 화면은
+     * 어디에도 "결제됨" 이라고 말하지 않는다 — 그래서 아무도 환불하지 않는다.
+     * 받을 수 없는 주문의 돈은 돌려준다. 취소 상태가 아닌 다른 이유라면(일시적 DB
+     * 오류 등) 여기서 판단하지 않고 그대로 던진다 — 멀쩡한 결제를 환불하면 안 된다.
+     */
+    const { rows } = await db.execute(sql`SELECT status FROM shop_orders WHERE id = ${params.orderId}::uuid`);
+    if (rows[0]?.status !== "cancelled") throw err;
+    const refund = await params.gateway
+      .cancel({ providerTid: result.providerTid, reason: "주문이 취소된 뒤 승인된 정기결제",
+                idempotencyKey: `${params.idempotencyKey}-orphan` })
+      .catch(() => ({ ok: false as const }));
+    await db.execute(sql`
+      UPDATE shop_payments SET
+        status = ${refund.ok ? "refunded" : "paid"},
+        refunded_amount = ${refund.ok ? approved : 0},
+        failure_reason = ${refund.ok ? "주문이 취소된 뒤 승인되어 전액 환불" : "주문이 취소된 뒤 승인됨 — 환불 실패, 수동 환불 필요"},
+        updated_at = now()
+      WHERE id = ${paymentId}
+    `);
+    // 환불까지 실패하면 사람이 봐야 한다 — 손님의 돈이 우리에게 있다
+    const reason = refund.ok
+      ? "주문이 취소된 뒤 승인되어 환불했습니다."
+      : `주문이 취소된 뒤 승인되었고 환불에 실패했습니다 — 수동 환불이 필요합니다 (거래 ${result.providerTid}).`;
+    return { ok: false, reason, customerReason: t("pay.failed") };
+  }
   return { ok: true };
 }
 
@@ -364,6 +406,11 @@ export async function subscribe(
     pointsPort: params.pointsPort ?? null,
   });
 
+  if (!charged.ok && charged.pending) {
+    // 같은 가입 요청이 이미 청구 중이다(가입마다 새 키라 사실상 재전송뿐이다).
+    // 실패로 처리해 주문을 취소하면 먼저 간 청구가 승인된 뒤 갈 곳이 없다 — 물러난다.
+    throw new ShopError(409, "결제가 처리 중입니다. 잠시 뒤 내 정기배송에서 확인하세요.");
+  }
   if (!charged.ok) {
     // 첫 결제 실패 = 가입 실패. 주문을 취소해 재고를 되돌리고 구독을 지운다.
     // 주문 이력(운영자가 본다)에는 자세한 이유를, 손님에게는 보여도 되는 것만
@@ -403,7 +450,11 @@ async function pauseSubscription(
 }
 
 /**
- * 결제일이 된 구독을 청구한다. 큐 워커 한 곳에서만 돈다.
+ * 결제일이 된 구독을 청구한다.
+ *
+ * "한 번에 하나" 는 호출자가 잠금으로 지킨다(index.ts 의 exclusive). 그래도 여기서
+ * 겹침을 전제로 방어한다 — 잠금이 끊기는 경우(DB 연결 순단으로 세션이 끝나면 잠금도
+ * 풀린다)가 있고, 돈이 걸린 코드는 한 겹으로 두지 않는다.
  *
  * 한 구독의 실패가 다른 구독을 막지 않도록 각각 격리해 처리한다.
  */
@@ -525,6 +576,12 @@ export async function chargeDueSubscriptions(
           pointsPort: deps.pointsPort ?? null,
         });
 
+        if (!result.ok && result.pending) {
+          // 다른 청구가 같은 회차를 처리 중이다 — 주문도 실패 기록도 건드리지 않는다.
+          // 여기서 주문을 취소한 것이 "긁혔는데 취소된" 사고의 직접 원인이었다.
+          deps.log(`정기결제: ${subId} ${nextCycle}회차는 다른 청구가 처리 중이라 건너뜁니다`);
+          continue;
+        }
         if (!result.ok) {
           await abandonCycleOrder(db, order.id, `정기결제 실패: ${result.reason}`);
           // 로그에는 자세히, 손님이 읽는 곳(이력·멈춤 사유·메일)에는 보여도 되는 것만
@@ -540,15 +597,19 @@ export async function chargeDueSubscriptions(
       // 성공 — 다음 예정일로 전진. 밀린 회차는 몰아 청구하지 않는다:
       // 예정일+주기가 이미 지났으면 지금부터 한 주기 뒤로 잡는다.
       const step = sql.raw(String(sub.interval_unit) === "week" ? "interval '7 days'" : "interval '1 month'");
-      await db.execute(sql`
+      // **읽었던 회차일 때만** 전진한다. 겹쳐 돈 청구가 이미 전진시켰다면 여기서 한 번
+      // 더 밀면 다음 결제일이 두 주기 뒤로 간다 — 손님이 한 달을 건너뛴다.
+      const { rows: advanced } = await db.execute(sql`
         UPDATE shop_subscriptions
         SET cycle_no = ${nextCycle}, fail_count = 0,
             next_charge_at = CASE
               WHEN next_charge_at + ${step} > now() THEN next_charge_at + ${step}
               ELSE now() + ${step}
             END
-        WHERE id = ${subId}::uuid
+        WHERE id = ${subId}::uuid AND cycle_no = ${cycleNo}
+        RETURNING id
       `);
+      if (!advanced.length) continue;
       // ON CONFLICT: 크래시 복구 재실행에서 같은 회차 이벤트가 이미 있을 수 있다
       await db.execute(sql`
         INSERT INTO shop_subscription_events (id, subscription_id, cycle_no, kind, order_no, detail)

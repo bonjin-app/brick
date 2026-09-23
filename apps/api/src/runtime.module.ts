@@ -3,6 +3,7 @@ import { createDb } from "@brick/database";
 import { HookBus, LogMailProvider, DisabledCaptchaProvider } from "@brick/core";
 import { PostgresCacheProvider } from "./providers/postgres-cache.provider.js";
 import { PostgresQueueProvider } from "./providers/postgres-queue.provider.js";
+import { PostgresLockProvider } from "./providers/postgres-lock.provider.js";
 import { LocalStorageProvider } from "./providers/local-storage.provider.js";
 import { SmtpMailProvider } from "./providers/smtp-mail.provider.js";
 import { SvgCaptchaProvider } from "./providers/svg-captcha.provider.js";
@@ -13,6 +14,7 @@ export const DB = "BRICK_DB";
 export const HOOKS = "BRICK_HOOKS";
 export const CACHE = "BRICK_CACHE";
 export const QUEUE = "BRICK_QUEUE";
+export const LOCK = "BRICK_LOCK";
 export const STORAGE = "BRICK_STORAGE";
 export const MAIL = "BRICK_MAIL";
 export const CAPTCHA = "BRICK_CAPTCHA";
@@ -52,6 +54,11 @@ export const ENV = "BRICK_ENV";
       inject: [DB],
     },
     {
+      provide: LOCK,
+      useFactory: (db: unknown) => new PostgresLockProvider(db as never),
+      inject: [DB],
+    },
+    {
       provide: STORAGE,
       useFactory: (env: ReturnType<typeof loadEnv>) => new LocalStorageProvider(env.uploadsDir),
       inject: [ENV],
@@ -75,6 +82,6 @@ export const ENV = "BRICK_ENV";
       inject: [ENV, CACHE],
     },
   ],
-  exports: [DB, HOOKS, CACHE, QUEUE, STORAGE, MAIL, CAPTCHA, ENV],
+  exports: [DB, HOOKS, CACHE, QUEUE, LOCK, STORAGE, MAIL, CAPTCHA, ENV],
 })
 export class RuntimeModule {}

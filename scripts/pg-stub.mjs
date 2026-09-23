@@ -47,6 +47,15 @@ const billingKeys = new Map();
 let failNextCharges = 0;
 /** 멱등키 → 응답 (같은 키로 다시 오면 그대로 돌려준다) */
 const idempotent = new Map();
+/**
+ * 처리 중인 멱등키. 실제 PG 는 같은 키의 요청이 **아직 처리 중**이면 저장된 응답이
+ * 없으므로 재생하지 못하고 "처리 중" 오류(409)로 거절한다. 스텁이 이것을 흉내 내지
+ * 않으면 동시 요청이 둘 다 승인되어, 실제로는 일어나지 않는 이중 청구를 보거나 —
+ * 더 나쁘게는 실제로 일어나는 "두 번째 요청의 실패" 를 못 본다.
+ */
+const inflight = new Set();
+/** 테스트 제어: 빌링 청구 응답을 늦춘다 (실제 PG 호출은 1~3초 걸린다) */
+let chargeDelayMs = 0;
 
 function record(entry) {
   appendFileSync(OUT, `${JSON.stringify(entry)}\n`);
@@ -68,7 +77,7 @@ const server = createServer((req, res) => {
     // 무한히 받지 않는다
     if (raw.length > 1_000_000) req.destroy();
   });
-  req.on("end", () => {
+  req.on("end", async () => {
     let body = {};
     try {
       body = raw ? JSON.parse(raw) : {};
@@ -178,8 +187,9 @@ const server = createServer((req, res) => {
 
     // ── 테스트 제어 (실제 PG 에는 없다 — 스텁 전용) ──
     if (req.method === "POST" && path === "/__control") {
-      failNextCharges = Math.max(0, Number(body.failNextCharges ?? 0));
-      return send(res, 200, { ok: true, failNextCharges });
+      if (body.failNextCharges !== undefined) failNextCharges = Math.max(0, Number(body.failNextCharges));
+      if (body.chargeDelayMs !== undefined) chargeDelayMs = Math.max(0, Number(body.chargeDelayMs));
+      return send(res, 200, { ok: true, failNextCharges, chargeDelayMs });
     }
 
     // ── 빌링키 발급 (정기결제) ──
@@ -225,6 +235,17 @@ const server = createServer((req, res) => {
       if (idemKey && idempotent.has(idemKey)) {
         return send(res, 200, idempotent.get(idemKey));
       }
+      if (idemKey && inflight.has(idemKey)) {
+        return send(res, 409, { code: "IDEMPOTENT_REQUEST_PROCESSING", message: "이전 요청이 아직 처리 중입니다." });
+      }
+      if (idemKey) inflight.add(idemKey);
+      try {
+        if (chargeDelayMs) await new Promise((r) => setTimeout(r, chargeDelayMs));
+        return billingCharge();
+      } finally {
+        if (idemKey) inflight.delete(idemKey);
+      }
+      function billingCharge() {
       const knownCustomer = billingKeys.get(billingKey);
       if (!knownCustomer) {
         return send(res, 404, { code: "NOT_FOUND_BILLING_KEY", message: "등록되지 않은 빌링키입니다." });
@@ -249,6 +270,7 @@ const server = createServer((req, res) => {
       };
       if (idemKey) idempotent.set(idemKey, response);
       return send(res, 200, response);
+      }
     }
 
     record({ kind: "unknown", method: req.method, path });

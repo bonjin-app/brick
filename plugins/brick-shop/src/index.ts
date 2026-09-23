@@ -1463,18 +1463,35 @@ export default definePlugin(async (ctx) => {
     return await deleteGrade(db, req.params.id);
   });
 
+  /*
+   * 주기 작업은 클러스터에서 **한 번에 하나만** 돈다.
+   *
+   * 큐는 "한 워커가 집는다" 까지만 보장한다. 같은 작업이 두 개 예약돼 있거나
+   * (부팅할 때마다 사슬의 첫 작업을 다시 심는다), 관리자의 "지금 실행" 이 주기
+   * 작업과 겹치거나, 서버가 두 대면 둘 다 돈다. 정기결제에서 그 겹침은 **카드는
+   * 긁혔는데 주문은 취소되고 환불도 없는** 결과를 냈다 — 늦게 온 쪽이 PG 의
+   * "처리 중" 응답을 실패로 읽고 그 회차 주문을 취소했다(subscriptions.ts).
+   *
+   * 돌려받는 null 은 "다른 곳에서 이미 돌고 있다" 이다. 주기 작업은 조용히
+   * 건너뛰고(다음 차례에 돈다), 관리자 버튼은 그렇다고 말한다.
+   */
+  const exclusive = <T>(job: string, fn: () => Promise<T>) =>
+    ctx.lock.withLock(`brick-shop:${job}`, fn);
+
   /** 지금 재계산 — 등급을 만들거나 경계를 바꾼 직후 확인하는 데 쓴다 */
   ctx.registerRoute("POST", "/admin/grades/recompute", async (req) => {
     requireAdmin(req);
-    return await recomputeGrades(db);
+    const result = await exclusive("grades", () => recomputeGrades(db));
+    if (!result) throw new ShopError(409, "등급 재계산이 이미 진행 중입니다. 끝난 뒤 다시 시도하세요.");
+    return result;
   });
 
   // 주기 재계산 — 재입고 스윕과 같은 자기 재예약 방식 (ADR-64).
   // 등급은 실시간일 필요가 없다: "이번 기간의 내 등급"으로 안내되는 값이고,
   // 주문 중에 바뀌면 장바구니와 결제 화면의 할인이 달라져 혼란스럽다.
   ctx.queue.process(GRADE_RECOMPUTE_JOB, async () => {
-    const result = await recomputeGrades(db);
-    if (result.assigned > 0) {
+    const result = await exclusive("grades", () => recomputeGrades(db));
+    if (result && result.assigned > 0) {
       ctx.logger.log(`회원 등급 재계산: ${result.assigned}명 배정`);
     }
     await ctx.queue.enqueue(GRADE_RECOMPUTE_JOB, {}, { delaySeconds: 21600, maxAttempts: 3 });
@@ -1718,7 +1735,9 @@ export default definePlugin(async (ctx) => {
    */
   ctx.registerRoute("POST", "/admin/restock-sweep", async (req) => {
     requireAdmin(req);
-    return await runRestockSweep();
+    const result = await runRestockSweep();
+    if (!result) throw new ShopError(409, "재입고 알림 발송이 이미 진행 중입니다. 끝난 뒤 다시 시도하세요.");
+    return result;
   });
 
   /**
@@ -1728,7 +1747,9 @@ export default definePlugin(async (ctx) => {
    * 각각에 알림을 붙이면 반드시 하나를 빠뜨린다. 주기적으로 "대기자가 있는데
    * 재고가 있는 조합"을 찾으면 경로와 무관하게 잡힌다 (restock.ts).
    */
-  const runRestockSweep = async (): Promise<{ groups: number; sent: number; failed: number }> => {
+  const runRestockSweep = () => exclusive("restock", restockSweepOnce);
+  // 겹쳐 돌면 같은 대기자에게 알림 메일이 두 번 간다 — 위의 exclusive 로만 부른다
+  async function restockSweepOnce(): Promise<{ groups: number; sent: number; failed: number }> {
     const targets = await sweepRestock(db);
     if (!targets.length) return { groups: 0, sent: 0, failed: 0 };
 
@@ -1757,7 +1778,7 @@ export default definePlugin(async (ctx) => {
       failed += result.failed;
     }
     return { groups: targets.length, sent, failed };
-  };
+  }
 
   // 큐 워커가 스윕을 돌리고 **스스로 다시 예약한다.**
   //
@@ -1766,7 +1787,7 @@ export default definePlugin(async (ctx) => {
   // 큐를 쓰면 잡이 한 워커에서만 실행된다.
   ctx.queue.process(RESTOCK_QUEUE_JOB, async () => {
     const result = await runRestockSweep();
-    if (result.sent > 0 || result.failed > 0) {
+    if (result && (result.sent > 0 || result.failed > 0)) {
       ctx.logger.log(`재입고 알림: ${result.sent}건 발송, ${result.failed}건 실패`);
     }
     // 다음 스윕을 예약한다. 실패하면 큐가 재시도하고(3회), 워커가 중단되면
@@ -1929,8 +1950,7 @@ export default definePlugin(async (ctx) => {
     return await cancelSubscription(db, { id: req.params.id, actor: "admin" });
   });
 
-  const runSubscriptionSweep = async () => {
-    return await chargeDueSubscriptions(db, {
+  const runSubscriptionSweep = () => exclusive("subscription", async () => chargeDueSubscriptions(db, {
       settings: await settings(),
       pointsPort: pointsPort(),
       // 메일과 알림함 두 곳으로 — 정기배송은 회원만 하므로 알림함이 항상 닿는다
@@ -1944,20 +1964,21 @@ export default definePlugin(async (ctx) => {
           url: "/shop/subscriptions",
         }).then(() => true),
       log: (m) => ctx.logger.warn(m),
-    });
-  };
+    }));
 
   /** 수동 스윕 (운영·테스트용) — 주기 스윕과 같은 코드를 돈다 */
   ctx.registerRoute("POST", "/admin/subscriptions/sweep", async (req) => {
     requireAdmin(req);
-    return await runSubscriptionSweep();
+    const result = await runSubscriptionSweep();
+    if (!result) throw new ShopError(409, "정기결제 청구가 이미 진행 중입니다. 끝난 뒤 다시 시도하세요.");
+    return result;
   });
 
-  // 회차 청구도 재입고와 같은 자기 재예약 큐 잡이다 — 한 워커에서만 돌고,
-  // 플러그인을 비활성화하면 함께 멈춘다. setInterval 은 둘 다 못 한다.
+  // 회차 청구도 재입고와 같은 자기 재예약 큐 잡이다 — 플러그인을 비활성화하면
+  // 함께 멈춘다(setInterval 은 못 한다). "한 번에 하나" 는 큐가 아니라 exclusive 가 지킨다.
   ctx.queue.process(SUBSCRIPTION_QUEUE_JOB, async () => {
     const result = await runSubscriptionSweep();
-    if (result.due > 0) {
+    if (result && result.due > 0) {
       ctx.logger.log(
         `정기결제: 대상 ${result.due} · 성공 ${result.charged} · 실패 ${result.failed} · 중지 ${result.paused}`,
       );
@@ -1972,11 +1993,13 @@ export default definePlugin(async (ctx) => {
   // 그날 생일자를 통째로 놓친다.
   ctx.registerRoute("POST", "/admin/coupons/birthday-sweep", async (req) => {
     requireAdmin(req);
-    return await issueBirthdayCoupons(db);
+    const result = await exclusive("birthday", () => issueBirthdayCoupons(db));
+    if (!result) throw new ShopError(409, "생일 쿠폰 지급이 이미 진행 중입니다. 끝난 뒤 다시 시도하세요.");
+    return result;
   });
   ctx.queue.process(BIRTHDAY_QUEUE_JOB, async () => {
-    const result = await issueBirthdayCoupons(db);
-    if (result.issued > 0) ctx.logger.log(`생일 쿠폰: ${result.issued}장 지급`);
+    const result = await exclusive("birthday", () => issueBirthdayCoupons(db));
+    if (result && result.issued > 0) ctx.logger.log(`생일 쿠폰: ${result.issued}장 지급`);
     await ctx.queue.enqueue(BIRTHDAY_QUEUE_JOB, {}, { delaySeconds: 6 * 3600, maxAttempts: 3 });
   });
   await ctx.queue.enqueue(BIRTHDAY_QUEUE_JOB, {}, { delaySeconds: 120, maxAttempts: 3 });

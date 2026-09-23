@@ -980,5 +980,10 @@
   "제1기 전체 (1~6월)": "H1 total (Jan–Jun)",
   "제2기 예정 (7~9월)": "H2 estimate (Jul–Sep)",
   "제2기 확정 (10~12월)": "H2 final (Oct–Dec)",
-  "제2기 전체 (7~12월)": "H2 total (Jul–Dec)"
+  "제2기 전체 (7~12월)": "H2 total (Jul–Dec)",
+  "등급 재계산이 이미 진행 중입니다. 끝난 뒤 다시 시도하세요.": "Grade recalculation is already running. Please try again when it finishes.",
+  "재입고 알림 발송이 이미 진행 중입니다. 끝난 뒤 다시 시도하세요.": "Restock notifications are already being sent. Please try again when it finishes.",
+  "정기결제 청구가 이미 진행 중입니다. 끝난 뒤 다시 시도하세요.": "Subscription billing is already running. Please try again when it finishes.",
+  "생일 쿠폰 지급이 이미 진행 중입니다. 끝난 뒤 다시 시도하세요.": "Birthday coupons are already being issued. Please try again when it finishes.",
+  "결제가 처리 중입니다. 잠시 뒤 내 정기배송에서 확인하세요.": "Your payment is still being processed. Please check My Subscriptions in a moment."
 }

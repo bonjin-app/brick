@@ -304,6 +304,8 @@ export default definePlugin(async (ctx) => {
       if (!res.ok) {
         return {
           ok: false,
+          // 같은 멱등키의 요청이 아직 처리 중 — 실패가 아니다(먼저 간 요청이 끝낸다)
+          pending: res.data.code === "IDEMPOTENT_REQUEST_PROCESSING",
           failureReason: String(res.data.message ?? `청구 실패 (HTTP ${res.status})`),
           customerReason: customerSafe(res),
           raw: sanitize(res.data),

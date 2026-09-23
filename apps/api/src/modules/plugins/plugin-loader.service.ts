@@ -9,10 +9,10 @@ import { eq, sql } from "drizzle-orm";
 import type { BrickDb } from "@brick/database";
 import { installedPlugins, siteSettings } from "@brick/database";
 import type { PluginManifest } from "@brick/shared";
-import type { PluginContext, PluginInstance, BlockDefinition, PluginRouteHandler, PluginDb, AdminResource, HookBus, CacheProvider, QueueProvider, StorageProvider, MailProvider, CaptchaProvider, PersonalDataEraser, SitemapSource,
+import type { PluginContext, PluginInstance, BlockDefinition, PluginRouteHandler, PluginDb, AdminResource, HookBus, CacheProvider, QueueProvider, LockProvider, StorageProvider, MailProvider, CaptchaProvider, PersonalDataEraser, SitemapSource,
   SearchSource, LinkTargetSource, DashboardCard, HeaderAction, PluginScreen, Locale, MessageCatalog } from "@brick/core";
 import { AVAILABLE_LOCALES, DEFAULT_LOCALE, makeTranslator, normalizeLocale } from "@brick/core";
-import { DB, HOOKS, CACHE, QUEUE, STORAGE, MAIL, CAPTCHA, ENV } from "../../runtime.module.js";
+import { DB, HOOKS, CACHE, QUEUE, LOCK, STORAGE, MAIL, CAPTCHA, ENV } from "../../runtime.module.js";
 import type { BrickEnv } from "../../config/env.js";
 import { ImageService } from "../images/image.service.js";
 import { CspService } from "../security/csp.service.js";
@@ -136,6 +136,7 @@ export class PluginLoaderService implements OnModuleInit {
     @Inject(HOOKS) private readonly hooks: HookBus,
     @Inject(CACHE) private readonly cache: CacheProvider,
     @Inject(QUEUE) private readonly queue: QueueProvider,
+    @Inject(LOCK) private readonly lock: LockProvider,
     @Inject(STORAGE) private readonly storage: StorageProvider,
     @Inject(MAIL) private readonly mail: MailProvider,
     private readonly notifications: NotificationsService,
@@ -613,6 +614,7 @@ export class PluginLoaderService implements OnModuleInit {
       hooks: this.hooks,
       cache: this.cache,
       queue: this.queue,
+      lock: this.lock,
       storage: this.storage,
       mail: this.mail,
       notify: (input) => this.notifications.notify(input),
@@ -893,21 +895,13 @@ export class PluginLoaderService implements OnModuleInit {
     if (!files.length) return;
 
     const { sql } = await import("drizzle-orm");
-    const LOCK_KEY = 74200002; // brick plugin migration advisory lock (코어는 ...01)
-    const deadline = Date.now() + 60_000;
-    for (;;) {
-      const got = await this.db.execute(sql`SELECT pg_try_advisory_lock(${LOCK_KEY}) AS locked`);
-      if ((got as unknown as { rows: Array<{ locked: boolean }> }).rows?.[0]?.locked) break;
-      if (Date.now() >= deadline) {
-        throw new Error(
-          `플러그인 마이그레이션 락을 60초 안에 얻지 못했습니다 (${pluginName}).\n` +
-            `  다른 인스턴스가 마이그레이션 중이거나, 이전 프로세스가 락을 쥔 채 남아 있습니다.`,
-        );
-      }
-      await new Promise((r) => setTimeout(r, 300));
-    }
-
-    try {
+    /*
+     * 잠금은 LockProvider 가 **전용 연결**에서 잡고 푼다. 전에는 풀에 대고
+     * try_lock 과 unlock 을 따로 보냈는데, 그 사이 다른 쿼리가 하나만 끼어도
+     * 해제가 다른 연결로 가서 실패하고 잠금은 남았다(재 보니 그랬다). 부팅 중에는
+     * 요청과 다른 플러그인의 쿼리가 늘 끼어든다.
+     */
+    const done = await this.lock.withLock("plugin-migrations", async () => {
       for (const file of files) {
         const id = `${pluginName}:${file}`;
         // plugin_migrations 테이블로 멱등 보장
@@ -920,8 +914,13 @@ export class PluginLoaderService implements OnModuleInit {
         });
         this.logger.log(`migration applied: ${id}`);
       }
-    } finally {
-      await this.db.execute(sql`SELECT pg_advisory_unlock(${LOCK_KEY})`).catch(() => undefined);
+      return { ok: true } as const;
+    }, { waitMs: 60_000 });
+    if (!done) {
+      throw new Error(
+        `플러그인 마이그레이션 락을 60초 안에 얻지 못했습니다 (${pluginName}).\n` +
+          `  다른 인스턴스가 마이그레이션 중입니다. 잠시 뒤 다시 시작하세요.`,
+      );
     }
   }
 }
