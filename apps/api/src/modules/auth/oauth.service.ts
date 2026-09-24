@@ -479,7 +479,7 @@ export function safeNext(value: unknown): string {
   const v = String(value ?? "").trim();
   // "//evil.com" 은 브라우저가 프로토콜 상대 URL로 읽어 외부로 나간다
   if (!v.startsWith("/") || v.startsWith("//")) return "/";
-  if (v.includes("\\") || /[ -]/.test(v)) return "/";
+  if (v.includes("\\") || /[\x00-\x1f]/.test(v)) return "/";
   return v.slice(0, 500);
 }
 

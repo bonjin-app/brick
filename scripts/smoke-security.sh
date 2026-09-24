@@ -440,6 +440,13 @@ for i in $(seq 1 40); do
 done
 [[ -n "$BULK" ]] && ok "대량 생성은 결국 막힌다 (${BULK}번째)" || bad "대량 생성이 막히지 않는다"
 
+echo "── 로그인 뒤 돌아갈 주소는 같은 사이트의 경로만 (열린 리다이렉트)"
+# "/\evil.example"·"/<탭>/evil.example" 이 "//" 만 막는 문자열 규칙을 지나 다른 사이트로 갔다.
+# 웹의 실제 검사 함수를 Node 의 같은 WHATWG URL 해석기로 부른다.
+check "우회 주소는 모두 거절하고 정상 경로는 받는다" \
+  "$(node --experimental-strip-types --no-warnings "$ROOT/scripts/safe-path-probe.ts")" \
+  '["/account?tab=orders#top","거절","거절","거절","거절","거절","거절","거절"]'
+
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 # 실측을 남긴다(설정됐을 때만) — README 의 표가 실제와 같은지 CI 가 대조한다.
 # 표의 숫자는 조용히 썩는다: 단언을 더해도 아무도 그 줄을 고치지 않는다.

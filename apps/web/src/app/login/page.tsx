@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { SocialButtons } from "../../components/SocialButtons";
 import { AuthShell, authButton, authInput, authLabel, authLink } from "../../components/AuthShell";
 import { useT } from "../../lib/i18n";
+import { sameOriginPath } from "../../lib/safe-path";
 
 /** 공개 로그인 — 로그인 후 홈으로 이동한다 (관리자 로그인은 /admin/login) */
 export default function LoginPage() {
@@ -145,8 +146,9 @@ const AUTH_PATHS = /^\/(login|register|forgot-password|reset-password|admin\/log
  */
 function safeNext(): string {
   if (typeof window === "undefined") return "/";
-  const next = new URLSearchParams(window.location.search).get("next") ?? "";
-  if (/^\/(?!\/)/.test(next) && !AUTH_PATHS.test(next)) return next;
+  // 문자열 규칙("//" 만 막기)은 "/\\evil.example" 에 뚫렸다 — safe-path.ts 참고
+  const next = sameOriginPath(new URLSearchParams(window.location.search).get("next"), window.location.origin);
+  if (next && !AUTH_PATHS.test(next)) return next;
   try {
     const ref = document.referrer ? new URL(document.referrer) : null;
     if (ref && ref.origin === window.location.origin && !AUTH_PATHS.test(ref.pathname)) {

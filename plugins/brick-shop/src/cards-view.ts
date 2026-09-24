@@ -71,12 +71,17 @@ const cardsScript = (t: (k: string, p?: Record<string, string | number>) => stri
    * 정기배송 신청 화면이 카드가 없으면 여기로 보내는데(주소의 next), 등록을 마치고
    * 이 화면에 남으면 손님은 자기가 무엇을 하려 했는지부터 다시 찾아야 한다.
    *
-   * 열린 리다이렉트를 만들지 않는다: 같은 사이트의 경로("/…")만 받는다.
-   * "//evil.example" 은 브라우저에게 다른 사이트이므로 첫 글자만 보면 안 된다.
+   * 열린 리다이렉트를 만들지 않는다: 같은 사이트의 경로("/…")만 받는다. 문자열 규칙
+   * ("//" 만 막기)은 "/\\evil.example" 에 뚫렸다 — 브라우저는 역슬래시를 슬래시로 읽는다.
+   * 브라우저의 해석기로 풀어 보고 출처가 같을 때만 받는다(apps/web/src/lib/safe-path.ts 와 같은 규칙).
    */
   function safeNext(){
     var n = new URLSearchParams(location.search).get('next') || '';
-    return n.charAt(0) === '/' && n.charAt(1) !== '/' ? n : '';
+    if (n.charAt(0) !== '/') return '';
+    try {
+      var u = new URL(n, location.origin);
+      return u.origin === location.origin ? u.pathname + u.search + u.hash : '';
+    } catch (e) { return ''; }
   }
 
   function msgBox(){ return document.querySelector('.brick-cards-msg'); }
