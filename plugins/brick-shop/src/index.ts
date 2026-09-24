@@ -7,6 +7,8 @@ import { DEFAULT_SETTINGS, ORDER_STATUS, PRODUCT_STATUS_LABEL, ShopError, STATUS
 import { quote } from "./pricing.js";
 import { addToCart, clearCart, getCartItems, updateCartItem, type CartOwner } from "./cart.js";
 import { changeOrderStatus, createOrder, onOrderTransition, type PointsPort } from "./orders.js";
+import { cancelUnpaidOrders, depositDeadline } from "./unpaid.js";
+import { formatDue } from "./order-mail.js";
 import { bankTransferGateway, confirmPayment, gateways, refundPayment, registerGateway } from "./payments.js";
 import { CASH_RECEIPT_RESOURCE, CATEGORY_RESOURCE, COLLECTION_RESOURCE, GRADE_RESOURCE, COUPON_RESOURCE, INQUIRY_RESOURCE,
          ORDER_RESOURCE, PRODUCT_RESOURCE, RESTOCK_DEMAND_RESOURCE, RETURN_RESOURCE, REVIEW_RESOURCE,
@@ -138,6 +140,7 @@ export default definePlugin(async (ctx) => {
         siteUrl: ctx.site.url,
         siteName: await ctx.site.name(),
         bankAccount: s.bankAccount,
+        depositDays: s.depositDays,
         sms: s.notifyOrderSms,
         log: (m) => ctx.logger.warn(m),
       }, { orderId, status, kind });
@@ -449,7 +452,10 @@ export default definePlugin(async (ctx) => {
      * 한 번 더 내야 하나 싶게 만든다.
      */
     const needsDeposit = order.status === "pending" && order.payment_method === "bank_transfer";
-    const bankAccount = needsDeposit ? (await settings()).bankAccount : "";
+    const shopSettings = await settings();
+    const bankAccount = needsDeposit ? shopSettings.bankAccount : "";
+    // 입금 기한 — 메일과 같은 계산. 지나면 자동 취소되므로 이 화면이 말해야 한다
+    const due = needsDeposit ? depositDeadline(order.created_at as Date, shopSettings.depositDays) : null;
     /*
      * 현금영수증 신청 가능 여부.
      *
@@ -480,6 +486,7 @@ export default definePlugin(async (ctx) => {
       order, items, events,
       statusLabel: STATUS_LABEL[order.status as OrderStatus],
       ...(bankAccount ? { bankAccount } : {}),
+      ...(due ? { depositDue: formatDue(due) } : {}),
       cashReceipt,
       payable,
       // 결제창에 뜨는 이름 — 주문번호만 보내면 손님은 무엇을 사는지 알 수 없다
@@ -1799,6 +1806,27 @@ export default definePlugin(async (ctx) => {
   // 않는다 — 전에는 부팅할 때마다 사슬이 하나씩 늘어 같은 일을 되풀이했다.
   await ctx.queue.enqueue(RESTOCK_QUEUE_JOB, {}, { delaySeconds: 60, maxAttempts: 3, dedupeKey: RESTOCK_QUEUE_JOB });
 
+  // ── 미결제 주문 정리 (unpaid.ts) ────────────────────
+  // 결제창을 닫은 주문과 입금하지 않은 무통장 주문이 재고를 영원히 붙잡지 않게 한다.
+  // 주기 작업의 규칙은 docs/plugin-development.md "주기 작업" 그대로다.
+  const UNPAID_JOB = "shop.orders.unpaid";
+  const runUnpaidSweep = () =>
+    exclusive("unpaid", async () => cancelUnpaidOrders(db, await settings(), pointsPort()));
+  ctx.registerRoute("POST", "/admin/orders/unpaid-sweep", async (req) => {
+    requireAdmin(req);
+    const result = await runUnpaidSweep();
+    if (!result) throw new ShopError(409, "미결제 주문 정리가 이미 진행 중입니다. 끝난 뒤 다시 시도하세요.");
+    return result;
+  });
+  ctx.queue.process(UNPAID_JOB, async () => {
+    const result = await runUnpaidSweep();
+    if (result && result.cancelled > 0) {
+      ctx.logger.log(`미결제 주문 자동 취소: ${result.cancelled}건 (${result.orderNos.join(", ")})`);
+    }
+    await ctx.queue.enqueue(UNPAID_JOB, {}, { delaySeconds: 300, maxAttempts: 3, dedupeKey: UNPAID_JOB });
+  });
+  await ctx.queue.enqueue(UNPAID_JOB, {}, { delaySeconds: 120, maxAttempts: 3, dedupeKey: UNPAID_JOB });
+
   // ════════════════════════════════════════════════════
   //  정기결제 — 카드는 PG 에, 해지는 한 클릭에 (subscriptions.ts)
   // ════════════════════════════════════════════════════
@@ -2700,6 +2728,9 @@ export default definePlugin(async (ctx) => {
       pageSize: Math.min(60, Math.max(4, Math.floor(Number(b.pageSize ?? DEFAULT_SETTINGS.pageSize)))),
       returnShippingFee: Math.max(0, Math.floor(Number(b.returnShippingFee ?? DEFAULT_SETTINGS.returnShippingFee))),
       addressSearch: b.addressSearch !== false,
+      // 0 = 자동 취소하지 않는다. 상한은 실수로 붙잡힌 재고가 수년 묶이지 않게 한다
+      unpaidCancelMinutes: Math.min(10080, Math.max(0, Math.floor(Number(b.unpaidCancelMinutes ?? DEFAULT_SETTINGS.unpaidCancelMinutes)) || 0)),
+      depositDays: Math.min(30, Math.max(0, Math.floor(Number(b.depositDays ?? DEFAULT_SETTINGS.depositDays)) || 0)),
     };
     await ctx.settings.set("settings", next);
     await ctx.cache.invalidateTag("pages");

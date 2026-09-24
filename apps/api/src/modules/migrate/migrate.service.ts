@@ -1272,7 +1272,7 @@ export class MigrateService {
            payment_method, payment_status, paid_at,
            orderer_name, orderer_phone, orderer_email,
            receiver_name, receiver_phone, postcode, address1, address2, delivery_memo,
-           created_at, updated_at)
+           created_at, updated_at, imported_from)
         VALUES
           (${id}, ${orderNo},
            ${memberMap.get(String(row.mb_id ?? "")) ? sql`${memberMap.get(String(row.mb_id))}::uuid` : sql`NULL`},
@@ -1286,7 +1286,10 @@ export class MigrateService {
            ${String(row.od_b_tel ?? row.od_b_hp ?? row.od_tel ?? "").slice(0, 30) || "-"},
            ${postcode(row as never)}, ${addr.address1}, ${addr.address2},
            ${String(row.od_memo ?? "").slice(0, 500) || null},
-           ${createdAt}, ${createdAt})
+           ${createdAt}, ${createdAt},
+           -- 옮겨 온 주문 표시 — 미결제 자동 취소가 몇 년 전 미입금 주문을 한꺼번에 취소해
+           -- 차감한 적 없는 재고를 되돌리고 옛 손님에게 메일을 보내지 않게 한다
+           'youngcart')
       `);
       orderMap.set(odId, id);
       result.shop.orders += 1;

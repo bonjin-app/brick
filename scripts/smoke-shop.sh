@@ -1075,6 +1075,92 @@ curl -s -X POST "$SHOP/orders" -H 'content-type: application/json' --data-binary
 sleep 1
 absent "끄면 보내지 않는다" "$(cat "$TMP/api.log")" "to: off@mail.test"
 
+echo "── 결제하지 않은 주문은 재고를 영원히 붙잡지 않는다"
+# 주문은 만들 때 재고를 잡는다(초과판매 방지). 그런데 입금하지 않은 무통장 주문,
+# 결제창을 그냥 닫은 주문은 결제대기로 남아 **그 재고를 영원히 붙잡았다** — 되돌리는 길은
+# 운영자가 하나씩 취소하는 것뿐이었다. 한정 수량이면 사지 않은 한 사람 때문에 다른
+# 손님에게 품절로 보인다.
+printf '{"slug":"hold-item","name":"한정 상품","price":9000,"stock":1,"status":"selling"}' > "$TMP/hp.json"
+HPID="$(curl -s -b "$CK" -X POST "$SHOP/admin/products" -H 'content-type: application/json' \
+  --data-binary "@$TMP/hp.json" | /usr/bin/python3 -c "import sys,json;print(json.load(sys.stdin)['id'])")"
+hold_order() {  # hold_order <이메일> → 주문번호
+  printf '{"items":[{"productId":"%s","quantity":1}],"orderer":{"ordererName":"보류손님","ordererPhone":"010-5555-6666","ordererEmail":"%s","postcode":"06236","address1":"서울"}}' "$HPID" "$1" > "$TMP/ho.json"
+  curl -s -X POST "$SHOP/orders" -H 'content-type: application/json' --data-binary "@$TMP/ho.json" \
+    | /usr/bin/python3 -c "import sys,json;print(json.load(sys.stdin).get('orderNo',''))"
+}
+unpaid_sweep() { curl -s -b "$CK" -X POST "$SHOP/admin/orders/unpaid-sweep"; }
+# 그 주문번호의 메일만 본다 — 로그 전체에서 문구를 찾으면 **다른 주문의 메일**을 보고
+# 통과한다(처음에 그랬다: 앞 절이 메일을 꺼 둔 채라 이 절의 주문엔 메일이 없었는데도 통과).
+mail_of() {  # mail_of <주문번호> <제목 조각>
+  /usr/bin/python3 - "$TMP/api.log" "$1" "$2" <<'PYM'
+import re, sys
+log = re.sub(r"\x1b\[[0-9;]*m", "", open(sys.argv[1], encoding="utf-8").read())
+for block in log.split("[brick:mail]")[1:]:
+    head = block.split("\n", 3)
+    if f"({sys.argv[2]})" in block[:400] and sys.argv[3] in block[:400]:
+        print(block[:1500])
+PYM
+}
+# 앞 절("끄면 보내지 않는다")이 주문 메일을 꺼 둔 채 끝난다 — 이 절은 메일을 본다
+curl -s -b "$CK" -X PUT "$SHOP/admin/settings" -H 'content-type: application/json' --data-binary "@$TMP/mailset.json" -o /dev/null
+# 0021 의 채우기가 **우리 주문**을 옮겨 온 것으로 읽으면 그 주문들은 영원히
+# 자동 취소에서 빠진다. 앞 절들이 만든 주문은 전부 그대로여야 한다. 아래에서 기한 경과를
+# 흉내 내려고 created_at 을 과거로 돌리기 **전에** 본다 — 돌린 주문은 id 시각과 주문일이
+# 벌어져 옮겨 온 것처럼 보인다(실제 코드는 주문일을 바꾸지 않는다).
+psql_q "$(sed -n '/^UPDATE shop_orders SET imported_from/,/;$/p' "$ROOT/plugins/brick-shop/migrations/0021_order_origin.sql")" >/dev/null
+check "0021 의 채우기는 우리가 만든 주문을 건드리지 않는다" \
+  "$(psql_q "SELECT count(*) FROM shop_orders WHERE imported_from IS NOT NULL")" "0"
+HNO="$(hold_order hold@mail.test)"
+[[ -n "$HNO" ]] && ok "한정 상품 주문 (무통장)" || bad "한정 상품 주문"
+contains "주문하면 재고를 잡는다" "$(curl -s "$SHOP/products/hold-item")" '"stock":0'
+check "다른 손님에게는 품절" "$(code -X POST "$SHOP/orders" -H 'content-type: application/json' --data-binary "@$TMP/ho.json")" "409"
+# 알리지 않은 기한으로 취소하면 안 된다 — 메일과 주문 조회가 기한을 말해야 한다
+sleep 1
+contains "접수 메일에 입금 기한" "$(mail_of "$HNO" "접수")" "입금 기한:"
+HTOKEN="$(psql_q "SELECT guest_token FROM shop_orders WHERE order_no='$HNO'")"
+contains "주문 조회에도 입금 기한" "$(curl -s "$SHOP/orders/$HNO?token=$HTOKEN")" '"depositDue"'
+absent "기한 전에는 취소하지 않는다" "$(unpaid_sweep)" "$HNO"
+check "기한 전 주문은 그대로 결제대기" "$(psql_q "SELECT status FROM shop_orders WHERE order_no='$HNO'")" "pending"
+
+# 기한(기본 3일)이 지났다
+psql_q "UPDATE shop_orders SET created_at = now() - interval '4 days' WHERE order_no='$HNO'" >/dev/null
+contains "기한이 지나면 취소한다" "$(unpaid_sweep)" "$HNO"
+check "주문은 취소 상태" "$(psql_q "SELECT status FROM shop_orders WHERE order_no='$HNO'")" "cancelled"
+contains "왜 취소됐는지 이력에 남는다" "$(psql_q "SELECT cancelled_reason FROM shop_orders WHERE order_no='$HNO'")" "입금 기한"
+contains "재고가 돌아왔다" "$(curl -s "$SHOP/products/hold-item")" '"stock":1'
+H2="$(hold_order next@mail.test)"
+[[ -n "$H2" ]] && ok "이제 다른 손님이 살 수 있다" || bad "이제 다른 손님이 살 수 있다"
+sleep 1
+contains "손님에게 자동 취소를 알린다 (내가 취소하지 않았는데 로 읽지 않게)" "$(mail_of "$HNO" "취소")" "입금 기한이 지나 주문이 자동으로 취소"
+
+# 끄면 취소하지 않는다
+printf '{"bankAccount":"○○은행 111-222-333 (예금주: 스모크)","shippingFee":3000,"freeShippingOver":50000,"returnShippingFee":3000,"pageSize":20,"notifyOrderMail":true,"depositDays":0}' > "$TMP/off.json"
+curl -s -b "$CK" -X PUT "$SHOP/admin/settings" -H 'content-type: application/json' --data-binary "@$TMP/off.json" -o /dev/null
+psql_q "UPDATE shop_orders SET created_at = now() - interval '40 days' WHERE order_no='$H2'" >/dev/null
+absent "입금 기한을 0 으로 두면 취소하지 않는다" "$(unpaid_sweep)" "$H2"
+curl -s -b "$CK" -X PUT "$SHOP/admin/settings" -H 'content-type: application/json' --data-binary "@$TMP/mailset.json" -o /dev/null
+
+# 결제가 진행 중인 주문은 건드리지 않는다 — PG 승인을 기다리는 사이 취소하면 그 뒤
+# 승인된 돈이 갈 곳이 없다(정기결제에서 실제로 났던 사고)
+H2ID="$(psql_q "SELECT id FROM shop_orders WHERE order_no='$H2'")"
+psql_q "INSERT INTO shop_payments (id, order_id, provider, status, amount)
+        VALUES (gen_random_uuid(), '$H2ID', 'toss', 'requested', 12000)" >/dev/null
+absent "결제 승인을 기다리는 주문은 취소하지 않는다" "$(unpaid_sweep)" "$H2"
+psql_q "DELETE FROM shop_payments WHERE order_id='$H2ID' AND status='requested'" >/dev/null
+
+# 개인결제 주문 — 재고가 없고 청구서가 자기 기한을 갖는다. 게다가 청구서는 만들어 둔 주문을
+# 재사용하므로, 취소하면 그 청구서로는 영원히 결제할 수 없다
+psql_q "UPDATE shop_orders SET is_direct_payment = true WHERE order_no='$H2'" >/dev/null
+absent "개인결제 주문은 취소하지 않는다" "$(unpaid_sweep)" "$H2"
+psql_q "UPDATE shop_orders SET is_direct_payment = false WHERE order_no='$H2'" >/dev/null
+
+# 옮겨 온 주문 — 영카트의 몇 년 전 미입금 주문. 취소하면 차감한 적 없는 재고를 되돌리고
+# 옛 손님에게 취소 메일이 한꺼번에 간다
+psql_q "UPDATE shop_orders SET imported_from = 'youngcart' WHERE order_no='$H2'" >/dev/null
+absent "옮겨 온 옛 주문은 취소하지 않는다" "$(unpaid_sweep)" "$H2"
+psql_q "UPDATE shop_orders SET imported_from = NULL WHERE order_no='$H2'" >/dev/null
+contains "표시를 걷으면 그제야 취소된다 (위의 셋이 조건 때문에 남았다는 증거)" "$(unpaid_sweep)" "$H2"
+
 echo
 echo "── 할 일이 답변만 남았을 때 (주문 상태를 통째로 바꾸므로 **맨 끝**에 둔다)"
 # 앞 절의 주문을 빌려 쓰지 않고 상태를 바꾸는 검사는 뒷 절을 깨뜨린다 — 두 번 겪었다
@@ -1165,3 +1251,4 @@ echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 # 표의 숫자는 조용히 썩는다: 단언을 더해도 아무도 그 줄을 고치지 않는다.
 [[ -n "${BRICK_SMOKE_LOG:-}" ]] && echo "$(basename "${BASH_SOURCE[0]}") ${PASS} ${FAIL}" >> "$BRICK_SMOKE_LOG"
 [[ $FAIL -eq 0 ]] || { echo; echo "── 서버 로그 ──"; tail -40 "$TMP/api.log"; exit 1; }
+

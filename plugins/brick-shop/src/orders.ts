@@ -303,8 +303,17 @@ export async function changeOrderStatus(
     trackingNo?: string | null;
     /** 취소·환불 시 사용 포인트를 되돌리기 위해 필요 */
     pointsPort?: PointsPort | null;
+    /**
+     * 잠근 뒤 본 현재 상태가 이 중 하나일 때만 바꾼다. 아니면 **아무것도 하지 않고**
+     * false 를 돌려준다(오류가 아니다).
+     *
+     * 자동 처리가 쓴다: 미결제 자동 취소는 "아직 결제대기인 주문" 을 골라 두었다가
+     * 취소하는데, 그 사이 결제가 끝났을 수 있다. 결제완료→취소 는 허용된 전이라
+     * 조건 없이 부르면 **결제된 주문을 환불 없이 취소한다.**
+     */
+    onlyFrom?: OrderStatus[];
   } = {},
-): Promise<void> {
+): Promise<boolean> {
   /** 실제로 바뀌었는가 — 멱등 반환과 구분해야 알림이 두 번 가지 않는다 */
   let changed: OrderStatus | null = null;
 
@@ -317,6 +326,7 @@ export async function changeOrderStatus(
     if (!current) throw new ShopError(404, "주문을 찾을 수 없습니다.");
 
     if (current === to) return; // 멱등
+    if (opts.onlyFrom && !opts.onlyFrom.includes(current)) return;
     if (!STATUS_TRANSITIONS[current].includes(to)) {
       /*
        * 화면이 쓰는 말로 말한다.
@@ -438,6 +448,7 @@ export async function changeOrderStatus(
   // 커밋된 뒤에만 알린다 — 되돌려진 전이에 메일이 나가서는 안 된다.
   // 멱등 반환(current === to)이면 changed 가 비어 있어 알리지 않는다.
   if (changed) transitionListener?.({ orderId, from: changed, to });
+  return changed !== null;
 }
 
 /**

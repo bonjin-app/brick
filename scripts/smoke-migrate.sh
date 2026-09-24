@@ -408,6 +408,23 @@ check "미결제 주문은 결제 시각 없음" "$UNPAID_AT" "true"
 METHOD="$(psql_q "SELECT payment_method FROM shop_orders WHERE order_no = '20210601-0000001'")"
 check "결제수단 원문 보존 (통계에 쓴다)" "$METHOD" "카드"
 
+echo "── 옮겨 온 옛 주문은 미결제 자동 취소가 건드리지 않는다"
+# 영카트의 '주문'(미입금)·알 수 없는 상태는 결제대기로 옮겨진다. 몇 년 전 것이라 자동 취소가
+# 첫 정리에서 한꺼번에 취소하면, 차감한 적 없는 재고를 되돌려 재고가 부풀고 옛 손님에게
+# 취소 메일이 한꺼번에 간다.
+check "옮겨 온 주문에 모두 표시가 남는다" \
+  "$(psql_q "SELECT count(*) FROM shop_orders WHERE imported_from IS NULL")" "0"
+absent "옮겨 온 옛 미입금 주문은 자동 취소되지 않는다" \
+  "$(curl -s -b "$CK" -X POST "$API/api/plugins/brick-shop/admin/orders/unpaid-sweep")" "20210605-0000005"
+check "그 주문은 결제대기 그대로" "$(psql_q "SELECT status FROM shop_orders WHERE order_no='20210605-0000005'")" "pending"
+# 이 표시가 생기기 **전에** 옮긴 사이트 — 0021 이 찾아서 채워야 한다. 주문번호 모양으로는
+# 가릴 수 없다(이 시험 데이터부터 우리 번호와 같은 YYYYMMDD-NNNNNNN 이다). id(UUIDv7)에 든
+# 행을 넣은 시각과 원래 주문일의 차이로 찾는다.
+psql_q "UPDATE shop_orders SET imported_from = NULL" >/dev/null
+psql_q "$(sed -n '/^UPDATE shop_orders SET imported_from/,/;$/p' "$ROOT/plugins/brick-shop/migrations/0021_order_origin.sql")" >/dev/null
+check "표시 전에 옮긴 주문도 0021 이 찾아낸다 (id 시각 ≫ 주문일)" \
+  "$(psql_q "SELECT count(*) FROM shop_orders WHERE imported_from IS NULL")" "0"
+
 echo "── 우편번호와 주소"
 ZIP_OLD="$(psql_q "SELECT postcode FROM shop_orders WHERE order_no = '20210601-0000001'")"
 check "구버전 우편번호 (od_zip1+od_zip2)" "$ZIP_OLD" "063-000"

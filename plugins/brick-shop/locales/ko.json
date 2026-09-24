@@ -458,5 +458,10 @@
   "wish.removed": "위시리스트에서 뺐습니다.",
   "wish.soldout": "품절",
   "wish.title": "위시리스트",
-  "wish.unavailable": "판매 종료"
+  "wish.unavailable": "판매 종료",
+  "ordermail.depositDue": "입금 기한: {date}까지 — 기한이 지나면 주문이 자동으로 취소됩니다.",
+  "ordermail.autoCancelledDeposit": "입금 기한이 지나 주문이 자동으로 취소되었습니다. 필요하시면 다시 주문해 주세요.",
+  "ordermail.autoCancelledUnpaid": "결제가 끝나지 않아 주문이 자동으로 취소되었습니다. 필요하시면 다시 주문해 주세요.",
+  "orders.depositDue": "입금 기한",
+  "orders.depositDueNote": "기한이 지나면 주문이 자동으로 취소됩니다."
 }

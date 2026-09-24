@@ -56,6 +56,8 @@ const idempotent = new Map();
 const inflight = new Set();
 /** 테스트 제어: 빌링 청구 응답을 늦춘다 (실제 PG 호출은 1~3초 걸린다) */
 let chargeDelayMs = 0;
+/** 테스트 제어: 결제 승인 응답을 늦춘다 — 그 사이 주문이 취소되는 상황을 만든다 */
+let confirmDelayMs = 0;
 
 function record(entry) {
   appendFileSync(OUT, `${JSON.stringify(entry)}\n`);
@@ -114,6 +116,7 @@ const server = createServer((req, res) => {
       if (idemKey && idempotent.has(idemKey)) {
         return send(res, 200, idempotent.get(idemKey));
       }
+      if (confirmDelayMs) await new Promise((r) => setTimeout(r, confirmDelayMs));
 
       payments.set(paymentKey, { approved, cancelled: 0 });
       const response = {
@@ -189,7 +192,8 @@ const server = createServer((req, res) => {
     if (req.method === "POST" && path === "/__control") {
       if (body.failNextCharges !== undefined) failNextCharges = Math.max(0, Number(body.failNextCharges));
       if (body.chargeDelayMs !== undefined) chargeDelayMs = Math.max(0, Number(body.chargeDelayMs));
-      return send(res, 200, { ok: true, failNextCharges, chargeDelayMs });
+      if (body.confirmDelayMs !== undefined) confirmDelayMs = Math.max(0, Number(body.confirmDelayMs));
+      return send(res, 200, { ok: true, failNextCharges, chargeDelayMs, confirmDelayMs });
     }
 
     // ── 빌링키 발급 (정기결제) ──

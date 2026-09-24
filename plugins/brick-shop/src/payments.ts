@@ -299,7 +299,12 @@ export async function confirmPayment(
     WHERE id = ${String(order.id)}::uuid
   `);
   // 상태 머신을 통해 전이한다 (이력이 남고 규칙이 검증된다)
-  await changeOrderStatus(db, String(order.id), "paid", {
+  //
+  // 결제창에 머무는 사이 주문이 취소됐을 수 있다(운영자의 수동 취소). 그러면 PG 는
+  // 승인했는데 주문은 결제 상태가 될 수 없다 — 그대로 두면 손님은 결제되고 받을 것이
+  // 없으며, 어느 화면도 "결제됨" 이라고 말하지 않아 아무도 환불하지 않는다. 정기결제가
+  // 이 모양으로 사고를 냈다(subscriptions.ts). 받을 수 없는 주문의 돈은 돌려준다.
+  const settled = await changeOrderStatus(db, String(order.id), "paid", {
     /*
      * 이력 note 는 **저장되는 데이터**다 — 화면 문구가 아니다.
      *
@@ -310,7 +315,31 @@ export async function confirmPayment(
     note: `${gateway.displayName} 결제 승인 (${approved.toLocaleString("ko-KR")}원)`,
     actorId: params.actorId ?? null,
     pointsPort: params.pointsPort ?? null,
+    // onlyFrom 을 쓰지 않는다 — 그것은 조건이 안 맞으면 **조용히** false 를 돌려주는데,
+    // 여기서 알아야 하는 것은 바로 그 경우(취소됨)다. 취소→결제완료는 허용되지 않은
+    // 전이라 예외가 나고, 그 예외로 판단한다.
+  }).then(() => true, async (err) => {
+    const { rows: now } = await db.execute(sql`SELECT status FROM shop_orders WHERE id = ${String(order.id)}::uuid`);
+    if (now[0]?.status !== "cancelled") throw err;
+    return false;
   });
+  if (!settled) {
+    const refund = await gateway
+      .cancel({ providerTid: params.providerTid, reason: "주문이 취소된 뒤 승인된 결제",
+                idempotencyKey: `${params.providerTid}-orphan` })
+      .catch(() => ({ ok: false as const }));
+    await db.execute(sql`
+      UPDATE shop_payments SET
+        status = ${refund.ok ? "refunded" : "paid"},
+        refunded_amount = ${refund.ok ? approved : 0},
+        failure_reason = ${refund.ok ? "주문이 취소된 뒤 승인되어 전액 환불" : "주문이 취소된 뒤 승인됨 — 환불 실패, 수동 환불 필요"},
+        updated_at = now()
+      WHERE id = ${paymentId}
+    `);
+    throw new ShopError(409, refund.ok
+      ? "결제하는 사이 주문이 취소되어 결제를 취소했습니다. 다시 주문해 주세요."
+      : "결제하는 사이 주문이 취소되었습니다. 결제 취소가 처리되지 않아 판매자가 확인 후 환불합니다.");
+  }
 
   // 결제 완료 통지 — 포인트 적립 등이 구독한다.
   // 실패해도 결제는 유효하므로 예외를 삼킨다 (적립은 나중에 보정할 수 있다).

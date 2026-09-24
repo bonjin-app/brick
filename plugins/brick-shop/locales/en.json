@@ -985,5 +985,17 @@
   "재입고 알림 발송이 이미 진행 중입니다. 끝난 뒤 다시 시도하세요.": "Restock notifications are already being sent. Please try again when it finishes.",
   "정기결제 청구가 이미 진행 중입니다. 끝난 뒤 다시 시도하세요.": "Subscription billing is already running. Please try again when it finishes.",
   "생일 쿠폰 지급이 이미 진행 중입니다. 끝난 뒤 다시 시도하세요.": "Birthday coupons are already being issued. Please try again when it finishes.",
-  "결제가 처리 중입니다. 잠시 뒤 내 정기배송에서 확인하세요.": "Your payment is still being processed. Please check My Subscriptions in a moment."
+  "결제가 처리 중입니다. 잠시 뒤 내 정기배송에서 확인하세요.": "Your payment is still being processed. Please check My Subscriptions in a moment.",
+  "ordermail.depositDue": "Transfer deadline: {date} — the order is cancelled automatically after that.",
+  "ordermail.autoCancelledDeposit": "The transfer deadline passed, so the order was cancelled automatically. Please order again if you still need it.",
+  "ordermail.autoCancelledUnpaid": "Payment was not completed, so the order was cancelled automatically. Please order again if you still need it.",
+  "orders.depositDue": "Transfer deadline",
+  "orders.depositDueNote": "The order is cancelled automatically after this.",
+  "무통장입금 입금 기한(일)": "Bank transfer deadline (days)",
+  "기한이 지나도록 입금하지 않은 주문은 취소하고 재고를 되돌립니다. 기한은 주문 접수 메일과 주문 조회에 함께 적힙니다. 0 이면 취소하지 않습니다.": "Orders not paid by the deadline are cancelled and their stock is released. The deadline is shown in the order confirmation email and on the order page. 0 turns this off.",
+  "온라인 결제 미완료 주문 정리(분)": "Release unfinished online payments (minutes)",
+  "카드 등으로 결제를 시작하고 끝내지 않은 주문을 이 시간이 지나면 취소해 재고를 되돌립니다. 결제창을 그냥 닫은 주문이 재고를 붙잡아 다른 손님에게 품절로 보이는 것을 막습니다. 0 이면 취소하지 않습니다.": "Orders where a card (or other online) payment was started but never finished are cancelled after this long, releasing their stock — so a closed payment window does not make the item look sold out to everyone else. 0 turns this off.",
+  "미결제 주문 정리가 이미 진행 중입니다. 끝난 뒤 다시 시도하세요.": "Unpaid order cleanup is already running. Please try again when it finishes.",
+  "결제하는 사이 주문이 취소되어 결제를 취소했습니다. 다시 주문해 주세요.": "The order was cancelled while you were paying, so the payment has been cancelled. Please place the order again.",
+  "결제하는 사이 주문이 취소되었습니다. 결제 취소가 처리되지 않아 판매자가 확인 후 환불합니다.": "The order was cancelled while you were paying. The payment could not be cancelled automatically, so the seller will refund it after checking."
 }

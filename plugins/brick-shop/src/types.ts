@@ -113,6 +113,20 @@ export interface ShopSettings {
    * 켜져 있어도 스크립트는 **손님이 버튼을 누른 뒤에야** 내려온다.
    */
   addressSearch: boolean;
+  /**
+   * 온라인 결제를 시작하고 끝내지 않은 주문을 몇 분 뒤 취소할까. 0 이면 취소하지 않는다.
+   *
+   * 주문은 만들 때 재고를 잡는다. 결제창을 그냥 닫은 손님의 주문은 결제대기로 남아
+   * **그 재고를 영원히 붙잡는다** — 한정 수량 상품이면 사지 않은 한 사람 때문에
+   * 다른 손님에게 품절로 보인다. 결제창에서 "취소" 를 눌러 돌아와도 마찬가지였다.
+   */
+  unpaidCancelMinutes: number;
+  /**
+   * 무통장입금 입금 기한(일). 지나면 주문을 취소하고 재고를 되돌린다. 0 이면 취소하지
+   * 않는다. 기한은 주문 접수 메일과 주문 조회에 함께 적힌다 — 알리지 않은 기한으로
+   * 취소하면 안 된다.
+   */
+  depositDays: number;
 }
 
 export const DEFAULT_SETTINGS: ShopSettings = {
@@ -124,6 +138,8 @@ export const DEFAULT_SETTINGS: ShopSettings = {
   notifyOrderSms: false,
   returnShippingFee: 3000,
   addressSearch: true,
+  unpaidCancelMinutes: 60,
+  depositDays: 3,
 };
 
 export function escapeHtml(s: unknown): string {

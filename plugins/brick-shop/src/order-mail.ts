@@ -1,6 +1,8 @@
 import { sql } from "drizzle-orm";
 import { won, type Db, type OrderStatus } from "./types.js";
-import { t } from "./i18n.js";
+import { localeTag, t } from "./i18n.js";
+import { SITE_TZ } from "@brick/plugin-sdk";
+import { depositDeadline } from "./unpaid.js";
 
 /**
  * 주문 안내 메일.
@@ -56,6 +58,8 @@ export interface OrderMailPort {
   siteName: string;
   /** 무통장입금 안내 계좌 (비어 있으면 안내 문구를 넣지 않는다) */
   bankAccount: string;
+  /** 무통장입금 입금 기한(일) — 0 이면 기한 없음. 알리지 않은 기한으로 취소하지 않는다 */
+  depositDays?: number;
   /** 주문 안내를 문자로도 보낼까 (설정) */
   sms?: boolean;
   log?: (message: string) => void;
@@ -87,7 +91,7 @@ export async function sendOrderMail(
 
   const { rows } = await db.execute(sql`
     SELECT o.order_no, o.total, o.status, o.tracking_no, o.guest_token, o.payment_method,
-           o.orderer_name, o.user_id, o.orderer_phone,
+           o.orderer_name, o.user_id, o.orderer_phone, o.created_at, o.cancelled_reason,
            coalesce(nullif(o.orderer_email, ''), u.email) AS email
     FROM shop_orders o
     LEFT JOIN users u ON u.id = o.user_id
@@ -139,11 +143,17 @@ export async function sendOrderMail(
   // 무통장입금은 **입금할 곳**을 알려주는 것이 이 메일의 본체다
   if (params.status === "pending" && order.payment_method === "bank_transfer" && port.bankAccount) {
     body.push("", t("ordermail.bankAccount", { account: port.bankAccount }), t("ordermail.bankNotice"));
+    const due = depositDeadline(order.created_at as Date, port.depositDays ?? 0);
+    if (due) body.push(t("ordermail.depositDue", { date: formatDue(due) }));
   }
   if ((params.status === "shipped" || params.kind === "trackingAdded") && order.tracking_no) {
     body.push("", t("ordermail.tracking", { trackingNo: String(order.tracking_no) }));
   }
 
+  // 자동 취소였다면 왜 취소됐는지 말한다 — 손님은 "내가 취소하지 않았는데" 로 읽는다
+  if (params.status === "cancelled" && typeof order.cancelled_reason === "string" && order.cancelled_reason.includes("자동 취소")) {
+    body.push("", t(order.payment_method === "bank_transfer" ? "ordermail.autoCancelledDeposit" : "ordermail.autoCancelledUnpaid"));
+  }
   body.push(
     "",
     t("ordermail.lookup", { url: lookup }),
@@ -168,4 +178,11 @@ export async function sendOrderMail(
     port.log?.(`주문 안내 메일 실패 (${String(order.order_no)}): ${(err as Error).message}`);
     return false;
   }
+}
+
+/** 입금 기한 표기 — 사이트 시간대와 언어로 ("9월 27일 오후 2:30") */
+export function formatDue(d: Date): string {
+  return new Intl.DateTimeFormat(localeTag(), {
+    timeZone: SITE_TZ, month: "long", day: "numeric", weekday: "short", hour: "numeric", minute: "2-digit",
+  }).format(d);
 }

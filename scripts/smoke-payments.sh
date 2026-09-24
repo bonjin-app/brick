@@ -280,6 +280,31 @@ DUP="$(curl -s -b "$B" -X POST "$SHOP/payments/confirm" -H 'content-type: applic
 contains "거부한다" "$DUP" "이미"
 check "PG 를 다시 부르지 않았다" "$(pg_count confirm)" "$((BEFORE_CONFIRMS + 1))"
 
+echo "── 결제창에 있는 사이 주문이 취소되면 승인된 돈을 돌려준다"
+# 손님이 결제창에 머무는 동안 운영자가 그 주문을 취소할 수 있다. 그러면 PG 는 승인했는데
+# 주문은 결제 상태가 될 수 없다. 전에는 결제 기록만 '승인' 으로 남고 주문은 취소 그대로,
+# 환불은 없었다 — 손님은 결제되고 받을 것이 없으며 어느 화면도 "결제됨" 이라고 말하지
+# 않는다. 정기결제가 이 모양으로 사고를 냈다. PG 응답을 늦춰 그 틈을 만든다.
+O_RACE="$(mkorder 1)"
+O_RACE_ID="$(psql_q "SELECT id FROM shop_orders WHERE order_no='$O_RACE'")"
+curl -s -X POST "http://127.0.0.1:$PG_PORT/__control" -H 'content-type: application/json' -d '{"confirmDelayMs":1500}' >/dev/null
+curl -s -b "$B" -X POST "$SHOP/payments/confirm" -H 'content-type: application/json' \
+  -d "{\"orderNo\":\"$O_RACE\",\"provider\":\"toss\",\"providerTid\":\"pk_race\",\"amount\":14000}" > "$TMP/race.json" &
+RACE_PID=$!
+sleep 0.4
+contains "그 사이 운영자가 주문을 취소한다" "$(curl -s -b "$CK" -X PUT "$SHOP/admin/orders/$O_RACE_ID" \
+  -H 'content-type: application/json' -d '{"status":"cancelled","note":"재고 문제로 취소"}')" '"ok":true'
+wait "$RACE_PID"
+curl -s -X POST "http://127.0.0.1:$PG_PORT/__control" -H 'content-type: application/json' -d '{"confirmDelayMs":0}' >/dev/null
+contains "손님에게 결제를 취소했다고 말한다" "$(cat "$TMP/race.json")" "결제를 취소했습니다"
+check "승인된 결제를 PG 에서 취소했다" "$(pg_last cancel paymentKey)" "pk_race"
+check "결제 기록은 전액 환불로 남는다" \
+  "$(psql_q "SELECT status, refunded_amount = amount FROM shop_payments WHERE provider_tid='pk_race'")" "refunded|true"
+check "주문은 취소 그대로" "$(psql_q "SELECT status FROM shop_orders WHERE order_no='$O_RACE'")" "cancelled"
+check "승인된 결제인데 주문이 결제되지 않은 기록이 없다 (긁혔는데 받을 것이 없는 손님)" \
+  "$(psql_q "SELECT count(*) FROM shop_payments p JOIN shop_orders o ON o.id = p.order_id
+             WHERE p.status = 'paid' AND o.payment_status <> 'paid'")" "0"
+
 echo "══ 부분 환불: 정확한 금액이 PG 로 가는가 ══"
 # 이것이 이 수트의 존재 이유다. 지금까지 아무도 확인하지 않았다.
 RES="$(curl -s -b "$CK" -X POST "$SHOP/admin/payments/refund" -H 'content-type: application/json' \
