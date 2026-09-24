@@ -165,6 +165,14 @@ export interface PaymentGateway {
     amount?: number;
     reason: string;
     idempotencyKey?: string;
+    /**
+     * 이 취소 **전에** 남아 있던 취소 가능 금액(결제액 − 누적 환불액). 모를 때는 비운다.
+     *
+     * PG 가 지원하면(포트원의 currentCancellableAmount) 실제 잔액과 다를 때 취소를 거절한다
+     * — 커밋되지 않은 재시도로 같은 부분환불이 두 번 나가는 것을 PG 쪽에서도 막는다.
+     * 멱등키를 지원하지 않는 PG 에게는 이것이 그 역할을 한다.
+     */
+    currentCancellable?: number;
   }): Promise<{
     ok: boolean;
     raw?: unknown;
@@ -417,6 +425,7 @@ export async function refundPayment(
     ...(amount < remaining ? { amount } : {}),
     reason: params.reason,
     idempotencyKey,
+    currentCancellable: remaining,
   });
   if (!result.ok) throw new ShopError(402, result.failureReason ?? "환불 처리에 실패했습니다.");
 

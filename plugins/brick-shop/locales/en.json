@@ -997,5 +997,6 @@
   "카드 등으로 결제를 시작하고 끝내지 않은 주문을 이 시간이 지나면 취소해 재고를 되돌립니다. 결제창을 그냥 닫은 주문이 재고를 붙잡아 다른 손님에게 품절로 보이는 것을 막습니다. 0 이면 취소하지 않습니다.": "Orders where a card (or other online) payment was started but never finished are cancelled after this long, releasing their stock — so a closed payment window does not make the item look sold out to everyone else. 0 turns this off.",
   "미결제 주문 정리가 이미 진행 중입니다. 끝난 뒤 다시 시도하세요.": "Unpaid order cleanup is already running. Please try again when it finishes.",
   "결제하는 사이 주문이 취소되어 결제를 취소했습니다. 다시 주문해 주세요.": "The order was cancelled while you were paying, so the payment has been cancelled. Please place the order again.",
-  "결제하는 사이 주문이 취소되었습니다. 결제 취소가 처리되지 않아 판매자가 확인 후 환불합니다.": "The order was cancelled while you were paying. The payment could not be cancelled automatically, so the seller will refund it after checking."
+  "결제하는 사이 주문이 취소되었습니다. 결제 취소가 처리되지 않아 판매자가 확인 후 환불합니다.": "The order was cancelled while you were paying. The payment could not be cancelled automatically, so the seller will refund it after checking.",
+  "카드·간편결제 (포트원)": "Card · easy pay (PortOne)"
 }

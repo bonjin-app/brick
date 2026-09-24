@@ -27,7 +27,7 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-3946%20passing-2ea043.svg" alt="스모크 테스트 3946개" />
+  <img src="https://img.shields.io/badge/E2E-3993%20passing-2ea043.svg" alt="스모크 테스트 3993개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
   <a href="https://github.com/bonjin-app/brick/pkgs/container/brick">
     <img src="https://img.shields.io/badge/docker-amd64%20%C2%B7%20arm64-2496ed.svg" alt="Docker image (amd64 · arm64)" />
@@ -369,7 +369,7 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 3,946개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 3,993개 항목):
 
 | 수트 | 항목 | 무엇을 못박는가 |
 |---|---:|---|
@@ -385,6 +385,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `smoke-tax.sh` | 121 | 카드 이중 발급 거부 · 금액 분해 합 일치 · 면세 스냅샷 · 반품 시 증빙 취소 · **손님이 신청할 수 있는가(주문 상세가 폼을 낼지 정한다)** · **비회원도 토큰으로 받는다** |
 | `smoke-account-security.sh` | 119 | RFC 6238 벡터 · 코드 재사용 차단 · 위험 작업 재인증(세션 단위) · IP 제한 자기잠금 방지 · **2FA 강제 설정 자기잠금 방지(등록하지 않은 관리자는 켤 수 없다)** |
 | `smoke-payments.sh` | 158 | **결제창에 있는 사이 주문이 취소되면 승인된 돈을 돌려준다** · 스텁 PG로 실제 나가는 금액 검증 · 멱등키 · 개인결제가 매출에 포함되는가 · **개인결제 손님도 결제 안내를 받는가** · **PG 가 닿지 않아도 손님에게 내부 오류를 보여주지 않는다** · **스텁 포트가 막히면 옆으로 비킨다** |
+| `smoke-portone.sh` | 45 | **포트원 V2 — 결제는 조회로 확인(PAID·금액), 결제 ID 가 이 주문의 것인지, 부분환불에 취소 전 잔액을 실어 이중 환불을 막는다**, 실패·가상계좌·다른 상점 거절, 시크릿 비노출 |
 | `smoke-search.sh` | 131 | 비밀글·비공개 게시판 미노출 · ILIKE 이스케이프 · total 정확성 · 0건 기록 · **블록 CSS 미색인** · **결과 사진** |
 | `smoke-restock.sh` | 94 | 품절만 신청 · 옵션 단위 · 한 번만 발송 · 광고 아님 · 경로 무관 감지 · **메일의 해지 링크가 실제로 열린다** · **회원 신청 내역 화면** · **운영자의 재입고 대기 화면** |
 | `smoke-starter.sh` | 84 | 유형별 기본 구성 생성 · 홈 렌더 · **모든 메뉴 링크가 404 없이 렌더** · 일반 페이지로 수정 가능 · **청약철회 신청 폼의 칸에 이름이 있다** |
@@ -402,7 +403,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `smoke-security.sh` | 93 | **로그인 대입 한도는 서버 수·재시작과 무관하고, 자기 계정 로그인으로 IP 한도를 비울 수 없다** · **로그인 뒤 돌아갈 주소는 같은 사이트의 경로만(열린 리다이렉트)** · 캡차 · 레이트리밋 · 결제 위조 · 권한 우회 · **CSP** · **캡차 칸 안내** · **비회원 스팸 방어(재입고·문의 캡차·IP 한도)** · **비회원 주문이 메일 발사대가 되지 않는다** | · **설정 실수를 대시보드가 알린다(메일 링크 localhost · 프록시 뒤 IP)** · **가입 스팸(NAT 뒤 다섯 명은 통과 · 같은 이메일 네 번째는 차단)** |
 | `smoke-upgrade.sh` | 29 | **데이터가 있는 사이트에 새 마이그레이션이 올라가는가** — **업그레이드 전에 갇혀 있던 작업도 되찾는다** · 회원·동의·설정 보존 · 데이터 이관형 마이그레이션 적용 · 올린 뒤 가입·로그인·플러그인 활성화·주문 · 두 번 올려도 안전 · **인스턴스 둘이 동시에 부팅해도 플러그인 마이그레이션은 한 번만** |
 | `smoke-backup.sh` | 37 | **덤프를 뜨고 실제로 되돌린다** — 지운 회원·페이지가 돌아오는가 · 덤프 뒤에 만든 것은 사라지는가 · **앱이 돌고 있는 채로 복원**(문서가 시키는 그대로) · 복원 뒤 로그인·목록이 되는가 · **망가진 덤프를 성공이라 말하지 않는다** |
-| `smoke-release.sh` | 82 | FTP 설치 경로 · 동봉 플러그인 · **동봉 테마 전부** · 고아 프로세스 정리 · **update.mjs 교체·롤백 왕복** · **HOSTNAME 바인딩** · **공개 화면 보안 헤더** · **로그인·가입 칸을 비밀번호 관리자가 알아본다** · **손님마다 다른 화면은 공유 캐시에 담기지 않는다** |
+| `smoke-release.sh` | 84 | FTP 설치 경로 · 동봉 플러그인 · **동봉 테마 전부** · 고아 프로세스 정리 · **update.mjs 교체·롤백 왕복** · **HOSTNAME 바인딩** · **공개 화면 보안 헤더** · **로그인·가입 칸을 비밀번호 관리자가 알아본다** · **손님마다 다른 화면은 공유 캐시에 담기지 않는다** |
 | `smoke-create-plugin.sh` | 45 | 템플릿 생성→빌드→ZIP 설치→계약 전부 실사용 · escapeHtml · 실제 탈퇴로 파기 검증 |
 | `smoke-openapi.sh` | 24 | 실제 라우트에서 생성 · 플러그인 켜고 끄면 문서도 변함 · 자체 완결 문서 페이지 |
 | `smoke-registry.sh` | 23 | 서명 통과해야 설치 · 키·주소 고정(TOFU) · 레지스트리 키 바꿔치기 방어 |
@@ -506,6 +507,7 @@ plugins/
   brick-poll/     설문조사 (익명 집계 레퍼런스)
   brick-site/     방문자 집계 · 팝업 (훅 구독 레퍼런스)
   brick-pay-toss/ 토스페이먼츠 (PG를 코어 수정 없이 붙이는 레퍼런스)
+  brick-pay-portone/ 포트원 V2 (이니시스·KCP·NICE·카카오페이·네이버페이 등을 한 연동으로)
   brick-sms-aligo/ 문자 발송 (알리고 — 공급자를 코어 수정 없이 붙이는 레퍼런스)
 themes/
   default/        기본 테마 — 커뮤니티 (런타임 템플릿 레퍼런스)
@@ -514,7 +516,7 @@ themes/
   boutique/       부티크 — 여백 위주
   corporate/      회사 홈페이지 — 히어로·특징 카드
 docs-site/        GitHub Pages 랜딩페이지
-scripts/          스모크 테스트 38종 + 정적 검사 39종 + OIDC 스텁 + 배포본 생성(build-release.sh)
+scripts/          스모크 테스트 39종 + 정적 검사 39종 + OIDC 스텁 + 배포본 생성(build-release.sh)
 docker/           Dockerfile, entrypoint
 ```
 

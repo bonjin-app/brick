@@ -1,0 +1,22 @@
+{
+  "name": "brick-pay-portone",
+  "version": "0.1.0",
+  "displayName": "포트원 결제 (이니시스·KCP·NICE·카카오페이·네이버페이 등)",
+  "description": "포트원(PortOne) V2 로 국내 주요 PG 를 한 번에 연결합니다. 이미 계약한 PG 를 포트원 콘솔의 채널로 등록하고, 관리자 → 포트원에서 상점 ID·채널 키·API 시크릿을 입력하세요.",
+  "author": "Brick",
+  "brickVersion": ">=0.0.1",
+  "entry": "dist/index.js",
+  "csp": {
+    "script-src": [
+      "https://cdn.portone.io"
+    ],
+    "connect-src": [
+      "https://*.portone.io",
+      "https://*.iamport.co"
+    ],
+    "frame-src": [
+      "https://*.portone.io",
+      "https://*.iamport.co"
+    ]
+  }
+}
