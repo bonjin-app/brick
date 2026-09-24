@@ -1,3 +1,5 @@
 {
-  "err.senderRequired": "발신번호를 입력해주세요. 알리고에 사전 등록한 번호여야 합니다."
+  "err.senderRequired": "발신번호를 입력해주세요. 알리고에 사전 등록한 번호여야 합니다.",
+  "err.templateFetch": "알리고에서 템플릿을 가져오지 못했습니다: {message}",
+  "err.templateVars": "이 알림이 채울 수 없는 변수가 템플릿에 있습니다: {unknown}. 쓸 수 있는 변수: {known}"
 }

@@ -23,6 +23,16 @@ export interface SmsMessage {
   text: string;
   /** 장문일 때의 제목 (LMS 에만 쓰인다) */
   title?: string;
+  /**
+   * 무슨 알림인가 — `ctx.registerNotificationEvent` 로 등록한 이름(예: `shop.order.paid`).
+   *
+   * 알림톡처럼 **미리 승인받은 템플릿**으로만 보낼 수 있는 통로는 본문을 그대로 쓸 수 없다.
+   * 발송기가 이 이름으로 운영자가 연결한 템플릿을 찾고, `vars` 로 `#{변수}` 를 채운다.
+   * 연결된 템플릿이 없으면 `text` 로 문자를 보낸다.
+   */
+  event?: string;
+  /** 템플릿 변수 값 — 이벤트를 등록할 때 선언한 이름 그대로 (예: `{ 주문번호: "…" }`) */
+  vars?: Record<string, string>;
 }
 
 export interface SmsProvider {

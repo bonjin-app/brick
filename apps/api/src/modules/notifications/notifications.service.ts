@@ -46,6 +46,10 @@ export interface NotifyInput {
    * 켠 알림만 나간다(주문 접수·발송처럼 손님이 기다리는 것).
    */
   sms?: true;
+  /** 무슨 알림인가 — 알림톡처럼 승인된 템플릿으로 보내는 통로가 이것으로 템플릿을 찾는다 */
+  event?: string;
+  /** 템플릿 변수 값 */
+  vars?: Record<string, string>;
 }
 
 /**
@@ -126,7 +130,11 @@ export class NotificationsService {
       const phone = normalizePhone(input.phone);
       if (gateway?.enabled && phone) {
         await gateway
-          .send({ to: phone, title, text: body ? `${title}\n\n${body}` : title })
+          .send({
+            to: phone, title, text: body ? `${title}\n\n${body}` : title,
+            // 알림톡처럼 승인된 템플릿으로만 보내는 통로가 이것으로 템플릿을 찾아 채운다
+            ...(input.event ? { event: input.event, vars: input.vars ?? {} } : {}),
+          })
           .catch(() => false);
       }
     }

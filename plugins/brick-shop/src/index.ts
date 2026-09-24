@@ -16,7 +16,7 @@ import { CASH_RECEIPT_RESOURCE, CATEGORY_RESOURCE, COLLECTION_RESOURCE, GRADE_RE
          TAX_INVOICE_RESOURCE } from "./admin-resources.js";
 import { registerStorefrontBlocks } from "./blocks.js";
 import { importProducts } from "./import.js";
-import { sendOrderMail } from "./order-mail.js";
+import { ORDER_EVENTS, sendOrderMail } from "./order-mail.js";
 import {
   createInquiry, createReview, deleteInquiry, deleteReview, findPurchase,
   listInquiries, listReviews, replyToInquiry, replyToReview, REVIEW_SORTS, setReviewVisible, updateReview,
@@ -105,6 +105,9 @@ export default definePlugin(async (ctx) => {
     ...((await ctx.settings.get<Partial<ShopSettings>>("settings")) ?? {}),
   });
 
+  // 주문 알림의 종류와 변수 — 알림톡처럼 운영자가 템플릿을 연결하는 통로가 이 목록을 보여 준다
+  for (const event of ORDER_EVENTS) ctx.registerNotificationEvent(event);
+
   /**
    * 주문 안내 메일.
    *
@@ -132,6 +135,7 @@ export default definePlugin(async (ctx) => {
             email: s.notifyOrderMail ? msg.to : null,
             phone: msg.phone,
             ...(msg.sms ? { sms: true as const } : {}),
+            ...(msg.event ? { event: msg.event, vars: msg.vars } : {}),
             kind: "shop.order",
             title: msg.subject,
             body: msg.text,

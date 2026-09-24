@@ -26,6 +26,7 @@ const INTERNAL = {
   BRICK_MIGRATIONS_DIR: "마이그레이션 파일 위치를 배포 형태에 맞게 자동으로 찾고, 테스트만 덮어쓴다",
   BRICK_TOSS_API_BASE: "결제 스텁을 향하게 하는 테스트 전용 값. 프로덕션에서 바꾸면 결제가 끊긴다",
   BRICK_ALIGO_API_BASE: "문자 스텁을 향하게 하는 테스트 전용 값",
+  BRICK_ALIGO_KAKAO_API_BASE: "알림톡 스텁을 향하게 하는 테스트 전용 값",
   BRICK_PORTONE_API_BASE: "포트원 스텁을 향하게 하는 테스트 전용 값. 프로덕션에서 바꾸면 결제 확인이 끊긴다",
 };
 

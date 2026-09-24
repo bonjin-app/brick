@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { won, type Db, type OrderStatus } from "./types.js";
 import { localeTag, t } from "./i18n.js";
-import { SITE_TZ } from "@brick/plugin-sdk";
+import { SITE_TZ, normalizePhone, type NotificationEvent } from "@brick/plugin-sdk";
 import { depositDeadline } from "./unpaid.js";
 
 /**
@@ -35,6 +35,37 @@ import { depositDeadline } from "./unpaid.js";
  */
 const MAILED: readonly OrderStatus[] = ["pending", "paid", "shipped", "cancelled", "refunded"];
 
+/**
+ * 주문 알림 종류와 변수 — 알림톡 템플릿은 **이 이름으로** `#{…}` 를 쓴다.
+ *
+ * 변수 이름을 한국어로 둔 이유: 카카오 알림톡 템플릿은 운영자가 카카오 쪽 화면에서 직접 쓰고
+ * 심사받는다. `#{고객명}` 이 `#{orderer_name}` 보다 틀리기 어렵다.
+ */
+const COMMON_VARS: NotificationEvent["vars"] = [
+  { name: "고객명", description: "주문자 이름", sample: "홍길동" },
+  { name: "주문번호", description: "주문번호", sample: "20260924-000001" },
+  { name: "상품명", description: "첫 상품 이름 (여러 개면 \"외 N건\")", sample: "머그컵 외 1건" },
+  { name: "결제금액", description: "주문 총액", sample: "25,000원" },
+  { name: "쇼핑몰명", description: "사이트 이름", sample: "브릭 상점" },
+  { name: "주문조회", description: "주문 조회 주소 (비회원은 조회 토큰 포함)", sample: "https://shop.example/shop/orders/20260924-000001" },
+];
+export const ORDER_EVENTS: NotificationEvent[] = [
+  { event: "shop.order.pending", label: "주문 — 접수", vars: [
+    ...COMMON_VARS,
+    { name: "입금계좌", description: "무통장입금 계좌 (다른 결제 수단이면 빈칸)", sample: "국민은행 000-00-0000 (브릭)" },
+    { name: "입금기한", description: "무통장입금 기한 (없으면 빈칸)", sample: "9월 27일 (토) 오후 2:30" },
+  ] },
+  { event: "shop.order.paid", label: "주문 — 결제 확인", vars: COMMON_VARS },
+  { event: "shop.order.shipped", label: "주문 — 발송", vars: [
+    ...COMMON_VARS, { name: "송장번호", description: "운송장 번호 (없으면 빈칸)", sample: "123456789012" },
+  ] },
+  { event: "shop.order.tracking", label: "주문 — 운송장 번호 등록", vars: [
+    ...COMMON_VARS, { name: "송장번호", description: "운송장 번호", sample: "123456789012" },
+  ] },
+  { event: "shop.order.cancelled", label: "주문 — 취소", vars: COMMON_VARS },
+  { event: "shop.order.refunded", label: "주문 — 환불 완료", vars: COMMON_VARS },
+];
+
 export interface OrderMailPort {
   /**
    * 한 통 보낸다.
@@ -53,6 +84,9 @@ export interface OrderMailPort {
     phone?: string | null;
     /** 문자로도 보낼까 (설정이 켜져 있고 이 상태가 손님이 기다리는 것일 때) */
     sms?: true;
+    /** 알림 종류와 템플릿 변수 — 알림톡처럼 승인된 템플릿으로 보내는 통로가 쓴다 */
+    event?: string;
+    vars?: Record<string, string>;
   }) => Promise<boolean>;
   siteUrl: string;
   siteName: string;
@@ -107,7 +141,13 @@ export async function sendOrderMail(
    * 회원이면 주소가 없어도 알림함에는 남는다. 주소를 안 적었다는 것이
    * "아무 소식도 받지 않겠다" 는 뜻은 아니다.
    */
-  if (!to && !order.user_id) return false;
+  /*
+   * 단, 문자(알림톡)를 켠 가게에서 **전화번호만 적은 비회원**에게는 문자가 유일한 통로다.
+   * 전에는 여기서 끝나서, 이메일을 비운 비회원 손님은 문자 알림을 켜 둔 가게에서도 접수·
+   * 발송 안내를 한 통도 받지 못했다(주문서는 전화번호를 필수로 받는다).
+   */
+  const phone = normalizePhone(order.orderer_phone);
+  if (!to && !order.user_id && !(port.sms && phone)) return false;
 
   const { rows: items } = await db.execute(sql`
     SELECT product_name, option_name, quantity, line_total
@@ -162,6 +202,28 @@ export async function sendOrderMail(
     t("ordermail.footer", { site: port.siteName }),
   );
 
+  const first = items[0];
+  const vars: Record<string, string> = {
+    고객명: String(order.orderer_name ?? ""),
+    주문번호: String(order.order_no),
+    상품명: first
+      ? items.length > 1
+        ? t("ordermail.itemsMore", { name: String(first.product_name), n: items.length - 1 })
+        : String(first.product_name)
+      : "",
+    결제금액: won(Number(order.total)),
+    쇼핑몰명: port.siteName,
+    주문조회: lookup,
+    입금계좌: "",
+    입금기한: "",
+    송장번호: order.tracking_no ? String(order.tracking_no) : "",
+  };
+  if (params.status === "pending" && order.payment_method === "bank_transfer" && port.bankAccount) {
+    vars.입금계좌 = port.bankAccount;
+    const due = depositDeadline(order.created_at as Date, port.depositDays ?? 0);
+    if (due) vars.입금기한 = formatDue(due);
+  }
+
   try {
     return await port.send({
       to,
@@ -172,6 +234,8 @@ export async function sendOrderMail(
       url: order.user_id ? "/shop/orders" : "",
       phone: String(order.orderer_phone ?? ""),
       ...(port.sms ? { sms: true as const } : {}),
+      event: `shop.order.${params.kind === "trackingAdded" ? "tracking" : params.status}`,
+      vars,
     });
   } catch (err) {
     // 메일 실패가 주문 흐름을 막아서는 안 된다 — 기록만 남기고 넘어간다

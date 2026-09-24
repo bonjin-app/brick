@@ -470,5 +470,6 @@
   "adult.gateLogin": "로그인하고 본인인증하기",
   "adult.gateVerify": "본인인증하기",
   "adult.gateMinor": "본인인증 결과 19세 미만이라 이 상품을 볼 수 없습니다.",
-  "checkout.verifyIdentity": "본인인증하러 가기"
+  "checkout.verifyIdentity": "본인인증하러 가기",
+  "ordermail.itemsMore": "{name} 외 {n}건"
 }

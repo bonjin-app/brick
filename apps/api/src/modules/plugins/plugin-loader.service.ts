@@ -9,7 +9,7 @@ import { eq, sql } from "drizzle-orm";
 import type { BrickDb } from "@brick/database";
 import { installedPlugins, siteSettings } from "@brick/database";
 import type { PluginManifest } from "@brick/shared";
-import type { PluginContext, PluginInstance, BlockDefinition, PluginRouteHandler, PluginDb, AdminResource, HookBus, CacheProvider, QueueProvider, LockProvider, StorageProvider, MailProvider, CaptchaProvider, PersonalDataEraser, SitemapSource,
+import type { PluginContext, PluginInstance, BlockDefinition, PluginRouteHandler, PluginDb, AdminResource, HookBus, CacheProvider, QueueProvider, LockProvider, StorageProvider, MailProvider, CaptchaProvider, PersonalDataEraser, SitemapSource, NotificationEvent,
   SearchSource, LinkTargetSource, DashboardCard, HeaderAction, PluginScreen, Locale, MessageCatalog } from "@brick/core";
 import { AVAILABLE_LOCALES, DEFAULT_LOCALE, makeTranslator, normalizeLocale } from "@brick/core";
 import { RateLimitService } from "../auth/rate-limit.service.js";
@@ -122,6 +122,8 @@ export class PluginLoaderService implements OnModuleInit {
   readonly dashboardCards: Array<DashboardCard & { plugin: string }> = [];
   /** 헤더 유틸 영역의 링크 — 테마가 그린다 (쇼핑몰 장바구니, 쪽지함 등) */
   readonly headerActions: Array<HeaderAction & { plugin: string }> = [];
+  /** 플러그인이 선언한 알림 종류 — 알림 통로(알림톡 등)의 관리 화면이 읽는다 */
+  readonly notificationEventList: Array<NotificationEvent & { plugin: string }> = [];
   /**
    * 플러그인이 선언한 화면 — 페이지 행 없이도 그려진다.
    * 같은 slug 의 페이지가 있으면 페이지가 이긴다(운영자가 그 화면을 가질 수 있어야 한다).
@@ -355,6 +357,9 @@ export class PluginLoaderService implements OnModuleInit {
     // 끈 플러그인의 발송기를 남겨 두면 꺼진 확장이 계속 요금을 쓴다
     this.notifications.clearSmsGateway(name);
     this.identity.clearProviders(name);
+    for (let i = this.notificationEventList.length - 1; i >= 0; i--) {
+      if (this.notificationEventList[i].plugin === name) this.notificationEventList.splice(i, 1);
+    }
     /*
      * 선언 화면도 걷어낸다.
      *
@@ -740,6 +745,22 @@ export class PluginLoaderService implements OnModuleInit {
         this.identity.setProvider(pluginName, provider);
         this.logger.log(`plugin "${pluginName}" registers identity provider "${provider.name}"`);
       },
+      registerNotificationEvent: (event) => {
+        if (!/^[a-z][a-z0-9.-]{1,79}$/.test(event.event)) {
+          this.logger.warn(`plugin "${pluginName}" 의 알림 이름 "${event.event}" 이 올바르지 않아 무시합니다`);
+          return;
+        }
+        const at = this.notificationEventList.findIndex((e) => e.event === event.event);
+        if (at >= 0) this.notificationEventList.splice(at, 1);
+        this.notificationEventList.push({ ...event, vars: [...event.vars], plugin: pluginName });
+      },
+      // 이름·설명은 선언한 플러그인의 카탈로그로 번역한다 — 보여 주는 쪽(알림 통로)은 남의 카탈로그를 모른다
+      notificationEvents: () =>
+        this.notificationEventList.map((e) => ({
+          ...e,
+          label: this.trCatalog(e.plugin, e.label),
+          vars: e.vars.map((v) => ({ ...v, description: this.trCatalog(e.plugin, v.description) })),
+        })),
       registerScreen: (screen) => {
         const path = screen.path.replace(/^\/+|\/+$/g, "");
         // 블록 이름은 등록과 같은 규칙으로 네임스페이스를 붙인다

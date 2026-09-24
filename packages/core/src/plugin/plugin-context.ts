@@ -49,6 +49,32 @@ export interface NotifyInput {
    * 손님이 기다리는 것만 켠다. 댓글 알림을 문자로 보내면 요금과 성가심이 함께 는다.
    */
   sms?: true;
+  /**
+   * 무슨 알림인가 — `registerNotificationEvent` 로 등록한 이름. 알림톡처럼 승인된 템플릿으로만
+   * 보낼 수 있는 통로가 이 이름으로 템플릿을 찾는다. 없으면 제목·본문으로 보낸다.
+   */
+  event?: string;
+  /** 템플릿 변수 값 — 이벤트를 등록할 때 선언한 이름 그대로 */
+  vars?: Record<string, string>;
+}
+
+/**
+ * 알림 이벤트 — "무슨 일이 생기면 무엇을 알리는가" 의 목록.
+ *
+ * 문구를 코드가 아니라 **운영자가 정하는 통로**(알림톡 템플릿, 앞으로는 메일·문자 문구 편집)가
+ * 생기면, 운영자는 어떤 알림이 있고 어떤 값을 끼울 수 있는지 알아야 한다. 그 목록을 알림을
+ * 보내는 플러그인이 선언한다 — 발송 플러그인(알리고)은 쇼핑몰을 모른다.
+ */
+export interface NotificationEvent {
+  /** 이름 — `shop.order.paid` 처럼. `ctx.notify({ event })` 와 같은 값 */
+  event: string;
+  /** 관리 화면에 보일 이름 (예: "주문 — 결제 완료"). 원문이 번역 키다 */
+  label: string;
+  /**
+   * 이 알림이 채워 주는 변수. 알림톡 템플릿의 `#{이름}` 과 같은 이름을 쓴다.
+   * 템플릿에 여기 없는 변수가 있으면 연결을 거절한다 — 채우지 못한 템플릿은 카카오가 거절한다.
+   */
+  vars: Array<{ name: string; description: string; sample: string }>;
 }
 
 export interface PluginContext {
@@ -338,6 +364,15 @@ export interface PluginContext {
    * 나중 것이 이긴다.
    */
   registerIdentityProvider(provider: IdentityProvider): void;
+
+  /**
+   * 이 플러그인이 보내는 알림의 종류를 선언한다 (`NotificationEvent`).
+   * 같은 이름을 다시 선언하면 나중 것이 이긴다.
+   */
+  registerNotificationEvent(event: NotificationEvent): void;
+
+  /** 지금 켜진 플러그인들이 선언한 알림 종류 전부 (알림 통로 플러그인이 관리 화면에 쓴다) */
+  notificationEvents(): Array<NotificationEvent & { plugin: string }>;
 
   /**
    * 플러그인이 **자기 화면**을 가진다.
