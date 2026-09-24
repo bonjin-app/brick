@@ -487,7 +487,14 @@ export class PageRenderService {
         : [];
       // 빈 컨테이너는 높이가 0 이라 미리보기에서 누를 곳이 없다 — 편집기에서만 자리를 채운다
       if (marks && def.acceptsChildren && !kids.length) children.push(notice(marks.emptyContainer));
-      return box(await def.render(node.props ?? {}, { ...ctx, children }));
+      // 그 자리에서 고칠 수 있는 속성 — 편집기가 받는 것은 스키마에 있는 글자 속성뿐이다(이름만 적어 둔다)
+      const editable = marks
+        ? (prop: string, opts?: { multiline?: boolean }) =>
+            /^[A-Za-z][A-Za-z0-9_]{0,40}$/.test(prop)
+              ? ` data-brick-prop="${prop}"${opts?.multiline ? ' data-brick-multiline="1"' : ""}`
+              : ""
+        : undefined;
+      return box(await def.render(node.props ?? {}, { ...ctx, children, ...(editable ? { editable } : {}) }));
     } catch (err) {
       this.logger.warn(`block "${node.block}" render failed: ${String(err)}`);
       return marks ? box(notice(marks.blockFailed(node.block))) : `<!-- block "${escapeHtml(node.block)}" failed -->`;

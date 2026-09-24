@@ -451,6 +451,7 @@ const KO = {
   "pages.addInside": "+ 이 안에 블록 추가",
   "pages.searchBlocks": "블록 찾기",
   "pages.noBlocksFound": "찾는 블록이 없습니다.",
+  "pages.inlineHint": "미리보기의 제목·문단은 두 번 눌러 그 자리에서 고칠 수 있습니다 — Enter(여러 줄은 Ctrl+Enter)로 마치고 Esc 로 되돌립니다.",
 
   "menus.title": "메뉴 (헤더)",
   "menus.guide": "연결 대상 선택을 누르면 만들어 둔 페이지·게시판·쇼핑몰 화면이 목록으로 나옵니다.",
@@ -986,6 +987,7 @@ const EN: Record<keyof typeof KO, string> = {
   "pages.addInside": "+ Add a block inside",
   "pages.searchBlocks": "Find a block",
   "pages.noBlocksFound": "No matching blocks.",
+  "pages.inlineHint": "Double-click a heading or paragraph in the preview to edit it in place — press Enter (Ctrl+Enter for multiple lines) to finish and Esc to undo.",
 
   "menus.title": "Menu (header)",
   "menus.guide": "Press \"Pick link target\" to choose from your pages, boards and shop screens.",

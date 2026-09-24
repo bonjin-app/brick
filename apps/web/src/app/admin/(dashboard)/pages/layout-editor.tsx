@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { useAdminT } from "../../../../lib/i18n-admin";
 import {
-  duplicateAt, flatten, getNode, indentIntoPrevious, insertAt, isPrefix, moveNode, moveSibling,
+  applyTextEdit, duplicateAt, flatten, getNode, indentIntoPrevious, insertAt, isPrefix, moveNode, moveSibling,
   outdent, parsePath, pathKey, removeAt, samePath, updateAt, type BlockNode, type Path,
 } from "../../../../lib/block-tree";
 
@@ -209,12 +209,26 @@ export function LayoutEditor(props: {
 
   useEffect(() => { highlight(true); }, [highlight]);
 
+  // 메시지 처리기는 한 번만 단다 — 그 안에서 쓰는 최신 값은 ref 로 본다
+  const commitRef = useRef(commit);
+  commitRef.current = commit;
+  const catalogRef = useRef(catalog);
+  catalogRef.current = catalog;
+
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
       if (e.origin !== window.location.origin) return;
       const fromFront = e.source === (frontRef.current === 0 ? frameA : frameB).current?.contentWindow;
-      const d = (e.data ?? {}) as { brick?: string; path?: string; y?: number };
+      const d = (e.data ?? {}) as { brick?: string; path?: string; y?: number; prop?: unknown; value?: unknown };
       if (!fromFront || !d.brick) return;
+      if (d.brick === "text") {
+        // 미리보기에서 글자를 고쳤다 — 스키마의 글자 속성인지 다시 보고 반영한다
+        const r = applyTextEdit(draftRef.current.blocks, d.path, d.prop, d.value,
+          (block) => catalogRef.current.find((b) => b.name === block)?.propsSchema?.properties);
+        if (r && r.tree !== draftRef.current.blocks) commitRef.current(r.tree, { select: r.path });
+        else if (r) setSelected(r.path);
+        return;
+      }
       if (d.brick === "select") {
         const p = d.path ? parsePath(d.path) : null;
         setSelected(p && getNode(draftRef.current.blocks, p) ? p : null);
@@ -335,6 +349,7 @@ export function LayoutEditor(props: {
             {t("pages.addBlock")}
           </button>
           {rows.length > 0 && <p style={{ fontSize: 12, color: "var(--color-muted)", margin: "8px 0 0" }}>{t("pages.dragHint")}</p>}
+          {rows.length > 0 && showPreview && <p style={{ fontSize: 12, color: "var(--color-muted)", margin: "6px 0 0" }}>{t("pages.inlineHint")}</p>}
         </nav>
 
         {/* ── 가운데: 미리보기 ── */}

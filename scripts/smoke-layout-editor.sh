@@ -82,8 +82,26 @@ TREE_OUT="$(node --input-type=module -e '
   // 10. 제자리 이동은 원래 트리를 그대로 돌려준다(되돌리기 기록이 헛돌지 않게)
   const same = base(); r = T.moveNode(same, [2], [], 3);
   out.push("noop:" + (r.tree === same) + "@" + T.pathKey(r.path));
+  // 11. 미리보기에서 고친 글자 — 스키마의 글자 속성만 받는다
+  const schemas = { "a/h": { text: { type: "string" }, level: { type: "number" } }, "a/l": { text: { type: "string" } } };
+  const schemaOf = (b) => schemas[b];
+  const t0 = base();
+  r = T.applyTextEdit(t0, "1.0", "text", "고친 글자", schemaOf);
+  out.push("text-ok:" + JSON.stringify(T.getNode(r.tree, [1, 0]).props) + "@" + T.pathKey(r.path) + "," + JSON.stringify(t0[1].children[0].props));
+  out.push("text-reject:" + [
+    T.applyTextEdit(t0, "0", "level", "3", schemaOf),
+    T.applyTextEdit(t0, "0", "__proto__", "x", schemaOf),
+    T.applyTextEdit(t0, "0", "constructor", "x", schemaOf),
+    T.applyTextEdit(t0, "0", "text", 3, schemaOf),
+    T.applyTextEdit(t0, "9.9", "text", "x", schemaOf),
+    T.applyTextEdit(t0, "1", "text", "x", schemaOf),
+  ].map(String).join(","));
+  const t1 = T.applyTextEdit(t0, "0", "text", "제목", schemaOf).tree;
+  out.push("text-same:" + (T.applyTextEdit(t1, "0", "text", "제목", schemaOf).tree === t1) + "," + T.applyTextEdit(t0, "0", "text", "가".repeat(30000), schemaOf).tree[0].props.text.length);
   console.log(out.join("\n"));
-' "$ROOT/apps/web/src/lib/block-tree.ts" 2>&1)"
+' "$ROOT/apps/web/src/lib/block-tree.ts" 2>&1 || true)"
+# 시험 코드가 던지면(연산이 깨졌다) 스모크를 멈추지 않고 아래 검사들이 실패로 드러나게 한다
+[[ "$TREE_OUT" == *Error* ]] && echo "  (트리 연산 시험이 던졌습니다: $(echo "$TREE_OUT" | grep -m1 Error))"
 line() { echo "$TREE_OUT" | grep "^$1:" | head -1 | cut -d: -f2-; }
 check "같은 목록 아래로 — 놓은 자리 그대로" "$(line down)" '[{"core/columns",[{"a/l"},{"a/r"}]},{"a/p"},{"a/h"},{"core/columns",[]}]@2'
 check "뒤쪽 다단 안으로 — 빠진 자리만큼 경로가 당겨진다" "$(line into-later)" '[{"core/columns",[{"a/l"},{"a/r"}]},{"a/p"},{"core/columns",[{"a/h"}]}]@2.0'
@@ -96,6 +114,9 @@ check "연산이 원본 트리를 바꾸지 않는다" "$(line pure)" "true"
 check "개요는 깊이와 함께 펼친다" "$(line flat)" "0:a/h,0:core/columns,1:a/l,1:a/r,0:a/p,0:core/columns"
 check "경로 읽기 — 틀린 표기는 null" "$(line parse)" "[[1,0,2],null,null,null]"
 check "제자리 이동은 같은 트리" "$(line noop)" "true@2"
+check "미리보기에서 고친 글자를 그 블록에 반영한다 (원본은 그대로)" "$(line text-ok)" '{"text":"고친 글자"}@1.0,{}'
+check "스키마의 글자 속성이 아니면 받지 않는다 (숫자 속성·__proto__·글자 아닌 값·없는 경로·스키마 없는 블록)" "$(line text-reject)" "null,null,null,null,null,null"
+check "같은 값은 같은 트리 · 너무 긴 값은 자른다" "$(line text-same)" "true,20000"
 
 if [[ "${BRICK_SMOKE_KEEP_DB:-}" != "1" ]]; then
   node "$ROOT/scripts/reset-test-db.mjs" || exit 1
@@ -194,7 +215,15 @@ i = h.find('data-brick-node=\"3\"')
 print(h[i:i+400])" <<< "$HTML")"
 contains "모르는 블록도 보이게 그린다 (지울 수 있게)" "$UNKNOWN_BOX" "알 수 없는 블록 (nope/none)"
 contains "편집기와 이야기하는 스크립트가 붙는다" "$HTML" "brick: 'select'"
+contains "제목은 그 자리에서 고칠 수 있게 표시한다" "$HTML" '<h2 data-brick-prop="text">배치 초안 제목</h2>'
+contains "문단은 여러 줄로 고칠 수 있게 표시한다" "$HTML" '<p data-brick-prop="text" data-brick-multiline="1">왼쪽 칸 문장</p>'
+contains "두 번 누르면 고치고, 고친 글자(HTML 아님)를 보낸다" "$HTML" "brick: 'text', path: node.getAttribute('data-brick-node'), prop: el.getAttribute('data-brick-prop'), value: value.slice(0, 20000)"
 contains "메시지는 같은 출처로만 보낸다" "$HTML" "P.postMessage(msg, ORIGIN)"
+# 스크립트는 템플릿 문자열 안에 산다 — 이스케이프 하나가 빠지면(\n 이 진짜 줄바꿈이 되는 등) 통째로 문법 오류가 되어
+# 선택·테두리·글자 고치기가 모두 죽는데, 글자를 찾는 검사로는 보이지 않는다. 실제로 읽혀 보는지 본다
+RUNTIME_OK="$(python3 -c "import sys,re; m=re.findall(r'<script>([\s\S]*?)</script>', sys.stdin.read()); print(m[-1] if m else '')" <<< "$HTML" \
+  | node -e 'let s="";process.stdin.on("data",(d)=>{s+=d}).on("end",()=>{try{new Function(s);console.log(s.includes("dblclick")?"ok":"no-runtime")}catch(e){console.log("syntax: "+e.message)}})')"
+check "편집기 스크립트가 문법 오류 없이 읽힌다" "$RUNTIME_OK" "ok"
 contains "테마의 화면 틀로 그린다 (페이지 제목)" "$HTML" "회사 소개 초안"
 PUBLIC_HOME="$(curl -s "$API/api/render/page?path=" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("html",""))')"
 THEME_CSS="$(echo "$PUBLIC_HOME" | grep -oE '<link[^>]+rel="stylesheet"[^>]*>' | head -1)"
@@ -229,6 +258,7 @@ check "다단 안에 블록을 넣은 트리를 저장한다" "$(code -b "$CK" -
 PUB="$(curl -s "$API/api/render/page?path=layout-ok" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("html",""))')"
 contains "공개 화면이 다단 안의 블록을 그린다" "$PUB" "저장된 오른쪽"
 absent "공개 화면에는 위치 표시가 없다" "$PUB" "data-brick-node"
+absent "공개 화면에는 고치기 표시도 없다" "$PUB" "data-brick-prop"
 absent "공개 화면에는 편집기 스크립트가 없다" "$PUB" "brick-edit"
 absent "로그인한 운영자가 봐도 없다" "$(curl -s -b "$CK" "$API/api/render/page?path=layout-ok")" "data-brick-node"
 

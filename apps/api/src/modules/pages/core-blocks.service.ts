@@ -1,5 +1,5 @@
 import { Injectable, OnModuleInit } from "@nestjs/common";
-import { CORE_CATALOGS, makeTranslator } from "@brick/core";
+import { CORE_CATALOGS, makeTranslator, type BlockRenderContext } from "@brick/core";
 import { PluginLoaderService } from "../plugins/plugin-loader.service.js";
 import { SearchService } from "../search/search.service.js";
 import { NotificationsService } from "../notifications/notifications.service.js";
@@ -7,6 +7,10 @@ import { IdentityService, safeNext } from "../identity/identity.service.js";
 
 const esc = (s: unknown) =>
   String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+
+/** 배치 편집기에서 그 자리에서 고칠 수 있는 글자 — 공개 렌더에서는 빈 문자열 */
+const ed = (ctx: Pick<BlockRenderContext, "editable">, prop: string, multiline = false) =>
+  ctx.editable?.(prop, { multiline }) ?? "";
 
 /**
  * 코어 블록 — 플러그인 없이 기본 제공되는 페이지 빌더 재료.
@@ -34,9 +38,9 @@ export class CoreBlocksService implements OnModuleInit {
           level: { type: "number", title: "크기 (1-3)", default: 2 },
         },
       },
-      render: async (props) => {
+      render: async (props, ctx) => {
         const level = Math.min(3, Math.max(1, Number(props.level ?? 2)));
-        return `<h${level}>${esc(props.text)}</h${level}>`;
+        return `<h${level}${ed(ctx, "text")}>${esc(props.text)}</h${level}>`;
       },
     });
 
@@ -47,7 +51,7 @@ export class CoreBlocksService implements OnModuleInit {
         type: "object",
         properties: { text: { type: "string", title: "내용", format: "multiline" } },
       },
-      render: async (props) => `<p>${esc(props.text).replace(/\n/g, "<br />")}</p>`,
+      render: async (props, ctx) => `<p${ed(ctx, "text", true)}>${esc(props.text).replace(/\n/g, "<br />")}</p>`,
     });
 
     b.set("core/rich-text", {
@@ -169,7 +173,7 @@ export class CoreBlocksService implements OnModuleInit {
           .join("");
         // 이미지 위 글자는 테마가 어둡게 깔고 흰 글자로 그린다(has-image) — 사진 밝기와 무관하게 읽힌다
         return `<section class="brick-hero${props.plain ? " brick-hero-plain" : ""}${image ? " has-image" : ""}"${image ? ` style="--hero-image: url(${image})"` : ""}>
-${eyebrow ? `  <span class="brick-eyebrow">${esc(eyebrow)}</span>\n` : ""}${title ? `  <h1>${esc(title)}</h1>\n` : ""}${text ? `  <p>${esc(text).replace(/\n/g, "<br />")}</p>\n` : ""}${cta ? `  <div class="brick-hero-actions">${cta}</div>\n` : ""}</section>`;
+${eyebrow ? `  <span class="brick-eyebrow"${ed(ctx, "eyebrow")}>${esc(eyebrow)}</span>\n` : ""}${title ? `  <h1${ed(ctx, "title")}>${esc(title)}</h1>\n` : ""}${text ? `  <p${ed(ctx, "text", true)}>${esc(text).replace(/\n/g, "<br />")}</p>\n` : ""}${cta ? `  <div class="brick-hero-actions">${cta}</div>\n` : ""}</section>`;
       },
     });
 
@@ -218,14 +222,14 @@ ${eyebrow ? `  <span class="brick-eyebrow">${esc(eyebrow)}</span>\n` : ""}${titl
           buttonUrl: { type: "string", title: "버튼 링크" },
         },
       },
-      render: async (props) => {
+      render: async (props, ctx) => {
         const label = String(props.buttonLabel ?? "").trim();
         const url = String(props.buttonUrl ?? "").trim();
         const text = String(props.text ?? "").trim();
         return `<section class="brick-cta">
   <div>
-    <h2>${esc(props.title)}</h2>
-    ${text ? `<p>${esc(text)}</p>` : ""}
+    <h2${ed(ctx, "title")}>${esc(props.title)}</h2>
+    ${text ? `<p${ed(ctx, "text")}>${esc(text)}</p>` : ""}
   </div>
   ${label && url ? `<a class="brick-btn brick-btn-primary brick-btn-lg" href="${esc(url)}">${esc(label)}</a>` : ""}
 </section>`;
@@ -267,11 +271,11 @@ ${eyebrow ? `  <span class="brick-eyebrow">${esc(eyebrow)}</span>\n` : ""}${titl
           tone: { type: "string", title: "색 (info/success/warning/danger)", default: "info" },
         },
       },
-      render: async (props) => {
+      render: async (props, ctx) => {
         const tone = ["info", "success", "warning", "danger"].includes(String(props.tone))
           ? String(props.tone)
           : "info";
-        return `<div class="brick-notice brick-notice-${tone}">${esc(props.text).replace(/\n/g, "<br />")}</div>`;
+        return `<div class="brick-notice brick-notice-${tone}"${ed(ctx, "text", true)}>${esc(props.text).replace(/\n/g, "<br />")}</div>`;
       },
     });
 
@@ -296,7 +300,7 @@ ${eyebrow ? `  <span class="brick-eyebrow">${esc(eyebrow)}</span>\n` : ""}${titl
           reverse: { type: "boolean", title: "이미지를 오른쪽에", default: false },
         },
       },
-      render: async (props) => {
+      render: async (props, ctx) => {
         const image = safeUrl(props.image);
         const eyebrow = String(props.eyebrow ?? "").trim();
         const title = String(props.title ?? "").trim();
@@ -306,9 +310,9 @@ ${eyebrow ? `  <span class="brick-eyebrow">${esc(eyebrow)}</span>\n` : ""}${titl
         return `<section class="brick-media-text${props.reverse ? " is-reverse" : ""}${image ? "" : " no-media"}">
 ${image ? `  <div class="brick-media"><img src="${esc(image)}" alt="${esc(props.alt)}" loading="lazy" /></div>
 ` : ""}  <div class="brick-media-body">
-${eyebrow ? `    <span class="brick-eyebrow">${esc(eyebrow)}</span>
-` : ""}${title ? `    <h2>${esc(title)}</h2>
-` : ""}${text ? `    <p>${esc(text).replace(/\n/g, "<br />")}</p>
+${eyebrow ? `    <span class="brick-eyebrow"${ed(ctx, "eyebrow")}>${esc(eyebrow)}</span>
+` : ""}${title ? `    <h2${ed(ctx, "title")}>${esc(title)}</h2>
+` : ""}${text ? `    <p${ed(ctx, "text", true)}>${esc(text).replace(/\n/g, "<br />")}</p>
 ` : ""}${label && url ? `    <a class="brick-btn brick-btn-primary" href="${esc(url)}">${esc(label)}</a>
 ` : ""}  </div>
 </section>`;

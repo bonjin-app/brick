@@ -959,6 +959,15 @@ export interface BlockRenderContext {
    * 된다(true 인데 안 그림) — 둘 다 화면을 보면 바로 드러난다.
    */
   setSeo?: (seo: { title?: string; description?: string; ownHeading?: boolean }) => void;
+  /**
+   * 배치 편집기 미리보기에서 **이 속성을 그 자리에서 고칠 수 있게** 요소에 붙일 속성 문자열.
+   *
+   * 공개 렌더에서는 없거나 빈 문자열이다 — 그대로 이어 붙이면 된다:
+   *   `<h2${ctx.editable?.("title") ?? ""}>${esc(title)}</h2>`
+   * 속성 값이 **그대로 글자로** 들어가는 요소에만 붙인다(HTML 로 가공한 값이나 여러 속성을 합친 요소에는
+   * 붙이지 않는다 — 고친 글자가 속성으로 돌아갈 때 모양이 바뀐다). 여러 줄 값은 `multiline` 을 준다.
+   */
+  editable?: (prop: string, opts?: { multiline?: boolean }) => string;
 }
 
 /**

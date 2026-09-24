@@ -158,3 +158,29 @@ export function flatten(tree: BlockNode[], base: Path = []): Array<{ path: Path;
   });
   return out;
 }
+
+/**
+ * 미리보기에서 그 자리에서 고친 글자를 트리에 반영한다.
+ *
+ * 값은 미리보기 창이 보낸 것이다 — 그 창에는 블록의 스크립트도 돈다. 그래서 다시 본다: 경로가 있는 노드이고,
+ * 그 블록이 스키마에 **글자(string) 속성으로 선언한** 이름이어야 한다(`__proto__` 같은 이름이나 숫자·참거짓
+ * 속성에 글자가 들어가지 않게). 아니면 null. 같은 값이면 원래 트리를 그대로 돌려준다(되돌리기가 헛돌지 않게).
+ */
+export function applyTextEdit(
+  tree: BlockNode[],
+  pathStr: unknown,
+  prop: unknown,
+  value: unknown,
+  schemaOf: (block: string) => Record<string, { type?: string }> | undefined,
+): { tree: BlockNode[]; path: Path } | null {
+  if (typeof pathStr !== "string" || typeof prop !== "string" || typeof value !== "string") return null;
+  const path = parsePath(pathStr);
+  if (!path) return null;
+  const node = getNode(tree, path);
+  if (!node) return null;
+  const schema = schemaOf(node.block);
+  if (!schema || !Object.prototype.hasOwnProperty.call(schema, prop) || schema[prop]?.type !== "string") return null;
+  const next = value.slice(0, 20000);
+  if ((node.props ?? {})[prop] === next) return { tree, path };
+  return { tree: updateAt(tree, path, (n) => ({ ...n, props: { ...(n.props ?? {}), [prop]: next } })), path };
+}
