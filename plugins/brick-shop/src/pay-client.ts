@@ -14,11 +14,18 @@ import { gateways } from "./gateway-registry.js";
  * **준비된 것만** 싣는다. 키를 넣지 않은 PG 는 결제수단으로 나오지도 않으므로
  * 그 스크립트는 하는 일이 없고, 어떤 PG 플러그인을 깔아 두었는지만 알려 준다.
  */
-export async function gatewayScripts(): Promise<string> {
+export async function gatewayScripts(opts: { billing?: boolean } = {}): Promise<string> {
   const parts = await Promise.all(
     [...gateways.values()].map(async (g) => {
       if (!g.checkout) return "";
-      const ready = g.isReady ? await g.isReady().catch(() => false) : true;
+      /*
+       * 카드 등록 화면은 **정기결제 준비**로 판정한다 — 일반 결제는 다른 PG 로 받고 정기결제만 이 PG 로
+       * 하는 사이트에서, 결제 준비로 판정하면 정기결제 수단 목록(listBillingProviders)에는 뜨는데
+       * 카드 등록 창을 여는 스크립트가 없어 눌러도 아무 일이 없었다.
+       */
+      if (opts.billing && !(g.issueBillingKey && g.chargeBillingKey)) return "";
+      const check = opts.billing ? (g.isBillingReady ?? g.isReady) : g.isReady;
+      const ready = check ? await check.call(g).catch(() => false) : true;
       return ready ? g.checkout.script : "";
     }),
   );

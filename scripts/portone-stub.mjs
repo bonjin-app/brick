@@ -11,6 +11,8 @@
  *   - 취소에 currentCancellableAmount 가 오면 **실제 잔액과 대조**하고 다르면 409
  *     (포트원이 이중 부분환불을 막는 장치 — 이것을 흉내 내지 않으면 그 보호를 검증할 수 없다)
  *   - 남은 금액보다 큰 취소는 거절
+ *   - 빌링키 결제는 **이미 결제된 결제 ID 를 거절**한다(ALREADY_PAID) — 포트원에는 멱등키가 없고
+ *     결제 ID 중복 거절이 그 역할을 한다. 실패한 결제 ID 는 다시 시도할 수 있다.
  *
  * 사용법: node scripts/portone-stub.mjs --port 42640 --out log.jsonl --secret <시크릿>
  */
@@ -33,6 +35,12 @@ let failGets = 0;
 /** identityVerificationId → 본인인증 */
 const identities = new Map();
 let cancelSeq = 0;
+/** billingKey → 빌링키 (`/__control/billing-keys` 로 "손님이 창에서 카드를 등록했다" 를 흉내 낸다) */
+const billingKeys = new Map();
+/** 다음 n 번의 빌링키 청구를 카드사 거절로 (`/__control/fail-charge`) */
+let failCharges = 0;
+/** 다음 n 번의 빌링키 청구는 **결제는 하고** 응답만 500 으로 잃는다 (`/__control/lose-charge`) */
+let loseCharges = 0;
 
 const record = (entry) => appendFileSync(OUT, `${JSON.stringify(entry)}\n`);
 const send = (res, status, body) => {
@@ -77,6 +85,26 @@ const server = createServer((req, res) => {
       failGets = Number(body.n ?? 0) || 0;
       return send(res, 200, { ok: true, failGets });
     }
+    // ── 테스트 제어: 손님이 포트원 창에서 카드를 등록했다(빌링키 발급) ──
+    if (req.method === "POST" && path === "/__control/billing-keys") {
+      billingKeys.set(String(body.billingKey), {
+        billingKey: String(body.billingKey),
+        storeId: String(body.storeId ?? "store-test"),
+        status: String(body.status ?? "ISSUED"),
+        customer: { id: String(body.customerId ?? "") },
+        methods: [{ type: "BillingKeyPaymentMethodCard", card: { name: "신한카드", number: "53278800****1234" } }],
+        issuedAt: "2026-09-24T00:00:00Z",
+      });
+      return send(res, 200, { ok: true });
+    }
+    if (req.method === "POST" && path === "/__control/fail-charge") {
+      failCharges = Number(body.n ?? 0) || 0;
+      return send(res, 200, { ok: true, failCharges });
+    }
+    if (req.method === "POST" && path === "/__control/lose-charge") {
+      loseCharges = Number(body.n ?? 0) || 0;
+      return send(res, 200, { ok: true, loseCharges });
+    }
     // ── 테스트 제어: 손님이 가상계좌에 입금했다 ──
     if (req.method === "POST" && path === "/__control/deposit") {
       const p = payments.get(String(body.paymentId));
@@ -112,6 +140,46 @@ const server = createServer((req, res) => {
       const v = identities.get(id);
       if (!v) return send(res, 404, { type: "IDENTITY_VERIFICATION_NOT_FOUND", message: "요청한 본인인증 정보를 찾을 수 없습니다." });
       return send(res, 200, v);
+    }
+
+    const bkMatch = /^\/billing-keys\/([^/]+)$/.exec(path);
+    if (req.method === "GET" && bkMatch) {
+      const key = decodeURIComponent(bkMatch[1]);
+      record({ kind: "billing-key-get", billingKey: key, authOk });
+      if (!authOk) return send(res, 401, { type: "UNAUTHORIZED", message: "인증 정보가 올바르지 않습니다." });
+      const k = billingKeys.get(key);
+      if (!k) return send(res, 404, { type: "BILLING_KEY_NOT_FOUND", message: "빌링키 정보를 찾을 수 없습니다." });
+      return send(res, 200, k);
+    }
+    const chargeMatch = /^\/payments\/([^/]+)\/billing-key$/.exec(path);
+    if (req.method === "POST" && chargeMatch) {
+      const id = decodeURIComponent(chargeMatch[1]);
+      const total = Number(body.amount?.total);
+      record({ kind: "billing-charge", paymentId: id, authOk, billingKey: body.billingKey ?? null,
+               customerId: body.customer?.id ?? null, total, currency: body.currency ?? null });
+      if (!authOk) return send(res, 401, { type: "UNAUTHORIZED", message: "인증 정보가 올바르지 않습니다." });
+      const k = billingKeys.get(String(body.billingKey ?? ""));
+      if (!k || k.status !== "ISSUED") return send(res, 404, { type: "BILLING_KEY_NOT_FOUND", message: "빌링키 정보를 찾을 수 없습니다." });
+      const prev = payments.get(id);
+      if (prev && prev.status === "PAID") return send(res, 409, { type: "ALREADY_PAID", message: "이미 결제가 완료된 결제 건입니다." });
+      if (failCharges > 0) {
+        failCharges -= 1;
+        payments.set(id, { id, storeId: k.storeId, status: "FAILED", currency: "KRW", method: { type: "PaymentMethodCard" },
+                           amount: { total, paid: 0, cancelled: 0 } });
+        return send(res, 400, { type: "PG_PROVIDER", message: "카드 한도가 초과되었습니다.", pgCode: "LIMIT", pgMessage: "한도 초과" });
+      }
+      const p = {
+        id, transactionId: `tx-${payments.size + 1}`, storeId: k.storeId, status: "PAID",
+        orderName: String(body.orderName ?? ""), currency: "KRW", billingKey: k.billingKey,
+        method: { type: "PaymentMethodCard" },
+        amount: { total, paid: total, cancelled: 0 }, paidAt: "2026-09-24T00:00:00Z",
+      };
+      payments.set(id, p);
+      if (loseCharges > 0) {
+        loseCharges -= 1;
+        return send(res, 502, { type: "INTERNAL", message: "게이트웨이 응답을 받지 못했습니다." });
+      }
+      return send(res, 200, { payment: { pgTxId: p.transactionId, paidAt: p.paidAt } });
     }
 
     const getMatch = /^\/payments\/([^/]+)$/.exec(path);

@@ -83,6 +83,13 @@ export interface PaymentGateway {
    */
   isReady?(): Promise<boolean>;
   /**
+   * 정기결제(빌링키)를 받을 수 있는 상태인가 — 없으면 isReady 를 본다.
+   *
+   * 결제와 정기결제가 **다른 설정**인 PG 가 있다(포트원은 빌링키 전용 채널이 따로다). 결제만 켜 둔
+   * 가게의 카드 등록 화면에 그 PG 가 뜨면 손님은 누르고 실패한다.
+   */
+  isBillingReady?(): Promise<boolean>;
+  /**
    * 주문을 만든 **뒤** 손님을 PG 로 넘기는 클라이언트 단계.
    *
    * 없으면 주문만 만들고 끝난다 — 무통장입금처럼 **나중에 돈이 들어오는**

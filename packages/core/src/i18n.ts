@@ -168,7 +168,8 @@ const CORE_KO: MessageCatalog = {
   "mail.socialLinkedBody": "이 계정에 {provider} 로그인이 연결되었습니다. 이제 그 계정으로도 로그인할 수 있습니다.",
   "mail.socialLinkedNotYou": "본인이 한 것이 아니라면 계정이 도용된 것입니다. 비밀번호를 바꾸고 내 정보에서 연결을 해제한 뒤 사이트 운영자에게 알려주세요.",
   "withdraw.privacyLabel": "개인정보",
-  "withdraw.privacyDetail": "이메일·이름·비밀번호는 즉시 파기되며 같은 계정으로 다시 로그인할 수 없습니다.",  "identity.title": "본인인증",
+  "withdraw.privacyDetail": "이메일·이름·비밀번호는 즉시 파기되며 같은 계정으로 다시 로그인할 수 없습니다.",
+  "identity.title": "본인인증",
   "identity.loginRequired": "본인인증은 로그인한 뒤 할 수 있습니다.",
   "identity.login": "로그인",
   "identity.intro": "휴대폰으로 본인임을 확인합니다. 이름·생년월일·전화번호는 이 사이트에 저장되지 않고, 성인 여부를 가리는 데 필요한 출생 연도만 남습니다.",
@@ -499,6 +500,7 @@ export const CORE_ERROR_SOURCES = Object.keys(CORE_ERROR_EN);
  */
 const CORE_LABEL_EN: MessageCatalog = {
   "알림함": "Notifications",
+  "본인인증": "Identity verification",
   "표시 개수": "How many to show",
   "제목": "Heading",
   "내용": "Text",

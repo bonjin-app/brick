@@ -1067,5 +1067,11 @@
   "ret.refundBank": "Choose bank",
   "ret.refundAccountNo": "Account number",
   "ret.refundHolder": "Account holder",
-  "가상계좌로 결제한 주문은 환불 받을 계좌(은행·계좌번호·예금주)를 적어주세요.": "For an order paid by virtual account, please enter a refund account (bank, account number, holder)."
+  "가상계좌로 결제한 주문은 환불 받을 계좌(은행·계좌번호·예금주)를 적어주세요.": "For an order paid by virtual account, please enter a refund account (bank, account number, holder).",
+  "주문한 상품 전부 (한 줄에 하나 — 메일용)": "Every item in the order (one per line — for email)",
+  "무통장입금이면 계좌·기한 안내 여러 줄 (아니면 빈칸)": "Deposit account and deadline, several lines, for bank transfer (blank otherwise)",
+  "송장번호가 있으면 그 한 줄 (없으면 빈칸)": "One line with the tracking number if there is one (blank otherwise)",
+  "자동 취소였다면 그 이유 (아니면 빈칸)": "Why it was cancelled, if it was cancelled automatically (blank otherwise)",
+  "카드 등록 정보가 올바르지 않습니다. 카드 등록을 처음부터 다시 해 주세요.": "The card registration details are invalid. Please start the card registration again.",
+  "이미 다른 계정에 등록된 카드입니다.": "This card is already registered to another account."
 }

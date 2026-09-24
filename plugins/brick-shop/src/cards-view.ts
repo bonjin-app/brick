@@ -26,7 +26,7 @@ export function registerCardsView(
 <div class="brick-cards" id="brick-cards" data-user="${blockCtx?.user ? "1" : "0"}">
   <div id="brick-cards-body"><p class="brick-shop-empty">${escapeHtml(t("orders.loading"))}</p></div>
 </div>
-${await gatewayScripts()}${cardsScript(t)}${CARDS_CSS}`,
+${await gatewayScripts({ billing: true })}${cardsScript(t)}${CARDS_CSS}`,
   };
 
   ctx.registerBlock(cardsBlock);

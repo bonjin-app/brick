@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { definePlugin } from "@brick/plugin-sdk";
 
 /**
@@ -23,8 +24,10 @@ import { definePlugin } from "@brick/plugin-sdk";
  * "입금 대기"(awaitingDeposit)로 알리고, 입금은 포트원의 웹훅(`/webhook`)으로 안다. 웹훅 내용은 믿지
  * 않는다 — 결제 ID 만 받아 brick-shop 이 다시 확인(confirm → 포트원 조회)하게 한다.
  *
- * 아직 하지 않는 것: 정기결제 빌링키, 입금된 가상계좌의 환불(환불 계좌를 받아야 한다 — 포트원
- * 콘솔에서 처리한다).
+ * **정기결제(빌링키)** — 빌링키 전용 채널로 카드를 등록하고, 회차마다 빌링키로 청구한다. 포트원은
+ * 멱등키 대신 **결제 ID 중복을 거절**하므로, 회차의 결제 ID 를 정해진 값으로 만들어 "이미 결제됨" 을 같은
+ * 회차 재시도의 성공으로 읽는다. 응답을 잃으면(청구는 됐는데 끊김) 조회로 확인하고, 조회도 안 되면
+ * "처리 중" 으로 두어 주문을 건드리지 않는다 — 실패로 단정하면 주문이 취소되고 다음 시도가 이중 청구가 된다.
  *
  * **본인인증**도 같은 계정으로 한다(다날·KCP·이니시스 통합인증을 채널로 등록). 결제와 별도로
  * 켜고 끈다 — 결제는 다른 PG 로 받고 본인인증만 포트원으로 하는 사이트도 있다.
@@ -64,6 +67,10 @@ interface PortOneSettings {
   payMethod: PayMethod;
   /** 가상계좌 입금 기한(시간) — 결제창이 계좌를 발급할 때 넘긴다 */
   vaHours: number;
+  /** 정기결제 사용 — 빌링키 채널이 따로다 */
+  billingEnabled: boolean;
+  /** 빌링키 발급 채널 키 (카드 정기결제를 계약한 PG 의 채널) */
+  billingChannelKey: string;
   /** 본인인증 사용 — 결제와 따로 켠다 */
   identityEnabled: boolean;
   /** 본인인증 채널 키 (다날·KCP·이니시스 본인인증 채널) */
@@ -78,6 +85,8 @@ export default definePlugin(async (ctx) => {
     apiSecret: "",
     payMethod: "CARD",
     vaHours: 72,
+    billingEnabled: false,
+    billingChannelKey: "",
     identityEnabled: false,
     identityChannelKey: "",
     ...((await ctx.settings.get<Partial<PortOneSettings>>("config")) ?? {}),
@@ -187,6 +196,41 @@ export default definePlugin(async (ctx) => {
       if (q.get('code')) return null;
       var id = q.get('paymentId');
       return id ? { providerTid: id, amount: 0 } : null;
+    };
+
+    /*
+     * 정기결제 카드 등록 — 포트원 창에서 빌링키를 발급받는다. 카드번호는 포트원·PG 화면에서만 입력된다.
+     * 돌아오는 주소에 우리 고객 식별자를 실어 둔다(포트원은 빌링키만 붙여 돌려준다) — 서버가 그 빌링키가
+     * 이 고객에게 발급된 것인지 포트원에 물어 확인한다.
+     */
+    window.brickPay['portone'].registerCard = function (opts) {
+      return fetch('/api/plugins/brick-pay-portone/config')
+        .then(function(r){ return r.json(); })
+        .then(function(cfg){
+          if (!cfg.billingEnabled || !cfg.storeId || !cfg.billingChannelKey) throw new Error('portone billing not configured');
+          var back = new URL(opts.returnUrl, location.href);
+          back.searchParams.set('customerKey', opts.customerKey);
+          return loadSdk().then(function(){
+            return window.PortOne.requestIssueBillingKey({
+              storeId: cfg.storeId,
+              channelKey: cfg.billingChannelKey,
+              billingKeyMethod: 'CARD',
+              issueName: 'regular-payment-card',
+              customer: { customerId: opts.customerKey },
+              redirectUrl: back.toString()
+            });
+          }).then(function(res){
+            if (!res) return;
+            if (res.code) { back.searchParams.set('code', res.code); back.searchParams.set('message', res.message || ''); }
+            else back.searchParams.set('billingKey', res.billingKey || '');
+            location.href = back.toString();
+          });
+        });
+    };
+    window.brickPay['portone'].readCardReturn = function (q) {
+      if (q.get('code')) return null;
+      var key = q.get('billingKey'), customer = q.get('customerKey');
+      return key && customer ? { authKey: key, customerKey: customer } : null;
     };
   })();
   </script>`,
@@ -325,6 +369,88 @@ export default definePlugin(async (ctx) => {
     },
   };
 
+  // ── 정기결제 (빌링키) ─────────────────────────────────
+  Object.assign(gateway, {
+    async isBillingReady() {
+      return billingReady(await load());
+    },
+
+    /**
+     * 카드 등록 확인 — 브라우저가 가져온 빌링키를 포트원에 **직접 조회**한다. 이 상점의 것인지, 발급
+     * 상태인지, 그리고 **우리가 이 회원에게 준 고객 식별자로 발급됐는지** 본다(남의 빌링키를 들고 와
+     * 내 정기결제에 붙이는 것을 막는다).
+     */
+    async issueBillingKey(params: { authKey: string; customerKey: string }) {
+      const cfg = await load();
+      if (!billingReady(cfg)) return { ok: false, failureReason: "포트원 정기결제가 설정되지 않았습니다." };
+      const res = await callPortOne("GET", `/billing-keys/${encodeURIComponent(params.authKey)}`, cfg.apiSecret);
+      if (!res.ok) return { ok: false, failureReason: String(res.data.message ?? `빌링키 조회 실패 (HTTP ${res.status})`) };
+      if (cfg.storeId && typeof res.data.storeId === "string" && res.data.storeId !== cfg.storeId) {
+        return { ok: false, failureReason: "다른 상점의 빌링키입니다." };
+      }
+      if (String(res.data.status ?? "") !== "ISSUED") return { ok: false, failureReason: "발급되지 않은 빌링키입니다." };
+      const customer = (res.data.customer ?? {}) as Record<string, unknown>;
+      if (String(customer.id ?? "") !== params.customerKey) {
+        return { ok: false, failureReason: "이 회원에게 발급된 빌링키가 아닙니다." };
+      }
+      const methods = Array.isArray(res.data.methods) ? (res.data.methods as Array<Record<string, unknown>>) : [];
+      const card = (methods[0]?.card ?? {}) as Record<string, unknown>;
+      const tail = String(card.number ?? "").replace(/\D/g, "").slice(-4);
+      const issuer = String(card.name ?? card.issuer ?? card.publisher ?? "카드");
+      return { ok: true, billingKey: params.authKey, cardLabel: [issuer, tail ? `****${tail}` : ""].filter(Boolean).join(" ") };
+    },
+
+    /**
+     * 빌링키 청구. 결제 ID 는 회차 키로 정해진다 — 같은 회차의 재시도는 같은 결제 ID 라, 포트원이 이미
+     * 결제된 ID 를 거절하면 그것은 **먼저 간 시도가 성공한 것**이다(조회로 확인해 성공으로 돌려준다).
+     */
+    async chargeBillingKey(params: {
+      billingKey: string; customerKey: string; orderNo: string; amount: number; orderName: string; idempotencyKey: string;
+    }) {
+      const cfg = await load();
+      if (!billingReady(cfg)) return { ok: false, failureReason: "포트원 정기결제가 설정되지 않았습니다." };
+      // 주문번호로 시작해야 조회·취소·웹훅이 이 주문의 것으로 묶는다
+      const paymentId = `${params.orderNo}-${createHash("sha256").update(params.idempotencyKey).digest("hex").slice(0, 12)}`;
+      const res = await callPortOne("POST", `/payments/${encodeURIComponent(paymentId)}/billing-key`, cfg.apiSecret, {
+        billingKey: params.billingKey,
+        orderName: params.orderName.slice(0, 100),
+        customer: { id: params.customerKey },
+        amount: { total: params.amount },
+        currency: "KRW",
+      });
+      const type = String(res.data.type ?? "");
+      /*
+       * 확정 조회 — 성공 응답이든, "이미 결제됨" 이든, 응답을 잃었든(끊김·5xx) 포트원에 물어 실제 상태를 본다.
+       * 청구 금액도 여기서 읽는다(호출자가 대조한다).
+       */
+      const settle = async () => {
+        const got = await callPortOne("GET", `/payments/${encodeURIComponent(paymentId)}`, cfg.apiSecret);
+        if (!got.ok) return null;
+        if (String(got.data.status ?? "") !== "PAID") return { paid: false as const, data: got.data };
+        return { paid: true as const, data: got.data };
+      };
+      if (res.ok || type === "ALREADY_PAID" || res.status === 0 || res.status >= 500) {
+        const s = await settle();
+        if (s?.paid) {
+          const amt = (s.data.amount ?? {}) as Record<string, unknown>;
+          return { ok: true, providerTid: paymentId, approvedAmount: Number(amt.total), method: "카드(정기결제)", raw: sanitize(s.data) };
+        }
+        // 청구했는지 모른다 — 실패로 단정하지 않는다. 다음 청구가 같은 결제 ID 로 다시 묻는다
+        if (!s) return { ok: false, pending: true, failureReason: "포트원 청구 결과를 확인하지 못했습니다." };
+        if (res.ok || type === "ALREADY_PAID") {
+          return { ok: false, failureReason: `포트원 결제 상태 ${String(s.data.status ?? "알 수 없음")}`, raw: sanitize(s.data) };
+        }
+      }
+      return {
+        ok: false,
+        failureReason: String(res.data.message ?? `정기결제 청구 실패 (HTTP ${res.status})`),
+        // PG 가 거절한 이유(한도·정지 카드)는 손님이 고칠 수 있다 — 그것만 보여 준다
+        customerReason: type === "PG_PROVIDER" && typeof res.data.message === "string" ? res.data.message.slice(0, 200) : undefined,
+        raw: sanitize(res.data),
+      };
+    },
+  });
+
   await ctx.hooks.doAction("shop.payment.register", { gateway });
 
   // ── 본인인증 ────────────────────────────────────────
@@ -440,6 +566,7 @@ export default definePlugin(async (ctx) => {
     const ready = cfg.enabled && Boolean(cfg.storeId && cfg.channelKey && cfg.apiSecret);
     return {
       enabled: ready, storeId: cfg.storeId, channelKey: cfg.channelKey, payMethod: cfg.payMethod, vaHours: cfg.vaHours,
+      billingEnabled: billingReady(cfg), billingChannelKey: cfg.billingChannelKey,
       identityEnabled: identityReady(cfg), identityChannelKey: cfg.identityChannelKey,
     };
   });
@@ -476,6 +603,8 @@ export default definePlugin(async (ctx) => {
     channelKey: cfg.channelKey,
     payMethod: cfg.payMethod,
     vaHours: cfg.vaHours,
+    billingEnabled: cfg.billingEnabled,
+    billingChannelKey: cfg.billingChannelKey,
     identityEnabled: cfg.identityEnabled,
     identityChannelKey: cfg.identityChannelKey,
     // 시크릿은 내려보내지 않는다 — 비워 둔 채 저장하면 기존 값이 유지된다
@@ -498,6 +627,8 @@ export default definePlugin(async (ctx) => {
       apiSecret: b.apiSecret?.trim() ? b.apiSecret.trim() : current.apiSecret,
       payMethod,
       vaHours: b.vaHours === undefined ? current.vaHours : Math.floor(Number(b.vaHours)),
+      billingEnabled: b.billingEnabled ?? current.billingEnabled,
+      billingChannelKey: String(b.billingChannelKey ?? current.billingChannelKey).trim(),
       identityEnabled: b.identityEnabled ?? current.identityEnabled,
       identityChannelKey: String(b.identityChannelKey ?? current.identityChannelKey).trim(),
     };
@@ -512,6 +643,12 @@ export default definePlugin(async (ctx) => {
     }
     if (!Number.isInteger(next.vaHours) || next.vaHours < 1 || next.vaHours > 720) {
       throw Object.assign(new Error("가상계좌 입금 기한은 1~720시간이어야 합니다."), { status: 400, field: "vaHours" });
+    }
+    if (next.billingChannelKey && !/^channel-key-[\w-]+$/.test(next.billingChannelKey)) {
+      throw Object.assign(new Error("정기결제 채널 키는 channel-key- 로 시작합니다. 포트원 콘솔 → 결제 연동 → 채널에서 빌링키 채널의 키를 확인하세요."), { status: 400, field: "billingChannelKey" });
+    }
+    if (next.billingEnabled && !(next.storeId && next.billingChannelKey && next.apiSecret)) {
+      throw Object.assign(new Error("정기결제를 켜려면 상점 ID·정기결제 채널 키·API 시크릿을 모두 입력해야 합니다."), { status: 400 });
     }
     if (next.identityChannelKey && !/^channel-key-[\w-]+$/.test(next.identityChannelKey)) {
       throw Object.assign(new Error("본인인증 채널 키는 channel-key- 로 시작합니다. 포트원 콘솔 → 결제 연동 → 채널에서 본인인증 채널의 키를 확인하세요."), { status: 400, field: "identityChannelKey" });
@@ -556,6 +693,10 @@ export default definePlugin(async (ctx) => {
           { value: "VIRTUAL_ACCOUNT", label: "가상계좌" },
         ],
         help: "채널이 지원하는 수단이어야 합니다. 가상계좌를 쓰려면 포트원 콘솔 → 웹훅에 이 사이트의 /api/plugins/brick-pay-portone/webhook 주소를 등록하세요 — 입금 통지가 그리로 옵니다." },
+      { name: "billingEnabled", label: "정기결제 사용", type: "boolean",
+        help: "켜면 회원이 결제 카드를 등록하고 정기배송을 신청할 수 있습니다. 결제 사용과 따로 켭니다." },
+      { name: "billingChannelKey", label: "정기결제 채널 키", type: "text", placeholder: "channel-key-00000000-0000-0000-0000-000000000000",
+        help: "포트원 콘솔에 빌링키(정기결제) 채널을 등록하고 그 채널 키를 넣으세요. 일반 결제 채널 키와 다릅니다." },
       { name: "vaHours", label: "가상계좌 입금 기한 (시간)", type: "number",
         help: "기한이 지나면 계좌가 닫히고 주문이 자동으로 취소됩니다. 1~720시간 (기본 72)." },
     ],
@@ -563,6 +704,11 @@ export default definePlugin(async (ctx) => {
 
   return {};
 });
+
+/** 정기결제를 받을 수 있는가 — 결제·본인인증과 따로 판정한다 */
+function billingReady(cfg: PortOneSettings): boolean {
+  return cfg.billingEnabled && Boolean(cfg.storeId && cfg.billingChannelKey && cfg.apiSecret);
+}
 
 /** 본인인증을 받을 수 있는가 — 결제와 따로 판정한다 */
 function identityReady(cfg: PortOneSettings): boolean {

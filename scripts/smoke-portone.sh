@@ -7,6 +7,8 @@
 #   - 결제 ID 가 **이 주문의 것**인지(다른 주문의 같은 금액 결제로 이 주문을 끝낼 수 없다)
 #   - 부분환불은 취소 전 잔액을 함께 보낸다 — 포트원이 이중 부분환불을 막는 장치
 #   - 가상계좌는 입금 대기로 두고, 입금은 웹훅으로 안다(웹훅 내용은 믿지 않고 포트원에 다시 묻는다)
+#   - 정기결제: 빌링키는 이 회원에게 발급된 것만 받고, 회차 결제 ID 는 정해진 값 — 응답을 잃어도
+#     이중 청구도, "긁혔는데 취소된 주문" 도 없다. 탈퇴하면 청구가 멈춘다
 #   - 시크릿은 어디에도 새지 않는다
 #
 # 사용법: DATABASE_URL=postgresql://... bash scripts/smoke-portone.sh
@@ -404,6 +406,140 @@ check "돌려준 뒤 계좌는 지운다" "$(psql_q "SELECT coalesce(refund_acco
 O_CARDRET="$(mkorder 1)"; paid_by_customer "$O_CARDRET-ok" 14000; confirm "$O_CARDRET" "$O_CARDRET-ok" >/dev/null
 contains "카드 주문에는 계좌 칸을 열지 않는다" "$(curl -s -b "$B" "$SHOP/orders/$O_CARDRET/returnable")" '"needsRefundAccount":false'
 
+echo "── 정기결제 (빌링키) — 설정"
+BILLING="$(curl -s "$SHOP/billing/providers")"
+absent "정기결제를 켜기 전에는 정기결제 수단에 없다" "$BILLING" '"portone"'
+check "정기결제 채널 키 형식이 틀리면 거절" \
+  "$(code -b "$CK" -X PUT "$PO/admin/config" -H 'content-type: application/json' -d '{"billingChannelKey":"abc"}')" "400"
+check "채널 키 없이 정기결제를 켤 수 없다" \
+  "$(code -b "$CK" -X PUT "$PO/admin/config" -H 'content-type: application/json' -d '{"billingEnabled":true}')" "400"
+BILL_PUT="$(curl -s -b "$CK" -X PUT "$PO/admin/config" -H 'content-type: application/json' \
+  -d '{"billingEnabled":true,"billingChannelKey":"channel-key-billing-test"}')"
+contains "정기결제를 켠다" "$BILL_PUT" '"billingEnabled":true'
+contains "켜면 정기결제 수단에 뜬다" "$(curl -s "$SHOP/billing/providers")" '"portone"'
+contains "공개 설정에 정기결제 채널 키 (카드 등록 창이 쓴다)" "$(curl -s "$PO/config")" "channel-key-billing-test"
+# 일반 결제는 다른 PG 로 받고 정기결제만 포트원으로 — 카드 등록 화면이 창을 여는 스크립트를 실어야 한다
+curl -s -o /dev/null -b "$CK" -X PUT "$PO/admin/config" -H 'content-type: application/json' -d '{"enabled":false}'
+render_html() { curl -s -b "$B" "$API/api/render/page?path=$1" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("html",""))'; }
+CARDS_HTML="$(render_html shop/cards)"
+contains "결제를 꺼도 카드 등록 화면은 포트원 빌링키 창을 싣는다" "$CARDS_HTML" "requestIssueBillingKey"
+absent "주문서에는 싣지 않는다 (결제는 꺼져 있다)" "$(render_html shop/checkout)" "cdn.portone.io"
+contains "정기결제만 켜도 정기결제 수단에 뜬다" "$(curl -s "$SHOP/billing/providers")" '"portone"'
+curl -s -o /dev/null -b "$CK" -X PUT "$PO/admin/config" -H 'content-type: application/json' -d '{"enabled":true}'
+READ_CARD="$(node -e '
+  const html = process.argv[1];
+  const i = html.indexOf("window.brickPay[\x27portone\x27].readCardReturn");
+  const j = html.indexOf("};", i) + 2;
+  const vm = require("node:vm");
+  const window = { brickPay: { portone: {} } };
+  vm.runInNewContext(html.slice(i, j), { window, URLSearchParams });
+  const r = window.brickPay.portone.readCardReturn;
+  console.log(JSON.stringify([
+    r(new URLSearchParams("brickCard=portone&customerKey=cust-1&billingKey=bk-1")),
+    r(new URLSearchParams("brickCard=portone&customerKey=cust-1&billingKey=bk-1&code=FAILURE_TYPE_PG&message=x")),
+    r(new URLSearchParams("brickCard=portone&customerKey=cust-1")),
+  ]));
+' "$CARDS_HTML" 2>/dev/null || true)"
+check "카드 등록 뒤 돌아온 주소 읽기 — 성공은 빌링키·고객 식별자, 실패·취소는 null" "$READ_CARD" \
+  '[{"authKey":"bk-1","customerKey":"cust-1"},null,null]'
+
+echo "── 정기결제 — 카드 등록은 이 회원에게 발급된 빌링키만"
+prepare() { curl -s -b "$1" -X POST "$SHOP/me/billing-keys/prepare" | jq_get "['customerKey']"; }
+bk_issued() {  # bk_issued <빌링키> <고객 식별자> [storeId] — 손님이 포트원 창에서 카드를 등록했다
+  local body; body="$(printf '{"billingKey":"%s","customerId":"%s","storeId":"%s"}' "$1" "$2" "${3:-store-brick-test}")"
+  curl -s -o /dev/null -X POST "http://127.0.0.1:$PO_PORT/__control/billing-keys" -H 'content-type: application/json' -d "$body"
+}
+register_card() {  # register_card <쿠키> <빌링키> <고객 식별자> → 본문 + 상태
+  local body; body="$(printf '{"provider":"portone","authKey":"%s","customerKey":"%s"}' "$2" "$3")"
+  curl -s -b "$1" -w ' %{http_code}' -X POST "$SHOP/me/billing-keys" -H 'content-type: application/json' -d "$body"
+}
+stub_ctl() { curl -s -o /dev/null -X POST "http://127.0.0.1:$PO_PORT/__control/$1" -H 'content-type: application/json' -d "$(printf '{"n":%s}' "$2")"; }
+CUST="$(prepare "$B")"
+[[ "$CUST" == cust-* ]] && ok "고객 식별자 발급 (내부 id 가 아니다)" || bad "고객 식별자 발급 ($CUST)"
+check "고객 식별자는 회원마다 하나 — 다시 받아도 같다" "$(prepare "$B")" "$CUST"
+bk_issued "bk-someone" "cust-someone-else"
+R="$(register_card "$B" "bk-someone" "$CUST")"
+[[ "$R" == *" 402" && "$R" == *"이 회원에게 발급된 빌링키가 아닙니다"* ]] && ok "다른 고객 식별자로 발급된 빌링키는 거절" || bad "고객 불일치 (${R:0:160})"
+bk_issued "bk-otherstore" "$CUST" "store-other"
+R="$(register_card "$B" "bk-otherstore" "$CUST")"
+[[ "$R" == *" 402" && "$R" == *"다른 상점"* ]] && ok "다른 상점의 빌링키는 거절" || bad "다른 상점 (${R:0:160})"
+check "포트원에 없는 빌링키는 거절" "$(register_card "$B" "bk-missing" "$CUST" | tail -c 3)" "402"
+bk_issued "bk-b" "$CUST"
+REG="$(register_card "$B" "bk-b" "$CUST")"
+[[ "$REG" == *" 200" ]] && ok "카드 등록" || bad "카드 등록 (${REG:0:160})"
+contains "카드 표시는 마스킹" "$REG" "****1234"
+BK_ID="$(echo "${REG% *}" | jq_get "['id']")"
+check "포트원에 빌링키를 직접 조회했다 (인증 헤더)" "$(po_last billing-key-get authOk)" "True"
+# 남의 카드 등록 결과(빌링키 + 그 사람의 고객 식별자)는 돌아오는 주소에 실린다 — 들고 와도 붙일 수 없어야 한다
+printf '{"email":"c@po.test","password":"password123","agreements":{"terms":true,"privacy":true},"displayName":"다른 회원"}' > "$TMP/c.json"
+curl -s -o /dev/null -X POST "$API/api/register" -H 'content-type: application/json' --data-binary "@$TMP/c.json"
+curl -s -o /dev/null -c "$TMP/c.txt" -X POST "$API/api/auth/login" -H 'content-type: application/json' \
+  -d '{"email":"c@po.test","password":"password123"}'
+C="$TMP/c.txt"
+R="$(register_card "$C" "bk-b" "$CUST")"
+[[ "$R" == *" 400" && "$R" == *"처음부터"* ]] && ok "남의 고객 식별자로는 등록할 수 없다" || bad "남의 고객 식별자 (${R:0:160})"
+check "남의 빌링키를 내 고객 식별자로 들고 와도 포트원 대조에서 거절" "$(register_card "$C" "bk-b" "$(prepare "$C")" | tail -c 3)" "402"
+check "다른 회원 계정에 카드가 붙지 않았다" \
+  "$(psql_q "SELECT count(*) FROM shop_billing_keys k JOIN users u ON u.id=k.user_id WHERE u.email='c@po.test'")" "0"
+
+echo "── 정기결제 — 가입과 회차 청구"
+curl -s -o /dev/null -b "$CK" -X POST "$SHOP/admin/products" -H 'content-type: application/json' \
+  -d '{"slug":"po-sub","name":"포트원 정기배송","price":20000,"stock":50,"status":"selling","sub_interval":"month"}'
+SUB_BODY="$(printf '{"productSlug":"po-sub","billingKeyId":"%s","orderer":{"ordererName":"구매자","ordererPhone":"010-1111-2222","postcode":"06236","address1":"서울"}}' "$BK_ID")"
+SUB="$(curl -s -b "$B" -X POST "$SHOP/subscriptions" -H 'content-type: application/json' -d "$SUB_BODY")"
+SUB_ID="$(echo "$SUB" | jq_get "['id']")"
+SUB_O1="$(echo "$SUB" | jq_get "['orderNo']")"
+[[ -n "$SUB_ID" ]] && ok "정기배송 가입" || bad "정기배송 가입 (${SUB:0:200})"
+check "첫 회차 주문이 결제 완료" "$(psql_q "SELECT status FROM shop_orders WHERE order_no='$SUB_O1'")" "paid"
+check "포트원에 빌링키로 청구했다 (금액 · 통화 · 고객 · 빌링키)" \
+  "$(po_last billing-charge total)|$(po_last billing-charge currency)|$(po_last billing-charge customerId)|$(po_last billing-charge billingKey)" "23000|KRW|$CUST|bk-b"
+PID1="$(po_last billing-charge paymentId)"
+[[ "$PID1" == "$SUB_O1-"* ]] && ok "결제 ID 가 회차 주문번호로 시작한다 (조회·취소·웹훅이 주문을 찾는다)" || bad "결제 ID ($PID1 / $SUB_O1)"
+check "결제 기록 (결제 ID · 금액 · 수단)" \
+  "$(psql_q "SELECT provider, amount, method FROM shop_payments WHERE provider_tid='$PID1' AND status='paid'")" "portone|23000|카드(정기결제)"
+due()   { psql_q "UPDATE shop_subscriptions SET next_charge_at = now() - interval '1 hour' WHERE id='$SUB_ID'" >/dev/null; }
+sweep() { curl -s -b "$CK" -X POST "$SHOP/admin/subscriptions/sweep"; }
+sub_state() { psql_q "SELECT cycle_no, fail_count, status FROM shop_subscriptions WHERE id='$SUB_ID'"; }
+due
+contains "결제일이 되면 청구한다" "$(sweep)" '"charged":1'
+check "2회차로 전진" "$(sub_state)" "2|0|active"
+PID2="$(po_last billing-charge paymentId)"
+[[ -n "$PID2" && "$PID2" != "$PID1" ]] && ok "회차마다 다른 결제 ID" || bad "회차 결제 ID ($PID1 / $PID2)"
+
+echo "── 정기결제 — 카드사 거절"
+stub_ctl fail-charge 1; due
+contains "거절은 실패로 센다" "$(sweep)" '"failed":1'
+check "회차는 그대로, 실패 1회" "$(sub_state)" "2|1|active"
+contains "손님이 읽는 실패 이유는 카드사의 문장" \
+  "$(psql_q "SELECT detail FROM shop_subscription_events WHERE subscription_id='$SUB_ID' AND kind='failed' ORDER BY created_at DESC LIMIT 1")" "한도"
+due
+contains "카드를 고치면 다음 청구가 된다 (실패한 시도의 결제 ID 에 묶이지 않는다)" "$(sweep)" '"charged":1'
+check "3회차로 전진 · 실패 횟수 초기화" "$(sub_state)" "3|0|active"
+
+echo "── 정기결제 — 청구는 됐는데 응답을 잃었다"
+stub_ctl lose-charge 1; due
+contains "조회로 결제를 확인해 성공으로 마친다" "$(sweep)" '"charged":1'
+check "4회차로 전진 (실패로 세지 않는다)" "$(sub_state)" "4|0|active"
+PID_L="$(po_last billing-charge paymentId)"
+check "그 회차의 청구는 한 번 (다시 청구하지 않았다)" \
+  "$(python3 -c "
+import json
+print(sum(1 for l in open('$POLOG', encoding='utf-8') if json.loads(l).get('kind')=='billing-charge' and json.loads(l).get('paymentId')=='$PID_L'))")" "1"
+check "결제 기록이 결제 완료" "$(psql_q "SELECT status FROM shop_payments WHERE provider_tid='$PID_L'")" "paid"
+
+echo "── 정기결제 — 응답도 조회도 잃으면 '처리 중' — 주문을 건드리지 않는다"
+stub_ctl lose-charge 1; stub_ctl fail-get 1; due
+SW="$(sweep)"
+contains "실패로 세지 않는다" "$SW" '"failed":0'
+check "회차도 실패 횟수도 그대로" "$(sub_state)" "4|0|active"
+PID_P="$(po_last billing-charge paymentId)"
+O_P="${PID_P%-*}"
+check "그 회차 주문을 취소하지 않는다 (카드는 긁혔다)" "$(psql_q "SELECT status FROM shop_orders WHERE order_no='$O_P'")" "pending"
+contains "다음 청구가 같은 결제 ID 로 다시 묻고 '이미 결제됨' 을 성공으로 읽는다" "$(sweep)" '"charged":1'
+check "같은 결제 ID 로 다시 보냈다" "$(po_last billing-charge paymentId)" "$PID_P"
+check "그 주문이 결제 완료 · 5회차로 전진" "$(psql_q "SELECT status FROM shop_orders WHERE order_no='$O_P'")|$(sub_state)" "paid|5|0|active"
+check "그 회차의 결제 기록은 하나" "$(psql_q "SELECT count(*) FROM shop_payments WHERE provider_tid='$PID_P' AND status='paid'")" "1"
+
 echo "── 환불 전에 탈퇴하면 신청서의 계좌도 지운다"
 O_WD="$(mkorder 1)"
 issue_va "$O_WD-w1" 14000; confirm "$O_WD" "$O_WD-w1" >/dev/null; deposit "$O_WD-w1"; webhook "$O_WD-w1" >/dev/null
@@ -412,6 +548,18 @@ WD_REQ="$(printf '{"kind":"cancel","reasonCode":"change_of_mind","items":[{"orde
 check "계좌를 적어 신청 (아직 처리 전)" "$(code -b "$B" -X POST "$SHOP/orders/$O_WD/returns" -H 'content-type: application/json' -d "$WD_REQ")" "200"
 contains "탈퇴" "$(curl -s -b "$B" -X POST "$API/api/me/withdraw" -H 'content-type: application/json' -d '{"password":"password123","deletePosts":false}')" '"ok":true'
 check "신청서의 계좌가 남지 않는다" "$(psql_q "SELECT coalesce(r.refund_account, '(없음)') FROM shop_returns r JOIN shop_orders o ON o.id=r.order_id WHERE o.order_no='$O_WD'")" "(없음)"
+
+echo "── 탈퇴한 회원의 카드로 청구를 이어 가지 않는다"
+check "정기배송이 해지된다" "$(psql_q "SELECT status, (next_charge_at IS NULL) FROM shop_subscriptions WHERE id='$SUB_ID'")" "cancelled|true"
+check "해지 이력이 남는다" "$(psql_q "SELECT count(*) FROM shop_subscription_events WHERE subscription_id='$SUB_ID' AND kind='cancelled'")" "1"
+check "빌링키(청구에 쓰는 값)가 지워진다 — 카드 표시는 남는다" \
+  "$(psql_q "SELECT billing_key = '' AS erased, revoked_at IS NOT NULL AS revoked, card_label FROM shop_billing_keys WHERE id='$BK_ID'")" "true|true|신한카드 ****1234"
+check "고객 식별자도 지워진다" "$(psql_q "SELECT count(*) FROM shop_billing_customers WHERE customer_key='$CUST'")" "0"
+# 해지 전에 남은 구독(이 수정 전에 탈퇴한 회원)이 있어도 청구하지 않는다
+psql_q "UPDATE shop_subscriptions SET status='active', next_charge_at = now() - interval '1 hour' WHERE id='$SUB_ID'" >/dev/null
+CHARGES_BEFORE="$(po_count billing-charge)"
+contains "스윕이 탈퇴한 회원의 구독을 집지 않는다" "$(sweep)" '"due":0'
+check "포트원에 청구가 나가지 않았다" "$(po_count billing-charge)" "$CHARGES_BEFORE"
 
 echo "── 시크릿이 새지 않는다"
 absent "서버 로그에 시크릿이 없다" "$(cat "$TMP/api.log")" "SECRET_VALUE_DO_NOT_LEAK"

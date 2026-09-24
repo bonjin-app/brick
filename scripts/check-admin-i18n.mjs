@@ -77,6 +77,9 @@ for (const name of plugins) {
     for (const m of src.matchAll(re)) {
       const got = readConcat(src, m.index + m[0].length);
       if (!got || !HANGUL.test(got.text)) continue;
+      // `#{글제목}` 처럼 알림 템플릿의 변수 자리 하나뿐인 값은 라벨이 아니다 — 변수 이름은 번역하지 않는다
+      // (운영자가 템플릿에 적는 이름이 언어마다 달라지면 저장해 둔 템플릿이 깨진다)
+      if (/^#\{[^}]+\}$/.test(got.text)) continue;
       checked += 1;
       if (!(got.text in en)) missing.add(got.text);
     }

@@ -47,19 +47,35 @@ function billingGateway(provider: string): PaymentGateway | null {
   return g;
 }
 
-export function listBillingProviders(): Array<{ provider: string; displayName: string }> {
-  return [...gateways.values()]
+export async function listBillingProviders(): Promise<Array<{ provider: string; displayName: string }>> {
+  const out: Array<{ provider: string; displayName: string }> = [];
+  for (const g of gateways.values()) {
     /*
      * 서버 쪽 둘(발급·청구)만으로는 부족하다. 카드 등록 창을 여는 **클라이언트
      * 단계**(checkout.script 안의 registerCard)가 없으면 회원은 카드를 등록할
      * 길이 없다 — 그런 결제수단을 목록에 내놓으면 누를 수는 있는데 아무 일도
      * 일어나지 않는다. 결제수단을 감추는 isReady 와 같은 원칙이다.
      */
-    .filter((g) => g.issueBillingKey && g.chargeBillingKey && g.checkout)
-    .map((g) => ({ provider: g.provider, displayName: g.displayName }));
+    if (!(g.issueBillingKey && g.chargeBillingKey && g.checkout)) continue;
+    const ready = g.isBillingReady ?? g.isReady;
+    if (ready && !(await ready.call(g).catch(() => false))) continue;
+    out.push({ provider: g.provider, displayName: g.displayName });
+  }
+  return out;
 }
 
 // ── 빌링키 ──────────────────────────────────────────
+
+/** 회원의 PG 고객 식별자 — 없으면 만든다. 동시에 두 번 불려도 하나만 남는다 */
+export async function billingCustomerKey(db: Db, userId: string): Promise<string> {
+  await db.execute(sql`
+    INSERT INTO shop_billing_customers (user_id, customer_key)
+    VALUES (${userId}::uuid, ${`cust-${uuidv7().replace(/-/g, "")}`})
+    ON CONFLICT (user_id) DO NOTHING
+  `);
+  const { rows } = await db.execute(sql`SELECT customer_key FROM shop_billing_customers WHERE user_id = ${userId}::uuid`);
+  return String(rows[0]?.customer_key ?? "");
+}
 
 export async function issueBillingKey(
   db: Db,
@@ -74,10 +90,27 @@ export async function issueBillingKey(
     throw new ShopError(400, "카드 등록 정보가 올바르지 않습니다.");
   }
 
+  /*
+   * 고객 식별자가 **이 회원에게 준 값**이어야 한다. 요청이 들고 온 값을 믿으면, 남의 카드 등록 결과
+   * (빌링키 + 그 사람의 고객 식별자 — 돌아오는 주소에 실린다)로 내 계정에 카드를 붙일 수 있다.
+   * 게이트웨이는 그 빌링키가 이 고객 식별자로 발급됐는지 PG 에 확인한다 — 둘이 합쳐 "이 회원의 카드" 다.
+   */
+  const { rows: mine } = await db.execute(sql`
+    SELECT 1 FROM shop_billing_customers WHERE user_id = ${params.userId}::uuid AND customer_key = ${customerKey}
+  `);
+  if (!mine.length) throw new ShopError(400, "카드 등록 정보가 올바르지 않습니다. 카드 등록을 처음부터 다시 해 주세요.");
+
   const result = await gateway.issueBillingKey!({ authKey, customerKey });
   if (!result.ok || !result.billingKey) {
     throw new ShopError(402, result.failureReason ?? "카드 등록에 실패했습니다.");
   }
+  // 같은 빌링키가 다른 회원에게 살아 있으면 받지 않는다(위 대조를 지나온 경우의 이중 방어)
+  const { rows: taken } = await db.execute(sql`
+    SELECT 1 FROM shop_billing_keys
+    WHERE provider = ${params.provider} AND billing_key = ${result.billingKey}
+      AND user_id <> ${params.userId}::uuid AND revoked_at IS NULL
+  `);
+  if (taken.length) throw new ShopError(409, "이미 다른 계정에 등록된 카드입니다.");
 
   const id = uuidv7();
   await db.execute(sql`
@@ -490,6 +523,8 @@ export async function chargeDueSubscriptions(
     JOIN users u ON u.id = s.user_id
     LEFT JOIN shop_products p ON p.id = s.product_id
     WHERE s.status = 'active' AND s.next_charge_at IS NOT NULL AND s.next_charge_at <= now()
+      -- 탈퇴는 구독을 해지한다(쇼핑몰 eraser). 그 전에 만들어진 구독이 남았어도 청구하지 않는다
+      AND u.withdrawn_at IS NULL AND k.billing_key <> ''
     ORDER BY s.next_charge_at
     LIMIT 50
   `);

@@ -61,7 +61,7 @@ import {
 } from "./wishlist.js";
 import {
   SUBSCRIPTION_QUEUE_JOB, cancelSubscription, chargeDueSubscriptions, issueBillingKey,
-  listBillingKeys, listBillingProviders, listMySubscriptions, listSubscriptionsAdmin,
+  billingCustomerKey, listBillingKeys, listBillingProviders, listMySubscriptions, listSubscriptionsAdmin,
   quoteSubscription, resumeSubscription, revokeBillingKey, subscribe, subscriptionEvents,
 } from "./subscriptions.js";
 import { BIRTHDAY_QUEUE_JOB, issueBirthdayCoupons } from "./birthday.js";
@@ -1988,16 +1988,17 @@ export default definePlugin(async (ctx) => {
 
   /** 정기결제를 지원하는 결제수단 (카드 등록 화면이 조회) */
   ctx.registerRoute("GET", "/billing/providers", async () => {
-    return { providers: listBillingProviders() };
+    return { providers: await listBillingProviders() };
   });
 
   /**
-   * 카드 등록 준비 — PG 위젯에 넘길 고객 식별자를 발급한다.
+   * 카드 등록 준비 — PG 위젯에 넘길 고객 식별자를 준다. 회원마다 하나를 만들어 기억하고, 등록할 때
+   * 그 값인지 대조한다(subscriptions.ts 의 issueBillingKey).
    * 회원 id 를 그대로 쓰지 않는다: PG 에 넘어가는 값에 내부 식별자를 싣지 않는다.
    */
   ctx.registerRoute("POST", "/me/billing-keys/prepare", async (req) => {
-    requireMember(req);
-    return { customerKey: `cust-${uuidv7().replace(/-/g, "")}` };
+    const userId = requireMember(req);
+    return { customerKey: await billingCustomerKey(db, userId) };
   });
 
   ctx.registerRoute("POST", "/me/billing-keys", async (req) => {
@@ -2890,6 +2891,31 @@ export default definePlugin(async (ctx) => {
         DELETE FROM shop_carts WHERE user_id = ${userId}::uuid RETURNING id
       `);
       if (carts.length) done.push("장바구니 삭제");
+
+      /*
+       * 정기배송·결제 카드 — **탈퇴한 사람의 카드로 청구가 계속되고 있었다.** 계정은 익명화되어 남으므로
+       * (행이 지워지지 않아 CASCADE 도 없다) 스윕이 다음 결제일마다 그 빌링키로 청구했다. 손님은 로그인할
+       * 수 없어 스스로 해지할 길도 없다. 구독은 해지하고, 빌링키(청구에 쓰는 값)는 지운다 — 행은
+       * 과거 청구가 어느 카드로 됐는지의 근거라 남긴다(카드 표시만).
+       */
+      const { rows: subs } = await tx.execute(sql`
+        UPDATE shop_subscriptions SET status = 'cancelled', cancelled_at = now(), next_charge_at = NULL,
+          pause_reason = NULL
+        WHERE user_id = ${userId}::uuid AND status <> 'cancelled' RETURNING id
+      `);
+      for (const s of subs) {
+        await tx.execute(sql`
+          INSERT INTO shop_subscription_events (id, subscription_id, cycle_no, kind, detail)
+          SELECT ${uuidv7()}, id, cycle_no, 'cancelled', '회원 탈퇴로 해지' FROM shop_subscriptions WHERE id = ${String(s.id)}::uuid
+        `);
+      }
+      if (subs.length) done.push(`정기배송 ${subs.length}건 해지`);
+      const { rows: keys } = await tx.execute(sql`
+        UPDATE shop_billing_keys SET billing_key = '', revoked_at = coalesce(revoked_at, now())
+        WHERE user_id = ${userId}::uuid AND billing_key <> '' RETURNING id
+      `);
+      if (keys.length) done.push(`결제 카드 ${keys.length}개 삭제`);
+      await tx.execute(sql`DELETE FROM shop_billing_customers WHERE user_id = ${userId}::uuid`);
 
       // 반품 신청서에 남은 환불 계좌 — 환불 전에 떠났어도 금융 정보는 남기지 않는다
       const { rows: accounts } = await tx.execute(sql`
