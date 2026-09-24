@@ -188,6 +188,10 @@ const CORE_KO: MessageCatalog = {
   "identity.cancelled": "본인인증이 취소되었습니다.",
   "identity.failed": "본인인증을 진행하지 못했습니다. 잠시 후 다시 시도해주세요.",
   "identity.continue": "계속하기",
+  "identity.signupTitle": "가입 전 본인인증",
+  "identity.signupIntro": "이 사이트는 가입하기 전에 본인인증을 합니다. 이름·생년월일·전화번호는 저장되지 않고, 인증을 마치면 가입 양식으로 돌아갑니다. 만 14세 미만은 가입할 수 없습니다.",
+  "identity.signupDone": "본인인증을 마쳤습니다. 가입 양식으로 돌아갑니다.",
+  "identity.signupBack": "가입 양식으로",
 };
 
 const CORE_EN: MessageCatalog = {
@@ -285,6 +289,10 @@ const CORE_EN: MessageCatalog = {
   "identity.cancelled": "Identity verification was cancelled.",
   "identity.failed": "Identity verification could not be started. Please try again shortly.",
   "identity.continue": "Continue",
+  "identity.signupTitle": "Verify before signing up",
+  "identity.signupIntro": "This site verifies your identity before you sign up. Your name, date of birth and phone number are not stored, and you go back to the sign-up form when you are done. People under 14 cannot sign up.",
+  "identity.signupDone": "Verified. Taking you back to the sign-up form.",
+  "identity.signupBack": "Back to sign-up",
 };
 
 export const CORE_CATALOGS: Record<Locale, MessageCatalog> = { ko: CORE_KO, en: CORE_EN };
@@ -472,6 +480,10 @@ const CORE_ERROR_EN: MessageCatalog = {
   "본문은 5,000자까지 쓸 수 있습니다.": "The body can be up to 5,000 characters.",
   "문자 문구는 2,000자까지 쓸 수 있습니다.": "The SMS text can be up to 2,000 characters.",
   "인증 요청을 찾을 수 없습니다.": "The verification request was not found.",
+  "이미 로그인했습니다. 회원 정보에서 본인인증을 해주세요.": "You are already signed in. Verify your identity from your account page.",
+  "만 14세 미만은 이 사이트에 가입할 수 없습니다. 법정대리인의 동의가 필요하니 운영자에게 문의해주세요.": "People under 14 cannot sign up on this site. Consent from a legal guardian is required, so please contact the site operator.",
+  "이미 이 사이트에 가입한 계정이 있습니다. 로그인하거나 비밀번호 찾기를 이용해주세요.": "You already have an account on this site. Please sign in or reset your password.",
+  "가입하기 전에 본인인증을 해주세요. 인증한 지 30분이 지났다면 다시 인증해야 합니다.": "Please verify your identity before signing up. If more than 30 minutes have passed since you verified, verify again.",
   "이미 끝난 인증 요청입니다. 처음부터 다시 인증해주세요.": "This verification request has already finished. Please start the verification again.",
   "인증 시간이 지났습니다. 처음부터 다시 인증해주세요.": "The verification timed out. Please start the verification again.",
   "사용할 수 없는 본인인증 수단입니다.": "That identity verification method is not available.",

@@ -13,6 +13,33 @@ const REQUEST_TTL_MINUTES = 30;
 export const ONE_PERSON_KEY = "member.one_person_one_account";
 /** 회원 본인인증 필수 설정 키 */
 export const REQUIRED_KEY = "member.identity_required";
+/** 가입 전 본인인증 설정 키 */
+export const SIGNUP_KEY = "member.identity_at_signup";
+/** 가입 전 인증을 이 브라우저에 묶는 쿠키 — 서버가 만든 비밀값이고 스크립트는 읽지 못한다 */
+export const SIGNUP_COOKIE = "brick_idv";
+
+/** 요청의 가입 전 인증 쿠키 — 모양이 틀리면 없는 것으로 */
+export function signupCookie(req: { cookies?: unknown }): string {
+  const v = (req.cookies as Record<string, string> | undefined)?.[SIGNUP_COOKIE] ?? "";
+  return /^[A-Za-z0-9_-]{40,60}$/.test(v) ? v : "";
+}
+
+/**
+ * 만 나이 — 한국 시간의 오늘 기준. 생일이 지나야 한 살을 더한다.
+ *
+ * 성인 판정(청소년보호법)은 연 나이를 쓰지만, **만 14세 미만 가입 제한**(개인정보보호법 제22조의2 —
+ * 법정대리인 동의가 필요하다)은 만 나이다. 가입 전 인증에서 한 번 판정하고 생년월일은 버린다.
+ */
+export function manAge(birthDate: string, now: Date = new Date()): number | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(birthDate);
+  if (!m) return null;
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" })
+    .format(now).split("-").map(Number);
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  let age = today[0] - y;
+  if (today[1] < mo || (today[1] === mo && today[2] < d)) age -= 1;
+  return age;
+}
 
 /**
  * 끝나고 돌아갈 곳 — **사이트 안 경로만** 받는다.
@@ -88,7 +115,18 @@ export class IdentityService {
    * 수단이 없는데 요구하면 아무도 인증할 수 없어 모든 회원이 잠긴다.
    */
   async isRequired(): Promise<boolean> {
-    if ((await this.setting<boolean>(REQUIRED_KEY)) !== true) return false;
+    /*
+     * 가입 전 본인인증도 여기에 든다. 가입 화면만 막으면 **소셜 로그인으로 가입하는 길**(과 설정을 켜기 전에
+     * 가입한 회원)이 인증 없이 남는다 — 그런 회원은 인증하기 전까지 쓰기가 막히고 로그인하면 인증 화면으로 간다.
+     */
+    const on = (await this.setting<boolean>(REQUIRED_KEY)) === true || (await this.setting<boolean>(SIGNUP_KEY)) === true;
+    if (!on) return false;
+    return (await this.readyProviders()).length > 0;
+  }
+
+  /** 가입할 때 본인인증을 요구하는가 — 역시 인증 수단이 준비돼 있을 때만(없으면 아무도 가입할 수 없다) */
+  async signupRequired(): Promise<boolean> {
+    if ((await this.setting<boolean>(SIGNUP_KEY)) !== true) return false;
     return (await this.readyProviders()).length > 0;
   }
 
@@ -151,30 +189,9 @@ export class IdentityService {
       await this.fail(requestId, "시간 초과");
       return { ok: false, status: 410, message: "인증 시간이 지났습니다. 처음부터 다시 인증해주세요." };
     }
-    const entry = this.providers.get(row.provider);
-    if (!entry) return { ok: false, status: 409, message: "사용할 수 없는 본인인증 수단입니다." };
-
-    let check: Awaited<ReturnType<IdentityProvider["verify"]>>;
-    try {
-      check = await entry.provider.verify(requestId);
-    } catch (err) {
-      check = { ok: false, reason: String(err) };
-    }
-    if (!check.ok) {
-      await this.fail(requestId, check.reason);
-      return { ok: false, status: 402, message: check.customerReason ?? "본인인증이 완료되지 않았습니다." };
-    }
-
-    const person = check.person;
-    const birth = /^(\d{4})-\d{2}-\d{2}$/.exec(String(person.birthDate ?? ""));
-    const key = String(person.ci ?? "").trim() || String(person.di ?? "").trim();
-    if (!birth || !key) {
-      // 생년월일·연계정보가 없으면 나이도 한 사람도 판정할 수 없다 — 받은 것으로 치지 않는다
-      await this.fail(requestId, !birth ? "생년월일 없음" : "CI·DI 없음");
-      return { ok: false, status: 502, message: "인증 결과를 확인할 수 없습니다. 잠시 후 다시 시도해주세요." };
-    }
-    const birthYear = Number(birth[1]);
-    const personHash = this.personHash(key);
+    const checked = await this.askProvider(row.provider, requestId);
+    if (!checked.ok) return checked;
+    const { birthYear, personHash } = checked;
     const onePerPerson = (await this.setting<boolean>(ONE_PERSON_KEY)) === true;
 
     return await this.db.transaction(async (tx) => {
@@ -240,10 +257,185 @@ export class IdentityService {
     });
   }
 
-  /** 오래된 요청을 지운다 — 인증 결과는 user_certifications 에 있다. 주기 정리가 부른다 */
+  /**
+   * 공급자에게 **직접** 묻는다 — 화면이 보낸 이름·생년월일은 받지도 않는다. 회원 인증과 가입 전 인증이 같이 쓴다.
+   */
+  private async askProvider(providerName: string, requestId: string): Promise<
+    | { ok: true; birthYear: number; birthDate: string; personHash: string }
+    | { ok: false; status: number; message: string }
+  > {
+    const entry = this.providers.get(providerName);
+    if (!entry) return { ok: false, status: 409, message: "사용할 수 없는 본인인증 수단입니다." };
+    let check: Awaited<ReturnType<IdentityProvider["verify"]>>;
+    try {
+      check = await entry.provider.verify(requestId);
+    } catch (err) {
+      check = { ok: false, reason: String(err) };
+    }
+    if (!check.ok) {
+      await this.fail(requestId, check.reason);
+      return { ok: false, status: 402, message: check.customerReason ?? "본인인증이 완료되지 않았습니다." };
+    }
+    const person = check.person;
+    const birthDate = String(person.birthDate ?? "");
+    const birth = /^(\d{4})-\d{2}-\d{2}$/.exec(birthDate);
+    const key = String(person.ci ?? "").trim() || String(person.di ?? "").trim();
+    if (!birth || !key) {
+      // 생년월일·연계정보가 없으면 나이도 한 사람도 판정할 수 없다 — 받은 것으로 치지 않는다
+      await this.fail(requestId, !birth ? "생년월일 없음" : "CI·DI 없음");
+      return { ok: false, status: 502, message: "인증 결과를 확인할 수 없습니다. 잠시 후 다시 시도해주세요." };
+    }
+    return { ok: true, birthYear: Number(birth[1]), birthDate, personHash: this.personHash(key) };
+  }
+
+  // ── 가입 전 본인인증 ───────────────────────────────
+  //
+  // 계정이 없으니 요청을 회원에 묶을 수 없다. 대신 **브라우저**에 묶는다: 서버가 만든 비밀값을 httpOnly
+  // 쿠키로 주고 그 HMAC 을 요청에 적는다. 브라우저가 정한 ID 를 믿지 않는 것은 회원 인증과 같다 — 남이 끝낸
+  // 인증(또는 공급자 콘솔에서 본 ID)을 들고 와 내 가입에 붙일 수 없다.
+
+  /** 새 쿠키 값 (비밀값) */
+  newGuestToken(): string {
+    return randomBytes(32).toString("base64url");
+  }
+
+  private guestHash(token: string): string {
+    return createHmac("sha256", this.env.secret).update(`identity-guest:${token}`).digest("hex");
+  }
+
+  async startSignup(guestToken: string, providerName: string): Promise<{ ok: true; requestId: string } | { ok: false; message: string }> {
+    const entry = this.providers.get(providerName);
+    if (!guestToken || !entry || !(await entry.provider.isReady().catch(() => false))) {
+      return { ok: false, message: "사용할 수 없는 본인인증 수단입니다." };
+    }
+    const requestId = `bid${randomBytes(16).toString("hex")}`;
+    await this.db.execute(sql`
+      INSERT INTO identity_verifications (guest_hash, provider, request_id)
+      VALUES (${this.guestHash(guestToken)}, ${providerName}, ${requestId})
+    `);
+    return { ok: true, requestId };
+  }
+
+  /**
+   * 가입 전 인증을 확인한다. 결과는 가입이 가져갈 때까지 요청에 잠깐 둔다.
+   *
+   * 여기서 거절하는 것: **만 14세 미만**(법정대리인 동의 절차가 없다), 그리고 한 사람 한 계정 사이트에서
+   * **이미 가입한 사람**(계정을 만들고 나서 거절하면 빈 계정이 남는다). 가입할 때 한 번 더 본다 — 그 사이에
+   * 다른 창에서 가입했을 수 있다.
+   */
+  async completeSignup(guestToken: string, requestId: string): Promise<
+    { ok: true; adult: boolean } | { ok: false; status: number; message: string }
+  > {
+    if (!guestToken || !/^[A-Za-z0-9]{1,40}$/.test(requestId)) {
+      return { ok: false, status: 404, message: "인증 요청을 찾을 수 없습니다." };
+    }
+    const { rows } = (await this.db.execute(sql`
+      SELECT guest_hash, provider, status, birth_year,
+             created_at > now() - make_interval(mins => ${REQUEST_TTL_MINUTES}) AS fresh
+      FROM identity_verifications WHERE request_id = ${requestId}
+    `)) as unknown as { rows: Array<{ guest_hash: string | null; provider: string; status: string; birth_year: number | null; fresh: boolean }> };
+    const row = rows[0];
+    if (!row || !row.guest_hash || row.guest_hash !== this.guestHash(guestToken)) {
+      return { ok: false, status: 404, message: "인증 요청을 찾을 수 없습니다." };
+    }
+    if (row.status === "verified") return { ok: true, adult: isAdultByBirthYear(Number(row.birth_year)) };
+    if (row.status !== "pending") {
+      return { ok: false, status: 409, message: "이미 끝난 인증 요청입니다. 처음부터 다시 인증해주세요." };
+    }
+    if (!row.fresh) {
+      await this.fail(requestId, "시간 초과");
+      return { ok: false, status: 410, message: "인증 시간이 지났습니다. 처음부터 다시 인증해주세요." };
+    }
+    const checked = await this.askProvider(row.provider, requestId);
+    if (!checked.ok) return checked;
+    const age = manAge(checked.birthDate);
+    if (age === null || age < 14) {
+      await this.fail(requestId, "만 14세 미만");
+      return { ok: false, status: 403, message: "만 14세 미만은 이 사이트에 가입할 수 없습니다. 법정대리인의 동의가 필요하니 운영자에게 문의해주세요." };
+    }
+    if ((await this.setting<boolean>(ONE_PERSON_KEY)) === true && (await this.personTaken(checked.personHash))) {
+      await this.fail(requestId, "이미 가입한 사람");
+      return { ok: false, status: 409, message: "이미 이 사이트에 가입한 계정이 있습니다. 로그인하거나 비밀번호 찾기를 이용해주세요." };
+    }
+    const claimed = (await this.db.execute(sql`
+      UPDATE identity_verifications
+      SET status = 'verified', completed_at = now(), person_hash = ${checked.personHash},
+          birth_year = ${checked.birthYear}, over14 = true
+      WHERE request_id = ${requestId} AND status = 'pending' RETURNING id
+    `)) as unknown as { rows: unknown[] };
+    if (!claimed.rows?.length) return { ok: false, status: 409, message: "이미 끝난 인증 요청입니다. 처음부터 다시 인증해주세요." };
+    return { ok: true, adult: isAdultByBirthYear(checked.birthYear) };
+  }
+
+  /** 이 브라우저의 가입 전 인증 — 끝났고, 아직 가입이 가져가지 않았고, 30분이 지나지 않은 것 */
+  async signupStatus(guestToken: string): Promise<{ verified: boolean; adult: boolean }> {
+    if (!guestToken) return { verified: false, adult: false };
+    const { rows } = (await this.db.execute(sql`
+      SELECT birth_year FROM identity_verifications
+      WHERE guest_hash = ${this.guestHash(guestToken)} AND status = 'verified' AND consumed_at IS NULL
+        AND completed_at > now() - make_interval(mins => ${REQUEST_TTL_MINUTES})
+      ORDER BY completed_at DESC LIMIT 1
+    `)) as unknown as { rows: Array<{ birth_year: number }> };
+    return rows[0] ? { verified: true, adult: isAdultByBirthYear(Number(rows[0].birth_year)) } : { verified: false, adult: false };
+  }
+
+  /**
+   * 가입이 인증 결과를 가져간다 — **계정을 만드는 트랜잭션 안에서** 부른다(인증 없이 만들어진 계정이 남지 않게).
+   * 한 번만 가져갈 수 있다. 결과는 회원의 user_certifications 로 옮기고 요청의 결과 칸은 지운다.
+   */
+  async consumeSignup(
+    tx: { execute: BrickDb["execute"] },
+    guestToken: string,
+    userId: string,
+  ): Promise<{ ok: true } | { ok: false; status: number; message: string }> {
+    const need = { ok: false as const, status: 403, message: "가입하기 전에 본인인증을 해주세요. 인증한 지 30분이 지났다면 다시 인증해야 합니다." };
+    if (!guestToken) return need;
+    const { rows } = (await tx.execute(sql`
+      SELECT id, provider, person_hash, birth_year, over14 FROM identity_verifications
+      WHERE guest_hash = ${this.guestHash(guestToken)} AND status = 'verified' AND consumed_at IS NULL
+        AND completed_at > now() - make_interval(mins => ${REQUEST_TTL_MINUTES})
+      ORDER BY completed_at DESC LIMIT 1
+      FOR UPDATE
+    `)) as unknown as { rows: Array<{ id: string; provider: string; person_hash: string; birth_year: number; over14: boolean }> };
+    const row = rows[0];
+    if (!row || !row.person_hash || row.over14 !== true) return need;
+    // 사람 단위로 줄을 세운다 — 같은 사람이 두 창에서 동시에 가입해도 한 사람 한 계정이 지켜진다
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`identity:${row.person_hash}`}, 0))`);
+    if ((await this.setting<boolean>(ONE_PERSON_KEY)) === true) {
+      const { rows: taken } = (await tx.execute(sql`
+        SELECT 1 FROM user_certifications WHERE person_hash = ${row.person_hash} LIMIT 1
+      `)) as unknown as { rows: unknown[] };
+      if (taken.length) return { ok: false, status: 409, message: "이미 이 사이트에 가입한 계정이 있습니다. 로그인하거나 비밀번호 찾기를 이용해주세요." };
+    }
+    await tx.execute(sql`
+      INSERT INTO user_certifications (user_id, provider, person_hash, birth_year, verified_at)
+      VALUES (${userId}::uuid, ${row.provider}, ${row.person_hash}, ${row.birth_year}, now())
+    `);
+    await tx.execute(sql`
+      UPDATE identity_verifications
+      SET consumed_at = now(), user_id = ${userId}::uuid, person_hash = NULL, birth_year = NULL
+      WHERE id = ${row.id}::uuid
+    `);
+    return { ok: true };
+  }
+
+  private async personTaken(personHash: string): Promise<boolean> {
+    const { rows } = (await this.db.execute(sql`
+      SELECT 1 FROM user_certifications WHERE person_hash = ${personHash} LIMIT 1
+    `)) as unknown as { rows: unknown[] };
+    return rows.length > 0;
+  }
+
+  /**
+   * 오래된 요청을 지운다 — 인증 결과는 user_certifications 에 있다. 주기 정리가 부른다.
+   * 가입이 가져가지 않은 가입 전 인증은 하루 뒤에 지운다 — 사람 해시·출생 연도를 계정 없이 오래 두지 않는다.
+   */
   async prune(): Promise<number> {
     const { rows } = (await this.db.execute(sql`
-      DELETE FROM identity_verifications WHERE created_at < now() - interval '30 days' RETURNING id
+      DELETE FROM identity_verifications
+      WHERE created_at < now() - interval '30 days'
+         OR (user_id IS NULL AND created_at < now() - interval '1 day')
+      RETURNING id
     `)) as unknown as { rows: unknown[] };
     return rows?.length ?? 0;
   }

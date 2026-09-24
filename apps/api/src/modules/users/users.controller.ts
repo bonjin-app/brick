@@ -1,11 +1,12 @@
 import {
   BadRequestException, Body, ConflictException, Controller, Delete, ForbiddenException, Get, HttpException,
-  HttpStatus, Inject, Param, Post, Put, Query, Req, UseGuards,
+  HttpStatus, Inject, Param, Post, Put, Query, Req, Res, UseGuards,
 } from "@nestjs/common";
 import { count, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import argon2 from "argon2";
-import type { FastifyRequest } from "fastify";
+import type { FastifyReply, FastifyRequest } from "fastify";
+import { IdentityService, SIGNUP_COOKIE, signupCookie } from "../identity/identity.service.js";
 import type { BrickDb } from "@brick/database";
 import { siteSettings, users } from "@brick/database";
 import type { HookBus } from "@brick/core";
@@ -43,6 +44,7 @@ export class UsersController {
     @Inject(STORAGE) private readonly storage: StorageProvider,
     private readonly moderation: ModerationService,
     private readonly images: ImageService,
+    private readonly identity: IdentityService,
   ) {}
 
   /** 닉네임(표시 이름) 변경 주기(일). 설정이 없거나 이상하면 0 = 제한 없음 */
@@ -64,6 +66,7 @@ export class UsersController {
       ageConfirmed?: boolean;
     },
     @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
   ) {
     const open = await this.setting<boolean>("site.registration_open");
     if (open === false) throw new ForbiddenException("회원가입이 닫혀 있습니다.");
@@ -131,6 +134,19 @@ export class UsersController {
       );
     }
 
+    /*
+     * 가입 전 본인인증 — 켜져 있으면 이 브라우저가 인증을 마쳤어야 한다. 비밀번호 해싱 전에 먼저 본다(비싸다).
+     * 결과를 **가져가는 것**은 아래 트랜잭션 안이다 — 계정만 만들어지고 인증이 붙지 않는 일이 없게.
+     */
+    const identityToken = signupCookie(req);
+    const identityRequired = await this.identity.signupRequired();
+    if (identityRequired && !(await this.identity.signupStatus(identityToken)).verified) {
+      throw new ForbiddenException({
+        message: "가입하기 전에 본인인증을 해주세요. 인증한 지 30분이 지났다면 다시 인증해야 합니다.",
+        field: "identity",
+      });
+    }
+
     const id = uuidv7();
     const passwordHash = await argon2.hash(body.password);
 
@@ -157,6 +173,10 @@ export class UsersController {
             UPDATE users SET marketing_opt_in = true WHERE id = ${id}::uuid
           `);
         }
+        if (identityRequired) {
+          const taken = await this.identity.consumeSignup(tx as unknown as BrickDb, identityToken, id);
+          if (!taken.ok) throw new HttpException({ message: taken.message, field: "identity" }, taken.status);
+        }
       });
     } catch (err) {
       if (isUniqueViolation(err, "users_email")) {
@@ -164,6 +184,9 @@ export class UsersController {
       }
       throw err;
     }
+
+    // 가입이 가져간 인증은 다시 쓸 수 없다 — 쿠키도 치운다
+    if (identityRequired) reply.clearCookie(SIGNUP_COOKIE, { path: "/api" });
 
     // 인증 메일은 가입을 막지 않는다 — SMTP 가 없는 사이트에서 가입이 실패하면
     // 설치 직후 아무도 들어올 수 없다. 실패해도 계정은 남고, 나중에 재발송한다.

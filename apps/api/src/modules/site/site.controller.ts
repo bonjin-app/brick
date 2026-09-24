@@ -80,6 +80,9 @@ const EDITABLE_SETTINGS: Record<string, "string" | "boolean"> = {
   "member.one_person_one_account": "boolean",
   // 회원 본인인증 필수 — 인증하지 않은 회원은 쓰기(글·주문 등)를 못 한다. 인증 수단이 없으면 강제하지 않는다
   "member.identity_required": "boolean",
+  // 가입 전 본인인증 — 인증을 마친 브라우저만 가입할 수 있다(만 14세 미만·이미 가입한 사람은 인증 단계에서 거절).
+  // 소셜 로그인 가입·설정 전 회원은 위 "필수" 와 같이 인증 전까지 쓰기가 막힌다
+  "member.identity_at_signup": "boolean",
   // 모더레이션 (그누보드 기본 설정 동등성) — 줄바꿈/쉼표 구분 목록
   "moderation.banned_words": "string",         // 글·댓글·쪽지·이름에 못 쓰는 단어
   "moderation.denied_names": "string",         // 닉네임 금지 목록 (기본: admin·관리자·운영자 등은 항상)

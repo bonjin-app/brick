@@ -608,19 +608,29 @@ ${eyebrow ? `    <span class="brick-eyebrow">${esc(eyebrow)}</span>
         const t = makeTranslator({ locale: this.loader.siteLocale, catalogs: CORE_CATALOGS });
         ctx.setSeo?.({ title: t("identity.title") });
         const next = safeNext(ctx.query?.next);
-        if (!ctx.user) {
+        /*
+         * 가입 전 본인인증 — 손님이 가입 양식에서 왔다(`?signup=1`). 요청은 회원 대신 이 브라우저에 묶이고
+         * (서버의 쿠키), 끝나면 가입 양식으로 돌아간다. 이미 마쳤는지는 쿠키를 봐야 하므로 스크립트가 묻는다 —
+         * 손님 화면은 렌더 캐시에 들어가므로 서버가 사람마다 다르게 그리면 안 된다.
+         */
+        const signup = !ctx.user && String(ctx.query?.signup ?? "") === "1";
+        if (signup) ctx.setSeo?.({ title: t("identity.signupTitle") });
+        if (!ctx.user && !signup) {
           const self = next ? `/identity?next=${encodeURIComponent(next)}` : "/identity";
           return `<div class="brick-identity"><p>${esc(t("identity.loginRequired"))}</p>
 <p><a class="brick-btn brick-btn-primary" href="/login?next=${esc(encodeURIComponent(self))}">${esc(t("identity.login"))}</a></p></div>`;
         }
-        const status = await this.identity.status(ctx.user.id);
+        const status = ctx.user
+          ? await this.identity.status(ctx.user.id)
+          : { verified: false, adult: false, verifiedAt: null as Date | null };
         const providers = await this.identity.readyProviders();
+        const back = signup ? next || "/register" : next;
         const cont = next ? `<p><a class="brick-btn brick-btn-primary" href="${esc(next)}">${esc(t("identity.continue"))}</a></p>` : "";
         const when = status.verifiedAt ? status.verifiedAt.toISOString().slice(0, 10) : "";
         const state = status.verified
           ? `<p class="brick-id-state is-done"><strong>${esc(t("identity.verified"))}</strong> <span>${esc(t("identity.verifiedAt", { date: when }))}</span></p>
 <p class="brick-id-adult">${esc(status.adult ? t("identity.adult") : t("identity.notAdult"))}</p>${cont}`
-          : `<p class="brick-id-intro">${esc(t("identity.intro"))}</p>`;
+          : `<p class="brick-id-intro">${esc(t(signup ? "identity.signupIntro" : "identity.intro"))}</p>`;
         /*
          * 이미 인증했으면 인증창을 다시 열 이유가 없다 — 인증은 건당 요금이 나간다.
          * (명의를 바꾸는 것은 막혀 있다: 서버가 다른 명의를 거절한다)
@@ -633,12 +643,17 @@ ${eyebrow ? `    <span class="brick-eyebrow">${esc(eyebrow)}</span>
                 .join("")}</div>`
             : `<p class="brick-id-none">${esc(t("identity.none"))}</p>`;
         const T = {
-          opening: t("identity.opening"), working: t("identity.working"), done: t("identity.done"),
+          opening: t("identity.opening"), working: t("identity.working"),
+          done: t(signup ? "identity.signupDone" : "identity.done"),
           cancelled: t("identity.cancelled"), failed: t("identity.failed"),
+          back: t("identity.signupBack"),
         };
+        const api = signup
+          ? { start: "/api/identity/signup/start", complete: "/api/identity/signup/complete", state: "/api/identity/signup" }
+          : { start: "/api/me/identity/start", complete: "/api/me/identity/complete", state: "" };
         // 인증창이 끝나고 돌아올 곳에서만 스크립트가 필요하다 — 이미 인증했어도 돌아온 처리는 해야 한다
         const scripts = providers.map(({ provider: p }) => p.clientScript).join("\n");
-        return `<div class="brick-identity" data-next="${esc(next)}" data-t="${esc(JSON.stringify(T))}">
+        return `<div class="brick-identity" data-next="${esc(back)}" data-signup="${signup ? "1" : ""}" data-api="${esc(JSON.stringify(api))}" data-t="${esc(JSON.stringify(T))}">
 ${state}
 ${actions}
 <p class="brick-id-msg" role="alert"></p>
@@ -649,7 +664,9 @@ ${scripts}
   var root = document.querySelector('.brick-identity');
   if (!root) return;
   var T = JSON.parse(root.getAttribute('data-t') || '{}');
+  var API = JSON.parse(root.getAttribute('data-api') || '{}');
   var next = root.getAttribute('data-next') || '';
+  var signup = root.getAttribute('data-signup') === '1';
   var msg = root.querySelector('.brick-id-msg');
   function say(text, err){ msg.textContent = text; msg.classList.toggle('is-error', !!err); }
   function post(url, body){
@@ -659,14 +676,24 @@ ${scripts}
   function returnUrl(provider){
     var u = new URL(location.pathname, location.href);
     u.searchParams.set('provider', provider);
+    if (signup) u.searchParams.set('signup', '1');
     if (next) u.searchParams.set('next', next);
     return u.toString();
   }
   // 돌아온 주소의 인증 값은 한 번 쓰고 지운다 — 새로고침·공유로 다시 보내지 않게
   function cleanUrl(){
     var u = new URL(location.pathname, location.href);
+    if (signup) u.searchParams.set('signup', '1');
     if (next) u.searchParams.set('next', next);
     history.replaceState(null, '', u.toString());
+  }
+  // 가입 전 인증을 이미 마친 브라우저 — 인증창을 다시 열 이유가 없다(건당 요금)
+  if (signup && API.state) {
+    fetch(API.state).then(function(r){ return r.json(); }).then(function(d){
+      if (!d || !d.verified) return;
+      var acts = root.querySelector('.brick-id-actions');
+      if (acts) acts.innerHTML = '<a class="brick-btn brick-btn-primary" href="' + next.replace(/"/g, '') + '">' + T.back + '</a>';
+    }).catch(function(){});
   }
   var q = new URLSearchParams(location.search);
   var back = q.get('provider');
@@ -678,7 +705,7 @@ ${scripts}
     if (!id) { say(T.cancelled + (why ? ' (' + why + ')' : ''), true); }
     else {
       say(T.working);
-      post('/api/me/identity/complete', { requestId: id }).then(function(x){
+      post(API.complete, { requestId: id }).then(function(x){
         if (!x.ok) { say(x.d.message || T.failed, true); return; }
         say(T.done);
         if (next) location.href = next; else location.reload();
@@ -693,7 +720,7 @@ ${scripts}
     if (!run) { say(T.failed, true); return; }
     b.disabled = true;
     say(T.opening);
-    post('/api/me/identity/start', { provider: p }).then(function(x){
+    post(API.start, { provider: p }).then(function(x){
       if (!x.ok) throw new Error(x.d.message || T.failed);
       return run({ requestId: x.d.requestId, returnUrl: returnUrl(p) });
     }).catch(function(err){ say((err && err.message) || T.failed, true); b.disabled = false; });

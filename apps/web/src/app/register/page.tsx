@@ -42,6 +42,19 @@ export default function RegisterPage() {
   /** 캡차 — 서버가 켜져 있다고 하면 그린다(끈 사이트에서는 칸이 없다) */
   const [captcha, setCaptcha] = useState<{ token: string; svg: string; hint: string } | null>(null);
   const [captchaAnswer, setCaptchaAnswer] = useState("");
+  /*
+   * 가입 전 본인인증 — 켠 사이트는 인증을 마친 브라우저만 가입 양식을 보낼 수 있다. 인증은 테마 화면
+   * (`/identity?signup=1`)에서 한다: 공급자의 인증창 스크립트는 외부 스크립트라 이 화면의 고정 CSP 가 받지 않는다.
+   */
+  const [identity, setIdentity] = useState<{ required: boolean; verified: boolean } | null>(null);
+  useEffect(() => {
+    fetch("/api/identity/signup")
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d) => setIdentity({ required: d.required === true, verified: d.verified === true }))
+      .catch(() => setIdentity({ required: false, verified: false }));
+  }, []);
+  const identityHref = `/identity?signup=1&next=${encodeURIComponent("/register")}`;
+  const needIdentity = identity?.required === true && !identity.verified;
 
   /** 새 문제를 받는다 — 틀렸을 때도 다시 받아야 한다(한 번 쓴 토큰은 재사용되지 않는다) */
   const loadCaptcha = () => {
@@ -87,6 +100,8 @@ export default function RegisterPage() {
       // 쓴 토큰은 다시 못 쓴다 — 새 문제를 받지 않으면 두 번째 시도가 반드시 실패한다
       if (captcha) { loadCaptcha(); setCaptchaAnswer(""); }
       const field = typeof body.field === "string" ? body.field : "";
+      // 인증이 만료됐다(30분) — 양식 대신 인증으로 다시 보낸다
+      if (field === "identity") setIdentity((s) => (s ? { ...s, verified: false } : s));
       setBadField(field);
       setState("idle");
       // 표시만 하고 끝내면 손님이 어느 칸인지 찾아야 한다 — 그 칸으로 데려간다
@@ -117,8 +132,20 @@ export default function RegisterPage() {
     <AuthShell title={t("register.title")}>
       {state === "done" ? (
         <p style={{ textAlign: "center", color: "var(--color-success)" }}>{t("register.done")}</p>
+      ) : needIdentity ? (
+        <div>
+          <p style={{ fontSize: 14, lineHeight: 1.7, color: "var(--color-text)" }}>{t("register.identityNeed")}</p>
+          <a href={identityHref} style={{ ...authButton, display: "block", textAlign: "center", textDecoration: "none", boxSizing: "border-box" }}>
+            {t("register.identityGo")}
+          </a>
+        </div>
       ) : (
         <form onSubmit={submit}>
+          {identity?.required && identity.verified && (
+            <p role="status" style={{ marginTop: 0, fontSize: 14, color: "var(--color-success)", fontWeight: 600 }}>
+              ✓ {t("register.identityDone")}
+            </p>
+          )}
           <label style={{ ...authLabel, marginTop: 0 }}>{t("register.name")}
             <input id="register-displayName" style={authInput} required minLength={2} maxLength={30}
               name="name" autoComplete="name"

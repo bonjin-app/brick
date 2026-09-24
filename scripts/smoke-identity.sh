@@ -327,6 +327,124 @@ check "비회원은 대상이 아니다" "$(cart_add -)" "200"
 check "운영진도 아니다" "$(cart_add "$CK")" "200"
 check "끄면 다시 쓴다" "$(code -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"member.identity_required":false}'; cart_add "$U")" "200200"
 
+echo "── 가입 전 본인인증 (사이트 설정)"
+gjar() { local f="$TMP/guest-$1.txt"; : > "$f"; echo "$f"; }
+gstate() { curl -s -b "$1" "$API/api/identity/signup"; }
+gstart() {  # gstart <손님 쿠키> → requestId
+  curl -s -b "$1" -c "$1" -X POST "$API/api/identity/signup/start" -H 'content-type: application/json' \
+    -d '{"provider":"portone"}' | jq_get "['requestId']"
+}
+gcomplete() {  # gcomplete <손님 쿠키> <requestId> → "본문 상태"
+  local body; body="$(printf '{"requestId":"%s"}' "$2")"
+  curl -s -b "$1" -c "$1" -w ' %{http_code}' -X POST "$API/api/identity/signup/complete" -H 'content-type: application/json' -d "$body"
+}
+reg() {  # reg <손님 쿠키> <이메일> → "본문 상태"
+  local body; body="$(printf '{"email":"%s","password":"password123","agreements":{"terms":true,"privacy":true},"displayName":"가입자","ageConfirmed":true}' "$2")"
+  curl -s -b "$1" -c "$1" -w ' %{http_code}' -X POST "$API/api/register" -H 'content-type: application/json' -d "$body"
+}
+users_with() { psql_q "SELECT count(*) FROM users WHERE email='$1'"; }
+# 오늘(한국 시간)에서 n 년 전의 날짜 (+d 일) — 만 14세 경계를 만든다
+ago() { python3 -c "
+import datetime, sys
+t = (datetime.datetime.utcnow() + datetime.timedelta(hours=9)).date() + datetime.timedelta(days=int(sys.argv[2]))
+for shift in range(0, 3):
+    try: print(t.replace(year=t.year - int(sys.argv[1])).isoformat()); break
+    except ValueError: t = t + datetime.timedelta(days=1)
+" "$1" "${2:-0}"; }
+
+G0="$(gjar off)"
+contains "끈 상태 — 가입 화면에 요구하지 않는다" "$(gstate "$G0")" '"required":false'
+R="$(reg "$G0" "free@id.test")"
+[[ "$R" == *" 201" ]] && ok "끈 상태 — 인증 없이 가입한다" || bad "끈 상태 가입 (${R:0:160})"
+check "설정을 켠다" "$(code -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"member.identity_at_signup":true}')" "200"
+G1="$(gjar one)"
+contains "가입 화면이 인증을 요구한다는 것을 안다" "$(gstate "$G1")" '"required":true,"verified":false'
+R="$(reg "$G1" "noverify@id.test")"
+[[ "$R" == *" 403" && "$R" == *'"field":"identity"'* ]] && ok "인증하지 않은 브라우저는 가입할 수 없다 (본인인증 칸으로)" || bad "인증 없는 가입 (${R:0:160})"
+check "계정이 만들어지지 않았다" "$(users_with noverify@id.test)" "0"
+check "로그인한 회원은 가입 전 인증을 열 수 없다 (회원 인증으로)" \
+  "$(code -b "$M" -X POST "$API/api/identity/signup/start" -H 'content-type: application/json' -d '{"provider":"portone"}')" "409"
+RID1="$(gstart "$G1")"
+[[ "$RID1" == bid* ]] && ok "손님 인증 시작 — 인증 ID 는 서버가 만든다" || bad "손님 인증 시작 ($RID1)"
+check "이 브라우저에 묶는 쿠키는 스크립트가 읽지 못한다 (HttpOnly)" "$(grep -c '^#HttpOnly_.*brick_idv' "$G1")" "1"
+verified "$RID1" "CI-SIGNUP-1" "1990-05-05"
+GX="$(gjar other)"
+# 다른 브라우저도 자기 인증을 시작해 제 쿠키를 가진 상태 — 쿠키가 없어서 막히는 것과 구별한다
+gstart "$GX" >/dev/null
+R="$(gcomplete "$GX" "$RID1")"
+[[ "$R" == *" 404" ]] && ok "다른 브라우저는 (제 쿠키가 있어도) 남의 인증을 가져갈 수 없다" || bad "다른 브라우저 (${R:0:120})"
+R="$(complete "$U" "$RID1")"
+[[ "$R" == *" 404" ]] && ok "회원 인증 경로로도 손님의 인증을 가져갈 수 없다" || bad "회원 경로 (${R:0:120})"
+R="$(gcomplete "$G1" "$RID1")"
+[[ "$R" == *" 200" && "$R" == *'"adult":true'* ]] && ok "인증을 마친다 (성인)" || bad "손님 인증 확인 (${R:0:160})"
+contains "가입 화면이 인증을 마친 것을 안다" "$(gstate "$G1")" '"required":true,"verified":true'
+cp "$G1" "$TMP/guest-one-copy.txt"
+R="$(reg "$G1" "verified@id.test")"
+[[ "$R" == *" 201" ]] && ok "인증을 마친 브라우저는 가입한다" || bad "인증 뒤 가입 (${R:0:160})"
+NEW_ID="$(psql_q "SELECT id FROM users WHERE email='verified@id.test'")"
+check "가입한 계정에 인증 결과가 붙는다 (출생 연도)" "$(psql_q "SELECT birth_year FROM user_certifications WHERE user_id='$NEW_ID'")" "1990"
+check "요청에 남았던 결과는 지운다 (사람 해시·출생 연도)" \
+  "$(psql_q "SELECT (consumed_at IS NOT NULL) AS used, (person_hash IS NULL) AS no_hash, (birth_year IS NULL) AS no_year, (user_id = '$NEW_ID') AS owner FROM identity_verifications WHERE request_id='$RID1'")" "true|true|true|true"
+check "가입이 쿠키를 치운다" "$(grep -c 'brick_idv' "$G1")" "0"
+R="$(reg "$TMP/guest-one-copy.txt" "replay@id.test")"
+[[ "$R" == *" 403" ]] && ok "쿠키를 복사해 두어도 한 번 가져간 인증으로 또 가입할 수 없다" || bad "인증 재사용 (${R:0:160})"
+check "두 번째 계정은 없다" "$(users_with replay@id.test)" "0"
+NEWCK="$TMP/verified.txt"
+printf '{"email":"verified@id.test","password":"password123"}' > "$TMP/vlogin.json"
+curl -s -o /dev/null -c "$NEWCK" -X POST "$API/api/auth/login" -H 'content-type: application/json' --data-binary "@$TMP/vlogin.json"
+contains "새 회원은 인증된 상태로 시작한다" "$(curl -s -b "$NEWCK" "$API/api/me/identity")" '"verified":true'
+check "새 회원은 쓸 수 있다" "$(cart_add "$NEWCK")" "200"
+check "인증하지 않은 기존 회원(소셜 가입과 같은 처지)은 쓰기가 막힌다" "$(cart_add "$U")" "403"
+
+echo "── 가입 전 본인인증 — 만 14세 미만"
+GK="$(gjar kid)"
+RIDK="$(gstart "$GK")"; verified "$RIDK" "CI-KID-1" "$(ago 14 1)"
+R="$(gcomplete "$GK" "$RIDK")"
+[[ "$R" == *" 403" && "$R" == *"만 14세 미만"* ]] && ok "내일 만 14세가 되는 사람은 아직 가입할 수 없다" || bad "만 14세 경계 (${R:0:160})"
+contains "그 브라우저는 인증을 마친 것이 아니다" "$(gstate "$GK")" '"verified":false'
+check "가입도 막힌다" "$(reg "$GK" "kid@id.test" | tail -c 3)" "403"
+GB="$(gjar birthday)"
+RIDB="$(gstart "$GB")"; verified "$RIDB" "CI-TEEN-1" "$(ago 14 0)"
+R="$(gcomplete "$GB" "$RIDB")"
+[[ "$R" == *" 200" && "$R" == *'"adult":false'* ]] && ok "오늘 만 14세가 된 사람은 가입할 수 있다 (성인은 아니다)" || bad "만 14세 생일 (${R:0:160})"
+check "생년월일은 남기지 않는다 (판정만)" "$(psql_q "SELECT over14 FROM identity_verifications WHERE request_id='$RIDB'")" "true"
+
+echo "── 가입 전 본인인증 — 한 사람 한 계정"
+# 이 절에서 가입을 여러 번 한다 — 같은 주소의 가입 한도(시간당 20회)는 시험의 사정이라 여기서 비운다
+psql_q "DELETE FROM rate_limit_hits WHERE key LIKE 'register-ip:%'" >/dev/null
+curl -s -o /dev/null -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"member.one_person_one_account":true}'
+G3="$(gjar same)"
+RID3="$(gstart "$G3")"; verified "$RID3" "CI-SIGNUP-1" "1990-05-05"
+R="$(gcomplete "$G3" "$RID3")"
+[[ "$R" == *" 409" && "$R" == *"이미 이 사이트에 가입한 계정"* ]] && ok "이미 가입한 사람은 계정을 만들기 전에 거절한다" || bad "이미 가입한 사람 (${R:0:160})"
+G4="$(gjar race-a)"; G5="$(gjar race-b)"
+RID4="$(gstart "$G4")"; verified "$RID4" "CI-SIGNUP-2" "1985-01-01"
+RID5="$(gstart "$G5")"; verified "$RID5" "CI-SIGNUP-2" "1985-01-01"
+R4="$(gcomplete "$G4" "$RID4")"; R5="$(gcomplete "$G5" "$RID5")"
+[[ "$R4" == *" 200" && "$R5" == *" 200" ]] && ok "같은 사람이 두 창에서 인증을 마쳤다 (둘 다 아직 가입 전)" || bad "두 창 인증 (${R4:0:80} / ${R5:0:80})"
+check "첫 창은 가입한다" "$(reg "$G4" "race-a@id.test" | tail -c 3)" "201"
+R="$(reg "$G5" "race-b@id.test")"
+[[ "$R" == *" 409" ]] && ok "둘째 창은 가입할 때 다시 보고 거절한다" || bad "둘째 창 가입 (${R:0:160})"
+check "둘째 계정은 만들어지지 않았다 (트랜잭션이 되돌린다)" "$(users_with race-b@id.test)" "0"
+curl -s -o /dev/null -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"member.one_person_one_account":false}'
+
+echo "── 가입 전 본인인증 — 30분이 지나면 다시"
+G6="$(gjar late)"
+RID6="$(gstart "$G6")"; verified "$RID6" "CI-LATE-1" "1995-03-03"; gcomplete "$G6" "$RID6" >/dev/null
+psql_q "UPDATE identity_verifications SET completed_at = now() - interval '31 minutes' WHERE request_id='$RID6'" >/dev/null
+contains "오래된 인증은 마친 것으로 치지 않는다" "$(gstate "$G6")" '"verified":false'
+check "가입도 막힌다" "$(reg "$G6" "late@id.test" | tail -c 3)" "403"
+
+echo "── 가입 전 본인인증 — 인증 화면"
+SIGNUP_HTML="$(render - identity "signup=1&next=%2Fregister")"
+contains "손님에게 가입 전 인증 안내를 보여 준다" "$SIGNUP_HTML" "가입하기 전에 본인인증을 합니다"
+contains "손님용 경로로 인증을 시작한다" "$SIGNUP_HTML" "/api/identity/signup/start"
+contains "인증 수단 버튼이 있다" "$SIGNUP_HTML" 'data-provider="portone"'
+absent "로그인하라고 하지 않는다" "$SIGNUP_HTML" "로그인한 뒤 할 수 있습니다"
+contains "가입 표시가 없으면 손님에게는 여전히 로그인 안내" "$(render - identity)" "로그인한 뒤 할 수 있습니다"
+curl -s -o /dev/null -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"member.identity_at_signup":false}'
+check "끄면 인증 안 한 회원도 다시 쓴다" "$(cart_add "$U")" "200"
+
 echo "── 탈퇴하면 인증 기록이 지워진다"
 AID="$(psql_q "SELECT id FROM users WHERE email='a@id.test'")"
 ID_ROWS="SELECT (SELECT count(*) FROM user_certifications WHERE user_id='$AID') || '|' || (SELECT count(*) FROM identity_verifications WHERE user_id='$AID')"

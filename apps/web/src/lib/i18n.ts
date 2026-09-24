@@ -50,6 +50,9 @@ const KO = {
   "register.viewBody": "내용 보기",
   "register.age": "만 14세 이상입니다.",
   "register.needAge": "만 14세 이상만 가입할 수 있습니다.",
+  "register.identityNeed": "이 사이트는 가입하기 전에 본인인증을 합니다. 이름·생년월일·전화번호는 저장되지 않습니다.",
+  "register.identityGo": "본인인증하고 가입하기",
+  "register.identityDone": "본인인증을 마쳤습니다.",
 
 
   "account.title": "내 정보",
@@ -214,6 +217,9 @@ const EN: Record<keyof typeof KO, string> = {
   "register.viewBody": "View details",
   "register.age": "I am 14 years of age or older.",
   "register.needAge": "You must be at least 14 years old to sign up.",
+  "register.identityNeed": "This site verifies your identity before you sign up. Your name, date of birth and phone number are not stored.",
+  "register.identityGo": "Verify and sign up",
+  "register.identityDone": "Identity verified.",
   "register.done": "Welcome! Taking you to the login page…",
   "register.haveAccount": "Already have an account?",
 
