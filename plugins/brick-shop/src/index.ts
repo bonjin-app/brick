@@ -16,7 +16,7 @@ import { CASH_RECEIPT_RESOURCE, CATEGORY_RESOURCE, COLLECTION_RESOURCE, GRADE_RE
          TAX_INVOICE_RESOURCE } from "./admin-resources.js";
 import { registerStorefrontBlocks } from "./blocks.js";
 import { importProducts } from "./import.js";
-import { ORDER_EVENTS, sendOrderMail } from "./order-mail.js";
+import { ORDER_EVENTS, sendOrderMail, virtualAccountText } from "./order-mail.js";
 import {
   createInquiry, createReview, deleteInquiry, deleteReview, findPurchase,
   listInquiries, listReviews, replyToInquiry, replyToReview, REVIEW_SORTS, setReviewVisible, updateReview,
@@ -120,7 +120,7 @@ export default definePlugin(async (ctx) => {
   const notifyOrder = async (
     orderId: string,
     status: OrderStatus,
-    kind?: "trackingAdded",
+    kind?: "trackingAdded" | "virtualAccount",
   ): Promise<void> => {
     try {
       const s = await settings();
@@ -465,6 +465,18 @@ export default definePlugin(async (ctx) => {
      * 한 번 더 내야 하나 싶게 만든다.
      */
     const needsDeposit = order.status === "pending" && order.payment_method === "bank_transfer";
+    /*
+     * 가상계좌 — 발급된 계좌를 다시 보여 준다(무통장입금과 같은 이유: 입금은 나중에 한다).
+     * 결제대기이고 입금을 기다리는 결제가 있을 때만.
+     */
+    const { rows: vaRows } = order.status === "pending"
+      ? await db.execute(sql`
+          SELECT va_bank, va_account, va_holder, va_expires_at FROM shop_payments
+          WHERE order_id = ${String(order.id)}::uuid AND status = 'waiting'
+          ORDER BY created_at DESC LIMIT 1
+        `)
+      : { rows: [] as Array<Record<string, unknown>> };
+    const va = vaRows[0];
     const shopSettings = await settings();
     const bankAccount = needsDeposit ? shopSettings.bankAccount : "";
     // 입금 기한 — 메일과 같은 계산. 지나면 자동 취소되므로 이 화면이 말해야 한다
@@ -494,12 +506,19 @@ export default definePlugin(async (ctx) => {
      */
     const gw = gateways.get(String(order.payment_method ?? ""));
     const gwReady = gw?.checkout ? (gw.isReady ? await gw.isReady().catch(() => false) : true) : false;
-    const payable = order.status === "pending" && order.payment_status !== "paid" && gwReady;
+    // 가상계좌로 입금을 기다리는 주문에는 "다시 결제" 를 내밀지 않는다 — 누르면 계좌가 하나 더 생긴다
+    const payable = order.status === "pending" && order.payment_status !== "paid" && gwReady && !va;
     return {
       order, items, events,
       statusLabel: STATUS_LABEL[order.status as OrderStatus],
       ...(bankAccount ? { bankAccount } : {}),
       ...(due ? { depositDue: formatDue(due) } : {}),
+      ...(va ? {
+        virtualAccount: {
+          text: virtualAccountText(String(va.va_bank ?? ""), String(va.va_account ?? ""), va.va_holder ? String(va.va_holder) : null),
+          expiresAt: va.va_expires_at ? formatDue(new Date(String(va.va_expires_at))) : null,
+        },
+      } : {}),
       cashReceipt,
       payable,
       // 결제창에 뜨는 이름 — 주문번호만 보내면 손님은 무엇을 사는지 알 수 없다
@@ -616,21 +635,14 @@ export default definePlugin(async (ctx) => {
    * 클라이언트(PG 리다이렉트)와 웹훅 모두 이 경로를 쓴다.
    * 금액 검증·중복 방어는 confirmPayment가 담당한다.
    */
-  ctx.registerRoute("POST", "/payments/confirm", async (req) => {
-    const b = req.body as { orderNo?: string; provider?: string; providerTid?: string; amount?: number };
-    if (!b?.orderNo || !b?.provider || !b?.providerTid) {
-      throw new ShopError(400, "orderNo, provider, providerTid가 필요합니다.");
-    }
-    // 무통장입금은 관리자만 승인할 수 있다 (고객이 스스로 입금완료 처리하면 안 된다)
-    if (b.provider === "bank_transfer" && req.user?.role !== "admin" && req.user?.role !== "manager") {
-      throw new ShopError(403, "무통장입금 확인은 관리자만 할 수 있습니다.");
-    }
-    return confirmPayment(db, {
-      orderNo: b.orderNo,
-      provider: b.provider,
-      providerTid: b.providerTid,
-      claimedAmount: b.amount,
-      actorId: req.user?.id ?? null,
+  /** 결제 확정 — 손님이 돌아온 경로와 PG 의 통지(웹훅)가 같은 것을 부른다 */
+  const runConfirm = (p: { orderNo: string; provider: string; providerTid: string; amount?: number; actorId?: string | null }) =>
+    confirmPayment(db, {
+      orderNo: p.orderNo,
+      provider: p.provider,
+      providerTid: p.providerTid,
+      claimedAmount: p.amount,
+      actorId: p.actorId ?? null,
       pointsPort: pointsPort(),
       // 포인트 적립 등이 이 훅을 구독한다
       onPaid: async (info) => {
@@ -642,6 +654,48 @@ export default definePlugin(async (ctx) => {
         await markRequestPaid(db, info.orderNo);
         await ctx.hooks.doAction("shop.order.paid", info);
       },
+      // 가상계좌가 발급됐다 — 계좌와 기한을 알린다(주문 접수 안내에는 계좌가 없었다)
+      onAwaitingDeposit: async ({ orderId }) => { void notifyOrder(orderId, "pending", "virtualAccount"); },
+    });
+
+  ctx.registerRoute("POST", "/payments/confirm", async (req) => {
+    const b = req.body as { orderNo?: string; provider?: string; providerTid?: string; amount?: number };
+    if (!b?.orderNo || !b?.provider || !b?.providerTid) {
+      throw new ShopError(400, "orderNo, provider, providerTid가 필요합니다.");
+    }
+    // 무통장입금은 관리자만 승인할 수 있다 (고객이 스스로 입금완료 처리하면 안 된다)
+    if (b.provider === "bank_transfer" && req.user?.role !== "admin" && req.user?.role !== "manager") {
+      throw new ShopError(403, "무통장입금 확인은 관리자만 할 수 있습니다.");
+    }
+    const r = await runConfirm({ orderNo: b.orderNo, provider: b.provider, providerTid: b.providerTid, amount: b.amount, actorId: req.user?.id ?? null });
+    /*
+     * 가상계좌 — 발급된 계좌를 손님이 읽는 모양으로 준다(은행 코드 → 이름, 기한은 사이트 시간대로).
+     * 결제창에서 돌아온 화면이 이것을 그대로 보여 준다.
+     */
+    if (!r.awaitingDeposit) return r;
+    const va = r.awaitingDeposit;
+    return {
+      ...r,
+      virtualAccount: {
+        text: virtualAccountText(va.bank, va.accountNumber, va.holder),
+        expiresAt: va.expiresAt ? formatDue(new Date(va.expiresAt)) : null,
+      },
+    };
+  });
+
+  /*
+   * PG 의 통지 — 게이트웨이 플러그인이 웹훅을 받아 이 훅을 부른다.
+   *
+   * 가상계좌는 입금이 **나중에** 일어나므로 통지 말고는 알 길이 없다. 카드 결제를 마치고 손님이
+   * 사이트로 돌아오지 않은(창을 닫은) 경우도 이것으로 확정된다. 통지 내용은 믿지 않는다 —
+   * confirm 이 PG 에 다시 물어 입금·결제를 확인할 때만 결제 완료로 만든다. 무통장입금은 받지 않는다.
+   */
+  ctx.hooks.onAction<{ provider?: string; providerTid?: string; orderNo?: string }>("shop.payment.webhook", "brick-shop", async (p) => {
+    const provider = String(p?.provider ?? ""), providerTid = String(p?.providerTid ?? ""), orderNo = String(p?.orderNo ?? "");
+    if (!provider || provider === "bank_transfer" || !providerTid || !orderNo) return;
+    await runConfirm({ orderNo, provider, providerTid }).catch((err: unknown) => {
+      // 이미 결제된 주문·다른 주문의 거래 등 — 통지는 여러 번 오고, 틀린 통지도 온다
+      ctx.logger.warn(`결제 통지 처리 (${provider} ${orderNo}): ${err instanceof Error ? err.message : String(err)}`);
     });
   });
 

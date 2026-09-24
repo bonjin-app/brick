@@ -49,6 +49,15 @@ export interface PaymentGateway {
      * 되어 `TypeError: fetch failed` 나 PG 서버 주소가 손님 화면에 떴다.
      */
     customerReason?: string;
+    /**
+     * **입금 대기** — 가상계좌처럼 계좌가 발급됐을 뿐 돈은 아직 들어오지 않았다(`ok: true` 와 함께).
+     *
+     * brick-shop 은 결제를 `waiting` 으로 두고 주문을 결제대기로 남긴 채 손님에게 계좌를 보여 준다.
+     * 입금되면 게이트웨이가 `shop.payment.webhook` 훅을 부르고, brick-shop 이 다시 confirm 해
+     * PG 가 입금을 확인할 때 결제 완료로 만든다. approvedAmount 는 이때도 채운다(발급 금액이 주문
+     * 금액과 같아야 한다).
+     */
+    awaitingDeposit?: { bank: string; accountNumber: string; holder?: string | null; expiresAt?: string | null };
   }>;
   /** 취소/환불. amount를 주면 부분 환불 */
   /**
@@ -206,8 +215,13 @@ export async function confirmPayment(
     pointsPort?: PointsPort | null;
     /** 결제 완료를 알린다 (포인트 적립 등이 구독한다) */
     onPaid?: (info: { orderNo: string; userId: string | null; amount: number }) => Promise<void>;
+    /** 가상계좌가 발급됐다 — 입금 안내를 보낸다 (처음 발급될 때 한 번) */
+    onAwaitingDeposit?: (info: { orderId: string; orderNo: string }) => Promise<void>;
   },
-): Promise<{ ok: boolean; orderNo: string; amount: number }> {
+): Promise<{
+  ok: boolean; orderNo: string; amount: number;
+  awaitingDeposit?: { bank: string; accountNumber: string; holder: string | null; expiresAt: string | null };
+}> {
   const gateway = gateways.get(params.provider);
   if (!gateway) throw new ShopError(400, t("err.unknownProvider", { provider: params.provider }));
 
@@ -236,24 +250,57 @@ export async function confirmPayment(
       .catch(() => undefined);
     throw new ShopError(409, "이미 결제가 완료된 주문입니다.");
   }
-  if (order.status !== "pending") {
+  /*
+   * 입금을 기다리던 가상계좌 주문이 그 사이 취소됐는데 입금 통지가 왔다 — 여기서 거절하면 돈은 PG 에
+   * 들어왔는데 아무 기록도 남지 않는다. 확정 단계로 보내 "취소된 뒤 들어온 결제" 로 환불(또는 수동
+   * 환불 표시)되게 한다. 같은 거래의 입금 대기 기록이 있을 때만이다.
+   */
+  let lateDeposit = false;
+  if (order.status === "cancelled") {
+    const { rows: w } = await db.execute(sql`
+      SELECT 1 FROM shop_payments WHERE order_id = ${String(order.id)}::uuid AND provider = ${params.provider}
+        AND provider_tid = ${params.providerTid} AND status IN ('waiting', 'cancelled') AND va_account IS NOT NULL LIMIT 1
+    `);
+    lateDeposit = w.length > 0;
+    if (lateDeposit) {
+      await db.execute(sql`
+        UPDATE shop_payments SET status = 'waiting', updated_at = now()
+        WHERE order_id = ${String(order.id)}::uuid AND provider = ${params.provider}
+          AND provider_tid = ${params.providerTid} AND status = 'cancelled'
+      `);
+    }
+  }
+  if (order.status !== "pending" && !lateDeposit) {
     throw new ShopError(400, t("err.notPayableStatus", { status: label(STATUS_LABEL[order.status as OrderStatus] ?? String(order.status)) }));
   }
 
   // ── 2. 결제 시도 기록 (중복은 unique 인덱스가 막는다) ──
-  const paymentId = uuidv7();
-  try {
-    await db.execute(sql`
-      INSERT INTO shop_payments (id, order_id, provider, provider_tid, status, amount)
-      VALUES (${paymentId}, ${String(order.id)}::uuid, ${params.provider}, ${params.providerTid},
-              'requested', ${orderTotal})
-    `);
-  } catch (err) {
-    if (isUniqueViolation(err, "shop_payments_tid_uniq")) {
-      // 같은 PG 거래가 이미 처리 중이거나 처리되었다 — 재고 이중 차감을 막는다
-      throw new ShopError(409, "이미 처리된 결제입니다.");
+  /*
+   * 입금을 기다리던 가상계좌 거래가 다시 오면(입금 통지·손님의 새로고침) 그 기록을 이어 쓴다.
+   * waiting → requested 로 **한 요청만** 넘긴다 — 통지가 두 번 겹쳐 와도 하나만 확정 단계로 간다.
+   */
+  const { rows: resumed } = await db.execute(sql`
+    UPDATE shop_payments SET status = 'requested', updated_at = now()
+    WHERE provider = ${params.provider} AND provider_tid = ${params.providerTid}
+      AND order_id = ${String(order.id)}::uuid AND status = 'waiting'
+    RETURNING id
+  `);
+  const wasWaiting = resumed.length > 0;
+  const paymentId = wasWaiting ? String(resumed[0].id) : uuidv7();
+  if (!wasWaiting) {
+    try {
+      await db.execute(sql`
+        INSERT INTO shop_payments (id, order_id, provider, provider_tid, status, amount)
+        VALUES (${paymentId}, ${String(order.id)}::uuid, ${params.provider}, ${params.providerTid},
+                'requested', ${orderTotal})
+      `);
+    } catch (err) {
+      if (isUniqueViolation(err, "shop_payments_tid_uniq")) {
+        // 같은 PG 거래가 이미 처리 중이거나 처리되었다 — 재고 이중 차감을 막는다
+        throw new ShopError(409, "이미 처리된 결제입니다.");
+      }
+      throw err;
     }
-    throw err;
   }
 
   // ── 3. PG 승인 ─────────────────────────────────────
@@ -264,6 +311,18 @@ export async function confirmPayment(
   });
 
   if (!result.ok) {
+    /*
+     * 입금을 기다리던 가상계좌를 다시 확인하다 실패했다(PG 가 잠시 닿지 않는 등) — failed 로 바꾸면
+     * 그 뒤 입금 통지가 와도 이 거래를 다시 확정할 길이 없다(같은 거래 키는 두 번 기록되지 않는다).
+     * 기다림으로 되돌린다. 계좌가 정말 끝났다면 입금 기한이 지나 주문이 자동 취소된다.
+     */
+    if (wasWaiting) {
+      await db.execute(sql`
+        UPDATE shop_payments SET status = 'waiting', failure_reason = ${(result.failureReason ?? "재확인 실패").slice(0, 500)}, updated_at = now()
+        WHERE id = ${paymentId}
+      `);
+      throw new ShopError(402, result.customerReason?.trim() || t("pay.failed"));
+    }
     await db.execute(sql`
       UPDATE shop_payments SET status = 'failed', failure_reason = ${(result.failureReason ?? "승인 실패").slice(0, 500)},
         raw = ${JSON.stringify(result.raw ?? null)}::jsonb, updated_at = now()
@@ -294,6 +353,36 @@ export async function confirmPayment(
       WHERE id = ${paymentId}
     `);
     throw new ShopError(400, "결제 금액이 주문 금액과 일치하지 않습니다. 결제를 취소했습니다.");
+  }
+
+  // ── 4-1. 입금 대기 (가상계좌) — 계좌만 발급됐다. 결제대기로 두고 계좌를 알려 준다 ──
+  if (result.awaitingDeposit) {
+    // 취소된 주문 — 아직 입금 전이면 다시 기다릴 것이 없다(계좌 안내도 하지 않는다)
+    if (lateDeposit) {
+      await db.execute(sql`UPDATE shop_payments SET status = 'cancelled', updated_at = now() WHERE id = ${paymentId}`);
+      throw new ShopError(400, t("err.notPayableStatus", { status: label(STATUS_LABEL.cancelled) }));
+    }
+    const va = result.awaitingDeposit;
+    const expires = va.expiresAt && !Number.isNaN(Date.parse(va.expiresAt)) ? new Date(va.expiresAt).toISOString() : null;
+    await db.execute(sql`
+      UPDATE shop_payments SET status = 'waiting', method = ${result.method ?? null},
+        va_bank = ${String(va.bank ?? "").slice(0, 40)}, va_account = ${String(va.accountNumber ?? "").slice(0, 60)},
+        va_holder = ${va.holder ? String(va.holder).slice(0, 60) : null}, va_expires_at = ${expires}::timestamptz,
+        raw = ${JSON.stringify(result.raw ?? null)}::jsonb, updated_at = now()
+      WHERE id = ${paymentId}
+    `);
+    await db.execute(sql`
+      UPDATE shop_orders SET payment_method = ${params.provider}, updated_at = now()
+      WHERE id = ${String(order.id)}::uuid
+    `);
+    // 처음 발급됐을 때만 안내한다 — 통지·새로고침마다 입금 안내가 가면 손님이 헷갈린다
+    if (!wasWaiting && params.onAwaitingDeposit) {
+      await params.onAwaitingDeposit({ orderId: String(order.id), orderNo: params.orderNo }).catch(() => undefined);
+    }
+    return {
+      ok: true, orderNo: params.orderNo, amount: approved,
+      awaitingDeposit: { bank: va.bank, accountNumber: va.accountNumber, holder: va.holder ?? null, expiresAt: expires },
+    };
   }
 
   // ── 5. 승인 확정 ───────────────────────────────────

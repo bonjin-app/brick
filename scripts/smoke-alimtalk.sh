@@ -125,7 +125,7 @@ curl -s -o /dev/null -b "$CK" -X PUT "$SHOP/admin/settings" -H 'content-type: ap
 
 echo "── 알림 종류는 알림을 보내는 플러그인이 선언한다"
 LIST="$(curl -s -b "$CK" "$AL/admin/alimtalk")"
-check "주문 알림 여섯 가지가 목록에 있다" "$(echo "$LIST" | jq_get "['total']")" "6"
+check "주문 알림 일곱 가지가 목록에 있다 (가상계좌 입금 안내 포함)" "$(echo "$LIST" | jq_get "['total']")" "7"
 contains "사람이 읽는 이름" "$LIST" "주문 — 접수"
 contains "쓸 수 있는 변수가 보인다" "$LIST" "#{주문번호}"
 contains "접수 알림은 입금계좌도 채운다" "$(curl -s -b "$CK" "$AL/admin/alimtalk/shop.order.pending")" "#{입금계좌}"

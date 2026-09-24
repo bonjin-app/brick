@@ -64,9 +64,10 @@ const CANCEL_VARS: NotificationEvent["vars"] = [
 ];
 
 /** 알림 종류 → 기본 문구에 넣을 안내 변수 (그 알림에서만 값이 있는 것) */
-type OrderMailKey = "pending" | "paid" | "shipped" | "trackingAdded" | "cancelled" | "refunded";
+type OrderMailKey = "pending" | "paid" | "shipped" | "trackingAdded" | "cancelled" | "refunded" | "virtualAccount";
 const EXTRA: Record<OrderMailKey, string> = {
   pending: "#{결제안내}",
+  virtualAccount: "#{결제안내}",
   paid: "",
   shipped: "#{배송안내}",
   trackingAdded: "#{배송안내}",
@@ -99,12 +100,14 @@ export function orderMailTemplate(key: OrderMailKey): { subject: string; body: s
   };
 }
 
-const eventOf = (key: OrderMailKey) => `shop.order.${key === "trackingAdded" ? "tracking" : key}`;
+const eventOf = (key: OrderMailKey) =>
+  `shop.order.${key === "trackingAdded" ? "tracking" : key === "virtualAccount" ? "deposit" : key}`;
 const ev = (key: OrderMailKey, label: string, vars: NotificationEvent["vars"]): NotificationEvent => ({
   event: eventOf(key), label, vars, defaults: () => orderMailTemplate(key),
 });
 export const ORDER_EVENTS: NotificationEvent[] = [
   ev("pending", "주문 — 접수", [...COMMON_VARS, ...PAYMENT_VARS]),
+  ev("virtualAccount", "주문 — 가상계좌 입금 안내", [...COMMON_VARS, ...PAYMENT_VARS]),
   ev("paid", "주문 — 결제 확인", COMMON_VARS),
   ev("shipped", "주문 — 발송", [...COMMON_VARS, ...SHIPPING_VARS]),
   ev("trackingAdded", "주문 — 운송장 번호 등록", [...COMMON_VARS, ...SHIPPING_VARS]),
@@ -162,7 +165,7 @@ export async function sendOrderMail(
    * 을 따로 두고 있다. 그런데 나중에 붙인 송장은 손님에게 아무것도 알리지 않아서,
    * 손님은 송장 없는 발송 메일만 받고 주문 조회를 새로고침하게 된다.
    */
-  params: { orderId: string; status: OrderStatus; kind?: "trackingAdded" },
+  params: { orderId: string; status: OrderStatus; kind?: "trackingAdded" | "virtualAccount" },
 ): Promise<boolean> {
   if (!params.kind && !MAILED.includes(params.status)) return false;
   const key = (params.kind ?? params.status) as OrderMailKey;
@@ -246,6 +249,24 @@ export async function sendOrderMail(
     }
     vars.결제안내 = lines.join("\n");
   }
+  /*
+   * 가상계좌 — 발급된 계좌와 기한이 이 안내의 본체다. 주문 접수 안내에는 계좌가 없었다(카드처럼
+   * 결제창으로 넘어가는 수단이라 접수 시점에는 계좌가 없다).
+   */
+  if (params.kind === "virtualAccount") {
+    const { rows: va } = await db.execute(sql`
+      SELECT va_bank, va_account, va_holder, va_expires_at FROM shop_payments
+      WHERE order_id = ${params.orderId}::uuid AND status = 'waiting' ORDER BY created_at DESC LIMIT 1
+    `);
+    if (!va[0]) return false;
+    vars.입금계좌 = virtualAccountText(String(va[0].va_bank ?? ""), String(va[0].va_account ?? ""), va[0].va_holder ? String(va[0].va_holder) : null);
+    const lines = [t("ordermail.bankAccount", { account: vars.입금계좌 }), t("ordermail.bankNotice")];
+    if (va[0].va_expires_at) {
+      vars.입금기한 = formatDue(new Date(String(va[0].va_expires_at)));
+      lines.push(t("ordermail.vaDue", { date: vars.입금기한 }));
+    }
+    vars.결제안내 = lines.join("\n");
+  }
   if ((params.status === "shipped" || params.kind === "trackingAdded") && order.tracking_no) {
     vars.배송안내 = t("ordermail.tracking", { trackingNo: String(order.tracking_no) });
   }
@@ -282,3 +303,22 @@ export function formatDue(d: Date): string {
     timeZone: SITE_TZ, month: "long", day: "numeric", weekday: "short", hour: "numeric", minute: "2-digit",
   }).format(d);
 }
+
+/**
+ * 가상계좌 표기 — "신한은행 56211234567890 (예금주 브릭상점)".
+ *
+ * PG 는 은행을 코드로 준다(`SHINHAN`). 손님이 은행 앱에서 고르는 것은 이름이므로 바꿔 적는다.
+ * 모르는 코드는 그대로 둔다 — 틀린 은행 이름보다 코드가 낫다.
+ */
+const BANK_NAMES: Record<string, string> = {
+  KOOKMIN: "국민은행", SHINHAN: "신한은행", WOORI: "우리은행", HANA: "하나은행", NONGHYUP: "농협은행",
+  IBK: "기업은행", KAKAO: "카카오뱅크", TOSS: "토스뱅크", K_BANK: "케이뱅크", SC: "SC제일은행",
+  CITI: "한국씨티은행", SUHYUP: "수협은행", POST: "우체국", SAEMAUL: "새마을금고", SHINHYEOP: "신협",
+  BUSAN: "부산은행", DAEGU: "대구은행", KWANGJU: "광주은행", JEONBUK: "전북은행", KYONGNAM: "경남은행",
+  JEJU: "제주은행", KDB: "산업은행",
+};
+export function virtualAccountText(bank: string, account: string, holder: string | null): string {
+  const name = BANK_NAMES[bank.toUpperCase()] ?? bank;
+  return `${name} ${account}${holder ? ` (${t("ordermail.vaHolder", { holder })})` : ""}`.trim();
+}
+

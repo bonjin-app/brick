@@ -6,6 +6,7 @@
 #   - 결제 확인은 조회다(승인 단계가 없다) — 상태가 PAID 이고 금액이 주문 총액과 같을 때만
 #   - 결제 ID 가 **이 주문의 것**인지(다른 주문의 같은 금액 결제로 이 주문을 끝낼 수 없다)
 #   - 부분환불은 취소 전 잔액을 함께 보낸다 — 포트원이 이중 부분환불을 막는 장치
+#   - 가상계좌는 입금 대기로 두고, 입금은 웹훅으로 안다(웹훅 내용은 믿지 않고 포트원에 다시 묻는다)
 #   - 시크릿은 어디에도 새지 않는다
 #
 # 사용법: DATABASE_URL=postgresql://... bash scripts/smoke-portone.sh
@@ -131,7 +132,7 @@ PUT="$(curl -s -b "$CK" -X PUT "$PO/admin/config" -H 'content-type: application/
 contains "저장된다" "$PUT" '"apiSecretConfigured":true'
 absent "저장 응답에 시크릿이 없다" "$PUT" "SECRET_VALUE_DO_NOT_LEAK"
 check "모르는 결제 수단은 기존 값을 지킨다" \
-  "$(curl -s -b "$CK" -X PUT "$PO/admin/config" -H 'content-type: application/json' -d '{"payMethod":"VIRTUAL_ACCOUNT"}' | jq_get "['payMethod']")" "CARD"
+  "$(curl -s -b "$CK" -X PUT "$PO/admin/config" -H 'content-type: application/json' -d '{"payMethod":"BITCOIN"}' | jq_get "['payMethod']")" "CARD"
 METHODS="$(curl -s "$SHOP/payment-methods")"
 contains "설정 후 결제수단으로 뜬다" "$METHODS" '"portone"'
 contains "그 자리에서 결제창으로 넘기는 수단이다" "$METHODS" '"online":true'
@@ -188,7 +189,9 @@ echo "── 결제가 끝나지 않았으면 결제 완료로 만들지 않는�
 paid_by_customer "$O1-f1" 25000 FAILED
 contains "실패한 결제는 거절하고 이유를 말한다" "$(confirm "$O1" "$O1-f1")" "결제가 실패했습니다"
 paid_by_customer "$O1-va" 25000 VIRTUAL_ACCOUNT_ISSUED
-contains "가상계좌 발급(입금 전)은 결제 완료가 아니다" "$(confirm "$O1" "$O1-va")" "가상계좌"
+# 계좌 번호 없이 "발급됨" 만 오면 손님에게 보여 줄 계좌가 없다 — 입금 대기로도 두지 않는다
+VA_NOACC="$(printf '{"orderNo":"%s","provider":"portone","providerTid":"%s-va","amount":0}' "$O1" "$O1")"
+check "계좌 번호 없는 가상계좌 발급 응답은 받지 않는다" "$(code -b "$B" -X POST "$SHOP/payments/confirm" -H 'content-type: application/json' -d "$VA_NOACC")" "402"
 check "주문은 여전히 결제대기" "$(psql_q "SELECT payment_status FROM shop_orders WHERE order_no='$O1'")" "unpaid"
 
 echo "── 금액이 주문 총액과 다르면 결제를 되돌린다"
@@ -233,6 +236,87 @@ R3="$(curl -s -b "$CK" -X POST "$SHOP/admin/payments/refund" -H 'content-type: a
   -d "{\"orderNo\":\"$O1\",\"amount\":2000,\"reason\":\"재시도 흉내\"}")"
 contains "잔액이 어긋나면 포트원이 거절하고 우리도 환불로 기록하지 않는다" "$R3" "잔액"
 check "우리 기록의 누적 환불액은 그대로" "$(psql_q "SELECT refunded_amount FROM shop_payments WHERE provider_tid='$O1-ok'")" "14000"
+
+echo "── 가상계좌 — 발급은 입금 대기, 입금은 웹훅으로 (웹훅 내용은 믿지 않고 다시 조회)"
+check "입금 기한은 1~720시간" "$(code -b "$CK" -X PUT "$PO/admin/config" -H 'content-type: application/json' -d '{"vaHours":0}')" "400"
+check "가상계좌로 바꾼다 (기한 48시간)" \
+  "$(curl -s -b "$CK" -X PUT "$PO/admin/config" -H 'content-type: application/json' -d '{"payMethod":"VIRTUAL_ACCOUNT","vaHours":48}' | jq_get "['payMethod']")" "VIRTUAL_ACCOUNT"
+contains "결제창에 입금 기한을 넘긴다" "$(curl -s "$PO/config")" '"vaHours":48'
+contains "결제창 스크립트가 계좌 기한을 싣는다" "$(curl -s -b "$B" "$API/api/render/page?path=shop/checkout")" "accountExpiry"
+issue_va() {  # issue_va <paymentId> <금액> [만료 시각] — 결제창에서 계좌가 발급됐다
+  curl -s -o /dev/null -X POST "http://127.0.0.1:$PO_PORT/__control/payments" -H 'content-type: application/json' \
+    -d "{\"paymentId\":\"$1\",\"total\":$2,\"status\":\"VIRTUAL_ACCOUNT_ISSUED\",\"storeId\":\"store-brick-test\",\"virtualAccount\":{\"accountNumber\":\"56211234567890\",\"expiredAt\":\"${3:-2099-01-01T00:00:00Z}\"}}"
+}
+webhook() {  # webhook <paymentId> [storeId] → 상태코드
+  code -X POST "$PO/webhook" -H 'content-type: application/json' \
+    -d "{\"type\":\"Transaction.Paid\",\"timestamp\":\"2026-09-24T00:00:00Z\",\"data\":{\"paymentId\":\"$1\",\"storeId\":\"${2:-store-brick-test}\"}}"
+}
+deposit() { curl -s -o /dev/null -X POST "http://127.0.0.1:$PO_PORT/__control/deposit" -H 'content-type: application/json' -d "{\"paymentId\":\"$1\"}"; }
+O_VA="$(mkorder 1)"
+issue_va "$O_VA-va1" 14000
+VA="$(confirm "$O_VA" "$O_VA-va1")"
+contains "발급된 계좌를 손님에게 보여 준다 (은행 코드 → 이름)" "$VA" "신한은행 56211234567890 (예금주 브릭상점)"
+contains "입금 기한도" "$VA" '"expiresAt":"'
+check "주문은 아직 결제대기" "$(psql_q "SELECT status, payment_status FROM shop_orders WHERE order_no='$O_VA'")" "pending|unpaid"
+check "결제는 입금 대기로 기록" "$(psql_q "SELECT p.status, p.va_account FROM shop_payments p JOIN shop_orders o ON o.id=p.order_id WHERE o.order_no='$O_VA'")" "waiting|56211234567890"
+DETAIL="$(curl -s -b "$B" "$SHOP/orders/$O_VA")"
+contains "주문 조회에서 계좌를 다시 본다" "$DETAIL" "56211234567890"
+contains "입금 대기 주문에는 다시 결제를 내밀지 않는다 (계좌가 하나 더 생긴다)" "$DETAIL" '"payable":false'
+sleep 1
+check "입금 안내가 한 번 나간다 (계좌·기한)" "$(grep -c "가상계좌 입금 안내 ($O_VA)" "$TMP/api.log" || true)" "1"
+confirm "$O_VA" "$O_VA-va1" >/dev/null
+sleep 1
+check "새로고침해도 안내는 다시 가지 않는다" "$(grep -c "가상계좌 입금 안내 ($O_VA)" "$TMP/api.log" || true)" "1"
+check "새로고침해도 여전히 입금 대기" "$(psql_q "SELECT p.status FROM shop_payments p JOIN shop_orders o ON o.id=p.order_id WHERE o.order_no='$O_VA'")" "waiting"
+# 결제 미완료 자동 취소(분)가 입금 기한 전에 가상계좌 주문을 지우면 안 된다
+curl -s -o /dev/null -b "$CK" -X PUT "$SHOP/admin/settings" -H 'content-type: application/json' \
+  -d '{"shippingFee":3000,"freeShippingOver":50000,"pageSize":20,"returnShippingFee":3000,"unpaidCancelMinutes":30}'
+psql_q "UPDATE shop_orders SET created_at = now() - interval '2 hours' WHERE order_no='$O_VA'" >/dev/null
+curl -s -o /dev/null -b "$CK" -X POST "$SHOP/admin/orders/unpaid-sweep"
+check "결제 미완료 규칙은 입금 대기 주문을 취소하지 않는다" "$(psql_q "SELECT status FROM shop_orders WHERE order_no='$O_VA'")" "pending"
+check "입금 전 웹훅 — 받기는 한다" "$(webhook "$O_VA-va1")" "200"
+check "입금 전이면 결제 완료가 아니다 (포트원에 다시 물었다)" "$(psql_q "SELECT payment_status FROM shop_orders WHERE order_no='$O_VA'")" "unpaid"
+deposit "$O_VA-va1"
+check "입금 뒤 웹훅" "$(webhook "$O_VA-va1")" "200"
+check "결제 완료" "$(psql_q "SELECT status, payment_status FROM shop_orders WHERE order_no='$O_VA'")" "paid|paid"
+check "입금 대기 기록이 결제로 확정 (새 기록을 만들지 않는다)" "$(psql_q "SELECT count(*), max(p.status) FROM shop_payments p JOIN shop_orders o ON o.id=p.order_id WHERE o.order_no='$O_VA'")" "1|paid"
+check "같은 웹훅이 다시 와도 그대로 (재전송)" "$(webhook "$O_VA-va1"; psql_q "SELECT count(*) FROM shop_payments p JOIN shop_orders o ON o.id=p.order_id WHERE o.order_no='$O_VA'")" "2001"
+
+echo "── 웹훅은 믿지 않는다"
+O_SP="$(mkorder 1)"
+check "우리 결제 ID 모양이 아니면 무시" "$(curl -s -X POST "$PO/webhook" -H 'content-type: application/json' -d '{"data":{"paymentId":"../../etc"}}' | jq_get "['ignored']")" "paymentId"
+OTHER_STORE="$(printf '{"data":{"paymentId":"%s-x1","storeId":"store-other"}}' "$O_SP")"
+check "다른 상점의 통지는 무시" "$(curl -s -X POST "$PO/webhook" -H 'content-type: application/json' -d "$OTHER_STORE" | jq_get "['ignored']")" "storeId"
+check "포트원에 없는 결제의 통지 — 받되" "$(webhook "$O_SP-fake1")" "200"
+check "주문은 결제되지 않는다" "$(psql_q "SELECT payment_status FROM shop_orders WHERE order_no='$O_SP'")" "unpaid"
+
+echo "── 카드로 결제하고 창을 닫은 손님 — 웹훅이 확정한다"
+curl -s -o /dev/null -b "$CK" -X PUT "$PO/admin/config" -H 'content-type: application/json' -d '{"payMethod":"CARD"}'
+O_CL="$(mkorder 1)"
+paid_by_customer "$O_CL-c1" 14000
+check "돌아오지 않았어도" "$(webhook "$O_CL-c1")" "200"
+check "결제 완료로 확정된다" "$(psql_q "SELECT payment_status FROM shop_orders WHERE order_no='$O_CL'")" "paid"
+
+echo "── 입금 기한이 지난 가상계좌"
+O_EXP="$(mkorder 1)"
+issue_va "$O_EXP-e1" 14000 "2020-01-01T00:00:00Z"
+confirm "$O_EXP" "$O_EXP-e1" >/dev/null
+curl -s -o /dev/null -b "$CK" -X POST "$SHOP/admin/orders/unpaid-sweep"
+check "기한이 지나면 자동 취소 (재고를 돌려놓는다)" "$(psql_q "SELECT status FROM shop_orders WHERE order_no='$O_EXP'")" "cancelled"
+contains "이유가 이력에 남는다" "$(psql_q "SELECT note FROM shop_order_events e JOIN shop_orders o ON o.id=e.order_id WHERE o.order_no='$O_EXP' ORDER BY e.created_at DESC LIMIT 1")" "가상계좌 입금 기한 경과"
+check "닫힌 계좌는 더 이상 입금 대기가 아니다" "$(psql_q "SELECT p.status FROM shop_payments p JOIN shop_orders o ON o.id=p.order_id WHERE o.order_no='$O_EXP'")" "cancelled"
+
+echo "── 운영자가 취소한 뒤 들어온 입금 — 모른 척하지 않는다"
+O_LATE="$(mkorder 1)"
+issue_va "$O_LATE-l1" 14000
+confirm "$O_LATE" "$O_LATE-l1" >/dev/null
+LATE_ID="$(psql_q "SELECT id FROM shop_orders WHERE order_no='$O_LATE'")"
+curl -s -o /dev/null -b "$CK" -X PUT "$SHOP/admin/orders/$LATE_ID" -H 'content-type: application/json' -d '{"status":"cancelled"}'
+deposit "$O_LATE-l1"
+webhook "$O_LATE-l1" >/dev/null
+check "주문은 취소 그대로" "$(psql_q "SELECT status FROM shop_orders WHERE order_no='$O_LATE'")" "cancelled"
+check "들어온 돈은 환불 요청됐다" "$(po_last cancel paymentId)" "$O_LATE-l1"
+check "기록이 남는다" "$(psql_q "SELECT p.status FROM shop_payments p JOIN shop_orders o ON o.id=p.order_id WHERE o.order_no='$O_LATE'")" "refunded"
 
 echo "── 시크릿이 새지 않는다"
 absent "서버 로그에 시크릿이 없다" "$(cat "$TMP/api.log")" "SECRET_VALUE_DO_NOT_LEAK"

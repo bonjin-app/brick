@@ -60,11 +60,23 @@ const server = createServer((req, res) => {
         status: String(body.status ?? "PAID"),
         orderName: String(body.orderName ?? "시험 주문"),
         currency: "KRW",
-        method: { type: "PaymentMethodCard" },
+        // 가상계좌면 발급된 계좌가 method 에 담긴다 (포트원 V2 PaymentMethodVirtualAccount 모양)
+        method: body.virtualAccount
+          ? { type: "PaymentMethodVirtualAccount", bank: "SHINHAN", accountNumber: String(body.virtualAccount.accountNumber ?? "56211234567890"),
+              remitteeName: "브릭상점", expiredAt: String(body.virtualAccount.expiredAt ?? "2026-09-27T05:00:00Z") }
+          : { type: "PaymentMethodCard" },
         amount: { total: Number(body.total), paid: Number(body.total), cancelled: 0 },
         paidAt: "2026-09-24T00:00:00Z",
       };
       payments.set(p.id, p);
+      return send(res, 200, { ok: true });
+    }
+    // ── 테스트 제어: 손님이 가상계좌에 입금했다 ──
+    if (req.method === "POST" && path === "/__control/deposit") {
+      const p = payments.get(String(body.paymentId));
+      if (!p) return send(res, 404, {});
+      p.status = "PAID";
+      p.amount.paid = p.amount.total;
       return send(res, 200, { ok: true });
     }
     // ── 테스트 제어: PG 쪽에서만 일어난 취소(우리가 모르는 잔액 변화) ──

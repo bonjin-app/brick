@@ -278,6 +278,13 @@ const checkoutScript = (t: (k: string) => string) => `
         if (summary) summary.hidden = true;   // 완료 화면이 떴으면 진행 안내는 치운다
         document.getElementById('brick-co-no').textContent = orderNo;
         if (res.d.amount != null) document.getElementById('brick-co-total').textContent = fmt(res.d.amount);
+        if (res.d.virtualAccount) {
+          document.getElementById('brick-co-bank-label').hidden = false;
+          var vaBox = document.getElementById('brick-co-bank');
+          vaBox.hidden = false;
+          vaBox.textContent = res.d.virtualAccount.text + (res.d.virtualAccount.expiresAt
+            ? ' — ' + ${JSON.stringify(t("checkout.vaDue"))}.replace('{date}', res.d.virtualAccount.expiresAt) : '');
+        }
         var view = document.getElementById('brick-co-view');
         if (view) view.href = root.dataset.shopBase + '/orders/' + encodeURIComponent(orderNo);
         document.getElementById('brick-co-done').hidden = false;

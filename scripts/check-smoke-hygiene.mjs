@@ -27,6 +27,8 @@
  * 둔 API 때문에 실제로 그랬고, DB 까지 초기화됐다). 대기 루프의 `kill -0` 로는
  * 못 잡는다: curl 이 먼저 성공해 break 하기 때문이다. 그래서 포트의 주인이
  * 우리인지 따로 확인해야 한다(`assert_own_api`, scripts/lib-smoke.sh).
+ *
+ * ── 5. 인자로 넘기는 "$(…)" 안에 쉼표 JSON 을 쓰지 않았는가 (bash 3.2 중괄호 확장 — 아래)
  */
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -144,6 +146,30 @@ for (const name of readdirSync(join(ROOT, "scripts"))) {
     checked++;
     bad.push([`scripts/${name}:${i + 1}`, m[1],
       "스텁을 맨손으로 띄웁니다 — start_stub/restart_stub 을 쓰세요 (포트가 막히면 수트 전체가 헛돕니다)"]);
+  });
+}
+
+/*
+ * 5. 함수 인자로 넘기는 "$(…)" 안에 **쉼표가 든 \"…\" JSON** 을 쓰지 않았는가.
+ *
+ * macOS 기본 bash(3.2)는 `check "이름" "$(curl … -d "{\"a\":1,\"b\":2}")"` 에서 안쪽 따옴표를
+ * 따옴표로 보지 않아 **중괄호를 확장한다** — curl 이 두 번 돌고, check 는 빈 값 두 개를 받아
+ * `'' == ''` 로 **무조건 통과**한다. 가상계좌 웹훅의 "다른 상점의 통지는 무시" 가 그렇게 헛돌고
+ * 있었다(되돌려 봐도 통과해서 set -x 로 찾았다). 변수에 받는 것(`R="$(…)"`)은 멀쩡하다.
+ * JSON 은 printf 로 변수에 만들어 `-d "$BODY"` 로 넘긴다.
+ */
+for (const name of readdirSync(join(ROOT, "scripts"))) {
+  if (!name.endsWith(".sh")) continue;
+  const lines = readFileSync(join(ROOT, "scripts", name), "utf8").split("\n");
+  lines.forEach((line, i) => {
+    if (/^\s*#/.test(line)) return;
+    // 변수 대입 한 줄(`X="$(…)"`)은 안전하다 — 함수·명령의 인자로 넘길 때만 확장된다
+    if (/^\s*(local\s+)?[A-Za-z_][A-Za-z0-9_]*="\$\(/.test(line)) return;
+    if (!/"\$\(/.test(line)) return;
+    if (!/-d "\{\\"[^"]*\\",/.test(line) && !/-d "\{\\".*\\",\\"/.test(line)) return;
+    checked++;
+    bad.push([`scripts/${name}:${i + 1}`, "-d \"{\\\"…\\\",…}\"",
+      "인자로 넘기는 \"$(…)\" 안의 쉼표 JSON — bash 3.2 가 중괄호를 확장해 단언이 무조건 통과합니다 (printf 로 변수에 만드세요)"]);
   });
 }
 

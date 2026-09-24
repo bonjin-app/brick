@@ -19,8 +19,12 @@ import { definePlugin } from "@brick/plugin-sdk";
  * 금액 대조는 brick-shop 이 한다(주문 총액과 PG 가 확인한 금액). 이 플러그인은 포트원이 알려
  * 준 실제 결제 금액을 정직하게 돌려주는 책임만 진다.
  *
- * 아직 하지 않는 것: 가상계좌(입금 대기 → 웹훅으로 완료 통지가 필요하다), 정기결제 빌링키.
- * 설정 화면의 결제 수단에 가상계좌를 두지 않는 이유다.
+ * **가상계좌** — 결제창에서 계좌가 발급될 뿐 돈은 나중에 들어온다. 발급되면 brick-shop 에
+ * "입금 대기"(awaitingDeposit)로 알리고, 입금은 포트원의 웹훅(`/webhook`)으로 안다. 웹훅 내용은 믿지
+ * 않는다 — 결제 ID 만 받아 brick-shop 이 다시 확인(confirm → 포트원 조회)하게 한다.
+ *
+ * 아직 하지 않는 것: 정기결제 빌링키, 입금된 가상계좌의 환불(환불 계좌를 받아야 한다 — 포트원
+ * 콘솔에서 처리한다).
  *
  * **본인인증**도 같은 계정으로 한다(다날·KCP·이니시스 통합인증을 채널로 등록). 결제와 별도로
  * 켜고 끈다 — 결제는 다른 PG 로 받고 본인인증만 포트원으로 하는 사이트도 있다.
@@ -45,8 +49,8 @@ function resolveApiBase(): string {
   }
 }
 
-/** 결제창에서 고를 수 있는 수단 — 가상계좌는 입금 통지(웹훅)가 생길 때까지 두지 않는다 */
-const PAY_METHODS = ["CARD", "EASY_PAY", "TRANSFER", "MOBILE"] as const;
+/** 결제창에서 고를 수 있는 수단 */
+const PAY_METHODS = ["CARD", "EASY_PAY", "TRANSFER", "MOBILE", "VIRTUAL_ACCOUNT"] as const;
 type PayMethod = (typeof PAY_METHODS)[number];
 
 interface PortOneSettings {
@@ -58,6 +62,8 @@ interface PortOneSettings {
   /** V2 API 시크릿 — 서버에서만 쓴다 */
   apiSecret: string;
   payMethod: PayMethod;
+  /** 가상계좌 입금 기한(시간) — 결제창이 계좌를 발급할 때 넘긴다 */
+  vaHours: number;
   /** 본인인증 사용 — 결제와 따로 켠다 */
   identityEnabled: boolean;
   /** 본인인증 채널 키 (다날·KCP·이니시스 본인인증 채널) */
@@ -71,6 +77,7 @@ export default definePlugin(async (ctx) => {
     channelKey: "",
     apiSecret: "",
     payMethod: "CARD",
+    vaHours: 72,
     identityEnabled: false,
     identityChannelKey: "",
     ...((await ctx.settings.get<Partial<PortOneSettings>>("config")) ?? {}),
@@ -156,6 +163,8 @@ export default definePlugin(async (ctx) => {
               totalAmount: order.amount,
               currency: 'CURRENCY_KRW',
               payMethod: cfg.payMethod || 'CARD',
+              // 가상계좌는 입금 기한을 함께 넘긴다 — 기한이 지나면 계좌가 닫히고 주문이 자동 취소된다
+              virtualAccount: cfg.payMethod === 'VIRTUAL_ACCOUNT' ? { accountExpiry: { validHours: cfg.vaHours || 72 } } : undefined,
               redirectUrl: order.returnUrl,
               forceRedirect: true
             });
@@ -221,6 +230,29 @@ export default definePlugin(async (ctx) => {
       if (cfg.storeId && typeof res.data.storeId === "string" && res.data.storeId !== cfg.storeId) {
         return { ok: false, failureReason: "다른 상점의 결제입니다.", raw: sanitize(res.data) };
       }
+      /*
+       * 가상계좌 발급 — 결제 완료가 아니라 **입금 대기**다. 계좌를 brick-shop 에 넘기면 주문을 결제대기로
+       * 두고 손님에게 계좌를 보여 준다. 입금되면 웹훅이 와서 다시 여기로 온다(그때는 PAID).
+       */
+      if (status === "VIRTUAL_ACCOUNT_ISSUED") {
+        const m = (res.data.method ?? {}) as Record<string, unknown>;
+        const amt = (res.data.amount ?? {}) as Record<string, unknown>;
+        if (!m.accountNumber) {
+          return { ok: false, failureReason: "가상계좌 번호가 없습니다.", raw: sanitize(res.data) };
+        }
+        return {
+          ok: true,
+          approvedAmount: Number(amt.total),
+          method: "가상계좌",
+          awaitingDeposit: {
+            bank: String(m.bank ?? ""),
+            accountNumber: String(m.accountNumber),
+            holder: typeof m.remitteeName === "string" ? m.remitteeName : null,
+            expiresAt: typeof m.expiredAt === "string" ? m.expiredAt : null,
+          },
+          raw: sanitize(res.data),
+        };
+      }
       if (status !== "PAID") {
         /*
          * 결제가 끝나지 않았다(실패·취소·대기). 손님이 결제창에서 그만뒀거나 PG 가 거절했다.
@@ -233,7 +265,6 @@ export default definePlugin(async (ctx) => {
           PARTIAL_CANCELLED: "결제가 취소되었습니다.",
           READY: "결제가 완료되지 않았습니다.",
           PENDING: "결제가 아직 처리 중입니다. 잠시 뒤 주문 조회에서 확인해주세요.",
-          VIRTUAL_ACCOUNT_ISSUED: "가상계좌 입금은 아직 지원하지 않습니다. 다른 수단으로 결제해주세요.",
         };
         return {
           ok: false,
@@ -403,9 +434,34 @@ export default definePlugin(async (ctx) => {
     const cfg = await load();
     const ready = cfg.enabled && Boolean(cfg.storeId && cfg.channelKey && cfg.apiSecret);
     return {
-      enabled: ready, storeId: cfg.storeId, channelKey: cfg.channelKey, payMethod: cfg.payMethod,
+      enabled: ready, storeId: cfg.storeId, channelKey: cfg.channelKey, payMethod: cfg.payMethod, vaHours: cfg.vaHours,
       identityEnabled: identityReady(cfg), identityChannelKey: cfg.identityChannelKey,
     };
+  });
+
+  /*
+   * 웹훅 — 포트원이 결제 상태가 바뀔 때(가상계좌 입금·결제 완료·취소) 부른다.
+   *
+   * **내용을 믿지 않는다.** 결제 ID 만 꺼내 brick-shop 에 넘기고, brick-shop 이 포트원에 다시 물어
+   * 입금·결제가 확인될 때만 결제 완료로 만든다. 그래서 위조된 통지는 "다시 확인" 을 한 번 부를 뿐이다
+   * (서명 검증을 하지 않는 이유 — 원문 본문을 받지 못하는 라우트에서 서명을 흉내 내면 오히려 틀린다).
+   * 쏟아부어 확인 요청을 늘리지 못하게 주소마다 한도를 둔다. 포트원은 2xx 가 아니면 다시 보내므로
+   * 처리 실패도 200 으로 답한다(다시 보내도 결과가 같다).
+   */
+  ctx.registerRoute("POST", "/webhook", async (req) => {
+    const { allowed } = await ctx.rateLimit.consume(`webhook:${req.ip ?? "?"}`, 120, 60_000);
+    if (!allowed) throw Object.assign(new Error("요청이 너무 많습니다."), { status: 429 });
+    const b = (req.body ?? {}) as { type?: unknown; data?: { paymentId?: unknown; storeId?: unknown } };
+    const paymentId = String(b.data?.paymentId ?? "");
+    // 결제 ID 는 "주문번호-접미사" 로 만들었다(결제창 스크립트) — 그 모양이 아니면 우리 결제가 아니다
+    const m = /^(\d{8}-\d{6})-[0-9a-z]{1,16}$/.exec(paymentId);
+    if (!m) return { ok: true, ignored: "paymentId" };
+    const cfg = await load();
+    if (cfg.storeId && b.data?.storeId !== undefined && String(b.data.storeId) !== cfg.storeId) {
+      return { ok: true, ignored: "storeId" };
+    }
+    await ctx.hooks.doAction("shop.payment.webhook", { provider: "portone", providerTid: paymentId, orderNo: m[1] });
+    return { ok: true };
   });
 
   // ── 관리자 설정 ─────────────────────────────────────
@@ -414,6 +470,7 @@ export default definePlugin(async (ctx) => {
     storeId: cfg.storeId,
     channelKey: cfg.channelKey,
     payMethod: cfg.payMethod,
+    vaHours: cfg.vaHours,
     identityEnabled: cfg.identityEnabled,
     identityChannelKey: cfg.identityChannelKey,
     // 시크릿은 내려보내지 않는다 — 비워 둔 채 저장하면 기존 값이 유지된다
@@ -435,6 +492,7 @@ export default definePlugin(async (ctx) => {
       channelKey: String(b.channelKey ?? current.channelKey).trim(),
       apiSecret: b.apiSecret?.trim() ? b.apiSecret.trim() : current.apiSecret,
       payMethod,
+      vaHours: b.vaHours === undefined ? current.vaHours : Math.floor(Number(b.vaHours)),
       identityEnabled: b.identityEnabled ?? current.identityEnabled,
       identityChannelKey: String(b.identityChannelKey ?? current.identityChannelKey).trim(),
     };
@@ -446,6 +504,9 @@ export default definePlugin(async (ctx) => {
     }
     if (next.enabled && !(next.storeId && next.channelKey && next.apiSecret)) {
       throw Object.assign(new Error("상점 ID·채널 키·API 시크릿을 모두 입력해야 켤 수 있습니다."), { status: 400 });
+    }
+    if (!Number.isInteger(next.vaHours) || next.vaHours < 1 || next.vaHours > 720) {
+      throw Object.assign(new Error("가상계좌 입금 기한은 1~720시간이어야 합니다."), { status: 400, field: "vaHours" });
     }
     if (next.identityChannelKey && !/^channel-key-[\w-]+$/.test(next.identityChannelKey)) {
       throw Object.assign(new Error("본인인증 채널 키는 channel-key- 로 시작합니다. 포트원 콘솔 → 결제 연동 → 채널에서 본인인증 채널의 키를 확인하세요."), { status: 400, field: "identityChannelKey" });
@@ -487,8 +548,11 @@ export default definePlugin(async (ctx) => {
           { value: "EASY_PAY", label: "간편결제 (카카오페이·네이버페이 등)" },
           { value: "TRANSFER", label: "계좌이체" },
           { value: "MOBILE", label: "휴대폰 결제" },
+          { value: "VIRTUAL_ACCOUNT", label: "가상계좌" },
         ],
-        help: "채널이 지원하는 수단이어야 합니다. 가상계좌는 입금 통지 연동 전이라 아직 없습니다." },
+        help: "채널이 지원하는 수단이어야 합니다. 가상계좌를 쓰려면 포트원 콘솔 → 웹훅에 이 사이트의 /api/plugins/brick-pay-portone/webhook 주소를 등록하세요 — 입금 통지가 그리로 옵니다." },
+      { name: "vaHours", label: "가상계좌 입금 기한 (시간)", type: "number",
+        help: "기한이 지나면 계좌가 닫히고 주문이 자동으로 취소됩니다. 1~720시간 (기본 72)." },
     ],
   });
 

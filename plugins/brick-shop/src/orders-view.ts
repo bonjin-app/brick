@@ -567,6 +567,13 @@ const detailScript = (t: (k: string, p?: Record<string, string | number>) => str
         ? '<dt>' + ${JSON.stringify(t("orders.depositDue"))} + '</dt><dd><strong>' + esc(d.depositDue) + '</strong>' +
           '<small class="brick-o-banknote">' + ${JSON.stringify(t("orders.depositDueNote"))} + '</small></dd>'
         : '') +
+      (d.virtualAccount
+        ? '<dt>' + ${JSON.stringify(t("orders.bankAccount"))} + '</dt><dd><strong>' + esc(d.virtualAccount.text) + '</strong></dd>' +
+          (d.virtualAccount.expiresAt
+            ? '<dt>' + ${JSON.stringify(t("orders.depositDue"))} + '</dt><dd><strong>' + esc(d.virtualAccount.expiresAt) + '</strong>' +
+              '<small class="brick-o-banknote">' + ${JSON.stringify(t("orders.vaDueNote"))} + '</small></dd>'
+            : '')
+        : '') +
       '</dl>' +
       (history ? '<h3>' + ${JSON.stringify(t("orders.history"))} + '</h3><ul class="brick-o-history">' + history + '</ul>' : '') +
       '<div id="brick-ret-slot"></div>' +

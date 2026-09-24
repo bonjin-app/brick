@@ -1023,5 +1023,12 @@
   "무통장입금 기한 (없으면 빈칸)": "Bank transfer deadline (empty if none)",
   "운송장 번호 (없으면 빈칸)": "Tracking number (empty if none)",
   "주문 안내를 문자·알림톡으로도 보낸다": "Also send order updates by SMS / KakaoTalk AlimTalk",
-  "건당 요금이 나갑니다. 문자 발송 확장(예: 알리고)을 설치하고 설정해야 실제로 나갑니다. 알림톡 템플릿을 연결한 안내는 알림톡으로, 나머지는 문자로 나갑니다.": "Billed per message. It only goes out once an SMS extension (for example Aligo) is installed and configured. Updates with a linked AlimTalk template go out as AlimTalk, the rest as SMS."
+  "건당 요금이 나갑니다. 문자 발송 확장(예: 알리고)을 설치하고 설정해야 실제로 나갑니다. 알림톡 템플릿을 연결한 안내는 알림톡으로, 나머지는 문자로 나갑니다.": "Billed per message. It only goes out once an SMS extension (for example Aligo) is installed and configured. Updates with a linked AlimTalk template go out as AlimTalk, the rest as SMS.",
+  "ordermail.virtualAccount.subject": "Bank transfer details for your order",
+  "ordermail.virtualAccount.lead": "please transfer the order amount to the account below.",
+  "ordermail.vaDue": "Deposit by {date} — after that the account closes and the order is cancelled automatically.",
+  "ordermail.vaHolder": "holder {holder}",
+  "주문 — 가상계좌 입금 안내": "Order — virtual account deposit details",
+  "orders.vaDueNote": "After this the account closes and the order is cancelled automatically.",
+  "checkout.vaDue": "please deposit by {date}"
 }

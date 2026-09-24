@@ -28,10 +28,16 @@ export async function cancelUnpaidOrders(
 ): Promise<{ cancelled: number; orderNos: string[] }> {
   const minutes = Math.max(0, Math.floor(Number(settings.unpaidCancelMinutes ?? 0)));
   const days = Math.max(0, Math.floor(Number(settings.depositDays ?? 0)));
-  if (!minutes && !days) return { cancelled: 0, orderNos: [] };
+  // 두 규칙이 모두 꺼져 있어도 가상계좌 기한 경과는 본다 — 그 기한은 운영자가 아니라 PG 가 정했다
 
+  /*
+   * 가상계좌로 입금을 기다리는 주문 — 결제 미완료 시간(분) 규칙을 쓰지 않는다. 계좌에는 PG 가 정한
+   * 입금 기한이 있고, 그 전에 취소하면 손님이 입금한 돈이 갈 곳이 없다. 기한이 지나면 취소한다.
+   */
   const { rows } = await db.execute(sql`
-    SELECT o.id, o.order_no, o.payment_method FROM shop_orders o
+    SELECT o.id, o.order_no, o.payment_method,
+           EXISTS (SELECT 1 FROM shop_payments w WHERE w.order_id = o.id AND w.status = 'waiting') AS va
+    FROM shop_orders o
     WHERE o.status = 'pending'
       AND o.payment_status <> 'paid'
       AND o.is_direct_payment IS NOT TRUE
@@ -40,7 +46,13 @@ export async function cancelUnpaidOrders(
         (o.payment_method = 'bank_transfer' AND ${days} > 0
           AND o.created_at < now() - make_interval(days => ${days}))
         OR (o.payment_method <> 'bank_transfer' AND ${minutes} > 0
-          AND o.created_at < now() - make_interval(mins => ${minutes}))
+          AND o.created_at < now() - make_interval(mins => ${minutes})
+          AND NOT EXISTS (SELECT 1 FROM shop_payments w WHERE w.order_id = o.id AND w.status = 'waiting'))
+        -- 입금 기한이 지난 가상계좌 (기한을 모르면 발급 후 7일)
+        OR EXISTS (
+          SELECT 1 FROM shop_payments w WHERE w.order_id = o.id AND w.status = 'waiting'
+            AND coalesce(w.va_expires_at, w.created_at + interval '7 days') < now()
+        )
       )
       AND NOT EXISTS (
         SELECT 1 FROM shop_payments p
@@ -56,11 +68,16 @@ export async function cancelUnpaidOrders(
     const bank = r.payment_method === "bank_transfer";
     // 이력 note 는 저장되는 데이터다 — 번역하지 않는다 (payments.ts 의 같은 주석 참고)
     const changed = await changeOrderStatus(db, String(r.id), "cancelled", {
-      note: bank ? `입금 기한(${days}일) 경과 — 자동 취소` : `결제 미완료(${minutes}분) — 자동 취소`,
+      note: r.va ? "가상계좌 입금 기한 경과 — 자동 취소"
+        : bank ? `입금 기한(${days}일) 경과 — 자동 취소` : `결제 미완료(${minutes}분) — 자동 취소`,
       pointsPort,
       onlyFrom: ["pending"],
     });
-    if (changed) orderNos.push(String(r.order_no));
+    if (changed) {
+      orderNos.push(String(r.order_no));
+      // 기다리던 계좌는 끝났다 — 입금 대기로 남겨 두면 주문 조회가 닫힌 계좌를 계속 보여 준다
+      if (r.va) await db.execute(sql`UPDATE shop_payments SET status = 'cancelled', updated_at = now() WHERE order_id = ${String(r.id)}::uuid AND status = 'waiting'`);
+    }
   }
   return { cancelled: orderNos.length, orderNos };
 }
