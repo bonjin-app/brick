@@ -292,6 +292,19 @@ export class PageRenderService {
         });
         return { html, status: 200, slug: "notifications" };
       }
+      /*
+       * /identity 는 페이지가 없어도 본인인증 화면으로 폴백한다 — 성인 상품 안내·주문서·회원
+       * 정보가 이 주소로 보낸다. 로그인 안내도 블록이 한다(돌아올 곳을 붙여서).
+       */
+      if (path === "identity") {
+        const title = t("identity.title");
+        const blocksHtml = await this.renderNodes([{ block: "core/identity", props: {} }], blockCtx);
+        const html = await this.themes.render("page", {
+          ...themeCommon, site, menu: nav,
+          title, pageTitle: `${title} — ${site.name}`, blocksHtml, seo: { noindex: true },
+        });
+        return { html, status: 200, slug: "identity" };
+      }
       // /search 는 페이지가 없어도 통합검색으로 폴백한다 — 테마 헤더의
       // 검색폼이 어느 사이트에서든 404 로 떨어지지 않게. search slug 로
       // 페이지를 만들면 그 페이지가 우선한다 (운영자가 화면을 가질 수 있다).

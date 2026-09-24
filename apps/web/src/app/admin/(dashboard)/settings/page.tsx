@@ -137,8 +137,9 @@ export default function AdminSettingsPage() {
       </Card>
 
       <Card id="members" title={t("settings.members")} desc={t("settings.membersDesc")}
-        keys={["site.registration_open", "member.nick_change_days", "moderation.denied_names", "moderation.denied_email_domains"]}>
+        keys={["site.registration_open", "member.nick_change_days", "member.one_person_one_account", "moderation.denied_names", "moderation.denied_email_domains"]}>
         <Check k="site.registration_open" label={t("settings.regOpen")} fallback />
+        <Check k="member.one_person_one_account" label={t("settings.onePerson")} hint={t("settings.onePersonHint")} />
         <Field label={t("settings.nickDays")} hint={t("settings.nickDaysHint")}>
           <input style={{ ...input, width: 120 }} inputMode="numeric" value={str("member.nick_change_days", "0")}
             onChange={(e) => set("member.nick_change_days", e.target.value.replace(/[^0-9]/g, ""))} />
@@ -190,4 +191,4 @@ export default function AdminSettingsPage() {
 }
 
 /** 서버가 boolean 으로 검증하는 키 — 미설정이면 false 로 보낸다 ("" 를 보내면 400) */
-const BOOLEAN_KEYS = new Set(["site.registration_open", "site.seo_noindex", "site.maintenance", "security.require_2fa_for_staff", "system.update_check"]);
+const BOOLEAN_KEYS = new Set(["site.registration_open", "member.one_person_one_account", "site.seo_noindex", "site.maintenance", "security.require_2fa_for_staff", "system.update_check"]);

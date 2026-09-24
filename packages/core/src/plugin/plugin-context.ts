@@ -6,6 +6,7 @@ import type { StorageProvider } from "../providers/storage.js";
 import type { MailProvider } from "../providers/mail.js";
 import type { SmsProvider } from "../providers/sms.js";
 import type { CaptchaProvider } from "../providers/captcha.js";
+import type { IdentityProvider, IdentityStatus } from "../providers/identity.js";
 import type { HookBus } from "../hooks/hook-bus.js";
 
 /**
@@ -87,6 +88,17 @@ export interface PluginContext {
    * `enabled` 가 false면 검사가 비활성이므로 UI도 숨겨야 한다.
    */
   readonly captcha: CaptchaProvider;
+  /**
+   * 본인인증 결과 — 코어가 한 곳에 둔다.
+   *
+   * 성인 상품·성인 게시판처럼 **나이를 확인해야 하는 곳**은 여기서 읽는다. 인증 화면은
+   * `/identity` 에 있다(`identity.url(next)` 로 돌아올 곳을 붙인 주소를 만든다).
+   */
+  readonly identity: {
+    status(userId: string): Promise<IdentityStatus>;
+    /** 인증 화면 주소. next 는 끝나고 돌아올 사이트 안 경로 */
+    url(next?: string): string;
+  };
   /** 플러그인 전용 네임스페이스가 적용된 설정 저장소 */
   readonly settings: {
     get<T>(key: string): Promise<T | null>;
@@ -318,6 +330,14 @@ export interface PluginContext {
    * 두 번 나가는 것(요금이 두 배다)보다 한 곳으로 나가는 편이 낫다.
    */
   registerSmsGateway(gateway: SmsProvider): void;
+
+  /**
+   * 본인인증 공급자를 등록한다 (포트원·NICE·KCP…).
+   *
+   * 여럿 등록할 수 있다 — 인증 화면이 준비된 것들을 고르게 한다. 같은 이름을 다시 등록하면
+   * 나중 것이 이긴다.
+   */
+  registerIdentityProvider(provider: IdentityProvider): void;
 
   /**
    * 플러그인이 **자기 화면**을 가진다.

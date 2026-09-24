@@ -264,6 +264,9 @@ jobs:
       - name: E2E 스모크 테스트 (포트원 — 이니시스·KCP·NICE·간편결제를 한 연동으로)
         run: bash scripts/smoke-portone.sh
 
+      - name: E2E 스모크 테스트 (본인인증 — 성인 상품 · 한 사람 한 계정)
+        run: bash scripts/smoke-identity.sh
+
       - name: E2E 스모크 테스트 (통합검색 · 검색 로그)
         run: bash scripts/smoke-search.sh
 

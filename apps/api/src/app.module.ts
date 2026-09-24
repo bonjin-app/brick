@@ -5,6 +5,7 @@ import { AuthModule } from "./modules/auth/auth.module.js";
 import { CaptchaModule } from "./modules/captcha/captcha.module.js";
 import { ExtensionsModule } from "./modules/extensions/extensions.module.js";
 import { HealthModule } from "./modules/health/health.module.js";
+import { IdentityModule } from "./modules/identity/identity.module.js";
 import { ImagesModule } from "./modules/images/images.module.js";
 import { SecurityModule } from "./modules/security/security.module.js";
 import { InstallModule } from "./modules/install/install.module.js";
@@ -36,6 +37,7 @@ import { UsersModule } from "./modules/users/users.module.js";
     CaptchaModule,
     ExtensionsModule,
     HealthModule,
+    IdentityModule,
     ImagesModule,
     SecurityModule,
     SystemModule,

@@ -21,6 +21,9 @@ import { definePlugin } from "@brick/plugin-sdk";
  *
  * 아직 하지 않는 것: 가상계좌(입금 대기 → 웹훅으로 완료 통지가 필요하다), 정기결제 빌링키.
  * 설정 화면의 결제 수단에 가상계좌를 두지 않는 이유다.
+ *
+ * **본인인증**도 같은 계정으로 한다(다날·KCP·이니시스 통합인증을 채널로 등록). 결제와 별도로
+ * 켜고 끈다 — 결제는 다른 PG 로 받고 본인인증만 포트원으로 하는 사이트도 있다.
  */
 const PORTONE_API = resolveApiBase();
 
@@ -55,6 +58,10 @@ interface PortOneSettings {
   /** V2 API 시크릿 — 서버에서만 쓴다 */
   apiSecret: string;
   payMethod: PayMethod;
+  /** 본인인증 사용 — 결제와 따로 켠다 */
+  identityEnabled: boolean;
+  /** 본인인증 채널 키 (다날·KCP·이니시스 본인인증 채널) */
+  identityChannelKey: string;
 }
 
 export default definePlugin(async (ctx) => {
@@ -64,6 +71,8 @@ export default definePlugin(async (ctx) => {
     channelKey: "",
     apiSecret: "",
     payMethod: "CARD",
+    identityEnabled: false,
+    identityChannelKey: "",
     ...((await ctx.settings.get<Partial<PortOneSettings>>("config")) ?? {}),
   });
 
@@ -282,11 +291,121 @@ export default definePlugin(async (ctx) => {
 
   await ctx.hooks.doAction("shop.payment.register", { gateway });
 
+  // ── 본인인증 ────────────────────────────────────────
+  ctx.registerIdentityProvider({
+    name: "portone",
+    // 원문이 곧 번역 키다 — 화면이 사이트 언어로 바꿔 그린다
+    displayName: "휴대폰 본인인증",
+
+    /*
+     * 인증 ID 는 코어가 만들어 넘긴다(영문·숫자 40자 이하 — KCP 규칙). 돌아오는 길을 하나로
+     * 만드는 것은 결제와 같다: 모바일은 redirectUrl 로 오고, PC 는 결과가 이 창으로 오므로 같은
+     * 주소로 옮겨 준다.
+     */
+    clientScript: `
+  <script>
+  (function(){
+    window.brickIdentity = window.brickIdentity || {};
+    var SDK = 'https://cdn.portone.io/v2/browser-sdk.js';
+    function loadSdk(){
+      if (window.PortOne) return Promise.resolve();
+      return new Promise(function(resolve, reject){
+        var el = document.querySelector('script[data-brick-portone]');
+        if (el) { el.addEventListener('load', resolve); el.addEventListener('error', reject); return; }
+        var s = document.createElement('script');
+        s.src = SDK; s.async = true; s.setAttribute('data-brick-portone', '1');
+        s.onload = resolve; s.onerror = reject;
+        document.head.appendChild(s);
+      });
+    }
+    window.brickIdentity['portone'] = function (req) {
+      return fetch('/api/plugins/brick-pay-portone/config')
+        .then(function(r){ return r.json(); })
+        .then(function(cfg){
+          if (!cfg.identityEnabled || !cfg.storeId || !cfg.identityChannelKey) throw new Error('portone identity not configured');
+          return loadSdk().then(function(){
+            return window.PortOne.requestIdentityVerification({
+              storeId: cfg.storeId,
+              identityVerificationId: req.requestId,
+              channelKey: cfg.identityChannelKey,
+              redirectUrl: req.returnUrl
+            });
+          });
+        }).then(function(res){
+          if (!res) return;
+          var u = new URL(req.returnUrl, location.href);
+          if (res.code) { u.searchParams.set('code', res.code); u.searchParams.set('message', res.message || ''); }
+          else u.searchParams.set('identityVerificationId', res.identityVerificationId || req.requestId);
+          location.href = u.toString();
+        });
+    };
+    // 실패·취소면 code 가 붙어 온다 — null 을 주면 화면이 "취소되었습니다" 로 알린다
+    window.brickIdentity['portone'].readReturn = function (q) {
+      if (q.get('code')) return null;
+      return q.get('identityVerificationId');
+    };
+  })();
+  </script>`,
+
+    async isReady() {
+      return identityReady(await load());
+    },
+
+    /**
+     * 인증 결과 조회 — 포트원에 **직접** 묻는다. 화면이 보낸 이름·생년월일은 받지 않는다.
+     */
+    async verify(requestId: string) {
+      const cfg = await load();
+      if (!identityReady(cfg)) return { ok: false as const, reason: "포트원 본인인증이 설정되지 않았습니다." };
+      const res = await callPortOne("GET", `/identity-verifications/${encodeURIComponent(requestId)}`, cfg.apiSecret);
+      if (!res.ok) {
+        return {
+          ok: false as const,
+          reason: String(res.data.message ?? `본인인증 조회 실패 (HTTP ${res.status})`),
+          customerReason: res.status === 404 ? ctx.t("본인인증이 완료되지 않았습니다. 다시 인증해주세요.") : undefined,
+        };
+      }
+      // 다른 인증의 결과가 오면 받지 않는다 (조회 경로가 어긋났거나 응답이 섞였다)
+      if (res.data.id !== undefined && String(res.data.id) !== requestId) {
+        return { ok: false as const, reason: "요청한 인증과 다른 결과가 왔습니다." };
+      }
+      if (cfg.storeId && typeof res.data.storeId === "string" && res.data.storeId !== cfg.storeId) {
+        return { ok: false as const, reason: "다른 상점의 본인인증입니다." };
+      }
+      const status = String(res.data.status ?? "");
+      if (status !== "VERIFIED") {
+        return {
+          ok: false as const,
+          reason: `포트원 본인인증 상태 ${status || "알 수 없음"}`,
+          customerReason: status === "FAILED"
+            ? ctx.t("본인인증에 실패했습니다. 다시 시도해주세요.")
+            : ctx.t("본인인증이 완료되지 않았습니다. 다시 인증해주세요."),
+        };
+      }
+      const c = (res.data.verifiedCustomer ?? {}) as Record<string, unknown>;
+      const gender = String(c.gender ?? "").toUpperCase();
+      return {
+        ok: true as const,
+        person: {
+          ci: typeof c.ci === "string" ? c.ci : null,
+          di: typeof c.di === "string" ? c.di : null,
+          name: String(c.name ?? ""),
+          birthDate: String(c.birthDate ?? ""),
+          gender: gender === "MALE" ? ("male" as const) : gender === "FEMALE" ? ("female" as const) : null,
+          isForeigner: typeof c.isForeigner === "boolean" ? c.isForeigner : null,
+        },
+      };
+    },
+  });
+
   // ── 결제창을 여는 데 필요한 공개 정보 (시크릿은 절대 내보내지 않는다) ──
   ctx.registerRoute("GET", "/config", async () => {
     const cfg = await load();
     const ready = cfg.enabled && Boolean(cfg.storeId && cfg.channelKey && cfg.apiSecret);
-    return { enabled: ready, storeId: cfg.storeId, channelKey: cfg.channelKey, payMethod: cfg.payMethod };
+    return {
+      enabled: ready, storeId: cfg.storeId, channelKey: cfg.channelKey, payMethod: cfg.payMethod,
+      identityEnabled: identityReady(cfg), identityChannelKey: cfg.identityChannelKey,
+    };
   });
 
   // ── 관리자 설정 ─────────────────────────────────────
@@ -295,6 +414,8 @@ export default definePlugin(async (ctx) => {
     storeId: cfg.storeId,
     channelKey: cfg.channelKey,
     payMethod: cfg.payMethod,
+    identityEnabled: cfg.identityEnabled,
+    identityChannelKey: cfg.identityChannelKey,
     // 시크릿은 내려보내지 않는다 — 비워 둔 채 저장하면 기존 값이 유지된다
     apiSecret: "",
     apiSecretConfigured: Boolean(cfg.apiSecret),
@@ -314,6 +435,8 @@ export default definePlugin(async (ctx) => {
       channelKey: String(b.channelKey ?? current.channelKey).trim(),
       apiSecret: b.apiSecret?.trim() ? b.apiSecret.trim() : current.apiSecret,
       payMethod,
+      identityEnabled: b.identityEnabled ?? current.identityEnabled,
+      identityChannelKey: String(b.identityChannelKey ?? current.identityChannelKey).trim(),
     };
     if (next.storeId && !/^store-[\w-]+$/.test(next.storeId)) {
       throw Object.assign(new Error("상점 ID 는 store- 로 시작합니다. 포트원 콘솔 → 연동 정보에서 확인하세요."), { status: 400, field: "storeId" });
@@ -323,6 +446,12 @@ export default definePlugin(async (ctx) => {
     }
     if (next.enabled && !(next.storeId && next.channelKey && next.apiSecret)) {
       throw Object.assign(new Error("상점 ID·채널 키·API 시크릿을 모두 입력해야 켤 수 있습니다."), { status: 400 });
+    }
+    if (next.identityChannelKey && !/^channel-key-[\w-]+$/.test(next.identityChannelKey)) {
+      throw Object.assign(new Error("본인인증 채널 키는 channel-key- 로 시작합니다. 포트원 콘솔 → 결제 연동 → 채널에서 본인인증 채널의 키를 확인하세요."), { status: 400, field: "identityChannelKey" });
+    }
+    if (next.identityEnabled && !(next.storeId && next.identityChannelKey && next.apiSecret)) {
+      throw Object.assign(new Error("본인인증을 켜려면 상점 ID·본인인증 채널 키·API 시크릿을 모두 입력해야 합니다."), { status: 400 });
     }
     await ctx.settings.set("config", next);
     return shown(next);
@@ -341,13 +470,17 @@ export default definePlugin(async (ctx) => {
       "그 채널 키를 입력하세요. API 시크릿은 저장 후 다시 표시되지 않으며, 비워두고 저장하면 기존 값이 유지됩니다.",
     fields: [
       { name: "enabled", label: "결제 사용", type: "boolean" },
-      { name: "storeId", label: "상점 ID", type: "text",
+      { name: "storeId", label: "상점 ID", type: "text", placeholder: "store-00000000-0000-0000-0000-000000000000",
         help: "store- 로 시작합니다. 포트원 콘솔 → 연동 정보. 공개되어도 되는 값입니다." },
-      { name: "channelKey", label: "채널 키", type: "text",
+      { name: "channelKey", label: "채널 키", type: "text", placeholder: "channel-key-00000000-0000-0000-0000-000000000000",
         help: "channel-key- 로 시작합니다. 어느 PG 로 결제할지 정합니다. 공개되어도 되는 값입니다." },
       { name: "apiSecret", label: "V2 API 시크릿", type: "text", secret: true,
         help: "포트원 콘솔 → 연동 정보 → V2 API. 절대 외부에 노출하지 마세요." },
       { name: "apiSecretConfigured", label: "API 시크릿 설정됨", type: "boolean", readOnly: true },
+      { name: "identityEnabled", label: "본인인증 사용", type: "boolean",
+        help: "켜면 회원이 휴대폰 본인인증으로 나이를 확인할 수 있습니다(성인 상품·한 사람 한 계정). 결제 사용과 따로 켭니다." },
+      { name: "identityChannelKey", label: "본인인증 채널 키", type: "text", placeholder: "channel-key-00000000-0000-0000-0000-000000000000",
+        help: "포트원 콘솔에 다날·KCP·이니시스 본인인증 채널을 등록하고 그 채널 키를 넣으세요. 결제 채널 키와 다릅니다." },
       { name: "payMethod", label: "결제 수단", type: "select",
         options: [
           { value: "CARD", label: "신용·체크카드" },
@@ -361,6 +494,11 @@ export default definePlugin(async (ctx) => {
 
   return {};
 });
+
+/** 본인인증을 받을 수 있는가 — 결제와 따로 판정한다 */
+function identityReady(cfg: PortOneSettings): boolean {
+  return cfg.identityEnabled && Boolean(cfg.storeId && cfg.identityChannelKey && cfg.apiSecret);
+}
 
 /** 결제 수단 표기 — 포트원의 method 객체(type: PaymentMethodCard 등)를 사람이 읽는 말로 */
 function methodLabel(method: Record<string, unknown>): string {

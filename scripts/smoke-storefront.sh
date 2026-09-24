@@ -440,7 +440,9 @@ MYSUBS="$(curl -s "$API/api/render/page?path=shop/subscriptions")"
 contains "회원 메뉴의 정기배송 화면이 열린다" "$MYSUBS" "brick-subs"
 absent "정기배송도 상품 상세로 떨어지지 않는다" "$MYSUBS" "상품을 찾을 수 없습니다"
 contains "카드 등록을 마치면 원래 하려던 곳으로 돌아간다" "$CARDSPAGE" "location.replace(nx)"
-contains "돌아갈 곳은 같은 사이트의 경로만 받는다 (열린 리다이렉트 금지)" "$CARDSPAGE" "n.charAt(1) !== '/'"
+# 문자열 규칙(둘째 글자가 / 가 아니면 통과)은 /\evil.example 을 지나보냈다 — 브라우저의 해석기로
+# 풀어 본 출처를 비교해야 한다. 우회 여섯 가지를 실제로 넣어 보는 것은 check-safe-next 가 한다
+contains "돌아갈 곳은 같은 사이트의 경로만 받는다 (열린 리다이렉트 금지 — 해석기로 출처 비교)" "$CARDSPAGE" "u.origin === location.origin"
 
 echo
 echo "── 상품 목록 페이지 나누기 (limit 를 넘는 상품에 닿을 수 있는가)"

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 포트원(PortOne) V2 API 스텁 — 결제 확인·취소를 실제 HTTP 로 검증하기 위한 것.
+ * 포트원(PortOne) V2 API 스텁 — 결제 확인·취소·본인인증 조회를 실제 HTTP 로 검증하기 위한 것.
  *
  * 포트원은 결제가 브라우저(결제창)에서 끝나므로, 테스트는 "손님이 결제창에서 결제를 마쳤다" 를
  * 제어 경로로 흉내 낸다(POST /__control/payments). 그 뒤 서버가 GET /payments/{id} 로
@@ -28,6 +28,8 @@ writeFileSync(OUT, "");
 
 /** paymentId → 결제 */
 const payments = new Map();
+/** identityVerificationId → 본인인증 */
+const identities = new Map();
 let cancelSeq = 0;
 
 const record = (entry) => appendFileSync(OUT, `${JSON.stringify(entry)}\n`);
@@ -71,6 +73,27 @@ const server = createServer((req, res) => {
       if (!p) return send(res, 404, {});
       p.amount.cancelled += Number(body.amount);
       return send(res, 200, { ok: true });
+    }
+
+    // ── 테스트 제어: 손님이 인증창에서 본인인증을 마쳤다(또는 실패했다) ──
+    if (req.method === "POST" && path === "/__control/identity") {
+      identities.set(String(body.id), {
+        id: String(body.id),
+        storeId: String(body.storeId ?? "store-test"),
+        status: String(body.status ?? "VERIFIED"),
+        verifiedCustomer: body.customer ?? undefined,
+        requestedAt: "2026-09-24T00:00:00Z",
+      });
+      return send(res, 200, { ok: true });
+    }
+    const idMatch = /^\/identity-verifications\/([^/]+)$/.exec(path);
+    if (req.method === "GET" && idMatch) {
+      const id = decodeURIComponent(idMatch[1]);
+      record({ kind: "identity-get", id, authOk });
+      if (!authOk) return send(res, 401, { type: "UNAUTHORIZED", message: "인증 정보가 올바르지 않습니다." });
+      const v = identities.get(id);
+      if (!v) return send(res, 404, { type: "IDENTITY_VERIFICATION_NOT_FOUND", message: "요청한 본인인증 정보를 찾을 수 없습니다." });
+      return send(res, 200, v);
     }
 
     const getMatch = /^\/payments\/([^/]+)$/.exec(path);

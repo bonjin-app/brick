@@ -45,7 +45,7 @@ export function registerSubscribeView(
       if (!slug) return `<div class="brick-shop-empty">${escapeHtml(t("detail.pickProduct"))}</div>${back}`;
 
       const { rows } = await db.execute(sql`
-        SELECT slug, name, image_url, price, stock, status, sub_interval, free_shipping
+        SELECT slug, name, image_url, price, stock, status, sub_interval, free_shipping, adult_only
         FROM shop_products WHERE slug = ${slug} LIMIT 1
       `);
       const p = rows[0];
@@ -57,6 +57,10 @@ export function registerSubscribeView(
         return `<div class="brick-shop-empty">${escapeHtml(t("detail.notFound"))}</div>${back}`;
       }
       const toProduct = `<p class="brick-subf-back"><a href="/shop/${encodeURIComponent(String(p.slug))}">${escapeHtml(t("subs.goProduct"))}</a></p>`;
+      // 성인 상품 — 확인 전에는 상세의 안내로 보낸다(그곳이 로그인·본인인증 길을 준다)
+      if (p.adult_only && !(blockCtx?.user && (await ctx.identity.status(blockCtx.user.id)).adult)) {
+        return `<div class="brick-shop-empty">${escapeHtml(t("adult.gateTitle"))}</div>${toProduct}`;
+      }
       if (!p.sub_interval) {
         return `<div class="brick-shop-empty">${escapeHtml(t("subs.notSubscribable"))}</div>${toProduct}`;
       }

@@ -278,9 +278,11 @@ check "발신번호 없이 켤 수 없다" \
 contains "왜 안 되는지 말해 준다" \
   "$(curl -s -b "$ADMIN" -X PUT "$SMSCFG" -H 'content-type: application/json' \
       -d '{"enabled":true,"userId":"brick","apiKey":"testkey"}')" "발신번호"
-contains "설정 저장" \
-  "$(curl -s -b "$ADMIN" -X PUT "$SMSCFG" -H 'content-type: application/json' \
-      -d '{"enabled":true,"userId":"brick","apiKey":"testkey","sender":"02-123-4567"}')" '"ok":true'
+SMSPUT="$(curl -s -b "$ADMIN" -X PUT "$SMSCFG" -H 'content-type: application/json' \
+      -d '{"enabled":true,"userId":"brick","apiKey":"testkey","sender":"02-123-4567"}')"
+# 관리 화면은 저장 응답으로 폼을 다시 채운다 — { ok: true } 만 주면 저장하는 순간 칸이 빈다
+contains "설정 저장 — 저장한 값을 GET 과 같은 모양으로 돌려준다 (폼이 비지 않는다)" "$SMSPUT" '"sender":"02-123-4567"'
+absent "저장 응답에도 API 키는 없다" "$SMSPUT" "testkey"
 absent "API 키는 돌려주지 않는다" "$(curl -s -b "$ADMIN" "$SMSCFG")" "testkey"
 check "설정됐다는 사실만 알려준다" \
   "$(curl -s -b "$ADMIN" "$SMSCFG" | jget "['apiKeyConfigured']")" "True"

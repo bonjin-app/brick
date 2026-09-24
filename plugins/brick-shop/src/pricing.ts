@@ -25,6 +25,8 @@ export interface PricedLine {
    * 이미 신고한 증빙 금액이 흔들리면 안 된다.
    */
   taxFree: boolean;
+  /** 성인 상품 — 본인인증으로 19세 이상임을 확인한 회원만 주문할 수 있다 */
+  adultOnly: boolean;
   /** 현재 남은 재고 (null이면 무한) */
   stock: number | null;
   /** 지금 이 수량으로 주문 가능한가 */
@@ -98,6 +100,13 @@ export interface QuoteOptions {
    * 화면이 깨지지 않아야 한다.
    */
   enforceStock?: boolean;
+  /**
+   * 주문자가 청소년보호법상 성인인가 — 성인 상품이 있을 때만 부른다(본인인증 조회를 아낀다).
+   *
+   * 없으면 **성인이 아닌 것으로 본다.** 새 호출 경로가 이것을 빠뜨렸을 때 성인 상품이
+   * 조용히 팔리는 쪽이 아니라 막히는 쪽으로 틀려야 한다.
+   */
+  isAdult?: () => Promise<boolean>;
 }
 
 /**
@@ -126,6 +135,8 @@ export async function quote(
   }
 
   const lines: PricedLine[] = [];
+  /** 성인 여부는 한 번만 묻는다 (성인 상품이 여럿이어도) */
+  let adult: boolean | null = null;
   for (const item of items) {
     const qty = Math.floor(Number(item.quantity));
     if (!Number.isFinite(qty) || qty < 1 || qty > 999) {
@@ -133,7 +144,7 @@ export async function quote(
     }
 
     const { rows } = await db.execute(sql`
-      SELECT p.id, p.slug, p.name, p.price, p.stock, p.status, p.free_shipping, p.tax_free, coalesce(p.thumb_url, p.image_url) AS image_url,
+      SELECT p.id, p.slug, p.name, p.price, p.stock, p.status, p.free_shipping, p.tax_free, p.adult_only, coalesce(p.thumb_url, p.image_url) AS image_url,
              o.id AS option_id, o.name AS option_name, o.extra_price, o.stock AS option_stock, o.is_active
       FROM shop_products p
       LEFT JOIN shop_product_options o
@@ -164,6 +175,17 @@ export async function quote(
     else if (stock !== null && stock <= 0) issue = "품절되었습니다";
     else if (stock !== null && stock < qty) issue = `재고가 ${stock}개만 남았습니다`;
 
+    const adultOnly = Boolean(row.adult_only);
+    if (adultOnly && adult === null) adult = opts.isAdult ? await opts.isAdult().catch(() => false) : false;
+    const adultBlocked = adultOnly && !adult;
+    if (adultBlocked && strict && !issue) {
+      /*
+       * 청소년보호법 제16조 — 나이를 확인하기 전에 팔 수 없다. field 로 "identity" 를 주면
+       * 주문서가 본인인증 화면으로 가는 길을 함께 보여준다.
+       */
+      throw new ShopError(403, "성인 인증이 필요한 상품이 있습니다. 본인인증을 마친 뒤 주문해주세요.", "identity");
+    }
+
     if (issue && strict) {
       // 주문 시에는 명확한 에러로 막는다
       const status = issue.includes("재고") || issue.includes("품절") ? 409 : 400;
@@ -177,12 +199,14 @@ export async function quote(
       productName: String(row.name),
       optionName: row.option_name ? String(row.option_name) : null,
       slug: String(row.slug),
-      imageUrl: row.image_url ? String(row.image_url) : null,
+      // 확인되지 않은 손님의 장바구니에는 성인 상품 사진을 싣지 않는다 — 목록과 같은 규칙
+      imageUrl: row.image_url && !adultBlocked ? String(row.image_url) : null,
       unitPrice,
       quantity: qty,
       lineTotal: unitPrice * qty,
       freeShipping: Boolean(row.free_shipping),
       taxFree: Boolean(row.tax_free),
+      adultOnly,
       stock,
       available: !issue,
       ...(issue ? { issue } : {}),

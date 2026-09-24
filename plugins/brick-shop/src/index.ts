@@ -256,6 +256,13 @@ export default definePlugin(async (ctx) => {
     return rows;
   });
 
+  /**
+   * 성인 상품 판정 — 코어의 본인인증 결과를 본다. 비회원은 성인으로 확인할 길이 없다
+   * (본인인증 결과는 회원에게 묶인다).
+   */
+  const adultCheck = (userId: string | null) => async () =>
+    userId ? (await ctx.identity.status(userId)).adult : false;
+
   // ── 장바구니 ────────────────────────────────────────
   ctx.registerRoute("GET", "/cart", async (req) => {
     const items = await getCartItems(db, owner(req));
@@ -266,7 +273,7 @@ export default definePlugin(async (ctx) => {
       items.map((it) => ({ ...it, ref: it.id })),
       await settings(),
       req.query.coupon,
-      { enforceStock: false },
+      { enforceStock: false, isAdult: adultCheck(req.user?.id ?? null) },
     );
     return {
       // ref로 장바구니 항목 id를 되돌려받는다 (인덱스 정렬에 의존하지 않는다)
@@ -337,6 +344,7 @@ export default definePlugin(async (ctx) => {
       // 장바구니 견적과 주문 생성이 **같은 등급**을 봐야 금액이 일치한다
       grade: await gradeOf(db, req.user?.id ?? null),
       userId: req.user?.id ?? null,
+      isAdult: adultCheck(req.user?.id ?? null),
     });
     return { ...q, pointsAvailable: Boolean(port) };
   });
@@ -395,6 +403,7 @@ export default definePlugin(async (ctx) => {
       pointUsed: body.pointUsed,
       pointsPort: pointsPort(),
       grade: await gradeOf(db, req.user?.id ?? null),
+      isAdult: adultCheck(req.user?.id ?? null),
     });
 
     // 성공한 주문만 센다 (위의 IP 제한)
@@ -700,7 +709,7 @@ export default definePlugin(async (ctx) => {
     const { rows } = await db.execute(sql`
       SELECT p.id, p.slug, p.name, p.price, p.list_price, p.stock, p.status, p.image_url,
              p.summary, p.free_shipping, p.sort_order, p.sold_count,
-             p.category_id, p.tax_free, p.sub_interval, p.review_count, p.rating_sum
+             p.category_id, p.tax_free, p.adult_only, p.sub_interval, p.review_count, p.rating_sum
       FROM shop_products p ${prodWhere} ORDER BY p.sort_order, p.created_at DESC LIMIT 30 OFFSET ${(page - 1) * 30}
     `);
     const { rows: cnt } = await db.execute(sql`SELECT count(*) AS n FROM shop_products p ${prodWhere}`);
@@ -730,7 +739,7 @@ export default definePlugin(async (ctx) => {
     const { rows } = await db.execute(sql`
       SELECT p.id, p.slug, p.name, p.price, p.list_price, p.stock, p.status, p.image_url,
              p.summary, p.description, p.free_shipping, p.sort_order, p.sold_count,
-             p.category_id, p.tax_free, p.sub_interval, p.images, p.review_count, p.rating_sum,
+             p.category_id, p.tax_free, p.adult_only, p.sub_interval, p.images, p.review_count, p.rating_sum,
              coalesce(
                (SELECT json_agg(json_build_object('name', o.name, 'extra_price', o.extra_price, 'stock', o.stock)
                                 ORDER BY o.sort_order, o.name)
@@ -788,12 +797,12 @@ export default definePlugin(async (ctx) => {
       await db.execute(sql`
         INSERT INTO shop_products
           (id, slug, name, price, list_price, stock, status, image_url, thumb_url, summary, description,
-           free_shipping, sort_order, images, category_id, tax_free, sub_interval)
+           free_shipping, sort_order, images, category_id, tax_free, adult_only, sub_interval)
         VALUES
           (${id}, ${p.slug}, ${p.name}, ${p.price}, ${p.listPrice}, ${p.stock}, ${p.status},
            ${mainImage}, ${await thumbFor(mainImage)}, ${p.summary}, ${p.description},
            ${p.freeShipping}, ${p.sortOrder}, ${JSON.stringify(images)}::jsonb,
-           ${p.categoryId}::uuid, ${p.taxFree}, ${p.subInterval})
+           ${p.categoryId}::uuid, ${p.taxFree}, ${p.adultOnly}, ${p.subInterval})
       `);
     } catch (err) {
       throw slugConflict(err, "상품");
@@ -820,7 +829,7 @@ export default definePlugin(async (ctx) => {
           image_url = ${mainImage}, thumb_url = ${await thumbFor(mainImage)}, summary = ${p.summary},
           description = ${p.description}, free_shipping = ${p.freeShipping}, sort_order = ${p.sortOrder},
           images = ${JSON.stringify(images)}::jsonb, category_id = ${p.categoryId}::uuid,
-          tax_free = ${p.taxFree}, sub_interval = ${p.subInterval}, updated_at = now()
+          tax_free = ${p.taxFree}, adult_only = ${p.adultOnly}, sub_interval = ${p.subInterval}, updated_at = now()
         WHERE id = ${req.params.id}::uuid RETURNING id
       `);
       if (!rows.length) throw new ShopError(404, "상품을 찾을 수 없습니다.");
@@ -1924,6 +1933,7 @@ export default definePlugin(async (ctx) => {
       quantity: b.quantity === undefined ? 1 : Number(b.quantity),
       postcode: b.postcode ? String(b.postcode) : null,
       settings: await settings(),
+      isAdult: adultCheck(req.user?.id ?? null),
     });
   });
 
@@ -1939,6 +1949,7 @@ export default definePlugin(async (ctx) => {
       orderer: (b.orderer ?? {}) as Parameters<typeof subscribe>[1]["orderer"],
       settings: await settings(),
       pointsPort: pointsPort(),
+      isAdult: adultCheck(userId),
     });
   });
 
@@ -1993,6 +2004,7 @@ export default definePlugin(async (ctx) => {
           url: "/shop/subscriptions",
         }).then(() => true),
       log: (m) => ctx.logger.warn(m),
+      isAdult: async (userId) => (await ctx.identity.status(userId)).adult,
     }));
 
   /** 수동 스윕 (운영·테스트용) — 주기 스윕과 같은 코드를 돈다 */
@@ -2933,7 +2945,7 @@ export default definePlugin(async (ctx) => {
     async search({ query, offset, limit }) {
       const { rows } = await db.execute(sql`
         SELECT p.slug, p.name, p.summary, p.description, p.price, p.status, p.created_at,
-               coalesce(p.thumb_url, p.image_url) AS image_url, c.name AS category_name
+               coalesce(p.thumb_url, p.image_url) AS image_url, c.name AS category_name, p.adult_only
         FROM shop_products p
         LEFT JOIN shop_categories c ON c.id = p.category_id
         WHERE ${productSearchWhere(query)}
@@ -2945,10 +2957,11 @@ export default definePlugin(async (ctx) => {
         path: `/shop/${String(r.slug)}`,
         title: String(r.name),
         // 짧은 설명이 있으면 그것을, 없으면 상세에서 발췌한다
-        excerpt: searchExcerpt(String(r.summary || r.description || ""), query),
+        // 성인 상품은 설명도 사진도 내지 않는다 — 목록의 19 표시와 같은 규칙(확인은 상세에서)
+        excerpt: r.adult_only ? t("adult.mark") : searchExcerpt(String(r.summary || r.description || ""), query),
         date: r.created_at as Date,
         // 글자만으로는 머그컵을 고를 수 없다 — 검색 결과에도 사진을 준다
-        thumbnail: r.image_url ? String(r.image_url) : null,
+        thumbnail: r.image_url && !r.adult_only ? String(r.image_url) : null,
         meta: [
           String(r.category_name ?? "") || null,
           won(Number(r.price)),
@@ -3146,6 +3159,8 @@ function validateProduct(b: Record<string, unknown>) {
     slug, name, price, listPrice, stock, status, categoryId,
     // 면세 상품 (도서·농수산물 등). 세금 증빙 금액 분해에 쓴다
     taxFree: b.tax_free === true || b.tax_free === "true",
+    // 성인 상품 — 본인인증으로 19세 이상임을 확인한 회원만 보고 산다
+    adultOnly: b.adult_only === true || b.adult_only === "true",
     imageUrl: String(b.image_url ?? "").trim() || null,
     summary: String(b.summary ?? "").trim() || null,
     description: String(b.description ?? ""),

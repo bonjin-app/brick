@@ -17,6 +17,7 @@ import { DB, HOOKS, CACHE, QUEUE, LOCK, STORAGE, MAIL, CAPTCHA, ENV } from "../.
 import type { BrickEnv } from "../../config/env.js";
 import { ImageService } from "../images/image.service.js";
 import { CspService } from "../security/csp.service.js";
+import { IdentityService, identityUrl } from "../identity/identity.service.js";
 
 /**
  * PluginLoader — Brick 런타임 아키텍처의 심장.
@@ -147,6 +148,7 @@ export class PluginLoaderService implements OnModuleInit {
     private readonly moderation: ModerationService,
     private readonly imageService: ImageService,
     private readonly csp: CspService,
+    private readonly identity: IdentityService,
   ) {}
 
   /**
@@ -352,6 +354,7 @@ export class PluginLoaderService implements OnModuleInit {
     }
     // 끈 플러그인의 발송기를 남겨 두면 꺼진 확장이 계속 요금을 쓴다
     this.notifications.clearSmsGateway(name);
+    this.identity.clearProviders(name);
     /*
      * 선언 화면도 걷어낸다.
      *
@@ -628,6 +631,10 @@ export class PluginLoaderService implements OnModuleInit {
       mail: this.mail,
       notify: (input) => this.notifications.notify(input),
       captcha: this.captcha,
+      identity: {
+        status: (userId: string) => this.identity.status(userId),
+        url: (next?: string) => identityUrl(next),
+      },
       logger: {
         log: (m: string) => this.logger.log(`[${pluginName}] ${m}`),
         warn: (m: string) => this.logger.warn(`[${pluginName}] ${m}`),
@@ -728,6 +735,10 @@ export class PluginLoaderService implements OnModuleInit {
         // 하나만 둔다 — 둘이 등록하면 같은 안내가 두 번 나가고 요금도 두 배다
         this.notifications.setSmsGateway(pluginName, gateway);
         this.logger.log(`plugin "${pluginName}" registers the SMS gateway`);
+      },
+      registerIdentityProvider: (provider) => {
+        this.identity.setProvider(pluginName, provider);
+        this.logger.log(`plugin "${pluginName}" registers identity provider "${provider.name}"`);
       },
       registerScreen: (screen) => {
         const path = screen.path.replace(/^\/+|\/+$/g, "");

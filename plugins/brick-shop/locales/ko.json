@@ -463,5 +463,12 @@
   "ordermail.autoCancelledDeposit": "입금 기한이 지나 주문이 자동으로 취소되었습니다. 필요하시면 다시 주문해 주세요.",
   "ordermail.autoCancelledUnpaid": "결제가 끝나지 않아 주문이 자동으로 취소되었습니다. 필요하시면 다시 주문해 주세요.",
   "orders.depositDue": "입금 기한",
-  "orders.depositDueNote": "기한이 지나면 주문이 자동으로 취소됩니다."
+  "orders.depositDueNote": "기한이 지나면 주문이 자동으로 취소됩니다.",
+  "adult.mark": "19세 이상",
+  "adult.gateTitle": "성인 인증이 필요한 상품입니다",
+  "adult.gateBody": "이 상품은 청소년보호법에 따라 19세 이상만 보고 구매할 수 있습니다. 본인인증으로 나이를 확인해주세요.",
+  "adult.gateLogin": "로그인하고 본인인증하기",
+  "adult.gateVerify": "본인인증하기",
+  "adult.gateMinor": "본인인증 결과 19세 미만이라 이 상품을 볼 수 없습니다.",
+  "checkout.verifyIdentity": "본인인증하러 가기"
 }

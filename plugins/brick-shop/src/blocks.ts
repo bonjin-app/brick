@@ -30,6 +30,23 @@ export function registerStorefrontBlocks(
   settings: () => Promise<ShopSettings>,
 ): void {
   bindI18n(ctx);
+
+  /** 성인 상품 안내 — 비회원은 로그인부터, 회원은 본인인증으로, 인증했는데 미성년이면 그렇다고 */
+  const adultGate = (back: string, loggedIn: boolean, verified: boolean): string => {
+    const verifyUrl = ctx.identity.url(back);
+    const action = !loggedIn
+      ? `<a class="brick-primary" href="/login?next=${encodeURIComponent(verifyUrl)}">${escapeHtml(t("adult.gateLogin"))}</a>`
+      : verified
+        ? `<p class="brick-adult-minor">${escapeHtml(t("adult.gateMinor"))}</p>`
+        : `<a class="brick-primary" href="${escapeHtml(verifyUrl)}">${escapeHtml(t("adult.gateVerify"))}</a>`;
+    return `<div class="brick-adult-gate">
+  ${adultMark()}
+  <h1>${escapeHtml(t("adult.gateTitle"))}</h1>
+  <p>${escapeHtml(t("adult.gateBody"))}</p>
+  ${action}
+</div>${STOREFRONT_CSS}`;
+  };
+
   // ── 상품 목록 ─────────────────────────────────────
   const productListBlock: Parameters<PluginContext["registerBlock"]>[0] = {
     name: "product-list",
@@ -222,7 +239,7 @@ export function registerStorefrontBlocks(
         -- 목록은 **썸네일**을 쓴다. 대표 사진(원본)을 64~300px 칸에 그리면 상품 24개가
         -- 깔린 첫 화면이 수 MB 가 된다. 썸네일이 없으면(외부 URL·GIF·SVG) 원본을 쓴다.
         SELECT p.slug, p.name, p.price, p.list_price, coalesce(p.thumb_url, p.image_url) AS image_url, p.status, p.stock,
-               p.review_count, p.rating_sum, p.created_at, p.sold_count
+               p.review_count, p.rating_sum, p.created_at, p.sold_count, p.adult_only
         FROM shop_products p
         LEFT JOIN shop_categories c ON c.id = p.category_id
         WHERE p.status IN ('selling', 'soldout') AND (${category} = '' OR c.slug = ${category})${priceCond}${stockCond}
@@ -272,7 +289,7 @@ export function registerStorefrontBlocks(
         return `
   <a class="brick-product-card${soldout ? " is-soldout" : ""}" href="/shop/${encodeURIComponent(String(p.slug))}">
     <div class="brick-product-thumb">
-      ${p.image_url ? `<img src="${escapeHtml(p.image_url)}" alt="${escapeHtml(p.name)}" loading="lazy" />` : `<span class="brick-noimg">${escapeHtml(t("common.noImage"))}</span>`}
+      ${p.adult_only ? adultMark() : p.image_url ? `<img src="${escapeHtml(p.image_url)}" alt="${escapeHtml(p.name)}" loading="lazy" />` : `<span class="brick-noimg">${escapeHtml(t("common.noImage"))}</span>`}
       ${soldout ? `<span class="brick-badge-soldout">${escapeHtml(t("common.soldout"))}</span>` : ""}
       ${badges ? `<div class="brick-tags">${badges}</div>` : ""}
     </div>
@@ -318,11 +335,24 @@ export function registerStorefrontBlocks(
 
       const { rows } = await db.execute(sql`
         SELECT id, slug, name, summary, description, image_url, images, price, list_price,
-               stock, status, free_shipping, sub_interval, review_count, rating_sum, inquiry_count
+               stock, status, free_shipping, sub_interval, review_count, rating_sum, inquiry_count, adult_only
         FROM shop_products WHERE slug = ${slug} AND status IN ('selling', 'soldout') LIMIT 1
       `);
       const p = rows[0];
       if (!p) return `<div class="brick-shop-empty">${escapeHtml(t("detail.notFound"))}</div>`;
+
+      /*
+       * 성인 상품 — 나이를 확인하기 전에는 사진·설명을 보여주지 않는다(청소년보호법 제16조).
+       * 상품명도 제목(검색 결과·공유 미리보기)에 싣지 않는다 — 그 자체가 유해 표현일 수 있다.
+       * 비로그인 화면은 캐시되지만 비회원은 언제나 이 안내를 보므로 섞이지 않는다.
+       */
+      if (p.adult_only) {
+        const viewer = blockCtx.user ? await ctx.identity.status(blockCtx.user.id) : null;
+        if (!viewer?.adult) {
+          blockCtx.setSeo?.({ title: t("adult.gateTitle"), ownHeading: true });
+          return adultGate(`/shop/${encodeURIComponent(slug)}`, Boolean(blockCtx.user), Boolean(viewer?.verified));
+        }
+      }
 
       /**
        * 이 화면의 제목·설명은 상품이다 — 상품 링크를 공유하면 상품명이 보여야
@@ -669,7 +699,7 @@ ${buyScript(`${shopBaseOf(blockCtx)}/cart`)}${GALLERY_SCRIPT}${restockScript()}$
     const cards = c.products
       .map((p) => `<a class="brick-product-card" href="/shop/${encodeURIComponent(p.slug)}">
   <span class="brick-product-thumb">${
-    p.imageUrl
+    p.adultOnly ? adultMark() : p.imageUrl
       ? `<img src="${escapeHtml(p.imageUrl)}" alt="${escapeHtml(p.name)}" loading="lazy" />`
       : `<span class="brick-noimg">${escapeHtml(t("common.noImage"))}</span>`
   }${p.soldout ? `<span class="brick-badge-soldout">${escapeHtml(t("common.soldout"))}</span>` : ""}</span>
@@ -802,7 +832,7 @@ function relatedSection(items: RelatedProduct[], title?: string): string {
   const cards = items
     .map((r) => {
       const href = `/shop/${encodeURIComponent(r.slug)}`;
-      const thumb = r.imageUrl
+      const thumb = r.adultOnly ? adultMark() : r.imageUrl
         ? `<img src="${escapeHtml(r.imageUrl)}" alt="${escapeHtml(r.name)}" loading="lazy" />`
         : `<span class="brick-noimg">${escapeHtml(t("common.noImage"))}</span>`;
       const soldout = r.status === "soldout" ? `<span class="brick-badge-soldout">${escapeHtml(t("common.soldout"))}</span>` : "";
@@ -930,11 +960,29 @@ const COLLECTION_CSS = `
 .brick-collection-notice{padding:10px 14px;background:var(--color-bg-soft,#f6f6f9);border-radius:var(--radius, 8px);color:var(--color-danger, #c9342f);font-weight:600}
 </style>`;
 
+/**
+ * 성인 상품의 목록 사진 자리 — **누가 보든** 사진 대신 19 표시다.
+ *
+ * 목록은 비로그인 화면이 캐시되고 여러 블록(목록·관련 상품·기획전)이 같은 카드를 그린다.
+ * 보는 사람마다 가르면 캐시가 섞이고 한 곳을 빠뜨리기 쉽다. 사진은 확인을 거친 상세에서 본다.
+ */
+function adultMark(): string {
+  return `<span class="brick-adult-mark" role="img" aria-label="${escapeHtml(t("adult.mark"))}">19</span>`;
+}
+
 /* ── 스토어프론트 CSS ────────────────────────────────
    테마가 빌드를 타지 않으므로 블록이 자기 스타일을 함께 낸다.
    CSS 변수는 테마 토큰을 우선 사용해 테마 디자인과 어울리게 한다. */
 const STOREFRONT_CSS = `
 <style>
+.brick-adult-mark{display:inline-flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:50%;
+  border:4px solid var(--color-danger, #c8322f);color:var(--color-danger, #c8322f);font-weight:800;font-size:26px;
+  background:var(--color-bg, #fff);letter-spacing:-.5px}
+.brick-adult-gate{max-width:520px;margin:24px auto;text-align:center}
+.brick-adult-gate h1{font-size:22px;margin:16px 0 8px}
+.brick-adult-gate p{color:var(--color-text-soft, #45454f);line-height:1.6}
+.brick-adult-gate .brick-primary{display:inline-flex;align-items:center;min-height:44px;padding:0 22px;margin-top:10px;text-decoration:none}
+.brick-adult-minor{font-weight:600;color:var(--color-danger, #c8322f)}
 .brick-wish-line{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0}
 /* 44px — 폰에서 누르는 자리다 */
 .brick-wish-btn{display:inline-flex;align-items:center;gap:7px;min-height:44px;padding:0 16px;cursor:pointer;

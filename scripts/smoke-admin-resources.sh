@@ -116,6 +116,10 @@ def mutate(field, cur):
         return None
     if ty in ("text", "textarea", "html", "url", "email"):
         base = "" if cur is None else str(cur)
+        # 형식이 정해진 칸(store-…·channel-key-…)은 선언의 예시 값을 쓴다 — 예시는 곧 올바른
+        # 값의 모양이다. 기계적으로 만든 "-왕복" 이 형식 검사에 걸리면 왕복을 시험하지 못한다
+        ph = str(field.get("placeholder") or "")
+        if ph and ph != base: return ph[:200]
         return (base + "-왕복")[:200]
     return None
 
@@ -161,6 +165,15 @@ for plugin, name, decl in settings:
         continue
 
     after_put = put(path, payload)
+    # "시크릿 없이 켤 수 없다" 같은 켜기 연동 규칙은 비밀 칸을 건너뛰는 이 검사로는 넘을 수
+    # 없다. 켜기(boolean) 칸만 그대로 두고 한 번 더 — 나머지 칸의 왕복은 시험할 수 있다.
+    if isinstance(after_put, dict) and int(after_put.get("statusCode") or 0) >= 400:
+        flips = [f["name"] for f in fields if f["name"] in changed and (f.get("type") in ("boolean", "checkbox"))]
+        if flips and len(flips) < len(changed):
+            for n in flips:
+                payload[n] = before.get(n)
+                changed.pop(n)
+            after_put = put(path, payload)
     if not isinstance(after_put, dict):
         results.append(f"{tag}: PUT 이 객체를 주지 않는다 ({str(after_put)[:60]})")
         continue

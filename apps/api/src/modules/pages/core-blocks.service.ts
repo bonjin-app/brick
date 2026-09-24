@@ -3,6 +3,7 @@ import { CORE_CATALOGS, makeTranslator } from "@brick/core";
 import { PluginLoaderService } from "../plugins/plugin-loader.service.js";
 import { SearchService } from "../search/search.service.js";
 import { NotificationsService } from "../notifications/notifications.service.js";
+import { IdentityService, safeNext } from "../identity/identity.service.js";
 
 const esc = (s: unknown) =>
   String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -17,6 +18,7 @@ export class CoreBlocksService implements OnModuleInit {
     private readonly loader: PluginLoaderService,
     private readonly search: SearchService,
     private readonly notifications: NotificationsService,
+    private readonly identity: IdentityService,
   ) {}
 
   onModuleInit(): void {
@@ -584,6 +586,128 @@ ${eyebrow ? `    <span class="brick-eyebrow">${esc(eyebrow)}</span>
 }
 .brick-noti-time { display: block; margin-top: 6px; color: var(--color-muted, #6c6c7a); font-size: 12.5px; }
 .brick-noti-more { margin: 16px 0 0; }
+</style>`;
+      },
+    });
+
+    /**
+     * 본인인증 — 인증 상태와 공급자 인증창.
+     *
+     * 테마 안에서 그려진다. 공급자 SDK(포트원 등)는 외부 스크립트라 플러그인이 선언한 CSP 가
+     * 필요한데, 회원 정보 화면(`/account`)은 고정 CSP 라 받지 않기 때문이다. 렌더러가
+     * `/identity` 를 이 블록으로 폴백한다.
+     *
+     * 인증창에서 돌아오면(`?provider=…&…`) 스크립트가 공급자의 readReturn 으로 인증 ID 를
+     * 꺼내 서버에 확인을 맡긴다. 결과(이름·생년월일)는 화면을 거치지 않는다.
+     */
+    b.set("core/identity", {
+      name: "core/identity",
+      displayName: "본인인증",
+      propsSchema: { type: "object", properties: {} },
+      render: async (_props, ctx) => {
+        const t = makeTranslator({ locale: this.loader.siteLocale, catalogs: CORE_CATALOGS });
+        ctx.setSeo?.({ title: t("identity.title") });
+        const next = safeNext(ctx.query?.next);
+        if (!ctx.user) {
+          const self = next ? `/identity?next=${encodeURIComponent(next)}` : "/identity";
+          return `<div class="brick-identity"><p>${esc(t("identity.loginRequired"))}</p>
+<p><a class="brick-btn brick-btn-primary" href="/login?next=${esc(encodeURIComponent(self))}">${esc(t("identity.login"))}</a></p></div>`;
+        }
+        const status = await this.identity.status(ctx.user.id);
+        const providers = await this.identity.readyProviders();
+        const cont = next ? `<p><a class="brick-btn brick-btn-primary" href="${esc(next)}">${esc(t("identity.continue"))}</a></p>` : "";
+        const when = status.verifiedAt ? status.verifiedAt.toISOString().slice(0, 10) : "";
+        const state = status.verified
+          ? `<p class="brick-id-state is-done"><strong>${esc(t("identity.verified"))}</strong> <span>${esc(t("identity.verifiedAt", { date: when }))}</span></p>
+<p class="brick-id-adult">${esc(status.adult ? t("identity.adult") : t("identity.notAdult"))}</p>${cont}`
+          : `<p class="brick-id-intro">${esc(t("identity.intro"))}</p>`;
+        /*
+         * 이미 인증했으면 인증창을 다시 열 이유가 없다 — 인증은 건당 요금이 나간다.
+         * (명의를 바꾸는 것은 막혀 있다: 서버가 다른 명의를 거절한다)
+         */
+        const actions = status.verified
+          ? ""
+          : providers.length
+            ? `<div class="brick-id-actions">${providers
+                .map(({ plugin, provider: p }) => `<button type="button" class="brick-btn brick-btn-primary" data-provider="${esc(p.name)}">${esc(this.loader.trCatalog(plugin, p.displayName))}</button>`)
+                .join("")}</div>`
+            : `<p class="brick-id-none">${esc(t("identity.none"))}</p>`;
+        const T = {
+          opening: t("identity.opening"), working: t("identity.working"), done: t("identity.done"),
+          cancelled: t("identity.cancelled"), failed: t("identity.failed"),
+        };
+        // 인증창이 끝나고 돌아올 곳에서만 스크립트가 필요하다 — 이미 인증했어도 돌아온 처리는 해야 한다
+        const scripts = providers.map(({ provider: p }) => p.clientScript).join("\n");
+        return `<div class="brick-identity" data-next="${esc(next)}" data-t="${esc(JSON.stringify(T))}">
+${state}
+${actions}
+<p class="brick-id-msg" role="alert"></p>
+</div>
+${scripts}
+<script>
+(function(){
+  var root = document.querySelector('.brick-identity');
+  if (!root) return;
+  var T = JSON.parse(root.getAttribute('data-t') || '{}');
+  var next = root.getAttribute('data-next') || '';
+  var msg = root.querySelector('.brick-id-msg');
+  function say(text, err){ msg.textContent = text; msg.classList.toggle('is-error', !!err); }
+  function post(url, body){
+    return fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(d){ return { ok: r.ok, d: d }; }); });
+  }
+  function returnUrl(provider){
+    var u = new URL(location.pathname, location.href);
+    u.searchParams.set('provider', provider);
+    if (next) u.searchParams.set('next', next);
+    return u.toString();
+  }
+  // 돌아온 주소의 인증 값은 한 번 쓰고 지운다 — 새로고침·공유로 다시 보내지 않게
+  function cleanUrl(){
+    var u = new URL(location.pathname, location.href);
+    if (next) u.searchParams.set('next', next);
+    history.replaceState(null, '', u.toString());
+  }
+  var q = new URLSearchParams(location.search);
+  var back = q.get('provider');
+  var impl = back && window.brickIdentity && window.brickIdentity[back];
+  if (impl && impl.readReturn) {
+    var id = impl.readReturn(q);
+    var why = q.get('message');
+    cleanUrl();
+    if (!id) { say(T.cancelled + (why ? ' (' + why + ')' : ''), true); }
+    else {
+      say(T.working);
+      post('/api/me/identity/complete', { requestId: id }).then(function(x){
+        if (!x.ok) { say(x.d.message || T.failed, true); return; }
+        say(T.done);
+        if (next) location.href = next; else location.reload();
+      }).catch(function(){ say(T.failed, true); });
+    }
+  }
+  root.addEventListener('click', function(e){
+    var b = e.target.closest ? e.target.closest('[data-provider]') : null;
+    if (!b) return;
+    var p = b.getAttribute('data-provider');
+    var run = window.brickIdentity && window.brickIdentity[p];
+    if (!run) { say(T.failed, true); return; }
+    b.disabled = true;
+    say(T.opening);
+    post('/api/me/identity/start', { provider: p }).then(function(x){
+      if (!x.ok) throw new Error(x.d.message || T.failed);
+      return run({ requestId: x.d.requestId, returnUrl: returnUrl(p) });
+    }).catch(function(err){ say((err && err.message) || T.failed, true); b.disabled = false; });
+  });
+})();
+</script>
+<style>
+.brick-identity { max-width: 560px; }
+.brick-id-intro, .brick-id-adult { color: var(--color-text-soft, #45454f); line-height: 1.7; }
+.brick-id-state.is-done strong { color: var(--color-success, #1d7a46); }
+.brick-id-state span { color: var(--color-muted, #6c6c7a); font-size: 13px; margin-left: 6px; }
+.brick-id-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+.brick-id-actions .brick-btn { min-height: 44px; }
+.brick-id-msg.is-error { color: var(--color-danger, #c8322f); font-weight: 600; }
 </style>`;
       },
     });

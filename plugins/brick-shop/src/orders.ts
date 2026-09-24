@@ -66,6 +66,8 @@ export async function createOrder(
     pointsPort?: PointsPort | null;
     /** 회원 등급 혜택 (grades.gradeOf 결과). 라우트가 읽어서 넘긴다 */
     grade?: { name: string; discountRate: number } | null;
+    /** 주문자가 성인인가 (본인인증) — 성인 상품이 있을 때만 불린다. 없으면 성인이 아닌 것으로 본다 */
+    isAdult?: () => Promise<boolean>;
   },
 ): Promise<{ id: string; orderNo: string; total: number; guestToken: string | null; orderName: string }> {
   const { orderer } = params;
@@ -122,6 +124,7 @@ export async function createOrder(
     grade: params.grade ?? null,
     // 쿠폰의 회원 조건(1인 제한·첫 구매·등급·발급형)을 검사한다
     userId: params.userId ?? null,
+    isAdult: params.isAdult,
   });
   // pricing이 상한을 적용했을 수 있다 (상품금액 초과분은 쓰지 않는다)
   requestedPoint = q.pointUsed;

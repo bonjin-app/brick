@@ -121,6 +121,12 @@ export default function AccountPage() {
    */
   const [memberMenu, setMemberMenu] = useState<Array<{ label: string; path: string }>>([]);
   const [gone, setGone] = useState(false);
+  /*
+   * 본인인증 — 인증 자체는 테마 화면(/identity)에서 한다. 여기는 고정 CSP 라 공급자 SDK 를
+   * 불러올 수 없다. 인증 수단이 없고 인증한 적도 없으면 섹션을 그리지 않는다.
+   */
+  const [cert, setCert] = useState<{ verified: boolean; adult: boolean; verifiedAt: string | null } | null>(null);
+  const [certAvailable, setCertAvailable] = useState(false);
 
   const say = (ok: string) => { setNotice(ok); setError(""); };
   const oops = (message?: string) => { setError(message || t("account.fail")); setNotice(""); };
@@ -156,6 +162,12 @@ export default function AccountPage() {
       .catch(() => {});
     fetch("/api/auth/oauth/providers").then((s) => (s.ok ? s.json() : { items: [] }))
       .then((d) => setProviders(d.items ?? []))
+      .catch(() => {});
+    fetch("/api/me/identity").then((s) => (s.ok ? s.json() : null))
+      .then((d) => setCert(d))
+      .catch(() => {});
+    fetch("/api/identity/providers").then((s) => (s.ok ? s.json() : { items: [] }))
+      .then((d) => setCertAvailable((d.items ?? []).length > 0))
       .catch(() => {});
   }
   useEffect(() => { load().catch(() => oops()); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -435,6 +447,28 @@ export default function AccountPage() {
                   </a>
                 ))}
               </div>
+            </section>
+          )}
+
+          {/* ── 본인인증 ── */}
+          {(cert?.verified || certAvailable) && (
+            <section style={card}>
+              <h2 style={h2}>{t("account.identity")}</h2>
+              {cert?.verified ? (
+                <p style={{ margin: 0, fontSize: 14 }}>
+                  <strong>{t("account.identityDone")}</strong>{" "}
+                  <span style={{ color: "var(--color-muted)" }}>
+                    {cert.verifiedAt ? cert.verifiedAt.slice(0, 10) : ""} · {cert.adult ? t("account.identityAdult") : t("account.identityMinor")}
+                  </span>
+                </p>
+              ) : (
+                <>
+                  <p style={{ margin: "0 0 10px", fontSize: 14, color: "var(--color-text-soft)" }}>{t("account.identityHint")}</p>
+                  <a href="/identity?next=/account" style={{ ...saveBtn, display: "inline-block", textDecoration: "none" }}>
+                    {t("account.identityStart")}
+                  </a>
+                </>
+              )}
             </section>
           )}
 

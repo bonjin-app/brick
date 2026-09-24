@@ -34,6 +34,8 @@ export interface RelatedProduct {
   price: number;
   listPrice: number | null;
   imageUrl: string | null;
+  /** 성인 상품 — 카드에 사진 대신 19 표시 */
+  adultOnly: boolean;
   status: string;
   /** manual(운영자 지정) | copurchase(함께 구매) */
   source: "manual" | "copurchase";
@@ -124,7 +126,7 @@ export async function listRelated(
   const cap = Math.min(24, Math.max(1, Math.floor(limit)));
 
   const { rows: manual } = await db.execute(sql`
-    SELECT p.id, p.slug, p.name, p.price, p.list_price, coalesce(p.thumb_url, p.image_url) AS image_url, p.status
+    SELECT p.id, p.slug, p.name, p.price, p.list_price, coalesce(p.thumb_url, p.image_url) AS image_url, p.status, p.adult_only
     FROM shop_related_products r
     JOIN shop_products p ON p.id = r.related_id
     WHERE r.product_id = ${productId}::uuid AND ${SELLABLE}
@@ -139,6 +141,7 @@ export async function listRelated(
     price: Number(r.price),
     listPrice: r.list_price === null ? null : Number(r.list_price),
     imageUrl: r.image_url ? String(r.image_url) : null,
+    adultOnly: Boolean(r.adult_only),
     status: String(r.status),
     source: "manual",
   }));
@@ -184,7 +187,7 @@ export async function coPurchased(
       ORDER BY o.paid_at DESC
       LIMIT 500
     )
-    SELECT p.id, p.slug, p.name, p.price, p.list_price, coalesce(p.thumb_url, p.image_url) AS image_url, p.status,
+    SELECT p.id, p.slug, p.name, p.price, p.list_price, coalesce(p.thumb_url, p.image_url) AS image_url, p.status, p.adult_only,
            count(DISTINCT oi.order_id) AS together
     FROM shop_order_items oi
     JOIN src ON src.order_id = oi.order_id
@@ -192,7 +195,7 @@ export async function coPurchased(
     WHERE oi.product_id NOT IN (${excludeList})
       AND oi.quantity > oi.cancelled_qty
       AND ${SELLABLE}
-    GROUP BY p.id, p.slug, p.name, p.price, p.list_price, p.thumb_url, p.image_url, p.status
+    GROUP BY p.id, p.slug, p.name, p.price, p.list_price, p.thumb_url, p.image_url, p.status, p.adult_only
     ORDER BY together DESC, p.sold_count DESC, p.name
     LIMIT ${cap}
   `);
@@ -204,6 +207,7 @@ export async function coPurchased(
     price: Number(r.price),
     listPrice: r.list_price === null ? null : Number(r.list_price),
     imageUrl: r.image_url ? String(r.image_url) : null,
+    adultOnly: Boolean(r.adult_only),
     status: String(r.status),
     source: "copurchase",
   }));

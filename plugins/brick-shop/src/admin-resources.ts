@@ -64,6 +64,8 @@ export const PRODUCT_RESOURCE: AdminResource = {
     // 도서·농수산물 등. 서점이 부가세를 붙여 증빙을 발급하면 잘못된 증빙이다
     { name: "tax_free", label: "면세 상품", type: "boolean",
       help: "도서·농수산물 등 부가세가 없는 상품. 현금영수증·세금계산서 금액 계산에 반영됩니다." },
+    { name: "adult_only", label: "성인 상품 (19세 이상)", type: "boolean",
+      help: "주류·성인용품 등 청소년유해매체물. 본인인증으로 19세 이상임을 확인한 회원만 상세를 보고 주문할 수 있습니다. 목록에는 사진 대신 19 표시가 나갑니다." },
     { name: "sub_interval", label: "정기배송", type: "select",
       options: [
         { value: "", label: "안 함 (일반 상품)" },

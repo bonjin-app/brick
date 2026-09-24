@@ -168,7 +168,21 @@ const CORE_KO: MessageCatalog = {
   "mail.socialLinkedBody": "이 계정에 {provider} 로그인이 연결되었습니다. 이제 그 계정으로도 로그인할 수 있습니다.",
   "mail.socialLinkedNotYou": "본인이 한 것이 아니라면 계정이 도용된 것입니다. 비밀번호를 바꾸고 내 정보에서 연결을 해제한 뒤 사이트 운영자에게 알려주세요.",
   "withdraw.privacyLabel": "개인정보",
-  "withdraw.privacyDetail": "이메일·이름·비밀번호는 즉시 파기되며 같은 계정으로 다시 로그인할 수 없습니다.",
+  "withdraw.privacyDetail": "이메일·이름·비밀번호는 즉시 파기되며 같은 계정으로 다시 로그인할 수 없습니다.",  "identity.title": "본인인증",
+  "identity.loginRequired": "본인인증은 로그인한 뒤 할 수 있습니다.",
+  "identity.login": "로그인",
+  "identity.intro": "휴대폰으로 본인임을 확인합니다. 이름·생년월일·전화번호는 이 사이트에 저장되지 않고, 성인 여부를 가리는 데 필요한 출생 연도만 남습니다.",
+  "identity.verified": "본인인증을 마쳤습니다.",
+  "identity.verifiedAt": "인증일 {date}",
+  "identity.adult": "청소년보호법상 성인으로 확인되었습니다.",
+  "identity.notAdult": "청소년보호법상 19세 미만으로 확인되어 성인 상품은 이용할 수 없습니다.",
+  "identity.none": "이 사이트에는 아직 본인인증 수단이 설정되지 않았습니다. 운영자에게 문의해주세요.",
+  "identity.opening": "인증창을 여는 중입니다…",
+  "identity.working": "인증 결과를 확인하는 중입니다…",
+  "identity.done": "본인인증이 완료되었습니다.",
+  "identity.cancelled": "본인인증이 취소되었습니다.",
+  "identity.failed": "본인인증을 진행하지 못했습니다. 잠시 후 다시 시도해주세요.",
+  "identity.continue": "계속하기",
 };
 
 const CORE_EN: MessageCatalog = {
@@ -247,7 +261,21 @@ const CORE_EN: MessageCatalog = {
   "mail.socialLinkedBody": "{provider} login was linked to this account. It can now be used to sign in.",
   "mail.socialLinkedNotYou": "If this was not you, your account has been taken over. Change your password, unlink it in your account settings, and tell the site operator.",
   "withdraw.privacyLabel": "Personal information",
-  "withdraw.privacyDetail": "Your email, name and password are destroyed immediately and you cannot sign in again with this account.",
+  "withdraw.privacyDetail": "Your email, name and password are destroyed immediately and you cannot sign in again with this account.",  "identity.title": "Identity verification",
+  "identity.loginRequired": "Please sign in to verify your identity.",
+  "identity.login": "Sign in",
+  "identity.intro": "Verify that it is you with your mobile phone. Your name, date of birth and phone number are not stored on this site — only your birth year, which is needed to check your age.",
+  "identity.verified": "Your identity is verified.",
+  "identity.verifiedAt": "Verified on {date}",
+  "identity.adult": "You are confirmed as an adult under Korea's Juvenile Protection Act.",
+  "identity.notAdult": "You are confirmed as under 19 under Korea's Juvenile Protection Act, so adults-only products are not available.",
+  "identity.none": "No identity verification method is set up on this site yet. Please contact the site operator.",
+  "identity.opening": "Opening the verification window…",
+  "identity.working": "Checking the verification result…",
+  "identity.done": "Your identity has been verified.",
+  "identity.cancelled": "Identity verification was cancelled.",
+  "identity.failed": "Identity verification could not be started. Please try again shortly.",
+  "identity.continue": "Continue",
 };
 
 export const CORE_CATALOGS: Record<Locale, MessageCatalog> = { ko: CORE_KO, en: CORE_EN };
@@ -425,6 +453,16 @@ const CORE_ERROR_EN: MessageCatalog = {
   "회원 테이블을 찾지 못했습니다.": "The member table was not found.",
   "회원가입이 닫혀 있습니다.": "Registration is closed.",
   "회원을 찾을 수 없습니다.": "Member not found.",
+  "인증 요청을 찾을 수 없습니다.": "The verification request was not found.",
+  "이미 끝난 인증 요청입니다. 처음부터 다시 인증해주세요.": "This verification request has already finished. Please start the verification again.",
+  "인증 시간이 지났습니다. 처음부터 다시 인증해주세요.": "The verification timed out. Please start the verification again.",
+  "사용할 수 없는 본인인증 수단입니다.": "That identity verification method is not available.",
+  "본인인증이 완료되지 않았습니다.": "Identity verification was not completed.",
+  "인증 결과를 확인할 수 없습니다. 잠시 후 다시 시도해주세요.": "The verification result could not be confirmed. Please try again shortly.",
+  "이미 다른 명의로 본인인증한 계정입니다.": "This account is already verified under another person's name.",
+  "이미 다른 계정에서 본인인증을 했습니다. 이 사이트는 한 사람이 한 계정만 쓸 수 있습니다.":
+    "You have already verified your identity on another account. This site allows one account per person.",
+  "본인인증을 너무 많이 시도했습니다. 잠시 후 다시 시도해주세요.": "Too many identity verification attempts. Please try again later.",
 };
 
 const CORE_ERRORS: Partial<Record<Locale, MessageCatalog>> = { en: CORE_ERROR_EN };

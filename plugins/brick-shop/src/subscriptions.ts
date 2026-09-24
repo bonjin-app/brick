@@ -317,7 +317,11 @@ async function subscribableProduct(
  */
 export async function quoteSubscription(
   db: Db,
-  params: { productSlug: string; quantity?: number; postcode?: string | null; settings: ShopSettings },
+  params: {
+    productSlug: string; quantity?: number; postcode?: string | null; settings: ShopSettings;
+    /** 성인 상품이면 묻는다 (본인인증) */
+    isAdult?: () => Promise<boolean>;
+  },
 ): Promise<{
   productName: string; quantity: number; interval: string;
   subtotal: number; shippingFee: number; zoneFee: number; zoneName: string | null; total: number;
@@ -328,6 +332,7 @@ export async function quoteSubscription(
     postcode: params.postcode ?? null,
     grade: null,
     userId: null,
+    isAdult: params.isAdult,
   });
   return {
     productName: product.name,
@@ -351,6 +356,7 @@ export async function subscribe(
     orderer: OrdererInput;
     settings: ShopSettings;
     pointsPort?: PointsPort | null;
+    isAdult?: () => Promise<boolean>;
   },
 ): Promise<{ id: string; orderNo: string; total: number; nextChargeAt: unknown }> {
   const quantity = Math.max(1, Math.floor(Number(params.quantity ?? 1)));
@@ -379,6 +385,7 @@ export async function subscribe(
     settings: params.settings,
     idempotencyKey: `sub-${subId}-c1`,
     pointsPort: params.pointsPort ?? null,
+    isAdult: params.isAdult,
   });
 
   // 구독 행을 청구 **전에** 만든다 (next_charge_at NULL = 아직 첫 결제 전 —
@@ -465,6 +472,11 @@ export async function chargeDueSubscriptions(
     pointsPort?: PointsPort | null;
     notify: SubscriptionNotifier;
     log: (message: string) => void;
+    /**
+     * 성인 상품 회차 — 가입 때 확인했어도 회차마다 다시 본다. 인증이 지워졌으면(탈퇴 후
+     * 복구·관리자 정리) 회차는 재고 부족과 같은 실패 경로로 간다.
+     */
+    isAdult?: (userId: string) => Promise<boolean>;
   },
 ): Promise<{ due: number; charged: number; failed: number; paused: number }> {
   const { rows: due } = await db.execute(sql`
@@ -534,6 +546,7 @@ export async function chargeDueSubscriptions(
           settings: deps.settings,
           idempotencyKey: idemKey,
           pointsPort: deps.pointsPort ?? null,
+          isAdult: deps.isAdult ? () => deps.isAdult!(String(sub.user_id)) : undefined,
         });
       } catch (err) {
         const reason = err instanceof ShopError ? err.message : "주문 생성 실패";

@@ -96,6 +96,15 @@ export class WithdrawalService {
       await tx.execute(sql`DELETE FROM user_identities WHERE user_id = ${params.userId}::uuid`);
       effects.push("소셜 연결 해제");
 
+      /*
+       * 본인인증 결과 — 출생 연도와 CI 의 HMAC. 이름은 없지만 "이 사람이 이 사이트에 있었다" 를
+       * 가리키는 값이다. 지우면 한 사람 한 계정 사이트에서 탈퇴 후 곧바로 다시 가입해 인증할 수
+       * 있게 되는데, 그것은 탈퇴한 사람의 권리다(재가입 제한은 개인정보를 남길 근거가 못 된다).
+       */
+      await tx.execute(sql`DELETE FROM user_certifications WHERE user_id = ${params.userId}::uuid`);
+      await tx.execute(sql`DELETE FROM identity_verifications WHERE user_id = ${params.userId}::uuid`);
+      effects.push("본인인증 기록 삭제");
+
       // ── 3. 비밀번호 재설정·이메일 인증 토큰 폐기 ──
       await tx.execute(sql`DELETE FROM password_resets WHERE user_id = ${params.userId}::uuid`);
       await tx.execute(sql`DELETE FROM email_verifications WHERE user_id = ${params.userId}::uuid`);

@@ -9,6 +9,7 @@ import { SearchService } from "../search/search.service.js";
 import { EmailVerifyService } from "../members/email-verify.service.js";
 import { PasswordResetService } from "../auth/password-reset.service.js";
 import { RateLimitService } from "../auth/rate-limit.service.js";
+import { IdentityService } from "../identity/identity.service.js";
 import { NotificationsService } from "../notifications/notifications.service.js";
 
 /**
@@ -42,6 +43,7 @@ export class MaintenanceService implements OnModuleInit, OnModuleDestroy {
     private readonly passwordReset: PasswordResetService,
     private readonly notifications: NotificationsService,
     private readonly rateLimit: RateLimitService,
+    private readonly identity: IdentityService,
   ) {}
 
   onModuleInit(): void {
@@ -77,6 +79,8 @@ export class MaintenanceService implements OnModuleInit, OnModuleDestroy {
       ["queue-jobs", () => this.queue.prune()],
       // 요청 제한 기록 — 가장 긴 창이 60분이라 하루 지난 것은 셀 일이 없다
       ["rate-limits", () => this.rateLimit.prune()],
+      // 30일 지난 본인인증 요청 — 결과는 user_certifications 에 있다
+      ["identity-requests", () => this.identity.prune()],
     ];
     for (const [name, run] of jobs) {
       try {

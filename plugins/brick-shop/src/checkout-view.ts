@@ -513,6 +513,18 @@ const checkoutScript = (t: (k: string) => string) => `
           form.querySelectorAll('[aria-invalid="true"]').forEach(function(el){ el.removeAttribute('aria-invalid'); });
           msg.classList.add('is-error');
           msg.textContent = res.d.message || ${JSON.stringify(t("checkout.fail"))};
+          /*
+           * 성인 상품 — 고칠 칸이 없다. 본인인증 화면으로 가는 길을 메시지 옆에 준다
+           * (인증을 마치면 이 주문서로 돌아온다).
+           */
+          if (res.d.field === 'identity') {
+            var go = document.createElement('a');
+            go.href = ${JSON.stringify("/identity")} + '?next=' + encodeURIComponent(location.pathname + location.search);
+            go.className = 'brick-co-verify';
+            go.textContent = ${JSON.stringify(t("checkout.verifyIdentity"))};
+            msg.appendChild(document.createTextNode(' '));
+            msg.appendChild(go);
+          }
           var bad = res.d.field ? form.querySelector('[name="' + String(res.d.field).replace(/[^A-Za-z0-9_]/g, '') + '"]') : null;
           if (bad) {
             bad.setAttribute('aria-invalid', 'true');

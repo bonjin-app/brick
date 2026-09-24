@@ -5,6 +5,7 @@ export * from "./providers/lock.js";
 export * from "./providers/mail.js";
 export * from "./providers/sms.js";
 export * from "./providers/captcha.js";
+export * from "./providers/identity.js";
 export * from "./hooks/hook-bus.js";
 export * from "./plugin/plugin-context.js";
 export * from "./db-errors.js";

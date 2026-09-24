@@ -226,7 +226,7 @@ export async function viewCollection(db: Db, slug: string) {
 
   const state = stateOf(c.starts_at, c.ends_at);
   const { rows: products } = await db.execute(sql`
-    SELECT p.slug, p.name, p.price, p.list_price, coalesce(p.thumb_url, p.image_url) AS image_url, p.status
+    SELECT p.slug, p.name, p.price, p.list_price, coalesce(p.thumb_url, p.image_url) AS image_url, p.status, p.adult_only
     FROM shop_collection_items ci
     JOIN shop_products p ON p.id = ci.product_id
     WHERE ci.collection_id = ${String(c.id)}::uuid
@@ -247,6 +247,7 @@ export async function viewCollection(db: Db, slug: string) {
       price: Number(p.price),
       listPrice: p.list_price === null ? null : Number(p.list_price),
       imageUrl: p.image_url ? String(p.image_url) : null,
+      adultOnly: Boolean(p.adult_only),
       soldout: String(p.status) === "soldout",
     })),
   };

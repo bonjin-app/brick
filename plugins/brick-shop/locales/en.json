@@ -998,5 +998,15 @@
   "미결제 주문 정리가 이미 진행 중입니다. 끝난 뒤 다시 시도하세요.": "Unpaid order cleanup is already running. Please try again when it finishes.",
   "결제하는 사이 주문이 취소되어 결제를 취소했습니다. 다시 주문해 주세요.": "The order was cancelled while you were paying, so the payment has been cancelled. Please place the order again.",
   "결제하는 사이 주문이 취소되었습니다. 결제 취소가 처리되지 않아 판매자가 확인 후 환불합니다.": "The order was cancelled while you were paying. The payment could not be cancelled automatically, so the seller will refund it after checking.",
-  "카드·간편결제 (포트원)": "Card · easy pay (PortOne)"
+  "카드·간편결제 (포트원)": "Card · easy pay (PortOne)",
+  "adult.mark": "Adults only (19+)",
+  "adult.gateTitle": "This product requires age verification",
+  "adult.gateBody": "Under Korea's Juvenile Protection Act, only people aged 19 or over may view and buy this product. Please verify your identity to confirm your age.",
+  "adult.gateLogin": "Sign in to verify",
+  "adult.gateVerify": "Verify my identity",
+  "adult.gateMinor": "Your verified age is under 19, so this product is not available to you.",
+  "checkout.verifyIdentity": "Verify my identity",
+  "성인 인증이 필요한 상품이 있습니다. 본인인증을 마친 뒤 주문해주세요.": "Your order includes an adults-only product. Please verify your identity before ordering.",
+  "성인 상품 (19세 이상)": "Adults-only product (19+)",
+  "주류·성인용품 등 청소년유해매체물. 본인인증으로 19세 이상임을 확인한 회원만 상세를 보고 주문할 수 있습니다. 목록에는 사진 대신 19 표시가 나갑니다.": "Liquor, adult goods and other items harmful to minors. Only members whose identity verification shows they are 19 or older can view the details and order. Lists show a 19 mark instead of the photo."
 }

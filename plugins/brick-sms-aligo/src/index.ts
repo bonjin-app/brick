@@ -105,17 +105,18 @@ export default definePlugin((ctx) => {
   };
   void refresh();
 
+  const shown = (cfg: AligoSettings) => ({
+    enabled: cfg.enabled,
+    userId: cfg.userId,
+    sender: cfg.sender,
+    // API 키는 내려보내지 않는다 — 빈 값으로 저장하면 기존 값을 유지한다
+    apiKey: "",
+    apiKeyConfigured: Boolean(cfg.apiKey),
+  });
+
   ctx.registerRoute("GET", "/admin/config", async (req) => {
     if (req.user?.role !== "admin") throw Object.assign(new Error("권한이 없습니다."), { status: 403 });
-    const cfg = await load();
-    return {
-      enabled: cfg.enabled,
-      userId: cfg.userId,
-      sender: cfg.sender,
-      // API 키는 내려보내지 않는다 — 빈 값으로 저장하면 기존 값을 유지한다
-      apiKey: "",
-      apiKeyConfigured: Boolean(cfg.apiKey),
-    };
+    return shown(await load());
   });
 
   ctx.registerRoute("PUT", "/admin/config", async (req) => {
@@ -126,14 +127,20 @@ export default definePlugin((ctx) => {
     if (b.enabled && !normalizePhone(sender)) {
       throw Object.assign(new Error(ctx.t("err.senderRequired")), { status: 400 });
     }
-    await ctx.settings.set<AligoSettings>("config", {
+    const next: AligoSettings = {
       enabled: b.enabled !== undefined ? Boolean(b.enabled) : current.enabled,
       userId: String(b.userId ?? current.userId).trim().slice(0, 50),
       apiKey: b.apiKey?.trim() ? b.apiKey.trim() : current.apiKey,
       sender,
-    });
+    };
+    await ctx.settings.set<AligoSettings>("config", next);
     await refresh();
-    return { ok: true };
+    /*
+     * 저장한 설정을 GET 과 같은 모양으로 돌려준다. 관리 화면은 PUT 응답으로 폼을 다시 채우는데,
+     * `{ ok: true }` 만 주었더니 저장하는 순간 아이디·발신번호·사용 여부가 **모두 빈칸으로**
+     * 보였다 — 운영자는 저장이 날아간 줄 알고 다시 입력한다.
+     */
+    return shown(next);
   });
 
   ctx.registerAdminResource({
