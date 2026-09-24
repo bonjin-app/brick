@@ -8,6 +8,8 @@ export class BoardError extends Error {
   constructor(
     public status: number,
     message: string,
+    /** 어느 칸·조치가 문제인가 — "identity" 면 화면이 본인인증으로 가는 길을 붙인다 */
+    public field?: string,
   ) {
     super(message);
   }
@@ -53,6 +55,8 @@ export interface BoardRow {
   notify_comment: boolean;
   /** 분류가 있는 게시판에서 분류 선택을 강제한다 */
   category_required?: boolean;
+  /** 본인인증 요구 — "" 없음 · verified 본인인증 회원만 · adult 성인만 (그누보드 bo_use_cert) */
+  cert_required?: "" | "verified" | "adult";
   /**
    * 여분 필드 — 게시판마다 정하는 추가 입력칸 (그누보드의 `wr_1`~`wr_10`).
    *
@@ -204,3 +208,13 @@ export function shortDate(value: unknown): string {
 export function pgArray(values: readonly string[]): string {
   return `{${values.map((v) => `"${String(v).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join(",")}}`;
 }
+
+/**
+ * 누구에게나 보여도 되는 글 — 사이트맵·최근 글 위젯처럼 **보는 사람을 모르는** 통로의 조건.
+ *
+ * 게시판 권한만 보면 회원 전용 그룹 안의 글이 새고, 공개를 끈 게시판·본인인증 게시판의 글도 샌다.
+ * 통로마다 조건을 따로 적어서 실제로 셋이 서로 달랐다 — 한 곳에 둔다. (`b` = board_boards,
+ * `g` = board_groups LEFT JOIN, `p` = board_posts)
+ */
+export const PUBLIC_POST_SQL = `p.is_secret = false AND b.is_visible = true AND b.read_role = 'guest'
+  AND coalesce(g.read_role, 'guest') = 'guest' AND b.cert_required = ''`;

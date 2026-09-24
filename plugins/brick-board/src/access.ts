@@ -22,7 +22,7 @@ export async function selectBoard(db: Db, slug: string): Promise<BoardRow | null
     SELECT b.id, b.slug, b.title, b.description, b.read_role, b.write_role, b.comment_role, b.download_role,
            b.categories, b.page_size, b.allow_reply, b.allow_secret, b.allow_vote, b.allow_upload,
            b.max_files, b.write_interval, b.list_style, b.notify_email, b.notify_comment, b.category_required,
-           b.extra_fields,
+           b.extra_fields, b.cert_required,
            b.group_id, g.title AS group_title, g.read_role AS group_read_role
     FROM board_boards b LEFT JOIN board_groups g ON g.id = b.group_id
     WHERE b.slug = ${slug} AND b.is_visible = true LIMIT 1
@@ -61,6 +61,49 @@ export function requireRole(
   const act = t(what);
   if (!user) throw new BoardError(401, t("err.loginFor", { act }));
   throw new BoardError(403, t("err.noPermFor", { act }));
+}
+
+/** 본인인증 상태를 묻는 방법 — 라우트·블록이 `ctx.identity.status` 를 넘긴다 */
+export type IdentityOf = (userId: string) => Promise<{ verified: boolean; adult: boolean }>;
+
+/**
+ * 게시판의 본인인증 요구(그누보드 bo_use_cert) — 목록·글·댓글·첨부·쓰기 모두 이것을 먼저 통과한다.
+ *
+ * 운영진(manager 이상)은 통과한다 — 게시판을 관리할 사람이 자기 인증 때문에 신고 글을 못 보면 안 된다.
+ * 거절은 `field: "identity"` 를 실어 화면이 본인인증으로 가는 길을 붙이게 한다.
+ */
+export async function requireCert(
+  board: { cert_required?: string | null },
+  user: SessionUser | null,
+  identityOf: IdentityOf,
+): Promise<void> {
+  const need = String(board.cert_required ?? "");
+  if (!need || hasRole(user, "manager")) return;
+  if (!user) throw new BoardError(401, t("err.certLogin"));
+  const s = await identityOf(user.id);
+  if (need === "adult" && !s.adult) {
+    throw new BoardError(403, s.verified ? t("err.certMinor") : t("err.certAdult"), "identity");
+  }
+  if (!s.verified) throw new BoardError(403, t("err.certVerified"), "identity");
+}
+
+/** 서버 렌더용 — 막혔으면 안내할 말(카탈로그 키), 통과면 null */
+export async function certBlock(
+  board: { cert_required?: string | null },
+  user: SessionUser | null,
+  identityOf: IdentityOf,
+): Promise<{ key: string; login: boolean; verify: boolean } | null> {
+  try {
+    await requireCert(board, user, identityOf);
+    return null;
+  } catch (err) {
+    const status = (err as { status?: number }).status;
+    const need = String(board.cert_required ?? "");
+    if (status === 401) return { key: "err.certLogin", login: true, verify: false };
+    const msg = (err as Error).message;
+    if (msg === t("err.certMinor")) return { key: "err.certMinor", login: false, verify: false };
+    return { key: need === "adult" ? "err.certAdult" : "err.certVerified", login: false, verify: true };
+  }
 }
 
 /**

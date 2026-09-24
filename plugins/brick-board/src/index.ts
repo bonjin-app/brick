@@ -4,16 +4,20 @@ import { uuidv7 } from "uuidv7";
 import {
   BoardError, asListStyle, effectiveReadRole, escapeHtml, extraFieldsOf, hasRole,
   parseExtraFields, pgArray, pickExtraValues, rankOf, type Db, type SessionUser,
+  PUBLIC_POST_SQL,
 } from "./types.js";
 import { t } from "./i18n.js";
 import { hashGuestPassword, verifyGuestPassword } from "./guest.js";
-import { checkGuestSecret } from "@brick/plugin-sdk";
-import { assertCanModify, canModifyPost, canReadSecret, checkWriteInterval, loadBoard, requireRole } from "./access.js";
+import { checkGuestSecret, fillTemplate } from "@brick/plugin-sdk";
+import { assertCanModify, canModifyPost, canReadSecret, checkWriteInterval, loadBoard, requireCert, requireRole, type IdentityOf } from "./access.js";
 import { attachFiles, claimDownload, deleteAttachments, listAttachments } from "./attachments.js";
 import { createPost, isBlankContent, listPosts, normalizeLinks, refreshThumb, type WritePostInput } from "./posts.js";
 import { sanitizeHtml, toPlainText } from "./sanitize.js";
 import { BOARD_RESOURCE, GROUP_RESOURCE, POST_RESOURCE } from "./admin-resources.js";
 import { registerBoardBlocks } from "./blocks.js";
+
+/** 누구에게나 보여도 되는 글 (types.ts 의 PUBLIC_POST_SQL) */
+const PUBLIC_POST = sql.raw(PUBLIC_POST_SQL);
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,50}$/;
 
@@ -25,6 +29,27 @@ const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,50}$/;
  *  추천/비추천 · 비회원 글쓰기 · 검색 · 도배 방지 · RSS
  */
 export default definePlugin(async (ctx) => {
+  /**
+   * 댓글 알림의 기본 문구 — `#{변수}` 로 쓴다. 실제 발송이 이것을 채운 것이라, 운영자가
+   * 알림 문구 화면에서 불러온 문장과 지금 나가는 문장이 같다.
+   */
+  const commentTemplate = () => ({
+    subject: ctx.t("mail.commentSubject", { board: "#{게시판명}", title: "#{글제목}" }),
+    body: ctx.t("mail.commentBody", { author: "#{댓글작성자}", title: "#{글제목}", excerpt: "#{댓글요약}", url: "#{글주소}" }),
+  });
+  ctx.registerNotificationEvent({
+    event: "board.comment",
+    label: "게시판 — 내 글에 댓글",
+    vars: [
+      { name: "게시판명", description: "게시판 이름", sample: "자유게시판" },
+      { name: "글제목", description: "원글 제목", sample: "첫 글입니다" },
+      { name: "댓글작성자", description: "댓글을 쓴 사람", sample: "홍길동" },
+      { name: "댓글요약", description: "댓글 앞부분 (비밀댓글이면 내용 대신 표시)", sample: "좋은 글 감사합니다" },
+      { name: "글주소", description: "원글 주소", sample: "https://example.com/board/free/1#comments" },
+    ],
+    defaults: commentTemplate,
+  });
+
   /*
    * 비회원 비밀번호 확인 — 대입 방어를 씌운다(대상별 다섯 번·IP별 스무 번, 15분).
    * 비회원 글·댓글·비밀글은 비밀번호 하나로 열리고 흔히 숫자 네 자리라, 시도 횟수 제한이
@@ -74,6 +99,23 @@ export default definePlugin(async (ctx) => {
   //  공개 API
   // ════════════════════════════════════════════════════
 
+  /** 본인인증 상태 — 코어가 가진다(쇼핑몰의 성인 상품과 같은 확인) */
+  const identityOf: IdentityOf = (userId) => ctx.identity.status(userId);
+
+  /**
+   * 글 하나에 닿는 경로(읽기·첨부·댓글·스크랩)의 읽기 검사 — **게시판 목록과 같은 규칙**으로.
+   *
+   * 전에는 이 경로들이 글과 게시판을 직접 조인해 `b.read_role` 만 봤다. 그래서 목록은 그룹
+   * 권한(회원 전용 그룹)과 비공개 게시판을 가렸지만, 글 ID 를 아는 비회원은 그 글과 첨부를 그대로
+   * 읽었다. 게시판을 한 곳(loadBoard — 공개 여부 · 그룹 권한 합산)에서 읽고 같은 검사를 한다.
+   */
+  const requireBoardRead = async (slug: string, user: ReturnType<typeof userOf>) => {
+    const board = await loadBoard(db, slug);
+    requireRole(user, board.read_role, "act.readBoard");
+    await requireCert(board, user, identityOf);
+    return board;
+  };
+
   /** 게시판 목록 */
   ctx.registerRoute("GET", "/boards", async (req) => {
     const user = userOf(req);
@@ -94,6 +136,7 @@ export default definePlugin(async (ctx) => {
   ctx.registerRoute("GET", "/boards/:slug/posts", async (req) => {
     const board = await loadBoard(db, req.params.slug);
     requireRole(userOf(req), board.read_role, "act.readBoard");
+    await requireCert(board, userOf(req), identityOf);
     return listPosts(db, {
       board,
       page: Number(req.query.page ?? 1),
@@ -108,6 +151,7 @@ export default definePlugin(async (ctx) => {
     const board = await loadBoard(db, req.params.slug);
     const user = userOf(req);
     requireRole(user, board.write_role, "act.write");
+    await requireCert(board, user, identityOf);
     await requireCaptchaForGuest(user, req.body as never);
     await checkWriteInterval(db, board, user, ipOf(req));
     await assertClean(`${String((req.body as WritePostInput).title ?? "")} ${String((req.body as WritePostInput).content ?? "")}`);
@@ -163,7 +207,7 @@ export default definePlugin(async (ctx) => {
     if (!post) throw new BoardError(404, "글을 찾을 수 없습니다.");
 
     const user = userOf(req);
-    requireRole(user, String(post.read_role), "act.readBoard");
+    await requireBoardRead(String(post.board_slug), user);
 
     const guestPw = req.query.pw;
     if (!(await canReadSecret(post as never, user, guestPw, guestCheck(req, `post:${req.params.id}`)))) {
@@ -319,6 +363,7 @@ export default definePlugin(async (ctx) => {
     if (!user) throw new BoardError(401, "이미지 삽입은 회원만 할 수 있습니다.");
     const board = await loadBoard(db, req.params.slug);
     requireRole(user, board.write_role, "act.write");
+    await requireCert(board, user, identityOf);
     if (!board.allow_upload) throw new BoardError(400, "이 게시판은 이미지 업로드를 허용하지 않습니다.");
     const files = await req.files();
     const file = files[0];
@@ -353,12 +398,14 @@ export default definePlugin(async (ctx) => {
   /** 다운로드 — 권한 검사 후 스토리지 URL로 안내 */
   ctx.registerRoute("GET", "/files/:id", async (req) => {
     const { rows } = await db.execute(sql`
-      SELECT a.id, b.download_role FROM board_attachments a
+      SELECT a.id, b.download_role, b.slug FROM board_attachments a
       JOIN board_posts p ON p.id = a.post_id
       JOIN board_boards b ON b.id = p.board_id
       WHERE a.id = ${req.params.id}::uuid LIMIT 1
     `);
     if (!rows[0]) throw new BoardError(404, "파일을 찾을 수 없습니다.");
+    // 내려받기 권한만 보면 읽을 수 없는 게시판(그룹 권한·비공개·본인인증)의 첨부가 열린다
+    await requireBoardRead(String(rows[0].slug), userOf(req));
     requireRole(userOf(req), String(rows[0].download_role), "act.download");
 
     const file = await claimDownload(db, req.params.id);
@@ -386,6 +433,7 @@ export default definePlugin(async (ctx) => {
     if (!post) throw new BoardError(404, "글을 찾을 수 없습니다.");
 
     const user = userOf(req);
+    await requireBoardRead(String(post.slug), user);
     requireRole(user, String(post.comment_role), "act.comment");
     await requireCaptchaForGuest(user, body);
 
@@ -454,16 +502,22 @@ export default definePlugin(async (ctx) => {
         if (!u[0]) return; // 탈퇴·정지한 회원에게는 보내지 않는다
         const title = String(post.title ?? "").slice(0, 200);
         const path = `/board/${encodeURIComponent(String(post.slug))}/${String(post.id)}#comments`;
+        // 운영자가 알림 문구를 고쳤다면 코어가 그 문구로 바꿔 보낸다 — 여기서는 기본 문구를 채운다
+        const vars = {
+          게시판명: String(post.board_title),
+          글제목: title,
+          댓글작성자: user ? user.displayName : (guestName ?? ""),
+          댓글요약: Boolean(body.isSecret) ? ctx.t("mail.secretComment") : content.slice(0, 200),
+          글주소: `${ctx.site.url}${path}`,
+        };
+        const tpl = commentTemplate();
         await ctx.notify({
           userId: String(post.author_id),
           kind: "board.comment",
-          title: ctx.t("mail.commentSubject", { board: String(post.board_title), title }),
-          body: ctx.t("mail.commentBody", {
-            author: user ? user.displayName : (guestName ?? ""),
-            title,
-            excerpt: Boolean(body.isSecret) ? "(비밀댓글)" : content.slice(0, 200),
-            url: `${ctx.site.url}${path}`,
-          }),
+          event: "board.comment",
+          vars,
+          title: fillTemplate(tpl.subject, vars),
+          body: fillTemplate(tpl.body, vars),
           url: path,
         });
       })().catch(() => undefined);
@@ -557,11 +611,11 @@ export default definePlugin(async (ctx) => {
 
     // 읽을 수 있는 글만 스크랩할 수 있다
     const { rows } = await db.execute(sql`
-      SELECT p.id, b.read_role FROM board_posts p JOIN board_boards b ON b.id = p.board_id
+      SELECT p.id, b.slug FROM board_posts p JOIN board_boards b ON b.id = p.board_id
       WHERE p.id = ${req.params.id}::uuid LIMIT 1
     `);
     if (!rows[0]) throw new BoardError(404, "글을 찾을 수 없습니다.");
-    requireRole(user, String(rows[0].read_role), "act.readBoard");
+    await requireBoardRead(String(rows[0].slug), user);
 
     return db.transaction(async (tx) => {
       const { rows: existing } = await tx.execute(sql`
@@ -611,7 +665,7 @@ export default definePlugin(async (ctx) => {
   ctx.registerRoute("GET", "/boards/:slug/rss", async (req) => {
     const board = await loadBoard(db, req.params.slug);
     // 비공개 게시판은 RSS를 제공하지 않는다 (로그인 없이 접근되는 경로다)
-    if (board.read_role !== "guest") throw new BoardError(403, "이 게시판은 RSS를 제공하지 않습니다.");
+    if (board.read_role !== "guest" || board.cert_required) throw new BoardError(403, "이 게시판은 RSS를 제공하지 않습니다.");
     const { rows } = await db.execute(sql`
       SELECT id, title, author_name, created_at, content
       FROM board_posts WHERE board_id = ${board.id}::uuid AND is_secret = false
@@ -652,7 +706,7 @@ ${items}
       SELECT id, slug, title, description, read_role, write_role, comment_role, download_role,
              categories, page_size, allow_reply, allow_secret, allow_vote, allow_upload,
              max_files, write_interval, sort_order, is_visible,
-             list_style, notify_email, notify_comment, group_id, category_required, extra_fields,
+             list_style, notify_email, notify_comment, group_id, category_required, extra_fields, cert_required,
              (SELECT count(*) FROM board_posts p WHERE p.board_id = b.id) AS post_count
       FROM board_boards b ORDER BY sort_order, title
     `);
@@ -726,6 +780,12 @@ ${items}
       notifyComment: b.notify_comment !== false,
       groupId: /^[0-9a-f-]{36}$/i.test(String(b.group_id ?? "")) ? String(b.group_id) : null,
       categoryRequired: b.category_required === true,
+      // 본인인증 요구 — 모르는 값은 "없음" 이 아니라 거절한다(오타로 성인 게시판이 열리면 안 된다)
+      certRequired: ((): "" | "verified" | "adult" => {
+        const c = String(b.cert_required ?? "");
+        if (c === "" || c === "verified" || c === "adult") return c;
+        throw new BoardError(400, "본인인증 요구 값이 올바르지 않습니다.");
+      })(),
     };
   };
 
@@ -739,14 +799,14 @@ ${items}
           id, slug, title, description, read_role, write_role, comment_role, download_role,
           categories, page_size, allow_reply, allow_secret, allow_vote, allow_upload,
           max_files, write_interval, sort_order, is_visible,
-          list_style, notify_email, notify_comment, group_id, category_required, extra_fields
+          list_style, notify_email, notify_comment, group_id, category_required, extra_fields, cert_required
         ) VALUES (
           ${id}, ${v.slug}, ${v.title}, ${v.description}, ${v.readRole}, ${v.writeRole},
           ${v.commentRole}, ${v.downloadRole}, ${JSON.stringify(v.categories)}::jsonb, ${v.pageSize},
           ${v.allowReply}, ${v.allowSecret}, ${v.allowVote}, ${v.allowUpload},
           ${v.maxFiles}, ${v.writeInterval}, ${v.sortOrder}, ${v.isVisible},
           ${v.listStyle}, ${v.notifyEmail}, ${v.notifyComment}, ${v.groupId}::uuid, ${v.categoryRequired},
-          ${JSON.stringify(v.extraFields)}::jsonb
+          ${JSON.stringify(v.extraFields)}::jsonb, ${v.certRequired}
         )
       `);
     } catch (err) {
@@ -775,7 +835,7 @@ ${items}
           sort_order = ${v.sortOrder}, is_visible = ${v.isVisible},
           list_style = ${v.listStyle}, notify_email = ${v.notifyEmail}, notify_comment = ${v.notifyComment},
           group_id = ${v.groupId}::uuid, category_required = ${v.categoryRequired},
-          extra_fields = ${JSON.stringify(v.extraFields)}::jsonb
+          extra_fields = ${JSON.stringify(v.extraFields)}::jsonb, cert_required = ${v.certRequired}
         WHERE id = ${req.params.id}::uuid RETURNING id
       `);
       if (!rows.length) throw new BoardError(404, "게시판을 찾을 수 없습니다.");
@@ -1093,6 +1153,15 @@ ${items}
             WHEN 'guest' THEN 0 WHEN 'member' THEN 1
             WHEN 'manager' THEN 2 WHEN 'admin' THEN 3 ELSE 3
           END <= ${rank}
+      -- 그룹 권한도 — 목록이 쓰는 실효 권한(게시판과 그룹 중 엄격한 쪽)과 같아야 한다.
+      -- 전에는 게시판 권한만 봐서 회원 전용 그룹 안의 글이 비회원 검색 결과에 나왔다
+      AND CASE coalesce(g.read_role, 'guest')
+            WHEN 'guest' THEN 0 WHEN 'member' THEN 1
+            WHEN 'manager' THEN 2 WHEN 'admin' THEN 3 ELSE 3
+          END <= ${rank}
+      AND b.is_visible = true
+      -- 본인인증을 요구하는 게시판은 검색 결과에 내지 않는다(확인은 게시판에 들어가서) — 운영진은 본다
+      AND (b.cert_required = '' OR ${rank} >= 2)
       AND (p.title ILIKE ${like} OR p.content ILIKE ${like})
     `;
   };
@@ -1137,6 +1206,7 @@ ${items}
       const { rows } = await db.execute(sql`
         SELECT count(*) AS n FROM board_posts p
         JOIN board_boards b ON b.id = p.board_id
+        LEFT JOIN board_groups g ON g.id = b.group_id
         WHERE ${postSearchWhere(query, viewer)}
       `);
       return Number(rows[0]?.n ?? 0);
@@ -1146,6 +1216,7 @@ ${items}
         SELECT p.id, p.title, p.content, p.created_at, p.thumb_url, b.slug AS board_slug, b.title AS board_title
         FROM board_posts p
         JOIN board_boards b ON b.id = p.board_id
+        LEFT JOIN board_groups g ON g.id = b.group_id
         WHERE ${postSearchWhere(query, viewer)}
         -- 정렬을 고정한다 — 안 하면 페이지를 넘길 때 같은 글이 두 번 나온다
         ORDER BY p.created_at DESC, p.id DESC
@@ -1170,7 +1241,7 @@ ${items}
         SELECT count(*) AS n FROM board_posts p
         JOIN board_boards b ON b.id = p.board_id
         LEFT JOIN board_groups g ON g.id = b.group_id
-        WHERE p.is_secret = false AND b.read_role = 'guest' AND coalesce(g.read_role, 'guest') = 'guest'
+        WHERE ${PUBLIC_POST}
       `);
       return Number(rows[0]?.n ?? 0);
     },
@@ -1179,7 +1250,9 @@ ${items}
         SELECT b.slug AS board, p.id, p.updated_at
         FROM board_posts p
         JOIN board_boards b ON b.id = p.board_id
-        WHERE p.is_secret = false AND b.read_role = 'guest'
+        LEFT JOIN board_groups g ON g.id = b.group_id
+        -- count 와 같은 조건 — 전에는 여기만 그룹 권한을 빠뜨려 회원 전용 그룹의 글 주소가 사이트맵에 실렸다
+        WHERE ${PUBLIC_POST}
         ORDER BY p.created_at, p.id
         LIMIT ${limit} OFFSET ${offset}
       `);

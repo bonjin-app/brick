@@ -1,5 +1,5 @@
 import { definePlugin, isUniqueViolation } from "@brick/plugin-sdk";
-import { checkGuestSecret } from "@brick/plugin-sdk";
+import { checkGuestSecret, fillTemplate } from "@brick/plugin-sdk";
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import {
@@ -24,6 +24,29 @@ import { registerHelpdeskBlocks } from "./blocks.js";
  * 기본값이 안전한 쪽이어야 한다.
  */
 export default definePlugin(async (ctx) => {
+  /** 답변 알림의 기본 문구 — 실제 발송이 이것을 채운 것이다(알림 문구 화면의 "기본 문구" 와 같다) */
+  const answeredTemplate = () => ({
+    subject: ctx.t("mail.answeredSubject", { no: "#{문의번호}" }),
+    body: [
+      ctx.t("mail.answeredBody", { name: "#{고객명}" }),
+      "",
+      ctx.t("mail.answeredNo", { no: "#{문의번호}" }),
+      ctx.t("mail.answeredTitle", { title: "#{문의제목}" }),
+      "",
+      ctx.t("mail.answeredVisit"),
+    ].join("\n"),
+  });
+  ctx.registerNotificationEvent({
+    event: "helpdesk.answered",
+    label: "1:1 문의 — 답변 등록",
+    vars: [
+      { name: "고객명", description: "문의한 사람", sample: "홍길동" },
+      { name: "문의번호", description: "문의번호", sample: "H20260924-00001" },
+      { name: "문의제목", description: "문의 제목", sample: "배송이 언제 되나요?" },
+    ],
+    defaults: answeredTemplate,
+  });
+
   /*
    * 비회원 문의는 문의번호(순번)와 조회 비밀번호(네 자리부터)만으로 열린다. 시도 횟수
    * 제한이 없으면 문의번호를 돌려 가며 흔한 비밀번호를 뿌리거나 한 건에 1만 번을 시도해
@@ -420,18 +443,19 @@ export default definePlugin(async (ctx) => {
      * 예전에는 메일뿐이어서, SMTP 가 없는 사이트에서는 답을 달아도 손님이
      * 알 방법이 없었다 — 물어본 사람은 그대로 기다린다.
      */
-    const no = String(t.ticket_no);
+    const vars = { 문의번호: String(t.ticket_no), 고객명: String(t.author_name), 문의제목: String(t.title) };
+    const tpl = answeredTemplate();
     await ctx.notify({
       userId: t.user_id ? String(t.user_id) : null,
       email: t.author_email ? String(t.author_email) : null,
       kind: "helpdesk.answered",
-      title: ctx.t("mail.answeredSubject", { no }),
+      // 운영자가 알림 문구를 고쳤다면 코어가 그 문구로 바꿔 보낸다
+      event: "helpdesk.answered",
+      vars,
+      title: fillTemplate(tpl.subject, vars),
       // 알림함에서 누르면 문의 화면으로 (registerScreen 이 그 주소를 보장한다)
       url: "/support",
-      body:
-        `${ctx.t("mail.answeredBody", { name: String(t.author_name) })}\n\n` +
-        `${ctx.t("mail.answeredNo", { no })}\n${ctx.t("mail.answeredTitle", { title: String(t.title) })}\n\n` +
-        `${ctx.t("mail.answeredVisit")}`,
+      body: fillTemplate(tpl.body, vars),
     });
   });
 

@@ -57,6 +57,13 @@ export const BOARD_RESOURCE: AdminResource = {
     { name: "comment_role", label: "댓글 권한", type: "select", options: ROLE_OPTIONS },
     { name: "download_role", label: "다운로드 권한", type: "select", options: ROLE_OPTIONS },
 
+    { name: "cert_required", label: "본인인증 요구", type: "select",
+      options: [
+        { value: "", label: "요구하지 않음" },
+        { value: "verified", label: "본인인증한 회원만" },
+        { value: "adult", label: "성인 인증한 회원만 (19세 이상)" },
+      ],
+      help: "목록·글·댓글·첨부·글쓰기 모두 확인한 회원만 쓸 수 있고, 통합검색·사이트맵·RSS·최근 글 위젯에서는 빠집니다. 본인인증 수단(예: 포트원)이 켜져 있어야 합니다. 운영진은 통과합니다." },
     { name: "category_required", label: "분류 선택 필수", type: "boolean",
       help: "분류가 있는 게시판에서 분류를 고르지 않으면 글을 올릴 수 없게 합니다." },
     { name: "categories", label: "분류", type: "text",

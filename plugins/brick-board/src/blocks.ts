@@ -1,11 +1,11 @@
 import { dateScript, STACK_TABLE_CSS } from "@brick/plugin-sdk";
 import { sql } from "drizzle-orm";
 import type { PluginContext } from "@brick/plugin-sdk";
-import { effectiveReadRole, escapeHtml, hasRole, shortDate, type BoardRow, type Db } from "./types.js";
+import { effectiveReadRole, escapeHtml, hasRole, shortDate, PUBLIC_POST_SQL, type BoardRow, type Db } from "./types.js";
 import { BOARD_CSS, boardScript } from "./client-script.js";
 import { renderDetail, renderList, renderWrite, resolveView } from "./views.js";
 import { bindI18n, t } from "./i18n.js";
-import { selectBoard } from "./access.js";
+import { certBlock, selectBoard } from "./access.js";
 
 /**
  * 게시판 블록 — 페이지 빌더로 배치한다.
@@ -83,6 +83,26 @@ export function registerBoardBlocks(pluginCtx: PluginContext, db: Db): void {
   <div class="brick-board-head"><h1>${escapeHtml(board.title)}</h1></div>
   <p class="brick-board-empty">${escapeHtml(board.read_role === "member" ? t("board.readMember") : t("board.readManager"))}
     ${!ctx.user ? `<a href="/login">${escapeHtml(t("common.login"))}</a>` : ""}</p>
+</div>${BOARD_CSS}`;
+      }
+
+      /*
+       * 본인인증·성인 인증을 요구하는 게시판 — 확인 전에는 목록·글·쓰기 화면을 그리지 않는다.
+       * 비로그인 화면은 캐시되지만 비회원은 언제나 이 안내를 보므로 섞이지 않는다.
+       */
+      const blocked = await certBlock(board, ctx.user as never, (id) => pluginCtx.identity.status(id));
+      if (blocked) {
+        const back = `/board/${encodeURIComponent(board.slug)}`;
+        const verifyUrl = pluginCtx.identity.url(back);
+        const action = blocked.login
+          ? `<a class="brick-primary" href="/login?next=${encodeURIComponent(verifyUrl)}">${escapeHtml(t("cert.loginAndVerify"))}</a>`
+          : blocked.verify
+            ? `<a class="brick-primary" href="${escapeHtml(verifyUrl)}">${escapeHtml(t("cert.verify"))}</a>`
+            : "";
+        return `<div class="brick-board">
+  <div class="brick-board-head"><h1>${escapeHtml(board.title)}</h1></div>
+  <p class="brick-board-empty">${escapeHtml(t(blocked.key))}</p>
+  ${action ? `<p class="brick-board-empty">${action}</p>` : ""}
 </div>${BOARD_CSS}`;
       }
 
@@ -207,8 +227,9 @@ export function registerBoardBlocks(pluginCtx: PluginContext, db: Db): void {
       const { rows } = await db.execute(sql`
         SELECT p.id, p.title, p.created_at, p.comment_count, b.slug AS board_slug
         FROM board_posts p JOIN board_boards b ON b.id = p.board_id
-        WHERE b.read_role = 'guest' AND b.is_visible = true
-          AND p.is_secret = false
+        LEFT JOIN board_groups g ON g.id = b.group_id
+        -- 그룹 권한·본인인증까지 — 게시판 권한만 보면 회원 전용 그룹의 글 제목이 공개 위젯에 나왔다
+        WHERE ${sql.raw(PUBLIC_POST_SQL)}
           AND (${slug} = '' OR b.slug = ${slug})
         ORDER BY p.created_at DESC LIMIT ${limit}
       `);
@@ -269,12 +290,14 @@ export function registerBoardBlocks(pluginCtx: PluginContext, db: Db): void {
       // ANY(${배열}) 은 쓰지 않는다 — drizzle 이 JS 배열을 PostgreSQL 배열 리터럴로
       // 직렬화하지 않아 "malformed array literal" 이 난다. IN 목록을 명시적으로 만든다.
       const slugFilter = wanted.length
-        ? sql`AND slug IN (${sql.join(wanted.map((w) => sql`${w}`), sql`, `)})`
+        ? sql`AND b.slug IN (${sql.join(wanted.map((w) => sql`${w}`), sql`, `)})`
         : sql``;
       const { rows: boards } = await db.execute(sql`
-        SELECT id, slug, title FROM board_boards
-        WHERE read_role = 'guest' AND is_visible = true ${slugFilter}
-        ORDER BY sort_order, title
+        SELECT b.id, b.slug, b.title FROM board_boards b
+        LEFT JOIN board_groups g ON g.id = b.group_id
+        WHERE b.read_role = 'guest' AND b.is_visible = true
+          AND coalesce(g.read_role, 'guest') = 'guest' AND b.cert_required = '' ${slugFilter}
+        ORDER BY b.sort_order, b.title
       `);
       if (!boards.length) return `<p class="brick-board-empty">${escapeHtml(t("list.emptyBoards"))}</p>${BOARD_CSS}`;
 

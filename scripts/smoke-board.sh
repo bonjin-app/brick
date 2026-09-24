@@ -482,7 +482,12 @@ contains "회원 목록에는 그룹 이름과 함께" "$(curl -s -b "$ADMIN" "$
 IDX_GUEST="$(render_html "board")"
 absent "/board 목록에서도 비회원에게 감춘다" "$IDX_GUEST" 'href="/board/gal"'
 contains "그룹이 있으면 소제목으로 묶인다(회원 화면은 로그인 렌더라 API 로 본다)" "$(curl -s -b "$ADMIN" "$BD/boards")" '"group_slug":"staff"'
-absent "사이트맵은 그룹 권한도 본다" "$(curl -s "$API/sitemap.xml" 2>/dev/null || curl -s "$API/api/sitemap.xml")" "/board/gal/"
+# /sitemap.xml 은 조각 목록(색인)이다 — 글 주소는 조각에 있다. 전에는 색인만 봐서 이 검사가 늘 통과했다
+SM_IDX="$(curl -s "$API/sitemap.xml")"
+SM_ALL="$SM_IDX"
+for u in $(echo "$SM_IDX" | grep -o '<loc>[^<]*</loc>' | sed -E 's#</?loc>##g; s#^https?://[^/]+##'); do SM_ALL="$SM_ALL$(curl -s "$API$u")"; done
+contains "사이트맵 조각에 공개 게시판 글이 실린다 (대조군)" "$SM_ALL" "/board/free/$P1"
+absent "사이트맵은 그룹 권한도 본다" "$SM_ALL" "/board/gal/"
 check "그룹 삭제" "$(code -b "$ADMIN" -X DELETE "$BD/admin/groups/$GID")" "200"
 check "그룹을 지워도 게시판은 남고 다시 공개된다" "$(code "$BD/boards/gal/posts")" "200"
 

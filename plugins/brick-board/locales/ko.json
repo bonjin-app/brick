@@ -170,5 +170,12 @@
   "write.subject": "제목",
   "write.submitEdit": "수정 완료",
   "write.title": "글쓰기",
-  "list.more": "더보기"
+  "list.more": "더보기",
+  "mail.secretComment": "(비밀댓글)",
+  "err.certLogin": "본인인증이 필요한 게시판입니다. 로그인한 뒤 본인인증해주세요.",
+  "err.certVerified": "본인인증한 회원만 이용할 수 있는 게시판입니다.",
+  "err.certAdult": "성인 인증(19세 이상)이 필요한 게시판입니다. 본인인증으로 나이를 확인해주세요.",
+  "err.certMinor": "본인인증 결과 19세 미만이라 이 게시판을 이용할 수 없습니다.",
+  "cert.loginAndVerify": "로그인하고 본인인증하기",
+  "cert.verify": "본인인증하기"
 }
