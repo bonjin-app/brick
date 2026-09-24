@@ -72,9 +72,30 @@ export class MailingService {
     // 워커 등록 — 발송은 요청 밖에서 진행된다.
     // 수만 명에게 보내는 것은 몇 분~몇 시간이 걸리고, 요청 안에서 다 보내면
     // 타임아웃이 나고 어디까지 보냈는지 알 수 없어진다.
-    this.queue.process<{ campaignId: string }>(QUEUE_JOB, async (job) => {
-      await this.runCampaign(job.payload.campaignId);
-    });
+    this.queue.process<{ campaignId: string }>(
+      QUEUE_JOB,
+      async (job) => {
+        await this.runCampaign(job.payload.campaignId);
+      },
+      {
+        /*
+         * 작업이 **끝내** 실패하면 캠페인의 '발송중' 을 푼다.
+         *
+         * 풀지 않으면 캠페인은 '발송중' 에 영원히 남고, 다시 시작하려는 운영자는
+         * "이미 발송 중입니다" 로 거절당한다 — 멈춘 작업을 되살릴 길이 없다. 'failed' 는
+         * start() 가 받아 주는 상태이고, 보내지 못한 수신자는 pending 으로 남아 있으므로
+         * 다시 시작하면 **남은 사람에게만** 이어서 보낸다.
+         */
+        onFailed: async (job, error) => {
+          await this.db.execute(sql`
+            UPDATE mail_campaigns SET status = 'failed', finished_at = now(),
+              error = ${`발송 작업이 끝내 실패했습니다 — 다시 시작하면 남은 대상에게 이어서 보냅니다. (${error.slice(0, 300)})`}
+            WHERE id = ${job.payload.campaignId}::uuid AND status = 'sending'
+          `);
+          this.log.warn(`캠페인 발송 작업 실패로 중단 (${job.payload.campaignId}): ${error}`);
+        },
+      },
+    );
   }
 
   /**
@@ -289,6 +310,9 @@ export class MailingService {
     const kind = String(c.kind) as CampaignKind;
     let sent = 0;
     let failed = 0;
+    // 이어서 보내는 경우 앞서 보낸 수 — 배치마다 전부 다시 세지 않으려고 한 번만 센다
+    // (수만 명 캠페인에서 20명마다 전체를 세면 그 자체가 일이 된다). 끝에서 정확히 다시 센다.
+    const base = await this.syncCounts(campaignId);
 
     for (;;) {
       // 중단 확인 — 관리자가 멈추면 즉시 반영된다
@@ -358,7 +382,7 @@ export class MailingService {
       }
 
       await this.db.execute(sql`
-        UPDATE mail_campaigns SET sent_count = ${sent}, failed_count = ${failed}
+        UPDATE mail_campaigns SET sent_count = ${base.sent + sent}, failed_count = ${base.failed + failed}
         WHERE id = ${campaignId}::uuid
       `);
 
@@ -370,13 +394,37 @@ export class MailingService {
       }
     }
 
+    const total = await this.syncCounts(campaignId);
     await this.db.execute(sql`
       UPDATE mail_campaigns SET
-        status = ${failed > 0 && sent === 0 ? "failed" : "sent"},
-        sent_count = ${sent}, failed_count = ${failed}, finished_at = now()
+        status = ${total.failed > 0 && total.sent === 0 ? "failed" : "sent"},
+        finished_at = now()
       WHERE id = ${campaignId}::uuid
     `);
-    this.log.log(`발송 완료: 성공 ${sent} · 실패 ${failed}`);
+    this.log.log(`발송 완료: 이번 실행 성공 ${sent} · 실패 ${failed} (누적 ${total.sent} · ${total.failed})`);
+  }
+
+  /**
+   * 발송 건수를 **수신자 기록에서** 센다.
+   *
+   * 전에는 이번 실행의 지역 변수로 세어 덮어썼다. 그래서 이어서 보내면(중단했다 다시
+   * 시작, 또는 워커가 죽어 다른 워커가 작업을 되찾은 경우) 앞서 보낸 수가 사라졌다 —
+   * 5,000명에게 보내고 끊긴 뒤 나머지 5,000명을 보내면 "성공 5,000" 으로 끝났다.
+   * 진실은 수신자 행에 있다.
+   */
+  private async syncCounts(campaignId: string): Promise<{ sent: number; failed: number }> {
+    const { rows } = await this.db.execute(sql`
+      UPDATE mail_campaigns c SET
+        sent_count = t.sent, failed_count = t.failed
+      FROM (
+        SELECT count(*) FILTER (WHERE status = 'sent')::int AS sent,
+               count(*) FILTER (WHERE status = 'failed')::int AS failed
+        FROM mail_recipients WHERE campaign_id = ${campaignId}::uuid
+      ) t
+      WHERE c.id = ${campaignId}::uuid
+      RETURNING t.sent, t.failed
+    `);
+    return { sent: Number(rows[0]?.sent ?? 0), failed: Number(rows[0]?.failed ?? 0) };
   }
 
   /**

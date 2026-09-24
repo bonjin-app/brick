@@ -572,6 +572,18 @@ check "심은 직후 오래된 행 3건" \
                   + (SELECT count(*) FROM email_verifications WHERE created_at < now() - interval '365 days')
                   + (SELECT count(*) FROM audit_logs WHERE created_at < now() - interval '365 days')")" "3"
 
+# 큐 작업 — 끝난 것은 보관 기간이 지나면 지우고, **아직 할 일은 절대 지우지 않는다**.
+# 오래전에 만든 대기 작업(먼 미래로 예약된 것)까지 지우면 정리가 기능을 삭제한다.
+for spec in "old-done|done|10 days" "old-failed|failed|40 days" "new-done|done|1 day" "new-failed|failed|10 days"; do
+  IFS='|' read -r tag st age <<< "$spec"
+  psql_q "INSERT INTO queue_jobs (id, name, payload, status, attempts, max_attempts, run_at, locked_at, created_at)
+          VALUES (gen_random_uuid()::text, 'retention.$tag', '{}', '$st', 1, 3, now() - interval '$age',
+                  now() - interval '$age', now() - interval '$age')" >/dev/null
+done
+psql_q "INSERT INTO queue_jobs (id, name, payload, status, attempts, max_attempts, run_at, created_at)
+        VALUES (gen_random_uuid()::text, 'retention.old-pending', '{}', 'pending', 0, 3,
+                now() + interval '30 days', now() - interval '400 days')" >/dev/null
+
 kill "$API_PID" 2>/dev/null || true; wait "$API_PID" 2>/dev/null || true
 node "$ROOT/apps/api/dist/main.js" > "$TMP/api-retention.log" 2>&1 &
 API_PID=$!
@@ -595,6 +607,13 @@ check "얼마 전에 읽은 알림은 남아 있다" \
   "$(psql_q "SELECT count(*) FROM notifications WHERE title = '얼마 전에 읽은 알림'")" "1"
 check "오늘 온 알림은 남아 있다" \
   "$(psql_q "SELECT count(*) FROM notifications WHERE title = '오늘 온 알림'")" "1"
+check "일주일 넘게 지난 끝난 작업은 지워졌다" \
+  "$(psql_q "SELECT count(*) FROM queue_jobs WHERE name IN ('retention.old-done','retention.old-failed')")" "0"
+# 무차별 삭제라면 아래 셋도 함께 사라진다
+check "최근에 끝난 작업과 한 달이 안 된 실패는 남아 있다 (대시보드가 보여 줄 것)" \
+  "$(psql_q "SELECT count(*) FROM queue_jobs WHERE name IN ('retention.new-done','retention.new-failed')")" "2"
+check "오래전에 만든 대기 작업은 지우지 않는다 (아직 할 일이다)" \
+  "$(psql_q "SELECT count(*) FROM queue_jobs WHERE name = 'retention.old-pending'")" "1"
 
 echo
 echo "── 회원 목록 검색 (운영자는 대개 한 사람을 찾으려고 이 화면을 연다)"

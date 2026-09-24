@@ -3,7 +3,8 @@ import { and, eq, lte, sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import type { BrickDb } from "@brick/database";
 import { queueJobs } from "@brick/database";
-import type { QueueProvider, QueueJob } from "@brick/core";
+import type { QueueProvider, QueueJob, EnqueueOptions, ProcessOptions, QueueFailure } from "@brick/core";
+import { isUniqueViolation } from "@brick/core";
 
 /**
  * Redis 없이 동작하는 기본 큐. `FOR UPDATE SKIP LOCKED` 폴링이다.
@@ -39,19 +40,37 @@ export class PostgresQueueProvider implements QueueProvider {
     private readonly leaseMs = 90_000,
   ) {}
 
-  async enqueue<T>(name: string, payload: T, opts?: { delaySeconds?: number; maxAttempts?: number }): Promise<string> {
+  /** 끝내 실패했을 때 알릴 곳 — 이름별. process() 가 등록한다 */
+  private readonly onFailed = new Map<string, NonNullable<ProcessOptions["onFailed"]>>();
+
+  async enqueue<T>(name: string, payload: T, opts?: EnqueueOptions): Promise<string> {
     const id = uuidv7();
-    await this.db.insert(queueJobs).values({
-      id,
-      name,
-      payload: payload as never,
-      maxAttempts: opts?.maxAttempts ?? 3,
-      runAt: opts?.delaySeconds ? new Date(Date.now() + opts.delaySeconds * 1000) : new Date(),
-    });
-    return id;
+    const runAt = opts?.delaySeconds ? new Date(Date.now() + opts.delaySeconds * 1000) : new Date();
+    const maxAttempts = opts?.maxAttempts ?? 3;
+    if (!opts?.dedupeKey) {
+      await this.db.insert(queueJobs).values({ id, name, payload: payload as never, maxAttempts, runAt });
+      return id;
+    }
+    /*
+     * 같은 키로 대기 중인 것이 있으면 넣지 않는다. 먼저 보고 넣는 방식은 인스턴스 둘이
+     * 동시에 부팅하면 둘 다 "없다" 를 보고 둘 다 넣는다 — 유일성은 DB 가 지킨다
+     * (0017 의 부분 유니크 인덱스). ON CONFLICT 의 대상은 그 인덱스의 조건과 같아야 한다.
+     */
+    const inserted = (await this.db.execute(sql`
+      INSERT INTO queue_jobs (id, name, payload, max_attempts, run_at, dedupe_key)
+      VALUES (${id}, ${name}, ${JSON.stringify(payload ?? null)}::jsonb, ${maxAttempts}, ${runAt}, ${opts.dedupeKey})
+      ON CONFLICT (dedupe_key) WHERE status = 'pending' AND dedupe_key IS NOT NULL DO NOTHING
+      RETURNING id
+    `)) as unknown as { rows: Array<{ id: string }> };
+    if (inserted.rows?.length) return id;
+    const existing = (await this.db.execute(sql`
+      SELECT id FROM queue_jobs WHERE dedupe_key = ${opts.dedupeKey} AND status = 'pending' LIMIT 1
+    `)) as unknown as { rows: Array<{ id: string }> };
+    return existing.rows?.[0]?.id ?? id;
   }
 
-  process<T>(name: string, handler: (job: QueueJob<T>) => Promise<void>): () => void {
+  process<T>(name: string, handler: (job: QueueJob<T>) => Promise<void>, opts?: ProcessOptions<T>): () => void {
+    if (opts?.onFailed) this.onFailed.set(name, opts.onFailed as NonNullable<ProcessOptions["onFailed"]>);
     /*
      * 폴링 오류를 **삼켜야** 한다.
      *
@@ -68,6 +87,7 @@ export class PostgresQueueProvider implements QueueProvider {
     return () => {
       clearInterval(timer);
       this.timers.delete(name);
+      this.onFailed.delete(name);
     };
   }
 
@@ -118,6 +138,7 @@ export class PostgresQueueProvider implements QueueProvider {
       name: row.name as string,
       payload: row.payload as T,
       attempts: row.attempts as number,
+      maxAttempts: row.max_attempts as number,
     };
     /*
      * 일하는 동안 임대를 갱신한다. 이것이 없으면 긴 작업은 스스로 만료되어
@@ -136,17 +157,43 @@ export class PostgresQueueProvider implements QueueProvider {
       await handler(job);
       await this.db.update(queueJobs).set({ status: "done" }).where(eq(queueJobs.id, job.id));
     } catch (err) {
-      const failedFinally = job.attempts >= (row.max_attempts as number);
-      await this.db
-        .update(queueJobs)
-        .set({
-          status: failedFinally ? "failed" : "pending",
-          lastError: String(err),
-          runAt: new Date(Date.now() + 2 ** job.attempts * 1000), // 지수 백오프
-        })
-        .where(and(eq(queueJobs.id, job.id), lte(queueJobs.attempts, row.max_attempts as number)));
+      const failedFinally = job.attempts >= job.maxAttempts;
+      const error = String(err).slice(0, 2000);
+      try {
+        await this.db
+          .update(queueJobs)
+          .set({
+            status: failedFinally ? "failed" : "pending",
+            lastError: error,
+            runAt: new Date(Date.now() + 2 ** job.attempts * 1000), // 지수 백오프
+          })
+          .where(and(eq(queueJobs.id, job.id), lte(queueJobs.attempts, job.maxAttempts)));
+      } catch (updateErr) {
+        /*
+         * 재시도로 되돌리려는데 같은 dedupe 키의 작업이 이미 대기 중이다(그 사이 부팅이
+         * 사슬을 다시 심었다). 대기 중인 것은 하나만 둔다는 약속을 지키려면 이쪽이
+         * 물러나야 한다 — 같은 일을 하는 작업이 곧 돈다.
+         */
+        if (!isUniqueViolation(updateErr)) throw updateErr;
+        await this.db.update(queueJobs)
+          .set({ status: "merged", lastError: `${error}\n(대기 중인 같은 작업에 합쳐짐)` })
+          .where(eq(queueJobs.id, job.id));
+        return;
+      }
+      if (failedFinally) await this.notifyFailed(job, error);
     } finally {
       clearInterval(beat);
+    }
+  }
+
+  /** 끝내 실패한 작업을 그 주인에게 알린다. 알림이 실패해도 폴링은 계속한다 */
+  private async notifyFailed<T>(job: QueueJob<T>, error: string): Promise<void> {
+    const hook = this.onFailed.get(job.name);
+    if (!hook) return;
+    try {
+      await hook(job as QueueJob<unknown>, error);
+    } catch (err) {
+      this.logger.warn(`실패 처리기 오류 (${job.name}): ${String(err)}`);
     }
   }
 
@@ -161,21 +208,70 @@ export class PostgresQueueProvider implements QueueProvider {
    * 1초마다 도는 폴링에 매번 붙이지 않는다 — 잡을 것이 거의 없는 질의를
    * 작업 종류 수만큼 매초 돌릴 이유가 없다.
    */
-  private lastReap = 0;
+  /*
+   * 이름별로 센다. 처음에는 필드 하나였는데, 그러면 30초마다 **가장 먼저 도착한
+   * 이름 하나만** 청소되고 나머지 이름은 계속 건너뛰어진다 — 폴링 주기가 같으므로
+   * 매번 같은 이름이 이긴다.
+   */
+  private readonly lastReap = new Map<string, number>();
   private async reapDead(name: string): Promise<void> {
     const now = Date.now();
-    if (now - this.lastReap < 30_000) return;
-    this.lastReap = now;
+    if (now - (this.lastReap.get(name) ?? 0) < 30_000) return;
+    this.lastReap.set(name, now);
     const lease = sql.raw(`interval '${Math.round(this.leaseMs / 1000)} seconds'`);
     const { rows } = (await this.db.execute(sql`
       UPDATE queue_jobs SET status = 'failed',
         last_error = coalesce(last_error, '작업이 끝나지 않았습니다 — 워커가 중단된 것으로 보입니다 (시도 횟수 소진)')
       WHERE name = ${name} AND status = 'running'
         AND attempts >= max_attempts AND locked_at < now() - ${lease}
-      RETURNING id
-    `)) as unknown as { rows: Array<{ id: string }> };
-    if (rows?.length) {
-      this.logger.warn(`중단된 작업 ${rows.length}건을 실패로 정리했습니다 (${name})`);
+      RETURNING id, name, payload, attempts, max_attempts, last_error
+    `)) as unknown as { rows: Array<Record<string, unknown>> };
+    if (!rows?.length) return;
+    this.logger.warn(`중단된 작업 ${rows.length}건을 실패로 정리했습니다 (${name})`);
+    // 마지막 시도 중에 워커가 죽은 경우다 — 핸들러의 catch 로는 알 수 없으므로 여기서 알린다
+    for (const r of rows) {
+      await this.notifyFailed(
+        { id: String(r.id), name: String(r.name), payload: r.payload,
+          attempts: Number(r.attempts), maxAttempts: Number(r.max_attempts) },
+        String(r.last_error ?? ""),
+      );
     }
+  }
+
+  /**
+   * 끝난 작업 기록을 지운다 — 주기 작업만으로 하루 수백 행이 쌓이는데 아무도 지우지 않았다.
+   *
+   * 성공은 7일(무슨 일이 있었는지 볼 여유), 실패와 합쳐진 것은 30일(운영자가 대시보드에서
+   * 보고 원인을 찾을 여유). **대기·실행 중인 것은 절대 지우지 않는다** — 오래전에 만든
+   * 예약 작업도 아직 할 일이다. 기준 시각은 locked_at 이다: 끝난 작업은 모두 한 번은
+   * 집혔으므로 값이 있고, queue_lease_idx(status, locked_at)를 그대로 쓴다.
+   */
+  async prune(): Promise<number> {
+    const { rows } = (await this.db.execute(sql`
+      DELETE FROM queue_jobs
+      WHERE (status = 'done' AND locked_at < now() - interval '7 days')
+         OR (status IN ('failed', 'merged') AND locked_at < now() - interval '30 days')
+      RETURNING id
+    `)) as unknown as { rows: unknown[] };
+    return rows?.length ?? 0;
+  }
+
+  /** 최근 끝내 실패한 작업 — 이름별 건수와 가장 최근의 이유 */
+  async recentFailures(days = 7): Promise<QueueFailure[]> {
+    const span = sql.raw(`interval '${Math.max(1, Math.floor(days))} days'`);
+    const { rows } = (await this.db.execute(sql`
+      SELECT name, count(*)::int AS n, max(locked_at) AS last_at,
+             (array_agg(last_error ORDER BY locked_at DESC))[1] AS last_error
+      FROM queue_jobs
+      WHERE status = 'failed' AND locked_at > now() - ${span}
+      GROUP BY name
+      ORDER BY max(locked_at) DESC
+    `)) as unknown as { rows: Array<Record<string, unknown>> };
+    return (rows ?? []).map((r) => ({
+      name: String(r.name),
+      count: Number(r.n),
+      lastError: r.last_error == null ? null : String(r.last_error),
+      lastAt: r.last_at ? new Date(String(r.last_at)) : null,
+    }));
   }
 }

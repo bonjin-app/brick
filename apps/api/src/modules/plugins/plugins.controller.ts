@@ -5,7 +5,7 @@ import {
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { eq, sql } from "drizzle-orm";
 import { siteSettings, type BrickDb } from "@brick/database";
-import type { MailProvider } from "@brick/core";
+import type { MailProvider, QueueProvider } from "@brick/core";
 import { SITE_TZ, isRawResponse, rankOf, translateCoreLabel, type PluginUploadedFile } from "@brick/core";
 import { PluginLoaderService } from "./plugin-loader.service.js";
 import { AdminGuard, ManagerGuard } from "../auth/auth.guard.js";
@@ -17,7 +17,7 @@ import { CORE_CATALOGS, makeTranslator } from "@brick/core";
 import { ThemesService } from "../themes/themes.service.js";
 import { MaintenanceModeService } from "../site/maintenance-mode.service.js";
 import { bypassesMaintenance, isWrite } from "../site/maintenance-mode.js";
-import { DB, MAIL } from "../../runtime.module.js";
+import { DB, MAIL, QUEUE } from "../../runtime.module.js";
 import { isLocalUrl, loadEnv } from "../../config/env.js";
 import { sawProxyHeaders } from "../../config/proxy-hint.js";
 import { msg } from "../../common/localized-error.js";
@@ -33,6 +33,7 @@ export class PluginsController {
     private readonly audit: AuditService,
     @Inject(DB) private readonly db: BrickDb,
     @Inject(MAIL) private readonly mail: MailProvider,
+    @Inject(QUEUE) private readonly queue: QueueProvider,
     private readonly themes: ThemesService,
     private readonly maintenance: MaintenanceModeService,
   ) {}
@@ -281,12 +282,14 @@ export class PluginsController {
   @Get("admin/dashboard")
   @UseGuards(AdminGuard)
   async adminDashboard() {
-    const [core, cards, businessMissing, themeProblem, maintenanceOn] = await Promise.all([
+    const [core, cards, businessMissing, themeProblem, maintenanceOn, jobFailures] = await Promise.all([
       this.coreStats(),
       this.loader.collectDashboardCards(),
       this.businessInfoMissing(),
       this.themes.problem(),
       this.maintenance.isOn(),
+      // 경고 하나 때문에 대시보드가 죽으면 안 된다
+      this.queue.recentFailures(7).catch(() => []),
     ]);
     const setup = this.setupWarnings();
     /*
@@ -323,6 +326,25 @@ export class PluginsController {
       setup.push({
         id: "themeNotRendering",
         docs: "https://github.com/bonjin-app/brick/blob/main/docs/operations.md",
+      });
+    }
+    /*
+     * 백그라운드 작업이 끝내 실패했다 — 정기결제 청구, 재입고 알림, 메일 발송.
+     *
+     * 이것도 "틀려도 조용한" 종류다. 큐는 실패를 기록하고 로그에 한 줄 남기지만,
+     * 운영자는 로그를 보지 않는다. 정기결제가 며칠째 청구되지 않아도 손님이 먼저 알고,
+     * 운영자는 매출이 왜 줄었는지 나중에 찾는다.
+     */
+    if (jobFailures.length) {
+      const total = jobFailures.reduce((n, f) => n + f.count, 0);
+      setup.push({
+        id: "jobsFailed",
+        docs: "https://github.com/bonjin-app/brick/blob/main/docs/operations.md",
+        params: {
+          count: total,
+          jobs: jobFailures.map((f) => f.name).join(", "),
+          error: (jobFailures[0].lastError ?? "").split("\n")[0].slice(0, 160),
+        },
       });
     }
     if (businessMissing) {
@@ -367,9 +389,9 @@ export class PluginsController {
     }
   }
 
-  private setupWarnings(): Array<{ id: string; docs: string }> {
+  private setupWarnings(): Array<{ id: string; docs: string; params?: Record<string, string | number> }> {
     const env = loadEnv();
-    const out: Array<{ id: string; docs: string }> = [];
+    const out: Array<{ id: string; docs: string; params?: Record<string, string | number> }> = [];
     const doc = (f: string) => `https://github.com/bonjin-app/brick/blob/main/docs/${f}`;
     /*
      * SMTP 가 없으면 모든 메일이 콘솔로만 나간다 — 주문 안내(무통장 계좌!),

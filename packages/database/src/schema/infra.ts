@@ -24,13 +24,16 @@ export const queueJobs = pgTable(
     id: varchar("id", { length: 36 }).primaryKey(),
     name: varchar("name", { length: 200 }).notNull(),
     payload: jsonb("payload").notNull(),
-    status: varchar("status", { length: 20 }).notNull().default("pending"), // pending | running | done | failed
+    // pending | running | done | failed | merged(대기 중인 같은 작업에 합쳐짐)
+    status: varchar("status", { length: 20 }).notNull().default("pending"),
     attempts: integer("attempts").notNull().default(0),
     maxAttempts: integer("max_attempts").notNull().default(3),
     runAt: timestamp("run_at", { withTimezone: true }).notNull().defaultNow(),
     lastError: text("last_error"),
     /** 임대 시각 — 일하는 워커가 주기적으로 갱신한다. 끊기면 다른 워커가 되찾는다 */
     lockedAt: timestamp("locked_at", { withTimezone: true }),
+    /** 같은 키로 대기 중인 작업은 하나만 (0017 의 부분 유니크 인덱스) */
+    dedupeKey: varchar("dedupe_key", { length: 200 }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

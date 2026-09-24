@@ -473,8 +473,39 @@ await ctx.db.transaction(async (tx) => {
 |---|---|
 | `ctx.db` | DB 핸들 — `execute()` 와 `transaction()` |
 | `ctx.settings` | `plugin:<name>:` 네임스페이스가 적용된 설정 저장소 |
-| `ctx.cache` / `ctx.queue` / `ctx.storage` | Provider 추상화 — Redis/S3 유무와 무관하게 동일 API |
+| `ctx.cache` / `ctx.queue` / `ctx.storage` | Provider 추상화 (지금 구현은 PostgreSQL·로컬 디스크뿐이다) |
+| `ctx.lock` | 클러스터 전체에서 **한 번에 하나만** 돌아야 하는 일 — `withLock(키, fn)`, 잡혀 있으면 `null` |
 | `ctx.hooks` | action/filter 버스 |
+
+### 주기 작업 — 사슬은 하나만, 실행은 한 번에 하나만
+
+큐에는 반복 실행 기능이 없으므로, 작업이 끝에서 자기 다음 차례를 예약하는 **사슬**로
+만듭니다. 쇼핑몰이 이 방식에서 두 번 사고를 냈습니다 — 그대로 따라 하면 같은 일이 납니다.
+
+```ts
+const JOB = "my-plugin.sweep";
+
+ctx.queue.process(JOB, async () => {
+  // (2) 겹쳐 돌지 않게 — 관리자의 "지금 실행" 버튼, 서버 두 대가 같은 순간에 돈다
+  const result = await ctx.lock.withLock(`my-plugin:sweep`, () => sweep());
+  if (result === null) ctx.logger.log("다른 곳에서 이미 돌고 있어 건너뜀");
+  await ctx.queue.enqueue(JOB, {}, { delaySeconds: 600, dedupeKey: JOB });
+}, {
+  // (3) 끝내 실패하면 — "진행 중" 표시를 풀어야 운영자가 다시 시작할 수 있다
+  onFailed: async (job, error) => { /* 상태를 '실패' 로 돌린다 */ },
+});
+// (1) 활성화할 때 사슬을 심는다 — dedupeKey 가 없으면 재시작할 때마다 사슬이 하나씩 는다
+await ctx.queue.enqueue(JOB, {}, { delaySeconds: 60, dedupeKey: JOB });
+```
+
+1. **`dedupeKey`** — 같은 키로 대기 중인 작업은 하나만 남깁니다. 없으면 부팅할 때마다
+   사슬이 하나씩 늘어 같은 일을 사슬 수만큼 되풀이합니다(개발 DB 에 넷이 겹쳐 있었습니다).
+2. **`ctx.lock`** — 큐는 "한 작업을 한 워커가 집는다" 까지만 보장합니다. 정기결제 청구가
+   겹쳤을 때 **카드는 긁혔는데 주문은 취소되고 환불도 없는** 결과가 났습니다
+   ([architecture.md](architecture.md) ADR-71).
+3. **`onFailed`** — 시도를 다 쓴 실패와, 마지막 시도 중 워커가 죽은 경우에 불립니다.
+   뒤의 것은 핸들러 안의 try/catch 로는 알 수 없습니다. 끝내 실패한 작업은 관리자
+   대시보드에도 경고로 뜹니다.
 
 ### 에러 → HTTP 상태코드
 

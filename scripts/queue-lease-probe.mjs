@@ -19,8 +19,57 @@ const { createDb } = await import(`${ROOT}apps/api/node_modules/@brick/database/
 const { sql } = await import(`${ROOT}apps/api/node_modules/drizzle-orm/index.js`);
 const { PostgresQueueProvider } = await import(`${ROOT}apps/api/dist/providers/postgres-queue.provider.js`);
 
-const [hb = 300, lease = 1000] = process.argv.slice(2).map(Number);
 const db = createDb(process.env.DATABASE_URL);
+
+/*
+ * 모드 — 큐 계약의 나머지 둘도 같은 방식(실제 DB, 실제 구현)으로 본다.
+ *
+ *   dedupe : 같은 dedupeKey 로 여러 번 넣어도 **대기 중인 것은 하나**. 실행 중인 작업이
+ *            끝에서 다음 차례를 예약하는 것은 막지 않는다(막으면 사슬이 끊긴다).
+ *            출력: "pending=<대기 수> chain=<사슬이 이어졌는가>"
+ *   fail   : 시도를 다 쓰고 실패하면 onFailed 가 **한 번** 불린다.
+ *            출력: "onFailed=<호출 수> status=<최종 상태>"
+ */
+const mode = process.argv[2];
+if (mode === "dedupe") {
+  const name = `dedupe-probe-${Date.now()}`;
+  const q = new PostgresQueueProvider(db, 100);
+  // 부팅 셋이 동시에 사슬을 심는 상황
+  await Promise.all([1, 2, 3].map(() => q.enqueue(name, {}, { delaySeconds: 3600, dedupeKey: name })));
+  const { rows: p1 } = await db.execute(sql`SELECT count(*)::int AS n FROM queue_jobs WHERE name = ${name} AND status = 'pending'`);
+  // 실행 중인 작업이 자기 다음 차례를 예약한다 — 대기 중인 것을 당겨 실행시킨다
+  await db.execute(sql`UPDATE queue_jobs SET run_at = now() WHERE name = ${name}`);
+  let chained = false;
+  const stop = q.process(name, async () => {
+    const before = await db.execute(sql`SELECT count(*)::int AS n FROM queue_jobs WHERE name = ${name} AND status = 'pending'`);
+    await q.enqueue(name, {}, { delaySeconds: 3600, dedupeKey: name });
+    const after = await db.execute(sql`SELECT count(*)::int AS n FROM queue_jobs WHERE name = ${name} AND status = 'pending'`);
+    chained = before.rows[0].n === 0 && after.rows[0].n === 1;
+  });
+  await new Promise((r) => setTimeout(r, 1500));
+  stop();
+  await db.execute(sql`DELETE FROM queue_jobs WHERE name = ${name}`);
+  console.log(`pending=${p1[0].n} chain=${chained}`);
+  process.exit(0);
+}
+if (mode === "fail") {
+  const name = `fail-probe-${Date.now()}`;
+  const q = new PostgresQueueProvider(db, 100);
+  let calls = 0;
+  await q.enqueue(name, {}, { maxAttempts: 2 });
+  const stop = q.process(name, async () => { throw new Error("의도한 실패"); }, {
+    onFailed: async () => { calls++; },
+  });
+  // 1회 실패 → 2초 백오프 → 2회 실패(마지막)
+  await new Promise((r) => setTimeout(r, 4500));
+  stop();
+  const { rows } = await db.execute(sql`SELECT status FROM queue_jobs WHERE name = ${name}`);
+  await db.execute(sql`DELETE FROM queue_jobs WHERE name = ${name}`);
+  console.log(`onFailed=${calls} status=${rows[0]?.status ?? "없음"}`);
+  process.exit(0);
+}
+
+const [hb = 300, lease = 1000] = process.argv.slice(2).map(Number);
 const name = `lease-probe-${Date.now()}`;
 let runs = 0;
 const handler = async () => { runs++; await new Promise((r) => setTimeout(r, lease * 4)); };

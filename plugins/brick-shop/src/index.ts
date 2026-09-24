@@ -1494,9 +1494,9 @@ export default definePlugin(async (ctx) => {
     if (result && result.assigned > 0) {
       ctx.logger.log(`회원 등급 재계산: ${result.assigned}명 배정`);
     }
-    await ctx.queue.enqueue(GRADE_RECOMPUTE_JOB, {}, { delaySeconds: 21600, maxAttempts: 3 });
+    await ctx.queue.enqueue(GRADE_RECOMPUTE_JOB, {}, { delaySeconds: 21600, maxAttempts: 3, dedupeKey: GRADE_RECOMPUTE_JOB });
   });
-  await ctx.queue.enqueue(GRADE_RECOMPUTE_JOB, {}, { delaySeconds: 120, maxAttempts: 3 });
+  await ctx.queue.enqueue(GRADE_RECOMPUTE_JOB, {}, { delaySeconds: 120, maxAttempts: 3, dedupeKey: GRADE_RECOMPUTE_JOB });
 
   // ════════════════════════════════════════════════════
   //  기획전 — 상품을 묶어 보여주는 진열
@@ -1793,10 +1793,11 @@ export default definePlugin(async (ctx) => {
     // 다음 스윕을 예약한다. 실패하면 큐가 재시도하고(3회), 워커가 중단되면
     // 임대가 끊긴 뒤 다른 워커가 되찾는다. 그래도 사슬이 끊기면 다음 부팅이
     // 아래에서 다시 씨를 뿌린다 — 정기 작업은 멈춘 것이 보이지 않기 때문이다.
-    await ctx.queue.enqueue(RESTOCK_QUEUE_JOB, {}, { delaySeconds: 300, maxAttempts: 3 });
+    await ctx.queue.enqueue(RESTOCK_QUEUE_JOB, {}, { delaySeconds: 300, maxAttempts: 3, dedupeKey: RESTOCK_QUEUE_JOB });
   });
-  // 활성화 직후 한 번 예약한다 (이미 예약된 것이 있어도 스윕은 멱등하다)
-  await ctx.queue.enqueue(RESTOCK_QUEUE_JOB, {}, { delaySeconds: 60, maxAttempts: 3 });
+  // 활성화 직후 한 번 예약한다. 이미 대기 중인 것이 있으면 dedupeKey 가 새로 넣지
+  // 않는다 — 전에는 부팅할 때마다 사슬이 하나씩 늘어 같은 일을 되풀이했다.
+  await ctx.queue.enqueue(RESTOCK_QUEUE_JOB, {}, { delaySeconds: 60, maxAttempts: 3, dedupeKey: RESTOCK_QUEUE_JOB });
 
   // ════════════════════════════════════════════════════
   //  정기결제 — 카드는 PG 에, 해지는 한 클릭에 (subscriptions.ts)
@@ -1983,9 +1984,9 @@ export default definePlugin(async (ctx) => {
         `정기결제: 대상 ${result.due} · 성공 ${result.charged} · 실패 ${result.failed} · 중지 ${result.paused}`,
       );
     }
-    await ctx.queue.enqueue(SUBSCRIPTION_QUEUE_JOB, {}, { delaySeconds: 600, maxAttempts: 3 });
+    await ctx.queue.enqueue(SUBSCRIPTION_QUEUE_JOB, {}, { delaySeconds: 600, maxAttempts: 3, dedupeKey: SUBSCRIPTION_QUEUE_JOB });
   });
-  await ctx.queue.enqueue(SUBSCRIPTION_QUEUE_JOB, {}, { delaySeconds: 90, maxAttempts: 3 });
+  await ctx.queue.enqueue(SUBSCRIPTION_QUEUE_JOB, {}, { delaySeconds: 90, maxAttempts: 3, dedupeKey: SUBSCRIPTION_QUEUE_JOB });
 
   // ── 생일 쿠폰 자동 지급 (birthday.ts) ────────────────
   // 지급이 멱등하므로(쿠폰당 회원당 1회) 넉넉히 자주 돌아도 안전하다 —
@@ -2000,9 +2001,9 @@ export default definePlugin(async (ctx) => {
   ctx.queue.process(BIRTHDAY_QUEUE_JOB, async () => {
     const result = await exclusive("birthday", () => issueBirthdayCoupons(db));
     if (result && result.issued > 0) ctx.logger.log(`생일 쿠폰: ${result.issued}장 지급`);
-    await ctx.queue.enqueue(BIRTHDAY_QUEUE_JOB, {}, { delaySeconds: 6 * 3600, maxAttempts: 3 });
+    await ctx.queue.enqueue(BIRTHDAY_QUEUE_JOB, {}, { delaySeconds: 6 * 3600, maxAttempts: 3, dedupeKey: BIRTHDAY_QUEUE_JOB });
   });
-  await ctx.queue.enqueue(BIRTHDAY_QUEUE_JOB, {}, { delaySeconds: 120, maxAttempts: 3 });
+  await ctx.queue.enqueue(BIRTHDAY_QUEUE_JOB, {}, { delaySeconds: 120, maxAttempts: 3, dedupeKey: BIRTHDAY_QUEUE_JOB });
 
   // ════════════════════════════════════════════════════
   //  개인결제 (주문서 없는 청구)

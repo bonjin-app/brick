@@ -611,6 +611,14 @@ contains "실패 이유를 남긴다 (운영자가 무슨 일이 났는지 볼 �
 #     하트비트가 없으면 이 작업은 네 번 실행된다 — 수만 명 발송이 네 번 나가는 것이다.
 check "오래 걸리는 작업도 한 번만 실행된다 (하트비트가 임대를 지킨다)" \
   "$(node "$ROOT/scripts/queue-lease-probe.mjs" 300 1000)" "runs=1 status=done"
+# (5) 대기 중인 것은 키당 하나 — 플러그인은 부팅할 때마다 주기 작업 사슬의 첫 작업을
+#     다시 심는다. 이것이 없으면 재시작 횟수만큼 사슬이 겹친다(개발 DB 에 넷이 있었다).
+#     실행 중인 작업이 자기 다음 차례를 예약하는 것은 막지 않아야 한다 — 막으면 사슬이 끊긴다.
+check "대기 중인 주기 작업은 하나만 남고, 사슬은 이어진다" \
+  "$(node "$ROOT/scripts/queue-lease-probe.mjs" dedupe)" "pending=1 chain=true"
+# (6) 끝내 실패하면 주인에게 알린다 — 캠페인의 '발송중' 을 풀 수 있는 유일한 자리다
+check "시도를 다 쓴 실패는 주인에게 한 번 알린다" \
+  "$(node "$ROOT/scripts/queue-lease-probe.mjs" fail)" "onFailed=1 status=failed"
 
 echo "── 잠금은 잡은 연결에서 풀린다 (한 번에 하나만 돌아야 하는 일 — 정기결제 청구 등)"
 # advisory lock 은 연결 단위다. 풀에 대고 잡고 풀면, 사이에 쿼리가 하나만 끼어도 해제가

@@ -69,6 +69,24 @@ console.log("▶ 보관 정책이 실제로 실행된다");
  */
 const className = (src) => (src.match(/export class (\w+)/) || [])[1] ?? "";
 
+/*
+ * 인터페이스로 주입받는 것도 따라간다. 큐처럼 `@Inject(QUEUE) queue: QueueProvider` 로
+ * 받으면 필드의 타입은 인터페이스이고 정리 함수는 구현 클래스(PostgresQueueProvider)에
+ * 있다 — 이름이 달라 "아무도 부르지 않는다" 로 잘못 읽었다(실제로는 부르고 있었다).
+ * `class X implements I` 를 모아 I → X 로 푼다.
+ */
+const implementers = new Map(); // 인터페이스 → [구현 클래스]
+const interfacesOf = new Map(); // 구현 클래스 → [인터페이스]
+for (const f of files) {
+  const src = readFileSync(f, "utf8");
+  for (const m of src.matchAll(/export class (\w+)[^{]*?implements ([\w\s,]+)\{/g)) {
+    for (const iface of m[2].split(",").map((x) => x.trim()).filter(Boolean)) {
+      implementers.set(iface, [...(implementers.get(iface) ?? []), m[1]]);
+      interfacesOf.set(m[1], [...(interfacesOf.get(m[1]) ?? []), iface]);
+    }
+  }
+}
+
 // MaintenanceService 생성자의 `private readonly search: SearchService` → search=SearchService
 const fieldType = new Map();
 for (const m of sweeper.matchAll(/private readonly (\w+):\s*(\w+)/g)) fieldType.set(m[1], m[2]);
@@ -76,7 +94,8 @@ for (const m of sweeper.matchAll(/private readonly (\w+):\s*(\w+)/g)) fieldType.
 const swept = new Set();
 for (const m of sweepBody.matchAll(/this\.(\w+)\.(\w+)\(/g)) {
   const cls = fieldType.get(m[1]);
-  if (cls) swept.add(`${cls}#${m[2]}`);
+  if (!cls) continue;
+  for (const c of [cls, ...(implementers.get(cls) ?? [])]) swept.add(`${c}#${m[2]}`);
 }
 
 const cleaners = [];
@@ -95,7 +114,8 @@ for (const c of cleaners) {
   const callers = files.filter((f) => {
     if (f.slice(ROOT.length) === c.file) return false;
     const src = readFileSync(f, "utf8");
-    return src.includes(c.cls) && new RegExp(`\\.${c.name}\\(`).test(src);
+    const names = [c.cls, ...(interfacesOf.get(c.cls) ?? [])];
+    return names.some((n) => src.includes(n)) && new RegExp(`\\.${c.name}\\(`).test(src);
   });
   if (callers.length) ok(`${c.cls}#${c.name} — ${callers.length}곳에서 부른다`);
   else bad(`${c.cls}#${c.name} (${c.file}) — **아무도 부르지 않습니다**. 테이블이 무한히 커지고 보관 기간은 문서에만 남습니다`);

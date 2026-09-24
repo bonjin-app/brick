@@ -24,8 +24,10 @@ interface Dashboard {
    * 번역이 없는 경고를 **빌드가 막는다** — 배너가 키 이름을 그대로 보여주는 일이 없다.
    */
   setup?: Array<{
-    id: "mailOff" | "siteUrlLocal" | "trustProxyOff" | "businessInfoMissing" | "pluginNotRunning" | "themeNotRendering" | "maintenanceOn";
+    id: "mailOff" | "siteUrlLocal" | "trustProxyOff" | "businessInfoMissing" | "pluginNotRunning" | "themeNotRendering" | "maintenanceOn" | "jobsFailed";
     docs: string;
+    /** 문장에 끼울 값 (예: 실패한 작업 수와 이름) — 판정한 쪽이 안다 */
+    params?: Record<string, string | number>;
   }>;
 }
 
@@ -169,8 +171,8 @@ export default function AdminDashboard() {
         */}
       {(dash?.setup ?? []).map((w) => (
         <div key={w.id} className="brick-card" role="alert" style={{ marginTop: 0, marginBottom: 16, borderColor: "var(--color-warning)", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12 }}>
-          <strong>{t(`dash.${w.id}`)}</strong>
-          <span style={{ color: "var(--color-muted)", fontSize: 13.5 }}>{t(`dash.${w.id}Detail`)}</span>
+          <strong>{t(`dash.${w.id}`, w.params)}</strong>
+          <span style={{ color: "var(--color-muted)", fontSize: 13.5 }}>{t(`dash.${w.id}Detail`, w.params)}</span>
           <a className="btn-link" href={w.docs} target="_blank" rel="noopener" style={{ marginLeft: "auto" }}>{t("dash.setupHow")} ↗</a>
         </div>
       ))}

@@ -2,7 +2,8 @@ import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nest
 import { lt } from "drizzle-orm";
 import type { BrickDb } from "@brick/database";
 import { sessions, cacheEntries } from "@brick/database";
-import { DB } from "../../runtime.module.js";
+import type { QueueProvider } from "@brick/core";
+import { DB, QUEUE } from "../../runtime.module.js";
 import { AuditService } from "../audit/audit.service.js";
 import { SearchService } from "../search/search.service.js";
 import { EmailVerifyService } from "../members/email-verify.service.js";
@@ -33,6 +34,7 @@ export class MaintenanceService implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     @Inject(DB) private readonly db: BrickDb,
+    @Inject(QUEUE) private readonly queue: QueueProvider,
     private readonly audit: AuditService,
     private readonly search: SearchService,
     private readonly emailVerify: EmailVerifyService,
@@ -69,6 +71,8 @@ export class MaintenanceService implements OnModuleInit, OnModuleDestroy {
       ["email-verifications", () => this.emailVerify.purgeExpired()],
       // 알림은 댓글·주문·재입고마다 한 줄씩 쌓인다 — 치우지 않으면 본문보다 커진다
       ["notifications", () => this.notifications.prune()],
+      // 끝난 큐 작업 — 정기 작업만으로 하루 수백 행이 쌓였는데 아무도 지우지 않았다
+      ["queue-jobs", () => this.queue.prune()],
     ];
     for (const [name, run] of jobs) {
       try {

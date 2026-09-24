@@ -516,6 +516,54 @@ for line in lines[$BEFORE_N3:]:
 contains "HTML 파트 포함" "$HTML_MAIL" "<b>강조</b>"
 contains "텍스트 대안 포함 (태그가 벗겨진 형태)" "$HTML_MAIL" "굵게 강조"
 
+echo "── 중단했다 이어서 보내도 발송 수가 누적된다"
+# 건수를 **이번 실행의 지역 변수**로 세어 덮어썼다. 그래서 이어서 보내면(중단 → 다시
+# 시작, 또는 워커가 죽어 다른 워커가 작업을 되찾은 경우) 앞서 보낸 수가 사라졌다 —
+# 5,000명에게 보내고 끊긴 뒤 나머지를 보내면 "성공 5,000" 으로 끝난다.
+RES="$(curl -s -b "$CK" -X POST "$API/api/admin/mail" -H 'content-type: application/json' \
+  -d '{"kind":"notice","subject":"이어 보내기","body":"본문입니다."}')"
+RID="$(echo "$RES" | jq_get "['id']")"
+R_TOTAL="$(psql_q "SELECT count(*) FROM mail_recipients WHERE campaign_id='$RID'")"
+[[ "$R_TOTAL" -ge 2 ]] && ok "대상 ${R_TOTAL}명" || bad "대상이 둘 이상이어야 한다 ($R_TOTAL)"
+# 앞선 실행이 한 명에게 보내고 중단된 모습 — 그 한 명은 이미 'sent' 이다
+psql_q "UPDATE mail_recipients SET status='sent', sent_at=now()
+        WHERE id = (SELECT id FROM mail_recipients WHERE campaign_id='$RID' ORDER BY id LIMIT 1)" >/dev/null
+psql_q "UPDATE mail_campaigns SET status='cancelled', sent_count=1 WHERE id='$RID'" >/dev/null
+contains "다시 시작" "$(curl -s -b "$CK" -X POST "$API/api/admin/mail/$RID/send")" '"queued":true'
+wait_done "$RID" || true
+check "앞서 보낸 사람까지 합쳐 센다" \
+  "$(psql_q "SELECT sent_count FROM mail_campaigns WHERE id='$RID'")" "$R_TOTAL"
+check "센 수가 수신자 기록과 같다" \
+  "$(psql_q "SELECT sent_count = (SELECT count(*) FROM mail_recipients WHERE campaign_id='$RID' AND status='sent') FROM mail_campaigns WHERE id='$RID'")" "true"
+
+echo "── 발송 작업이 끝내 실패해도 캠페인이 '발송중' 에 갇히지 않는다"
+# 마지막 시도 중에 워커가 죽은 모습을 만든다: 캠페인은 '발송중', 그 작업은 시도를 다
+# 쓴 채 임대가 끊겼다. 전에는 큐가 작업만 'failed' 로 끝내고 캠페인은 그대로 두었다 —
+# 운영자가 다시 시작하려 하면 "이미 발송 중입니다" 로 거절당해 되살릴 길이 없었다.
+STK="$(curl -s -b "$CK" -X POST "$API/api/admin/mail" -H 'content-type: application/json' \
+  -d '{"kind":"notice","subject":"갇힌 발송","body":"본문입니다."}')"
+SID="$(echo "$STK" | jq_get "['id']")"
+psql_q "UPDATE mail_campaigns SET status='sending', started_at=now() WHERE id='$SID'" >/dev/null
+JOBID="$(node -e 'console.log(require("node:crypto").randomUUID())')"
+psql_q "INSERT INTO queue_jobs (id, name, payload, status, attempts, max_attempts, run_at, locked_at)
+        VALUES ('$JOBID', 'mailing.send', '{\"campaignId\":\"$SID\"}', 'running', 3, 3,
+                now() - interval '10 minutes', now() - interval '10 minutes')" >/dev/null
+check "갇힌 모습: 다시 시작이 거절된다" "$(code -b "$CK" -X POST "$API/api/admin/mail/$SID/send")" "400"
+for _ in $(seq 1 45); do
+  CST="$(psql_q "SELECT status FROM mail_campaigns WHERE id='$SID'")"
+  [[ "$CST" == "failed" ]] && break
+  sleep 1
+done
+check "작업이 끝내 실패하면 캠페인이 '실패' 로 풀린다" "$CST" "failed"
+contains "이어서 보낼 수 있다고 알려 준다" "$(psql_q "SELECT error FROM mail_campaigns WHERE id='$SID'")" "이어서"
+contains "대시보드가 실패한 백그라운드 작업을 알린다" \
+  "$(curl -s -b "$CK" "$API/api/admin/dashboard")" '"id":"jobsFailed"'
+contains "경고에 어떤 작업인지 적혀 있다" \
+  "$(curl -s -b "$CK" "$API/api/admin/dashboard")" 'mailing.send'
+contains "풀린 캠페인은 다시 시작된다" "$(curl -s -b "$CK" -X POST "$API/api/admin/mail/$SID/send")" '"queued":true'
+wait_done "$SID" || true
+check "다시 시작하면 끝까지 보낸다" "$(psql_q "SELECT status FROM mail_campaigns WHERE id='$SID'")" "sent"
+
 echo
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 # 실측을 남긴다(설정됐을 때만) — README 의 표가 실제와 같은지 CI 가 대조한다.
