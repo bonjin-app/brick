@@ -1,6 +1,7 @@
 import type { PluginContext } from "@brick/plugin-sdk";
 import { escapeHtml, STACK_TABLE_CSS } from "@brick/plugin-sdk";
 import { gatewayScripts } from "./pay-client.js";
+import { BANK_OPTIONS } from "./order-mail.js";
 import { moneyFnScript, localeTag, dateOptsScript } from "./i18n.js";
 
 /**
@@ -207,6 +208,7 @@ const listScript = (t: (k: string) => string, labels: string) => `
  * localStorage 에도 넣어 그 기기에서 다음 조회가 되게 한다.
  */
 const detailScript = (t: (k: string, p?: Record<string, string | number>) => string, labels: string) => `
+<script>var BANKS = ${JSON.stringify(BANK_OPTIONS.map((b) => ({ value: b.value, label: t(b.label) }))).replace(/</g, "\\u003c")};</script>
 <script>
 (function(){
   var root = document.getElementById('brick-order-detail');
@@ -442,6 +444,14 @@ const detailScript = (t: (k: string, p?: Record<string, string | number>) => str
           '<option value="">—</option></select>' +
           '<h4 id="brick-ret-detail-label">' + ${JSON.stringify(t("ret.reasonDetail"))} + '</h4>' +
           '<input name="detail" maxlength="500" aria-labelledby="brick-ret-detail-label" />' +
+          (v.needsRefundAccount
+            ? '<h4 id="brick-ret-acc-label">' + ${JSON.stringify(t("ret.refundAccount"))} + '</h4>' +
+              '<p class="brick-ret-note">' + ${JSON.stringify(t("ret.refundAccountNote"))} + '</p>' +
+              '<select name="refund_bank" aria-label="' + ${JSON.stringify(t("ret.refundBank"))} + '"><option value="">' + ${JSON.stringify(t("ret.refundBank"))} + '</option>' +
+              BANKS.map(function(b){ return '<option value="' + esc(b.value) + '">' + esc(b.label) + '</option>'; }).join('') + '</select>' +
+              '<input name="refund_account_no" inputmode="numeric" autocomplete="off" maxlength="30" placeholder="' + ${JSON.stringify(t("ret.refundAccountNo"))} + '" aria-label="' + ${JSON.stringify(t("ret.refundAccountNo"))} + '" />' +
+              '<input name="refund_holder" maxlength="30" autocomplete="name" placeholder="' + ${JSON.stringify(t("ret.refundHolder"))} + '" aria-label="' + ${JSON.stringify(t("ret.refundHolder"))} + '" />'
+            : '') +
           '<h4>' + ${JSON.stringify(t("ret.items"))} + '</h4>' +
           '<table><tbody>' + rows + '</tbody></table>' +
           '<p class="brick-ret-note" data-ret-payer></p>' +
@@ -497,7 +507,10 @@ const detailScript = (t: (k: string, p?: Record<string, string | number>) => str
           fetch('/api/plugins/brick-shop/orders/' + encodeURIComponent(orderNo) + '/returns' + q, {
             method: 'POST', headers: {'content-type':'application/json'},
             body: JSON.stringify({ kind: kindEl.value, reasonCode: sel.value,
-              reason: form.querySelector('input[name=detail]').value || undefined, items: items })
+              reason: form.querySelector('input[name=detail]').value || undefined, items: items,
+              refund_bank: form.refund_bank ? form.refund_bank.value : undefined,
+              refund_account_no: form.refund_account_no ? form.refund_account_no.value : undefined,
+              refund_holder: form.refund_holder ? form.refund_holder.value : undefined })
           }).then(function(r){ return r.json().then(function(d){ return {ok:r.ok, d:d}; }); })
             .then(function(res){
               btn.disabled = false;

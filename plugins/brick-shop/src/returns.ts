@@ -6,6 +6,7 @@ import { cancelReceiptsForOrder } from "./tax.js";
 import { ShopError } from "./types.js";
 import type { PointsPort } from "./orders.js";
 import { t, label, withJosa } from "./i18n.js";
+import { parseRefundAccount } from "./order-mail.js";
 
 /**
  * 주문 취소 · 반품 · 교환.
@@ -139,6 +140,11 @@ export async function getReturnable(
    * 승인됐는지 거절됐는지 환불이 얼마인지 알 길이 없어서 결국 전화한다.
    */
   requests: Array<Record<string, unknown>>;
+  /**
+   * 환불 받을 계좌를 적어야 하는가 — **가상계좌로 결제한 주문**. 그 돈은 손님 계좌로 보내야 돌려줄 수
+   * 있다(카드는 승인 취소라 필요 없다). 신청 화면이 이것을 보고 계좌 칸을 연다.
+   */
+  needsRefundAccount: boolean;
 }> {
   const { rows } = await db.execute(sql`
     SELECT id, order_no, user_id, guest_token, status, subtotal, discount, shipping_fee,
@@ -174,6 +180,10 @@ export async function getReturnable(
     ORDER BY product_name
   `);
 
+  const { rows: vaPaid } = await db.execute(sql`
+    SELECT 1 FROM shop_payments WHERE order_id = ${String(order.id)}::uuid
+      AND status IN ('paid', 'partial_refunded') AND va_account IS NOT NULL LIMIT 1
+  `);
   const status = String(order.status);
   const deliveredAt = order.delivered_at ? new Date(String(order.delivered_at)) : null;
   const deadline = deliveredAt
@@ -197,6 +207,7 @@ export async function getReturnable(
       };
     }),
     allowedKinds: allowedKinds(status, expired),
+    needsRefundAccount: vaPaid.length > 0,
     withdrawalDeadline: deadline ? deadline.toISOString() : null,
     withdrawalExpired: expired,
     requests: requested.map((r) => ({
@@ -257,6 +268,10 @@ export interface RequestInput {
   kind: string;
   reasonCode: string;
   reason?: string;
+  /** 환불 받을 계좌 — 가상계좌로 결제한 주문의 취소·반품에 필요하다 */
+  refund_bank?: string;
+  refund_account_no?: string;
+  refund_holder?: string;
   images?: string[];
   items: Array<{ orderItemId: string; quantity: number; exchangeOptionId?: string | null }>;
 }
@@ -296,6 +311,14 @@ export async function requestReturn(
     }));
   }
   assertReasonAllowed(reasonCode, view.withdrawalExpired);
+  /*
+   * 가상계좌로 결제한 주문의 취소·반품 — 환불 받을 계좌가 없으면 승인돼도 돌려줄 수 없다. 신청할 때
+   * 받는다(운영자가 전화로 다시 묻지 않게). 교환은 돈이 오가지 않으므로 필요 없다.
+   */
+  const refundAccount = parseRefundAccount(params.input ?? {});
+  if (view.needsRefundAccount && kind !== "exchange" && !refundAccount) {
+    throw new ShopError(400, "가상계좌로 결제한 주문은 환불 받을 계좌(은행·계좌번호·예금주)를 적어주세요.", "refund_account_no");
+  }
 
   const requested = Array.isArray(params.input?.items) ? params.input.items : [];
   if (!requested.length) throw new ShopError(400, "대상 상품을 선택해주세요.");
@@ -413,13 +436,16 @@ export async function requestReturn(
     await tx.execute(sql`
       INSERT INTO shop_returns
         (id, return_no, order_id, user_id, kind, reason_code, reason, images,
-         return_shipping_fee, shipping_payer, refund_amount)
+         return_shipping_fee, shipping_payer, refund_amount, refund_bank, refund_account, refund_holder)
       VALUES
         (${id}, ${returnNo}, ${String(order.id)}::uuid,
          ${order.user_id ? sql`${String(order.user_id)}::uuid` : sql`NULL`},
          ${kind}, ${reasonCode}, ${String(params.input?.reason ?? "").slice(0, 2000) || null},
          ${JSON.stringify(normalizeImages(params.input?.images))}::jsonb,
-         ${returnShippingFee}, ${payer}, ${refundAmount})
+         ${returnShippingFee}, ${payer}, ${refundAmount},
+         ${kind !== "exchange" ? refundAccount?.bank ?? null : null},
+         ${kind !== "exchange" ? refundAccount?.number ?? null : null},
+         ${kind !== "exchange" ? refundAccount?.holder ?? null : null})
     `);
 
     for (const l of refundPerLine) {
@@ -460,7 +486,10 @@ export async function updateReturnStatus(
     pickupTrackingNo?: string;
     exchangeTrackingNo?: string;
     /** 실제 환불을 수행하는 함수 (payments.refundPayment 를 주입한다) */
-    refund?: (orderNo: string, amount: number, reason: string) => Promise<void>;
+    refund?: (
+      orderNo: string, amount: number, reason: string,
+      refundAccount?: { bank: string; number: string; holder: string },
+    ) => Promise<void>;
     pointsPort?: PointsPort | null;
   },
 ): Promise<{
@@ -476,6 +505,7 @@ export async function updateReturnStatus(
   const { rows } = await db.execute(sql`
     SELECT r.id, r.return_no, r.status, r.kind, r.reason_code, r.refund_amount,
            r.return_shipping_fee, r.shipping_payer, r.order_id, r.user_id,
+           r.refund_bank, r.refund_account, r.refund_holder,
            o.order_no, o.status AS order_status, o.subtotal, o.shipping_fee, o.point_used
     FROM shop_returns r JOIN shop_orders o ON o.id = r.order_id
     WHERE r.id = ${params.returnId}::uuid LIMIT 1
@@ -629,8 +659,16 @@ export async function updateReturnStatus(
           String(ret.order_no),
           amount,
           `${KIND_LABEL[String(ret.kind) as ReturnKind]} (${String(ret.return_no)})`,
+          ret.refund_account
+            ? { bank: String(ret.refund_bank), number: String(ret.refund_account), holder: String(ret.refund_holder) }
+            : undefined,
         );
         refunded = amount;
+        // 돌려줬다 — 손님 계좌는 더 둘 이유가 없다
+        await db.execute(sql`
+          UPDATE shop_returns SET refund_bank = NULL, refund_account = NULL, refund_holder = NULL
+          WHERE id = ${params.returnId}::uuid
+        `);
       } catch (err) {
         // 실패를 삼키지 않는다 — 운영자가 알아야 수동으로 처리할 수 있다.
         // 상태는 이미 completed 이므로 재고는 돌아갔고, 환불만 남는다.

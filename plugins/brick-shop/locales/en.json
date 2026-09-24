@@ -1061,5 +1061,11 @@
   "경남은행": "Kyongnam Bank",
   "제주은행": "Jeju Bank",
   "산업은행": "KDB Korea Development Bank",
-  "—": "—"
+  "—": "—",
+  "ret.refundAccount": "Refund account",
+  "ret.refundAccountNote": "Orders paid by virtual account are refunded to this account. It is deleted once the refund is done.",
+  "ret.refundBank": "Choose bank",
+  "ret.refundAccountNo": "Account number",
+  "ret.refundHolder": "Account holder",
+  "가상계좌로 결제한 주문은 환불 받을 계좌(은행·계좌번호·예금주)를 적어주세요.": "For an order paid by virtual account, please enter a refund account (bank, account number, holder)."
 }

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { won, type Db, type OrderStatus } from "./types.js";
+import { ShopError, won, type Db, type OrderStatus } from "./types.js";
 import { localeTag, t } from "./i18n.js";
 import { SITE_TZ, fillTemplate, normalizePhone, type NotificationEvent } from "@brick/plugin-sdk";
 import { depositDeadline } from "./unpaid.js";
@@ -320,6 +320,22 @@ const BANK_NAMES: Record<string, string> = {
 /** 환불 계좌로 받을 수 있는 은행 코드 (관리 화면의 선택지와 같다) */
 export const BANK_CODES = Object.keys(BANK_NAMES);
 export const BANK_OPTIONS = Object.entries(BANK_NAMES).map(([value, label]) => ({ value, label }));
+/**
+ * 환불 받을 계좌 — 셋 다 비었으면 없음, 하나라도 있으면 셋 다 올바라야 한다(반쯤 적은 계좌로 PG 에
+ * 보내면 PG 의 말로 거절된다). 은행은 PG 의 은행 코드다. 운영자 폼과 손님의 반품 신청서가 같이 쓴다.
+ */
+export function parseRefundAccount(b: { refund_bank?: unknown; refund_account_no?: unknown; refund_holder?: unknown }):
+  { bank: string; number: string; holder: string } | null {
+  const bank = String(b.refund_bank ?? "").trim().toUpperCase();
+  const number = String(b.refund_account_no ?? "").replace(/[\s-]/g, "");
+  const holder = String(b.refund_holder ?? "").trim();
+  if (!bank && !number && !holder) return null;
+  if (!BANK_CODES.includes(bank)) throw new ShopError(400, "환불 받을 은행을 골라주세요.", "refund_bank");
+  if (!/^\d{6,20}$/.test(number)) throw new ShopError(400, "환불 받을 계좌번호는 숫자 6~20자리여야 합니다.", "refund_account_no");
+  if (!holder || holder.length > 30) throw new ShopError(400, "환불 받을 계좌의 예금주를 입력해주세요.", "refund_holder");
+  return { bank, number, holder };
+}
+
 export function virtualAccountText(bank: string, account: string, holder: string | null): string {
   // 은행 이름도 사이트 언어로 (원문이 번역 키다)
   const known = BANK_NAMES[bank.toUpperCase()];

@@ -373,6 +373,46 @@ for l in open('$POLOG', encoding='utf-8'):
     if m.get('kind')=='cancel' and m.get('paymentId')=='$O_VA-va1': hit=m
 print(json.dumps(hit.get('refundAccount') if hit else None, ensure_ascii=False))")" '{"bank": "SHINHAN", "number": "110123456789", "holderName": "손님"}'
 
+echo "── 손님이 취소 신청서에 환불 계좌를 적는다 (가상계좌 주문)"
+O_VR="$(mkorder 1)"
+issue_va "$O_VR-v1" 14000; confirm "$O_VR" "$O_VR-v1" >/dev/null; deposit "$O_VR-v1"; webhook "$O_VR-v1" >/dev/null
+check "입금되어 결제 완료" "$(psql_q "SELECT payment_status FROM shop_orders WHERE order_no='$O_VR'")" "paid"
+RETV="$(curl -s -b "$B" "$SHOP/orders/$O_VR/returnable")"
+contains "신청 화면이 계좌 칸을 연다" "$RETV" '"needsRefundAccount":true'
+VR_ITEM="$(echo "$RETV" | jq_get "['items'][0]['orderItemId']")"
+ret_req() {  # ret_req <추가 JSON 조각> → 본문+상태
+  curl -s -b "$B" -w ' %{http_code}' -X POST "$SHOP/orders/$O_VR/returns" -H 'content-type: application/json' \
+    -d "$(printf '{"kind":"cancel","reasonCode":"change_of_mind","items":[{"orderItemId":"%s","quantity":1}]%s}' "$VR_ITEM" "$1")"
+}
+R="$(ret_req "")"
+[[ "$R" == *" 400" && "$R" == *"환불 받을 계좌"* ]] && ok "계좌 없이 신청하면 무엇이 필요한지 말한다" || bad "계좌 없는 신청 (${R:0:160})"
+check "형식이 틀리면 거절" "$(ret_req ',"refund_bank":"SHINHAN","refund_account_no":"1","refund_holder":"손님"' | tail -c 3)" "400"
+check "계좌를 적어 신청한다" "$(ret_req ',"refund_bank":"KOOKMIN","refund_account_no":"123-45-6789012","refund_holder":"구매자"' | tail -c 3)" "200"
+RET_ID="$(psql_q "SELECT r.id FROM shop_returns r JOIN shop_orders o ON o.id=r.order_id WHERE o.order_no='$O_VR'")"
+check "신청서에 계좌가 남는다 (숫자만)" "$(psql_q "SELECT refund_bank, refund_account FROM shop_returns WHERE id='$RET_ID'")" "KOOKMIN|123456789012"
+curl -s -o /dev/null -b "$CK" -X PUT "$SHOP/admin/returns/$RET_ID" -H 'content-type: application/json' -d '{"status":"approved"}'
+check "운영자가 완료 처리" "$(code -b "$CK" -X PUT "$SHOP/admin/returns/$RET_ID" -H 'content-type: application/json' -d '{"status":"completed"}')" "200"
+contains "그 계좌로 포트원에 환불을 보냈다" "$(python3 -c "
+import json
+hit=None
+for l in open('$POLOG', encoding='utf-8'):
+    m=json.loads(l)
+    if m.get('kind')=='cancel' and m.get('paymentId')=='$O_VR-v1': hit=m
+print(json.dumps(hit.get('refundAccount') if hit else None, ensure_ascii=False))")" '"number": "123456789012"'
+check "환불됐다" "$(psql_q "SELECT status FROM shop_payments WHERE provider_tid='$O_VR-v1'")" "refunded"
+check "돌려준 뒤 계좌는 지운다" "$(psql_q "SELECT coalesce(refund_account, '(없음)') FROM shop_returns WHERE id='$RET_ID'")" "(없음)"
+O_CARDRET="$(mkorder 1)"; paid_by_customer "$O_CARDRET-ok" 14000; confirm "$O_CARDRET" "$O_CARDRET-ok" >/dev/null
+contains "카드 주문에는 계좌 칸을 열지 않는다" "$(curl -s -b "$B" "$SHOP/orders/$O_CARDRET/returnable")" '"needsRefundAccount":false'
+
+echo "── 환불 전에 탈퇴하면 신청서의 계좌도 지운다"
+O_WD="$(mkorder 1)"
+issue_va "$O_WD-w1" 14000; confirm "$O_WD" "$O_WD-w1" >/dev/null; deposit "$O_WD-w1"; webhook "$O_WD-w1" >/dev/null
+WD_ITEM="$(curl -s -b "$B" "$SHOP/orders/$O_WD/returnable" | jq_get "['items'][0]['orderItemId']")"
+WD_REQ="$(printf '{"kind":"cancel","reasonCode":"change_of_mind","items":[{"orderItemId":"%s","quantity":1}],"refund_bank":"WOORI","refund_account_no":"1002123456789","refund_holder":"구매자"}' "$WD_ITEM")"
+check "계좌를 적어 신청 (아직 처리 전)" "$(code -b "$B" -X POST "$SHOP/orders/$O_WD/returns" -H 'content-type: application/json' -d "$WD_REQ")" "200"
+contains "탈퇴" "$(curl -s -b "$B" -X POST "$API/api/me/withdraw" -H 'content-type: application/json' -d '{"password":"password123","deletePosts":false}')" '"ok":true'
+check "신청서의 계좌가 남지 않는다" "$(psql_q "SELECT coalesce(r.refund_account, '(없음)') FROM shop_returns r JOIN shop_orders o ON o.id=r.order_id WHERE o.order_no='$O_WD'")" "(없음)"
+
 echo "── 시크릿이 새지 않는다"
 absent "서버 로그에 시크릿이 없다" "$(cat "$TMP/api.log")" "SECRET_VALUE_DO_NOT_LEAK"
 absent "결제 기록(raw)에 시크릿이 없다" "$(psql_q "SELECT raw::text FROM shop_payments")" "SECRET_VALUE_DO_NOT_LEAK"

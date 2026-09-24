@@ -16,7 +16,7 @@ import { CASH_RECEIPT_RESOURCE, CATEGORY_RESOURCE, COLLECTION_RESOURCE, GRADE_RE
          TAX_INVOICE_RESOURCE } from "./admin-resources.js";
 import { registerStorefrontBlocks } from "./blocks.js";
 import { importProducts } from "./import.js";
-import { BANK_CODES, ORDER_EVENTS, sendOrderMail, virtualAccountText } from "./order-mail.js";
+import { ORDER_EVENTS, parseRefundAccount, sendOrderMail, virtualAccountText } from "./order-mail.js";
 import {
   createInquiry, createReview, deleteInquiry, deleteReview, findPurchase,
   listInquiries, listReviews, replyToInquiry, replyToReview, REVIEW_SORTS, setReviewVisible, updateReview,
@@ -716,20 +716,6 @@ export default definePlugin(async (ctx) => {
     });
   });
 
-  /**
-   * 환불 받을 계좌 — 셋 다 비었으면 없음, 하나라도 있으면 셋 다 올바라야 한다(반쯤 적은 계좌로
-   * PG 에 보내면 PG 의 말로 거절된다). 은행은 PG 의 은행 코드다.
-   */
-  function parseRefundAccount(b: { refund_bank?: string; refund_account_no?: string; refund_holder?: string }) {
-    const bank = String(b.refund_bank ?? "").trim().toUpperCase();
-    const number = String(b.refund_account_no ?? "").replace(/[\s-]/g, "");
-    const holder = String(b.refund_holder ?? "").trim();
-    if (!bank && !number && !holder) return null;
-    if (!BANK_CODES.includes(bank)) throw new ShopError(400, "환불 받을 은행을 골라주세요.", "refund_bank");
-    if (!/^\d{6,20}$/.test(number)) throw new ShopError(400, "환불 받을 계좌번호는 숫자 6~20자리여야 합니다.", "refund_account_no");
-    if (!holder || holder.length > 30) throw new ShopError(400, "환불 받을 계좌의 예금주를 입력해주세요.", "refund_holder");
-    return { bank, number, holder };
-  }
 
   /** 주문의 결제 내역 (관리자) */
   ctx.registerRoute("GET", "/admin/payments/:orderNo", async (req) => {
@@ -2649,6 +2635,8 @@ export default definePlugin(async (ctx) => {
       orderStatus: view.order.status,
       // 이미 낸 요청 — 신청하고 나면 손님이 볼 수 있는 것이 없었다
       requests: view.requests,
+      // 가상계좌로 결제한 주문 — 신청서가 환불 받을 계좌 칸을 연다
+      needsRefundAccount: view.needsRefundAccount,
     };
   });
 
@@ -2707,9 +2695,10 @@ export default definePlugin(async (ctx) => {
       pickupTrackingNo: b.pickup_tracking_no === undefined ? undefined : String(b.pickup_tracking_no),
       exchangeTrackingNo: b.exchange_tracking_no === undefined ? undefined : String(b.exchange_tracking_no),
       // 실제 환불은 결제 모듈이 한다 — 금액 검증과 PG 호출이 거기 있다
-      refund: async (orderNo, amount, reason) => {
+      refund: async (orderNo, amount, reason, refundAccount) => {
         await refundPayment(db, {
           orderNo, amount, reason, actorId: req.user!.id, pointsPort: pointsPort(),
+          ...(refundAccount ? { refundAccount } : {}),
         });
       },
       pointsPort: pointsPort(),
@@ -2901,6 +2890,13 @@ export default definePlugin(async (ctx) => {
         DELETE FROM shop_carts WHERE user_id = ${userId}::uuid RETURNING id
       `);
       if (carts.length) done.push("장바구니 삭제");
+
+      // 반품 신청서에 남은 환불 계좌 — 환불 전에 떠났어도 금융 정보는 남기지 않는다
+      const { rows: accounts } = await tx.execute(sql`
+        UPDATE shop_returns SET refund_bank = NULL, refund_account = NULL, refund_holder = NULL
+        WHERE user_id = ${userId}::uuid AND refund_account IS NOT NULL RETURNING id
+      `);
+      if (accounts.length) done.push(`반품 신청의 환불 계좌 ${accounts.length}건 삭제`);
 
       // 주문: 행은 남기고 회원 연결만 해제
       const { rows: orders } = await tx.execute(sql`
