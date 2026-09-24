@@ -540,6 +540,67 @@ check "같은 결제 ID 로 다시 보냈다" "$(po_last billing-charge paymentI
 check "그 주문이 결제 완료 · 5회차로 전진" "$(psql_q "SELECT status FROM shop_orders WHERE order_no='$O_P'")|$(sub_state)" "paid|5|0|active"
 check "그 회차의 결제 기록은 하나" "$(psql_q "SELECT count(*) FROM shop_payments WHERE provider_tid='$PID_P' AND status='paid'")" "1"
 
+echo "── 정기결제 — 청구 응답보다 결제 완료 웹훅이 먼저 왔다"
+# 포트원은 웹훅과 API 응답의 순서를 보장하지 않는다 — 스텁이 청구 도중(응답 전)에 웹훅을 보낸다
+webhook_mid() {
+  local body; body="$(printf '{"url":"%s/webhook"}' "$PO")"
+  curl -s -o /dev/null -X POST "http://127.0.0.1:$PO_PORT/__control/webhook-during-charge" -H 'content-type: application/json' -d "$body"
+}
+webhook_mid; due
+SW="$(sweep)"
+PID_W="$(po_last billing-charge paymentId)"; O_W="${PID_W%-*}"
+check "웹훅이 실제로 청구 도중에 왔다" "$(po_last webhook-sent paymentId)" "$PID_W"
+contains "웹훅이 먼저 확정해도 이 회차는 청구 성공이다" "$SW" '"charged":1'
+contains "실패로 세지 않는다" "$SW" '"failed":0'
+check "6회차로 전진" "$(sub_state)" "6|0|active"
+check "주문은 결제 완료" "$(psql_q "SELECT status FROM shop_orders WHERE order_no='$O_W'")" "paid"
+check "한 거래를 두 번 적지 않고 끝나지 않은 기록도 남기지 않는다" \
+  "$(psql_q "SELECT string_agg(p.status, ',') FROM shop_payments p JOIN shop_orders o ON o.id=p.order_id WHERE o.order_no='$O_W'")" "paid"
+
+echo "── 정기결제 — 가입 첫 결제에서도 웹훅이 먼저 왔다"
+webhook_mid
+SUB2="$(curl -s -b "$B" -X POST "$SHOP/subscriptions" -H 'content-type: application/json' -d "$SUB_BODY")"
+SUB2_ID="$(echo "$SUB2" | jq_get "['id']")"; SUB2_O="$(echo "$SUB2" | jq_get "['orderNo']")"
+[[ -n "$SUB2_ID" ]] && ok "가입은 성공한다" || bad "웹훅이 먼저 온 가입 (${SUB2:0:200})"
+check "첫 회차 결제 완료 · 다음 결제일이 잡혔다" \
+  "$(psql_q "SELECT o.status, (s.next_charge_at IS NOT NULL) AS dated FROM shop_subscriptions s, shop_orders o WHERE s.id='$SUB2_ID' AND o.order_no='$SUB2_O'")" "paid|true"
+check "결제 기록은 하나" \
+  "$(psql_q "SELECT string_agg(p.status, ',') FROM shop_payments p JOIN shop_orders o ON o.id=p.order_id WHERE o.order_no='$SUB2_O'")" "paid"
+
+echo "── 정기결제 — 가입 첫 결제의 결과를 모르면 스윕이 이어서 끝낸다"
+stub_ctl lose-charge 1; stub_ctl fail-get 1
+R="$(curl -s -b "$B" -w ' %{http_code}' -X POST "$SHOP/subscriptions" -H 'content-type: application/json' -d "$SUB_BODY")"
+[[ "$R" == *" 409" && "$R" == *"처리 중"* ]] && ok "가입 응답은 '처리 중' (카드는 긁혔을 수 있다)" || bad "처리 중 가입 (${R:0:160})"
+PID_3="$(po_last billing-charge paymentId)"; O_3="${PID_3%-*}"
+SUB3_ID="$(psql_q "SELECT s.id FROM shop_subscriptions s JOIN shop_orders o ON o.idempotency_key = 'sub-' || s.id || '-c1' WHERE o.order_no='$O_3'")"
+check "구독은 첫 결제 확인 전 (다음 결제일 없음)" "$(psql_q "SELECT status, (next_charge_at IS NULL) AS undated FROM shop_subscriptions WHERE id='$SUB3_ID'")" "active|true"
+check "주문은 건드리지 않는다" "$(psql_q "SELECT status FROM shop_orders WHERE order_no='$O_3'")" "pending"
+sweep >/dev/null
+check "막 가입한 것은 바로 집지 않는다 (가입 요청이 아직 돌고 있을 수 있다)" "$(psql_q "SELECT (next_charge_at IS NULL) AS undated FROM shop_subscriptions WHERE id='$SUB3_ID'")" "true"
+psql_q "UPDATE shop_subscriptions SET created_at = now() - interval '10 minutes' WHERE id='$SUB3_ID'" >/dev/null
+sweep >/dev/null
+check "스윕이 첫 결제를 확인해 구독을 연다" "$(psql_q "SELECT status, (next_charge_at IS NOT NULL) AS dated, cycle_no FROM shop_subscriptions WHERE id='$SUB3_ID'")" "active|true|1"
+check "첫 회차 주문 결제 완료" "$(psql_q "SELECT status FROM shop_orders WHERE order_no='$O_3'")" "paid"
+check "첫 회차 이력" "$(psql_q "SELECT count(*) FROM shop_subscription_events WHERE subscription_id='$SUB3_ID' AND kind='charged' AND cycle_no=1")" "1"
+check "같은 결제 ID 로 다시 물었다 (새로 긁지 않았다)" "$(po_last billing-charge paymentId)" "$PID_3"
+check "결제 기록은 하나" \
+  "$(psql_q "SELECT string_agg(p.status, ',') FROM shop_payments p JOIN shop_orders o ON o.id=p.order_id WHERE o.order_no='$O_3'")" "paid"
+
+echo "── 정기결제 — 가입 첫 결제가 끊겼고 다시 해 봐도 거절되면 가입하지 않은 것으로"
+stub_ctl drop-charge 1
+R="$(curl -s -b "$B" -w ' %{http_code}' -X POST "$SHOP/subscriptions" -H 'content-type: application/json' -d "$SUB_BODY")"
+[[ "$R" == *" 409" ]] && ok "끊긴 첫 결제 — '처리 중'" || bad "끊긴 첫 결제 (${R:0:160})"
+PID_4="$(po_last billing-charge paymentId)"; O_4="${PID_4%-*}"
+SUB4_ID="$(psql_q "SELECT s.id FROM shop_subscriptions s JOIN shop_orders o ON o.idempotency_key = 'sub-' || s.id || '-c1' WHERE o.order_no='$O_4'")"
+psql_q "UPDATE shop_subscriptions SET created_at = now() - interval '10 minutes' WHERE id='$SUB4_ID'" >/dev/null
+STOCK_BEFORE="$(psql_q "SELECT stock FROM shop_products WHERE slug='po-sub'")"
+stub_ctl fail-charge 1
+sweep >/dev/null
+check "구독은 해지 (가입하지 않은 것으로)" "$(psql_q "SELECT status, (next_charge_at IS NULL) AS undated FROM shop_subscriptions WHERE id='$SUB4_ID'")" "cancelled|true"
+contains "손님이 읽는 이유가 남는다 (내 정기배송)" "$(psql_q "SELECT coalesce(pause_reason, '') FROM shop_subscriptions WHERE id='$SUB4_ID'")" "한도"
+check "첫 회차 주문은 취소되고 재고가 돌아온다" \
+  "$(psql_q "SELECT status FROM shop_orders WHERE order_no='$O_4'")|$(psql_q "SELECT stock - $STOCK_BEFORE FROM shop_products WHERE slug='po-sub'")" "cancelled|1"
+
 echo "── 환불 전에 탈퇴하면 신청서의 계좌도 지운다"
 O_WD="$(mkorder 1)"
 issue_va "$O_WD-w1" 14000; confirm "$O_WD" "$O_WD-w1" >/dev/null; deposit "$O_WD-w1"; webhook "$O_WD-w1" >/dev/null

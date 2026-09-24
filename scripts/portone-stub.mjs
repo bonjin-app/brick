@@ -41,6 +41,14 @@ const billingKeys = new Map();
 let failCharges = 0;
 /** 다음 n 번의 빌링키 청구는 **결제는 하고** 응답만 500 으로 잃는다 (`/__control/lose-charge`) */
 let loseCharges = 0;
+/**
+ * 다음 빌링키 청구는 결제한 뒤 **응답하기 전에** 결제 완료 웹훅을 이 주소로 보내고, 그 처리가 끝난 뒤에야
+ * 응답한다 (`/__control/webhook-during-charge`). 실제 포트원은 웹훅과 API 응답의 순서를 보장하지 않는다 —
+ * 웹훅이 먼저 도착하는 경우를 그대로 만든다.
+ */
+let webhookDuringCharge = "";
+/** 다음 n 번의 빌링키 청구는 **결제 전에** 끊긴다 — 응답도 없고 결제도 없다 (`/__control/drop-charge`) */
+let dropCharges = 0;
 
 const record = (entry) => appendFileSync(OUT, `${JSON.stringify(entry)}\n`);
 const send = (res, status, body) => {
@@ -100,6 +108,14 @@ const server = createServer((req, res) => {
     if (req.method === "POST" && path === "/__control/fail-charge") {
       failCharges = Number(body.n ?? 0) || 0;
       return send(res, 200, { ok: true, failCharges });
+    }
+    if (req.method === "POST" && path === "/__control/drop-charge") {
+      dropCharges = Number(body.n ?? 0) || 0;
+      return send(res, 200, { ok: true, dropCharges });
+    }
+    if (req.method === "POST" && path === "/__control/webhook-during-charge") {
+      webhookDuringCharge = String(body.url ?? "");
+      return send(res, 200, { ok: true });
     }
     if (req.method === "POST" && path === "/__control/lose-charge") {
       loseCharges = Number(body.n ?? 0) || 0;
@@ -162,6 +178,10 @@ const server = createServer((req, res) => {
       if (!k || k.status !== "ISSUED") return send(res, 404, { type: "BILLING_KEY_NOT_FOUND", message: "빌링키 정보를 찾을 수 없습니다." });
       const prev = payments.get(id);
       if (prev && prev.status === "PAID") return send(res, 409, { type: "ALREADY_PAID", message: "이미 결제가 완료된 결제 건입니다." });
+      if (dropCharges > 0) {
+        dropCharges -= 1;
+        return send(res, 504, { type: "INTERNAL", message: "게이트웨이 시간 초과" });
+      }
       if (failCharges > 0) {
         failCharges -= 1;
         payments.set(id, { id, storeId: k.storeId, status: "FAILED", currency: "KRW", method: { type: "PaymentMethodCard" },
@@ -179,7 +199,18 @@ const server = createServer((req, res) => {
         loseCharges -= 1;
         return send(res, 502, { type: "INTERNAL", message: "게이트웨이 응답을 받지 못했습니다." });
       }
-      return send(res, 200, { payment: { pgTxId: p.transactionId, paidAt: p.paidAt } });
+      const reply = () => send(res, 200, { payment: { pgTxId: p.transactionId, paidAt: p.paidAt } });
+      if (webhookDuringCharge) {
+        const url = webhookDuringCharge;
+        webhookDuringCharge = "";
+        record({ kind: "webhook-sent", paymentId: id });
+        fetch(url, {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ type: "Transaction.Paid", timestamp: "2026-09-24T00:00:00Z", data: { paymentId: id, storeId: k.storeId } }),
+        }).then((r) => r.text()).catch(() => undefined).finally(reply);
+        return;
+      }
+      return reply();
     }
 
     const getMatch = /^\/payments\/([^/]+)$/.exec(path);

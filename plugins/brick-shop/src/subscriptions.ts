@@ -16,6 +16,7 @@
  */
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
+import { isUniqueViolation } from "@brick/plugin-sdk";
 import type { Db, ShopSettings } from "./types.js";
 import { ShopError } from "./types.js";
 import { createOrder, changeOrderStatus, type OrdererInput, type PointsPort } from "./orders.js";
@@ -267,12 +268,30 @@ async function chargeOrder(
     return { ok: false, reason: mismatch, customerReason: mismatch };
   }
 
-  await db.execute(sql`
-    UPDATE shop_payments SET status = 'paid', provider_tid = ${result.providerTid},
-      method = ${result.method ?? "카드"},
-      raw = ${JSON.stringify(result.raw ?? null)}::jsonb, approved_at = now(), updated_at = now()
-    WHERE id = ${paymentId}
-  `);
+  try {
+    await db.execute(sql`
+      UPDATE shop_payments SET status = 'paid', provider_tid = ${result.providerTid},
+        method = ${result.method ?? "카드"},
+        raw = ${JSON.stringify(result.raw ?? null)}::jsonb, approved_at = now(), updated_at = now()
+      WHERE id = ${paymentId}
+    `);
+  } catch (err) {
+    if (!isUniqueViolation(err, "shop_payments_tid_uniq")) throw err;
+    /*
+     * **같은 PG 거래를 결제 완료 통지(웹훅)가 먼저 기록했다.** PG 는 웹훅과 API 응답의 순서를 보장하지 않는다 —
+     * 청구 응답을 기다리는 사이 웹훅이 와서 이 주문을 결제 완료로 만들 수 있다. 여기서 던지면 회차는 "실패" 로
+     * 세어지고 끝나지 않은 시도 기록이 남았고, **가입 첫 결제에서는 카드가 긁혔는데 손님이 500 을 받았다**
+     * (다시 누르면 두 번째 청구다). 거래는 하나다 — 이 시도의 기록을 치우고 먼저 적힌 쪽을 따른다.
+     */
+    await db.execute(sql`DELETE FROM shop_payments WHERE id = ${paymentId}`);
+    const { rows: first } = await db.execute(sql`
+      SELECT status FROM shop_payments
+      WHERE provider = ${params.gateway.provider} AND provider_tid = ${result.providerTid}
+    `);
+    // 통지 쪽이 아직 확정 중이면 그쪽이 끝낸다 — 처리 중으로 물러난다(주문도 실패 기록도 건드리지 않는다)
+    if (first[0]?.status === "paid") return { ok: true };
+    return { ok: false, pending: true };
+  }
   await db.execute(sql`
     UPDATE shop_orders SET payment_method = ${params.gateway.provider}, updated_at = now()
     WHERE id = ${params.orderId}::uuid
@@ -447,8 +466,9 @@ export async function subscribe(
   });
 
   if (!charged.ok && charged.pending) {
-    // 같은 가입 요청이 이미 청구 중이다(가입마다 새 키라 사실상 재전송뿐이다).
-    // 실패로 처리해 주문을 취소하면 먼저 간 청구가 승인된 뒤 갈 곳이 없다 — 물러난다.
+    // 청구 결과를 아직 모른다(같은 요청이 청구 중이거나, PG 응답을 잃었다). 실패로 처리해 주문을 취소하면
+    // 긁힌 돈이 갈 곳이 없다 — 물러난다. 구독은 다음 결제일 없이 남고, 스윕이 몇 분 뒤 이어서 끝낸다
+    // (settleFirstCharges — 같은 회차 키로 다시 물어 결제됐으면 구독을 열고, 거절되면 가입을 거둔다).
     throw new ShopError(409, "결제가 처리 중입니다. 잠시 뒤 내 정기배송에서 확인하세요.");
   }
   if (!charged.ok) {
@@ -530,6 +550,11 @@ export async function chargeDueSubscriptions(
   `);
 
   let charged = 0; let failed = 0; let paused = 0;
+
+  // 첫 결제를 확인하지 못한 가입부터 끝낸다 — 결제일 청구와 따로 센다
+  await settleFirstCharges(db, deps).catch((err: unknown) => {
+    deps.log(`정기결제 첫 결제 확인 오류: ${err instanceof Error ? err.message : String(err)}`);
+  });
 
   for (const sub of due) {
     const subId = String(sub.id);
@@ -674,6 +699,105 @@ export async function chargeDueSubscriptions(
   }
 
   return { due: due.length, charged, failed, paused };
+}
+
+/** 가입 요청이 아직 돌고 있을 수 있는 동안은 건드리지 않는다 */
+const FIRST_CHARGE_GRACE = "5 minutes";
+
+/**
+ * 첫 결제를 확인하지 못한 가입을 끝낸다.
+ *
+ * 가입의 첫 청구가 "처리 중" 으로 끝나면(PG 응답을 잃고 조회도 안 됐다) 구독은 다음 결제일 없이 남는다. 결제일
+ * 청구는 결제일이 있는 구독만 집으므로, **그런 구독은 아무도 끝내지 않았다** — 카드는 긁혔을 수 있는데 구독은
+ * 열리지 않고, 손님은 "잠시 뒤 확인하세요" 를 들은 채 기다린다.
+ *
+ * 같은 회차 키로 다시 청구한다 — PG 는 같은 키(포트원은 같은 결제 ID)의 두 번째 청구를 새로 긁지 않고 먼저 간
+ * 결과를 돌려준다. 결제됐으면 구독을 열고, 거절되면 가입을 거둔다(주문 취소·재고 복원, 구독은 해지로 남겨
+ * 손님이 이유를 본다). 아직도 모르면 다음 스윕에 다시 본다.
+ */
+async function settleFirstCharges(
+  db: Db,
+  deps: { pointsPort?: PointsPort | null; log: (message: string) => void },
+): Promise<void> {
+  const { rows } = await db.execute(sql`
+    SELECT s.id, s.product_name, s.interval_unit,
+           k.provider, k.billing_key, k.customer_key, k.revoked_at,
+           o.id AS order_id, o.order_no, o.total, o.status AS order_status, o.payment_status
+    FROM shop_subscriptions s
+    JOIN shop_billing_keys k ON k.id = s.billing_key_id
+    LEFT JOIN shop_orders o ON o.idempotency_key = 'sub-' || s.id::text || '-c1'
+    WHERE s.status = 'active' AND s.next_charge_at IS NULL AND s.cycle_no = 1
+      AND s.created_at < now() - ${sql.raw(`interval '${FIRST_CHARGE_GRACE}'`)}
+    ORDER BY s.created_at
+    LIMIT 20
+  `);
+  for (const s of rows) {
+    const subId = String(s.id);
+    try {
+      /** 가입을 거둔다 — 구독은 지우지 않고 해지로 남긴다(손님이 내 정기배송에서 이유를 본다) */
+      const drop = async (reason: string, customerReason: string) => {
+        if (s.order_id) await abandonCycleOrder(db, String(s.order_id), `정기결제 가입 실패: ${reason}`);
+        const { rows: gone } = await db.execute(sql`
+          UPDATE shop_subscriptions SET status = 'cancelled', cancelled_at = now(), pause_reason = ${customerReason}
+          WHERE id = ${subId}::uuid AND status = 'active' AND next_charge_at IS NULL RETURNING id
+        `);
+        if (gone.length) {
+          await db.execute(sql`
+            INSERT INTO shop_subscription_events (id, subscription_id, cycle_no, kind, detail)
+            VALUES (${uuidv7()}, ${subId}::uuid, 1, 'cancelled', ${`첫 결제 실패: ${customerReason}`})
+          `);
+        }
+        deps.log(`정기결제 가입 ${subId}: 첫 결제를 확인하지 못해 거둡니다 (${reason})`);
+      };
+
+      // 첫 회차 주문이 없거나 이미 취소됐다(운영자가 취소했다 등) — 열 구독이 아니다
+      if (!s.order_id || s.order_status === "cancelled") {
+        await drop("첫 회차 주문 없음", t("pay.failed"));
+        continue;
+      }
+      if (s.payment_status !== "paid") {
+        const gateway = billingGateway(String(s.provider));
+        // 결제수단이 꺼져 있다 — 물어볼 곳이 없다. 판단하지 않고 다음에 다시 본다(켜지면 끝난다)
+        if (!gateway) continue;
+        if (s.revoked_at || !String(s.billing_key ?? "")) {
+          // 카드를 지웠다 — 긁혔는지 모르는 채로 새로 긁을 수 없다. 같은 키로 묻기만 하는 길이 없으니 사람이 본다
+          deps.log(`정기결제 가입 ${subId}: 첫 결제 확인 전에 카드가 삭제됐습니다 — 주문 ${String(s.order_no)} 을 PG 에서 확인하세요`);
+          continue;
+        }
+        const result = await chargeOrder(db, {
+          gateway,
+          billingKey: String(s.billing_key),
+          customerKey: String(s.customer_key),
+          orderId: String(s.order_id),
+          orderNo: String(s.order_no),
+          amount: Number(s.total),
+          orderName: `${String(s.product_name)} 정기배송 1회차`,
+          idempotencyKey: `sub-${subId}-c1`,
+          pointsPort: deps.pointsPort ?? null,
+        });
+        if (!result.ok && result.pending) continue;
+        if (!result.ok) {
+          await drop(result.reason, result.customerReason);
+          continue;
+        }
+      }
+      const step = sql.raw(String(s.interval_unit) === "week" ? "interval '7 days'" : "interval '1 month'");
+      const { rows: opened } = await db.execute(sql`
+        UPDATE shop_subscriptions SET next_charge_at = now() + ${step}
+        WHERE id = ${subId}::uuid AND status = 'active' AND next_charge_at IS NULL RETURNING id
+      `);
+      if (opened.length) {
+        await db.execute(sql`
+          INSERT INTO shop_subscription_events (id, subscription_id, cycle_no, kind, order_no, detail)
+          VALUES (${uuidv7()}, ${subId}::uuid, 1, 'charged', ${String(s.order_no)},
+                  ${`가입 · ${Number(s.total).toLocaleString("ko-KR")}원 (결제 확인 뒤)`})
+          ON CONFLICT DO NOTHING
+        `);
+      }
+    } catch (err) {
+      deps.log(`정기결제 가입 ${subId} 첫 결제 확인 오류: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
 }
 
 /** 실패 기록 — 하루 뒤 재시도, MAX_FAILS 연속이면 멈추고 알린다 */
