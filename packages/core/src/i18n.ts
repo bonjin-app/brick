@@ -453,6 +453,12 @@ const CORE_ERROR_EN: MessageCatalog = {
   "회원 테이블을 찾지 못했습니다.": "The member table was not found.",
   "회원가입이 닫혀 있습니다.": "Registration is closed.",
   "회원을 찾을 수 없습니다.": "Member not found.",
+  "알림 종류를 찾을 수 없습니다.": "Notification type not found.",
+  "이 알림은 문구를 고칠 수 없습니다.": "The text of this notification cannot be edited.",
+  "제목은 한 줄로 써주세요.": "Please write the subject on one line.",
+  "제목은 200자까지 쓸 수 있습니다.": "The subject can be up to 200 characters.",
+  "본문은 5,000자까지 쓸 수 있습니다.": "The body can be up to 5,000 characters.",
+  "문자 문구는 2,000자까지 쓸 수 있습니다.": "The SMS text can be up to 2,000 characters.",
   "인증 요청을 찾을 수 없습니다.": "The verification request was not found.",
   "이미 끝난 인증 요청입니다. 처음부터 다시 인증해주세요.": "This verification request has already finished. Please start the verification again.",
   "인증 시간이 지났습니다. 처음부터 다시 인증해주세요.": "The verification timed out. Please start the verification again.",
@@ -570,6 +576,7 @@ export const CORE_LABEL_SOURCES = Object.keys(CORE_LABEL_EN);
  */
 const CORE_TEMPLATE_KO: MessageCatalog = {
   "err.tooManyAttemptsSec": "너무 많이 시도했습니다. {seconds}초 후 다시 시도해주세요.",
+  "err.unknownTemplateVars": "이 알림이 채울 수 없는 변수가 있습니다: {unknown}. 쓸 수 있는 변수: {known}",
   "err.tooManyLogins": "로그인 시도가 너무 많습니다. {minutes}분 후 다시 시도하세요.",
   "err.tooManySignups": "{label} 가입 시도가 너무 많습니다. {minutes}분 후 다시 시도하세요.",
   "err.mustStartWithHttp": "{label}은 http(s):// 로 시작해야 합니다.",
@@ -623,6 +630,7 @@ const CORE_TEMPLATE_KO: MessageCatalog = {
 };
 const CORE_TEMPLATE_EN: MessageCatalog = {
   "err.tooManyAttemptsSec": "Too many attempts. Please try again in {seconds} seconds.",
+  "err.unknownTemplateVars": "The text uses variables this notification cannot fill: {unknown}. Available variables: {known}",
   "err.tooManyLogins": "Too many sign-in attempts. Please try again in {minutes} minutes.",
   "err.tooManySignups": "Too many {label} sign-up attempts. Please try again in {minutes} minutes.",
   "err.mustStartWithHttp": "{label} must start with http(s)://.",

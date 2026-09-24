@@ -31,6 +31,8 @@ export { isValidBusinessNo, formatBusinessNo } from "@brick/core";
 export { normalizePhone, maskPhone } from "@brick/core";
 // 청소년보호법의 성인 기준(연 나이) — 코어와 플러그인이 같은 규칙을 쓴다
 export { isAdultByBirthYear } from "@brick/core";
+// 알림 문구 채우기 — 기본 문구와 운영자가 고친 문구가 같은 규칙으로 채워져야 한다
+export { fillTemplate, templateVarNames } from "@brick/core";
 // 조사(을/를·이/가) — 이름이 값에서 오므로 화면마다 "을(를)"을 적어 두게 된다
 export { josa, hasJongseong } from "@brick/core";
 // 권한 등급 — 권한 비교를 베끼면 한쪽만 고쳐지고 그것이 권한 구멍이 된다

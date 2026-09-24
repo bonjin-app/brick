@@ -4,7 +4,7 @@ import { uuidv7 } from "uuidv7";
 import type { BrickDb } from "@brick/database";
 import { notifications, users } from "@brick/database";
 import type { MailProvider } from "@brick/core";
-import { normalizePhone } from "@brick/core";
+import { fillTemplate, normalizePhone } from "@brick/core";
 import type { SmsProvider } from "@brick/core";
 import { DB, MAIL } from "../../runtime.module.js";
 
@@ -102,9 +102,26 @@ export class NotificationsService {
    * 알림이 실패했다고 그 일이 실패해서는 안 된다(메일이 그랬듯이).
    */
   async notify(input: NotifyInput): Promise<void> {
-    const title = input.title.trim().slice(0, 300);
+    let title = input.title.trim().slice(0, 300);
+    let body = (input.body ?? "").trim();
+    /** 운영자가 따로 쓴 문자 문구 (없으면 제목 + 본문) */
+    let smsText: string | null = null;
+    /*
+     * 운영자가 고친 문구가 있으면 그것으로 보낸다 — 알림함·메일·문자 모두.
+     *
+     * 보내는 쪽(플러그인)은 늘 기본 문구와 변수를 함께 넘긴다. 문구를 코드에서 고치던 시절에는
+     * "입금 확인 후 1~2일 안에 발송됩니다" 한 줄을 더하려고 개발자를 불렀다.
+     */
+    if (input.event) {
+      const tpl = await this.templateFor(input.event);
+      if (tpl) {
+        const vars = input.vars ?? {};
+        title = fillTemplate(tpl.subject, vars).replace(/\s+/g, " ").slice(0, 300) || title;
+        body = fillTemplate(tpl.body, vars);
+        smsText = tpl.sms?.trim() ? fillTemplate(tpl.sms, vars) : null;
+      }
+    }
     if (!title) return;
-    const body = (input.body ?? "").trim();
     const url = (input.url ?? "").trim().slice(0, 1000);
 
     if (input.userId) {
@@ -131,7 +148,7 @@ export class NotificationsService {
       if (gateway?.enabled && phone) {
         await gateway
           .send({
-            to: phone, title, text: body ? `${title}\n\n${body}` : title,
+            to: phone, title, text: smsText ?? (body ? `${title}\n\n${body}` : title),
             // 알림톡처럼 승인된 템플릿으로만 보내는 통로가 이것으로 템플릿을 찾아 채운다
             ...(input.event ? { event: input.event, vars: input.vars ?? {} } : {}),
           })
@@ -145,6 +162,44 @@ export class NotificationsService {
     await this.mail
       .send({ to, subject: title, text: body ? `${body}\n\n${url}`.trim() : url })
       .catch(() => false);
+  }
+
+  /** 운영자가 고친 알림 문구 — 없으면 null (기본 문구로 나간다). 읽기 실패도 기본 문구로 */
+  async templateFor(event: string): Promise<{ subject: string; body: string; sms: string | null; updatedAt: Date } | null> {
+    try {
+      const { rows } = (await this.db.execute(sql`
+        SELECT subject, body, sms, updated_at FROM notification_templates WHERE event = ${event}
+      `)) as unknown as { rows: Array<{ subject: string; body: string; sms: string | null; updated_at: string | Date }> };
+      const r = rows[0];
+      return r ? { subject: r.subject, body: r.body, sms: r.sms, updatedAt: new Date(r.updated_at) } : null;
+    } catch (e) {
+      this.logger.warn(`알림 문구를 읽지 못해 기본 문구로 보냅니다 (${event}): ${e instanceof Error ? e.message : String(e)}`);
+      return null;
+    }
+  }
+
+  async saveTemplate(event: string, t: { subject: string; body: string; sms: string | null }, userId: string | null): Promise<void> {
+    await this.db.execute(sql`
+      INSERT INTO notification_templates (event, subject, body, sms, updated_by, updated_at)
+      VALUES (${event}, ${t.subject}, ${t.body}, ${t.sms}, ${userId}::uuid, now())
+      ON CONFLICT (event) DO UPDATE SET
+        subject = EXCLUDED.subject, body = EXCLUDED.body, sms = EXCLUDED.sms,
+        updated_by = EXCLUDED.updated_by, updated_at = now()
+    `);
+  }
+
+  async removeTemplate(event: string): Promise<boolean> {
+    const { rows } = (await this.db.execute(sql`
+      DELETE FROM notification_templates WHERE event = ${event} RETURNING event
+    `)) as unknown as { rows: unknown[] };
+    return rows.length > 0;
+  }
+
+  async customizedEvents(): Promise<Map<string, Date>> {
+    const { rows } = (await this.db.execute(sql`SELECT event, updated_at FROM notification_templates`)) as unknown as {
+      rows: Array<{ event: string; updated_at: string | Date }>;
+    };
+    return new Map(rows.map((r) => [r.event, new Date(r.updated_at)]));
   }
 
   private async emailOf(userId: string): Promise<string> {

@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { won, type Db, type OrderStatus } from "./types.js";
 import { localeTag, t } from "./i18n.js";
-import { SITE_TZ, normalizePhone, type NotificationEvent } from "@brick/plugin-sdk";
+import { SITE_TZ, fillTemplate, normalizePhone, type NotificationEvent } from "@brick/plugin-sdk";
 import { depositDeadline } from "./unpaid.js";
 
 /**
@@ -45,25 +45,71 @@ const COMMON_VARS: NotificationEvent["vars"] = [
   { name: "고객명", description: "주문자 이름", sample: "홍길동" },
   { name: "주문번호", description: "주문번호", sample: "20260924-000001" },
   { name: "상품명", description: "첫 상품 이름 (여러 개면 \"외 N건\")", sample: "머그컵 외 1건" },
+  { name: "상품목록", description: "주문한 상품 전부 (한 줄에 하나 — 메일용)", sample: "  · 머그컵 × 1 — 12,000원\n  · 컵받침 × 2 — 6,000원" },
   { name: "결제금액", description: "주문 총액", sample: "25,000원" },
   { name: "쇼핑몰명", description: "사이트 이름", sample: "브릭 상점" },
   { name: "주문조회", description: "주문 조회 주소 (비회원은 조회 토큰 포함)", sample: "https://shop.example/shop/orders/20260924-000001" },
 ];
+const PAYMENT_VARS: NotificationEvent["vars"] = [
+  { name: "입금계좌", description: "무통장입금 계좌 (다른 결제 수단이면 빈칸)", sample: "국민은행 000-00-0000 (브릭)" },
+  { name: "입금기한", description: "무통장입금 기한 (없으면 빈칸)", sample: "9월 27일 (토) 오후 2:30" },
+  { name: "결제안내", description: "무통장입금이면 계좌·기한 안내 여러 줄 (아니면 빈칸)", sample: "입금 계좌: 국민은행 000-00-0000 (브릭)\n입금이 확인되면 다시 알려드립니다." },
+];
+const SHIPPING_VARS: NotificationEvent["vars"] = [
+  { name: "송장번호", description: "운송장 번호 (없으면 빈칸)", sample: "123456789012" },
+  { name: "배송안내", description: "송장번호가 있으면 그 한 줄 (없으면 빈칸)", sample: "송장번호: 123456789012" },
+];
+const CANCEL_VARS: NotificationEvent["vars"] = [
+  { name: "취소안내", description: "자동 취소였다면 그 이유 (아니면 빈칸)", sample: "입금 기한이 지나 주문이 자동으로 취소되었습니다." },
+];
+
+/** 알림 종류 → 기본 문구에 넣을 안내 변수 (그 알림에서만 값이 있는 것) */
+type OrderMailKey = "pending" | "paid" | "shipped" | "trackingAdded" | "cancelled" | "refunded";
+const EXTRA: Record<OrderMailKey, string> = {
+  pending: "#{결제안내}",
+  paid: "",
+  shipped: "#{배송안내}",
+  trackingAdded: "#{배송안내}",
+  cancelled: "#{취소안내}",
+  refunded: "",
+};
+
+/**
+ * 주문 안내의 기본 문구 — `#{변수}` 로 쓴다. **실제로 나가는 문구가 이것을 채운 것이다**
+ * (`fillTemplate`). 그래서 운영자가 알림 문구 화면에서 "기본 문구 불러오기" 로 가져온 문장과
+ * 지금 나가는 문장이 글자까지 같다 — 둘을 따로 만들면 반드시 어긋난다.
+ */
+export function orderMailTemplate(key: OrderMailKey): { subject: string; body: string } {
+  const extra = EXTRA[key];
+  return {
+    subject: `[#{쇼핑몰명}] ${t(`ordermail.${key}.subject`)} (#{주문번호})`,
+    body: [
+      t("ordermail.greeting", { name: "#{고객명}", lead: t(`ordermail.${key}.lead`) }),
+      "",
+      t("ordermail.orderNo", { orderNo: "#{주문번호}" }),
+      "#{상품목록}",
+      t("ordermail.total", { amount: "#{결제금액}" }),
+      ...(extra ? ["", extra] : []),
+      "",
+      t("ordermail.lookup", { url: "#{주문조회}" }),
+      "",
+      "─────────────────────────────────────",
+      t("ordermail.footer", { site: "#{쇼핑몰명}" }),
+    ].join("\n"),
+  };
+}
+
+const eventOf = (key: OrderMailKey) => `shop.order.${key === "trackingAdded" ? "tracking" : key}`;
+const ev = (key: OrderMailKey, label: string, vars: NotificationEvent["vars"]): NotificationEvent => ({
+  event: eventOf(key), label, vars, defaults: () => orderMailTemplate(key),
+});
 export const ORDER_EVENTS: NotificationEvent[] = [
-  { event: "shop.order.pending", label: "주문 — 접수", vars: [
-    ...COMMON_VARS,
-    { name: "입금계좌", description: "무통장입금 계좌 (다른 결제 수단이면 빈칸)", sample: "국민은행 000-00-0000 (브릭)" },
-    { name: "입금기한", description: "무통장입금 기한 (없으면 빈칸)", sample: "9월 27일 (토) 오후 2:30" },
-  ] },
-  { event: "shop.order.paid", label: "주문 — 결제 확인", vars: COMMON_VARS },
-  { event: "shop.order.shipped", label: "주문 — 발송", vars: [
-    ...COMMON_VARS, { name: "송장번호", description: "운송장 번호 (없으면 빈칸)", sample: "123456789012" },
-  ] },
-  { event: "shop.order.tracking", label: "주문 — 운송장 번호 등록", vars: [
-    ...COMMON_VARS, { name: "송장번호", description: "운송장 번호", sample: "123456789012" },
-  ] },
-  { event: "shop.order.cancelled", label: "주문 — 취소", vars: COMMON_VARS },
-  { event: "shop.order.refunded", label: "주문 — 환불 완료", vars: COMMON_VARS },
+  ev("pending", "주문 — 접수", [...COMMON_VARS, ...PAYMENT_VARS]),
+  ev("paid", "주문 — 결제 확인", COMMON_VARS),
+  ev("shipped", "주문 — 발송", [...COMMON_VARS, ...SHIPPING_VARS]),
+  ev("trackingAdded", "주문 — 운송장 번호 등록", [...COMMON_VARS, ...SHIPPING_VARS]),
+  ev("cancelled", "주문 — 취소", [...COMMON_VARS, ...CANCEL_VARS]),
+  ev("refunded", "주문 — 환불 완료", COMMON_VARS),
 ];
 
 export interface OrderMailPort {
@@ -119,9 +165,7 @@ export async function sendOrderMail(
   params: { orderId: string; status: OrderStatus; kind?: "trackingAdded" },
 ): Promise<boolean> {
   if (!params.kind && !MAILED.includes(params.status)) return false;
-  const key = params.kind ?? params.status;
-  const subject = t(`ordermail.${key}.subject`);
-  const lead = t(`ordermail.${key}.lead`);
+  const key = (params.kind ?? params.status) as OrderMailKey;
 
   const { rows } = await db.execute(sql`
     SELECT o.order_no, o.total, o.status, o.tracking_no, o.guest_token, o.payment_method,
@@ -140,8 +184,7 @@ export async function sendOrderMail(
    * 주소도 없고 회원도 아니면 보낼 곳이 없다 — 이메일은 선택 입력이다.
    * 회원이면 주소가 없어도 알림함에는 남는다. 주소를 안 적었다는 것이
    * "아무 소식도 받지 않겠다" 는 뜻은 아니다.
-   */
-  /*
+   *
    * 단, 문자(알림톡)를 켠 가게에서 **전화번호만 적은 비회원**에게는 문자가 유일한 통로다.
    * 전에는 여기서 끝나서, 이메일을 비운 비회원 손님은 문자 알림을 켜 둔 가게에서도 접수·
    * 발송 안내를 한 통도 받지 못했다(주문서는 전화번호를 필수로 받는다).
@@ -167,41 +210,6 @@ export async function sendOrderMail(
     ? `${base}/shop/orders/${String(order.order_no)}?token=${encodeURIComponent(String(order.guest_token))}`
     : `${base}/shop/orders/${String(order.order_no)}`;
 
-  const body = [
-    t("ordermail.greeting", { name: String(order.orderer_name), lead }),
-    "",
-    t("ordermail.orderNo", { orderNo: String(order.order_no) }),
-    ...items.map((it) => {
-      const name = it.option_name
-        ? `${String(it.product_name)} (${String(it.option_name)})`
-        : String(it.product_name);
-      return `  · ${name} × ${Number(it.quantity)} — ${won(Number(it.line_total))}`;
-    }),
-    t("ordermail.total", { amount: won(Number(order.total)) }),
-  ];
-
-  // 무통장입금은 **입금할 곳**을 알려주는 것이 이 메일의 본체다
-  if (params.status === "pending" && order.payment_method === "bank_transfer" && port.bankAccount) {
-    body.push("", t("ordermail.bankAccount", { account: port.bankAccount }), t("ordermail.bankNotice"));
-    const due = depositDeadline(order.created_at as Date, port.depositDays ?? 0);
-    if (due) body.push(t("ordermail.depositDue", { date: formatDue(due) }));
-  }
-  if ((params.status === "shipped" || params.kind === "trackingAdded") && order.tracking_no) {
-    body.push("", t("ordermail.tracking", { trackingNo: String(order.tracking_no) }));
-  }
-
-  // 자동 취소였다면 왜 취소됐는지 말한다 — 손님은 "내가 취소하지 않았는데" 로 읽는다
-  if (params.status === "cancelled" && typeof order.cancelled_reason === "string" && order.cancelled_reason.includes("자동 취소")) {
-    body.push("", t(order.payment_method === "bank_transfer" ? "ordermail.autoCancelledDeposit" : "ordermail.autoCancelledUnpaid"));
-  }
-  body.push(
-    "",
-    t("ordermail.lookup", { url: lookup }),
-    "",
-    "─────────────────────────────────────",
-    t("ordermail.footer", { site: port.siteName }),
-  );
-
   const first = items[0];
   const vars: Record<string, string> = {
     고객명: String(order.orderer_name ?? ""),
@@ -211,30 +219,54 @@ export async function sendOrderMail(
         ? t("ordermail.itemsMore", { name: String(first.product_name), n: items.length - 1 })
         : String(first.product_name)
       : "",
+    상품목록: items.map((it) => {
+      const name = it.option_name
+        ? `${String(it.product_name)} (${String(it.option_name)})`
+        : String(it.product_name);
+      return `  · ${name} × ${Number(it.quantity)} — ${won(Number(it.line_total))}`;
+    }).join("\n"),
     결제금액: won(Number(order.total)),
     쇼핑몰명: port.siteName,
     주문조회: lookup,
     입금계좌: "",
     입금기한: "",
+    결제안내: "",
     송장번호: order.tracking_no ? String(order.tracking_no) : "",
+    배송안내: "",
+    취소안내: "",
   };
+  // 무통장입금은 **입금할 곳**을 알려주는 것이 이 메일의 본체다
   if (params.status === "pending" && order.payment_method === "bank_transfer" && port.bankAccount) {
     vars.입금계좌 = port.bankAccount;
+    const lines = [t("ordermail.bankAccount", { account: port.bankAccount }), t("ordermail.bankNotice")];
     const due = depositDeadline(order.created_at as Date, port.depositDays ?? 0);
-    if (due) vars.입금기한 = formatDue(due);
+    if (due) {
+      vars.입금기한 = formatDue(due);
+      lines.push(t("ordermail.depositDue", { date: vars.입금기한 }));
+    }
+    vars.결제안내 = lines.join("\n");
+  }
+  if ((params.status === "shipped" || params.kind === "trackingAdded") && order.tracking_no) {
+    vars.배송안내 = t("ordermail.tracking", { trackingNo: String(order.tracking_no) });
+  }
+  // 자동 취소였다면 왜 취소됐는지 말한다 — 손님은 "내가 취소하지 않았는데" 로 읽는다
+  if (params.status === "cancelled" && typeof order.cancelled_reason === "string" && order.cancelled_reason.includes("자동 취소")) {
+    vars.취소안내 = t(order.payment_method === "bank_transfer" ? "ordermail.autoCancelledDeposit" : "ordermail.autoCancelledUnpaid");
   }
 
+  // 운영자가 문구를 고쳤다면 코어가 그 문구로 바꿔 보낸다(event·vars) — 여기서는 기본 문구를 채운다
+  const tpl = orderMailTemplate(key);
   try {
     return await port.send({
       to,
-      subject: `[${port.siteName}] ${subject} (${String(order.order_no)})`,
-      text: body.join("\n"),
+      subject: fillTemplate(tpl.subject, vars),
+      text: fillTemplate(tpl.body, vars),
       userId: order.user_id ? String(order.user_id) : null,
       // 회원은 주문 내역에서 바로 본다 (비회원 조회 주소는 본문의 링크가 안내한다)
       url: order.user_id ? "/shop/orders" : "",
       phone: String(order.orderer_phone ?? ""),
       ...(port.sms ? { sms: true as const } : {}),
-      event: `shop.order.${params.kind === "trackingAdded" ? "tracking" : params.status}`,
+      event: eventOf(key),
       vars,
     });
   } catch (err) {

@@ -270,6 +270,9 @@ jobs:
       - name: E2E 스모크 테스트 (카카오 알림톡 — 승인 템플릿 연결 · 대체 문자)
         run: bash scripts/smoke-alimtalk.sh
 
+      - name: E2E 스모크 테스트 (알림 문구 — 운영자 편집 · 기본 문구 일치)
+        run: bash scripts/smoke-notification-templates.sh
+
       - name: E2E 스모크 테스트 (통합검색 · 검색 로그)
         run: bash scripts/smoke-search.sh
 

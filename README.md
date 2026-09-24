@@ -27,7 +27,7 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-4130%20passing-2ea043.svg" alt="스모크 테스트 4130개" />
+  <img src="https://img.shields.io/badge/E2E-4169%20passing-2ea043.svg" alt="스모크 테스트 4169개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
   <a href="https://github.com/bonjin-app/brick/pkgs/container/brick">
     <img src="https://img.shields.io/badge/docker-amd64%20%C2%B7%20arm64-2496ed.svg" alt="Docker image (amd64 · arm64)" />
@@ -369,7 +369,7 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 4,130개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 4,169개 항목):
 
 | 수트 | 항목 | 무엇을 못박는가 |
 |---|---:|---|
@@ -388,6 +388,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `smoke-portone.sh` | 45 | **포트원 V2 — 결제는 조회로 확인(PAID·금액), 결제 ID 가 이 주문의 것인지, 부분환불에 취소 전 잔액을 실어 이중 환불을 막는다**, 실패·가상계좌·다른 상점 거절, 시크릿 비노출 |
 | `smoke-identity.sh` | 82 | **본인인증 — 인증 ID 는 서버가 만들어 회원에게 묶고(남의 인증 ID 로 내 계정을 인증할 수 없다), 결과는 포트원에 직접 묻는다** · 이름·CI 원문·전화번호는 남기지 않는다(출생 연도·CI 의 HMAC 만) · 청소년보호법의 연 나이 경계 · 명의는 바뀌지 않는다 · **한 사람 한 계정(스무 계정이 같은 순간에 끝내도 하나)** · **성인 상품은 확인 전에 보이지도(목록 19 표시·상세 안내·검색) 팔리지도(주문·정기배송) 않는다** · 탈퇴하면 파기 · 인증창 요금 한도 · 영어 사이트 |
 | `smoke-alimtalk.sh` | 54 | **카카오 알림톡 — 알림마다 승인된 템플릿을 연결하고(원문은 알리고에서, 검수 전·중지·채울 수 없는 변수는 거절), 스텁이 템플릿과 다른 본문을 거절하는 조건에서 실제로 나간다** · 변수·버튼 링크 채우기 · 연결 안 한 알림은 문자 · 알림톡 거절 시 문자 한 번 · **대체 문자는 문자를 켠 가게에서만** · **이메일 없이 전화번호만 적은 비회원도 안내를 받는다** · 키·번호 비노출 · 영어 사이트 |
+| `smoke-notification-templates.sh` | 39 | **운영자가 알림 문구(제목·본문·문자)를 고친다** · **기본 문구를 그대로 저장해 보낸 알림 = 고치지 않은 알림(글자까지)** · 고친 문구가 알림함·메일·문자에 · 문자 문구를 따로 쓰면 단문(SMS) · 채울 수 없는 변수·여러 줄 제목 거절 · 미리보기 · 되돌리기 · 감사 로그 · 영어 사이트 |
 | `smoke-search.sh` | 131 | 비밀글·비공개 게시판 미노출 · ILIKE 이스케이프 · total 정확성 · 0건 기록 · **블록 CSS 미색인** · **결과 사진** |
 | `smoke-restock.sh` | 94 | 품절만 신청 · 옵션 단위 · 한 번만 발송 · 광고 아님 · 경로 무관 감지 · **메일의 해지 링크가 실제로 열린다** · **회원 신청 내역 화면** · **운영자의 재입고 대기 화면** |
 | `smoke-starter.sh` | 84 | 유형별 기본 구성 생성 · 홈 렌더 · **모든 메뉴 링크가 404 없이 렌더** · 일반 페이지로 수정 가능 · **청약철회 신청 폼의 칸에 이름이 있다** |
@@ -518,7 +519,7 @@ themes/
   boutique/       부티크 — 여백 위주
   corporate/      회사 홈페이지 — 히어로·특징 카드
 docs-site/        GitHub Pages 랜딩페이지
-scripts/          스모크 테스트 41종 + 정적 검사 39종 + OIDC 스텁 + 배포본 생성(build-release.sh)
+scripts/          스모크 테스트 42종 + 정적 검사 39종 + OIDC 스텁 + 배포본 생성(build-release.sh)
 docker/           Dockerfile, entrypoint
 ```
 
@@ -553,6 +554,7 @@ docker/           Dockerfile, entrypoint
 | [결제](docs/payments.md) | PG 설정, 결제 흐름, 위조·중복 방어, 새 PG 붙이기 |
 | [본인인증](docs/identity.md) | 포트원 본인인증, 성인 상품, 한 사람 한 계정, 저장하는 것과 안 하는 것 |
 | [알림톡](docs/alimtalk.md) | 카카오 알림톡(알리고) 설정, 템플릿 연결, 주문 알림 변수, 대체 문자 규칙 |
+| [알림 문구](docs/notification-templates.md) | 주문 안내의 제목·본문·문자 문구를 운영자가 고치기, 변수, 미리보기 |
 | [보안](docs/security.md) | 구현된 방어, **신뢰 모델**, 배포 체크리스트 |
 | [아키텍처 (ADR)](docs/architecture.md) | 설계 결정 77건과 그 이유 |
 | [플러그인 개발](docs/plugin-development.md) | manifest, API, 마이그레이션, 배포 |

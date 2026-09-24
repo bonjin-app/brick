@@ -75,6 +75,14 @@ export interface NotificationEvent {
    * 템플릿에 여기 없는 변수가 있으면 연결을 거절한다 — 채우지 못한 템플릿은 카카오가 거절한다.
    */
   vars: Array<{ name: string; description: string; sample: string }>;
+  /**
+   * 기본 문구 — `#{변수}` 형태. 운영자가 알림 문구를 고칠 때 **여기서 시작한다**(빈 칸에서 다시
+   * 쓰라고 하면 아무도 고치지 않는다). 함수인 이유: 사이트 언어가 바뀌면 기본 문구도 따라가야 한다.
+   *
+   * 보내는 쪽이 이 기본 문구를 `fillTemplate` 으로 채워 보내면, 운영자가 불러온 문구와 실제로
+   * 나가던 문구가 글자까지 같다.
+   */
+  defaults?: () => { subject: string; body: string; sms?: string };
 }
 
 export interface PluginContext {

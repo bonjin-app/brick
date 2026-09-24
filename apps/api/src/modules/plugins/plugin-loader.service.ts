@@ -754,13 +754,7 @@ export class PluginLoaderService implements OnModuleInit {
         if (at >= 0) this.notificationEventList.splice(at, 1);
         this.notificationEventList.push({ ...event, vars: [...event.vars], plugin: pluginName });
       },
-      // 이름·설명은 선언한 플러그인의 카탈로그로 번역한다 — 보여 주는 쪽(알림 통로)은 남의 카탈로그를 모른다
-      notificationEvents: () =>
-        this.notificationEventList.map((e) => ({
-          ...e,
-          label: this.trCatalog(e.plugin, e.label),
-          vars: e.vars.map((v) => ({ ...v, description: this.trCatalog(e.plugin, v.description) })),
-        })),
+      notificationEvents: () => this.listNotificationEvents(),
       registerScreen: (screen) => {
         const path = screen.path.replace(/^\/+|\/+$/g, "");
         // 블록 이름은 등록과 같은 규칙으로 네임스페이스를 붙인다
@@ -781,6 +775,18 @@ export class PluginLoaderService implements OnModuleInit {
         this.logger.log(`plugin "${pluginName}" registers screen "/${path}" (${block})`);
       },
     };
+  }
+
+  /**
+   * 켜진 플러그인이 선언한 알림 종류. 이름·설명은 선언한 플러그인의 카탈로그로 번역한다 —
+   * 보여 주는 쪽(알림톡 확장·알림 문구 화면)은 남의 카탈로그를 모른다.
+   */
+  listNotificationEvents(): Array<NotificationEvent & { plugin: string }> {
+    return this.notificationEventList.map((e) => ({
+      ...e,
+      label: this.trCatalog(e.plugin, e.label),
+      vars: e.vars.map((v) => ({ ...v, description: this.trCatalog(e.plugin, v.description) })),
+    }));
   }
 
   /**

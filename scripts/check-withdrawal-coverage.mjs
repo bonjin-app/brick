@@ -45,6 +45,7 @@ const POLICY = {
   audit_logs: ["retained", "감사 기록을 탈퇴로 지울 수 있으면 감사가 아니다"],
   mail_recipients: ["retained", "광고 발송 이력(정보통신망법 제50조 분쟁 대비)"],
   mail_campaigns: ["anonymized", "만든 사람만 가리킨다 — 익명화된 users 행을 가리키게 둔다"],
+  notification_templates: ["anonymized", "고친 사람만 가리킨다 — 알림 문구는 사이트의 것이다"],
   pages: ["anonymized", "페이지는 사이트의 내용이다. 작성자 연결만 익명 계정을 가리킨다"],
   page_revisions: ["anonymized", "같은 이유 — 되돌릴 대상이 사라지면 안 된다"],
   media_files: ["anonymized", "올린 파일은 사이트의 자산이다"],
