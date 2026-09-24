@@ -370,6 +370,8 @@ export default definePlugin((ctx) => {
     propsSchema: { type: "object", properties: { text: { type: "string", title: "내용" } } },
     render: async (props) => `<p>${String(props.text ?? "")}</p>`,
   });
+  // 안에 다른 블록을 담는 블록은 acceptsChildren: true 와 ctx.children — 배치 편집기가 그 안에 넣는 길을 연다
+  // (docs/layout-editor.md 의 "플러그인 개발자")
 
   // 훅: 코어/다른 플러그인의 이벤트 구독
   ctx.hooks.onAction("board.post.created", "my-plugin", async (payload) => { /* ... */ });

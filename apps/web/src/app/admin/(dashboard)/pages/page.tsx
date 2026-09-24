@@ -4,25 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import { useUnsavedGuard } from "@/lib/unsaved-guard";
 import { useAdminT } from "../../../../lib/i18n-admin";
 import { useLocaleTag } from "../../../../lib/i18n";
+import { LayoutEditor, type BlockDef, type PageDraft } from "./layout-editor";
 
 /* ── 타입 ─────────────────────────────────────────── */
 interface PageRow { id: string; slug: string; title: string; status: string; updatedAt: string; publishedAt?: string | null }
-interface BlockNode { block: string; props: Record<string, unknown>; children?: BlockNode[] }
-interface BlockDef {
-  name: string;
-  displayName: string;
-  propsSchema?: { properties?: Record<string, { type?: string; title?: string; format?: string; default?: unknown }> };
-}
-interface PageDraft {
-  id?: string;
-  slug: string;
-  title: string;
-  status: string;
-  /** 예약 발행이면 공개할 시각 (ISO). 다른 상태에서는 쓰지 않는다 */
-  publishedAt?: string | null;
-  blocks: BlockNode[];
-  seo: { title?: string; description?: string };
-}
 
 /** 판 하나 (내용은 빼고 — 목록에 서른 판의 블록 JSON 을 실어 보내지 않는다) */
 interface Revision {
@@ -210,7 +195,6 @@ function PageEditor(props: {
 }) {
   const t = useAdminT();
   const { draft, catalog, onChange } = props;
-  const [picker, setPicker] = useState(false);
   const [revisions, setRevisions] = useState<Revision[]>([]);
   const [revBusy, setRevBusy] = useState(0);
 
@@ -236,28 +220,6 @@ function PageEditor(props: {
     } finally {
       setRevBusy(0);
     }
-  }
-
-  function updateBlock(i: number, node: BlockNode) {
-    const blocks = [...draft.blocks];
-    blocks[i] = node;
-    onChange({ ...draft, blocks });
-  }
-  function move(i: number, dir: -1 | 1) {
-    const blocks = [...draft.blocks];
-    const j = i + dir;
-    if (j < 0 || j >= blocks.length) return;
-    [blocks[i], blocks[j]] = [blocks[j], blocks[i]];
-    onChange({ ...draft, blocks });
-  }
-  function addBlock(name: string) {
-    const def = catalog.find((b) => b.name === name);
-    const propsInit: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(def?.propsSchema?.properties ?? {})) {
-      if (v.default !== undefined) propsInit[k] = v.default;
-    }
-    onChange({ ...draft, blocks: [...draft.blocks, { block: name, props: propsInit }] });
-    setPicker(false);
   }
 
   const input = { width: "100%", padding: 8, boxSizing: "border-box" as const, marginTop: 4 };
@@ -289,50 +251,8 @@ function PageEditor(props: {
           style={{ color: props.failed ? "var(--color-danger)" : "var(--color-success)" }}>{props.message}</p>
       )}
 
-      {/* 좁은 화면에서는 설정 패널이 아래로 내려간다 — 편집 영역이 먼저 */}
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
-        {/* 좌: 블록 캔버스 */}
-        <div style={{ flex: 1 }}>
-          {draft.blocks.map((node, i) => (
-            <BlockCard
-              key={i}
-              node={node}
-              def={catalog.find((b) => b.name === node.block)}
-              onChange={(n) => updateBlock(i, n)}
-              onMoveUp={() => move(i, -1)}
-              onMoveDown={() => move(i, 1)}
-              onRemove={() => onChange({ ...draft, blocks: draft.blocks.filter((_, j) => j !== i) })}
-            />
-          ))}
-          <div style={{ position: "relative" }}>
-            <button onClick={() => setPicker(!picker)}
-              style={{ width: "100%", padding: 14, cursor: "pointer", border: "2px dashed var(--color-line-strong)", background: "none", borderRadius: 8 }}>
-              {t("pages.addBlock")}
-            </button>
-            {picker && (
-              <div style={{ background: "var(--color-bg)", border: "1px solid var(--color-line-strong)", borderRadius: 8, marginTop: 4, boxShadow: "0 4px 12px rgba(0,0,0,.1)" }}>
-                {/*
-                  진짜 버튼이어야 한다. div + onClick 은 마우스로만 눌린다 —
-                  Tab 으로 닿지 않고 스크린리더도 "그냥 글"로 읽는다.
-                  블록을 고르는 것은 이 CMS 의 중심 동작이라 특히 그렇다.
-                */}
-                {catalog.map((b) => (
-                  <button key={b.name} type="button" onClick={() => addBlock(b.name)}
-                    style={{
-                      display: "block", width: "100%", textAlign: "left", font: "inherit", color: "inherit",
-                      background: "none", border: 0, borderBottom: "1px solid var(--color-line)",
-                      padding: "10px 16px", cursor: "pointer",
-                    }}>
-                    <strong>{b.displayName}</strong> <span style={{ color: "var(--color-muted)", fontSize: 12 }}>{b.name}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* 우: 페이지 설정 */}
-        <aside className="w-full shrink-0 lg:w-[280px]" style={{ background: "var(--color-bg)", borderRadius: 8, padding: 16 }}>
+      <LayoutEditor draft={draft} catalog={catalog} onChange={onChange} pageSettings={(
+        <div>
           <label>{t("common.title")}<input style={input} value={draft.title}
             onChange={(e) => onChange({ ...draft, title: e.target.value })} /></label>
           <label style={{ display: "block", marginTop: 12 }}>{t("pages.fieldSlug")}<input style={input} value={draft.slug}
@@ -407,56 +327,8 @@ function PageEditor(props: {
               )}
             </>
           )}
-        </aside>
-      </div>
-    </div>
-  );
-}
-
-/* ── 블록 카드: propsSchema 기반 속성 편집 ────────────── */
-function BlockCard(props: {
-  node: BlockNode;
-  def?: BlockDef;
-  onChange: (n: BlockNode) => void;
-  onMoveUp: () => void;
-  onMoveDown: () => void;
-  onRemove: () => void;
-}) {
-  const t = useAdminT();
-  const { node, def } = props;
-  const schema = def?.propsSchema?.properties ?? {};
-  const input = { width: "100%", padding: 6, boxSizing: "border-box" as const, marginTop: 2 };
-
-  function setProp(key: string, value: unknown) {
-    props.onChange({ ...node, props: { ...node.props, [key]: value } });
-  }
-
-  return (
-    <div style={{ background: "var(--color-bg)", borderRadius: 8, padding: 16, marginBottom: 12, boxShadow: "0 1px 3px rgba(0,0,0,.06)" }}>
-      <div style={{ display: "flex", alignItems: "center", marginBottom: 8 }}>
-        <strong style={{ flex: 1 }}>{def?.displayName ?? node.block}</strong>
-        <button onClick={props.onMoveUp} style={{ cursor: "pointer" }}>↑</button>
-        <button onClick={props.onMoveDown} style={{ cursor: "pointer", marginLeft: 4 }}>↓</button>
-        <button onClick={props.onRemove} style={{ cursor: "pointer", marginLeft: 8, color: "var(--color-danger)" }}>✕</button>
-      </div>
-      {Object.entries(schema).map(([key, meta]) => (
-        <label key={key} style={{ display: "block", marginTop: 8, fontSize: 13 }}>
-          {meta.title ?? key}
-          {meta.type === "boolean" ? (
-            <input type="checkbox" checked={Boolean(node.props[key])} onChange={(e) => setProp(key, e.target.checked)}
-              style={{ marginLeft: 8 }} />
-          ) : meta.type === "number" ? (
-            <input type="number" style={input} value={String(node.props[key] ?? "")}
-              onChange={(e) => setProp(key, e.target.value === "" ? undefined : Number(e.target.value))} />
-          ) : meta.format === "multiline" ? (
-            <textarea style={{ ...input, height: 100, fontFamily: "monospace" }} value={String(node.props[key] ?? "")}
-              onChange={(e) => setProp(key, e.target.value)} />
-          ) : (
-            <input style={input} value={String(node.props[key] ?? "")} onChange={(e) => setProp(key, e.target.value)} />
-          )}
-        </label>
-      ))}
-      {!Object.keys(schema).length && <p style={{ color: "var(--color-muted)", fontSize: 13 }}>{t("pages.noProps")}</p>}
+        </div>
+      )} />
     </div>
   );
 }

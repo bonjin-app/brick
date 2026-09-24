@@ -26,6 +26,28 @@ export interface BlockNode {
   children?: BlockNode[];
 }
 
+/**
+ * 배치 편집기 미리보기 표시 — 블록마다 트리 위치(`0.2.1`)를 단 상자로 감싼다.
+ *
+ * 편집기는 미리보기에서 누른 자리가 **트리의 어느 노드인지** 알아야 선택할 수 있다. HTML 만 보고는
+ * 알 수 없으므로(블록 둘이 같은 모양일 수 있다) 서버가 그릴 때 위치를 적는다. 공개 렌더에서는 절대
+ * 켜지 않는다 — 켜지는 곳은 초안 미리보기 하나다(렌더 캐시를 거치지 않는다).
+ */
+export interface EditMarks {
+  /** 빈 컨테이너·모르는 블록·실패한 블록을 **눌러서 고를 수 있게** 보이는 자리로 그릴 때의 문장 */
+  emptyContainer: string;
+  unknownBlock: (name: string) => string;
+  blockFailed: (name: string) => string;
+}
+
+/** 초안 — 저장하지 않은 편집 내용 그대로 */
+export interface PageDraft {
+  slug: string;
+  title: string;
+  blocks: BlockNode[];
+  seo: { title?: string; description?: string };
+}
+
 export interface RenderedPage {
   html: string;
   status: number;
@@ -173,6 +195,8 @@ export class PageRenderService {
     preview: string | null = null,
     /** 아직 공개되지 않은 페이지도 찾는다 (관리자 미리보기) */
     includeUnpublished = false,
+    /** 배치 편집기 — 저장하지 않은 초안을 그리고, 블록마다 위치를 표시한다 */
+    editing: { draft: PageDraft } | null = null,
   ): Promise<RenderedPage> {
     const [site, rawNav] = await Promise.all([this.siteInfo(), this.menu("header")]);
     const nav = markCurrent(rawNav, path);
@@ -242,9 +266,11 @@ export class PageRenderService {
      * 게시판 상세처럼 URL에 식별자가 들어가는 화면을 페이지 하나로 처리할 수 있다.
      */
     const segments = path.split("/").filter(Boolean);
-    let page: typeof pages.$inferSelect | undefined;
+    let page: Pick<typeof pages.$inferSelect, "slug" | "title" | "blocks" | "seo"> | undefined;
     let pathTail = "";
-    for (let i = segments.length; i >= 1; i--) {
+    // 초안은 DB 를 보지 않는다 — 저장된 판이 아니라 편집기의 지금 내용을 그린다
+    if (editing) page = { ...editing.draft };
+    else for (let i = segments.length; i >= 1; i--) {
       const candidate = segments.slice(0, i).join("/");
       const [found] = await this.db
         .select()
@@ -384,6 +410,13 @@ export class PageRenderService {
      * 페이지가 URL 로 여러 화면을 전환하는 경우, 화면을 아는 쪽은 블록이다.
      */
     const fromBlock: { title?: string; description?: string; ownHeading?: boolean } = {};
+    const marks: EditMarks | null = editing
+      ? {
+          emptyContainer: t("editor.emptyContainer"),
+          unknownBlock: (name) => t("editor.unknownBlock", { name }),
+          blockFailed: (name) => t("editor.blockFailed", { name }),
+        }
+      : null;
     const blocksHtml = await this.renderNodes(nodes, {
       ...blockCtx,
       setSeo: (s) => {
@@ -391,7 +424,7 @@ export class PageRenderService {
         if (s.description?.trim()) fromBlock.description = s.description.trim();
         if (s.ownHeading !== undefined) fromBlock.ownHeading = s.ownHeading;
       },
-    });
+    }, marks);
 
     // 우선순위: 운영자가 명시한 페이지 SEO > 블록이 정한 화면 제목 > 페이지 제목
     const headingTitle = fromBlock.title ?? page.title;
@@ -422,25 +455,61 @@ export class PageRenderService {
   async renderNodes(
     nodes: BlockNode[],
     ctx: Omit<BlockRenderContext, "children"> = { path: "", pathTail: "", query: {}, user: null },
+    /** 배치 편집기 미리보기에서만 — 블록마다 트리 위치를 단다 */
+    marks: EditMarks | null = null,
   ): Promise<string> {
     const parts: string[] = [];
-    for (const node of nodes ?? []) {
-      const def = this.loader.blocks.get(node.block);
-      if (!def) {
-        parts.push(`<!-- unknown block: ${escapeHtml(node.block)} -->`);
-        continue;
-      }
-      try {
-        const children = node.children?.length
-          ? await Promise.all(node.children.map((c) => this.renderNodes([c], ctx)))
-          : [];
-        parts.push(await def.render(node.props ?? {}, { ...ctx, children }));
-      } catch (err) {
-        this.logger.warn(`block "${node.block}" render failed: ${String(err)}`);
-        parts.push(`<!-- block "${escapeHtml(node.block)}" failed -->`);
-      }
-    }
+    for (const [i, node] of (nodes ?? []).entries()) parts.push(await this.renderOne(node, ctx, marks, [i]));
     return parts.join("\n");
+  }
+
+  private async renderOne(
+    node: BlockNode,
+    ctx: Omit<BlockRenderContext, "children">,
+    marks: EditMarks | null,
+    at: number[],
+  ): Promise<string> {
+    /*
+     * 공개 렌더에서는 모르는 블록·실패한 블록을 **주석으로** 숨긴다(손님에게 고장을 보이지 않는다).
+     * 편집기에서는 반대다 — 보이지 않으면 누를 수 없고, 누를 수 없으면 지울 수도 없다.
+     */
+    const box = (inner: string) =>
+      marks ? `<div class="brick-edit-node" data-brick-node="${at.join(".")}">${inner}</div>` : inner;
+    const notice = (text: string) => `<div class="brick-edit-missing">${escapeHtml(text)}</div>`;
+    const def = this.loader.blocks.get(node.block);
+    if (!def) {
+      return marks ? box(notice(marks.unknownBlock(node.block))) : `<!-- unknown block: ${escapeHtml(node.block)} -->`;
+    }
+    try {
+      const kids = node.children ?? [];
+      const children = kids.length
+        ? await Promise.all(kids.map((c, j) => this.renderOne(c, ctx, marks, [...at, j])))
+        : [];
+      // 빈 컨테이너는 높이가 0 이라 미리보기에서 누를 곳이 없다 — 편집기에서만 자리를 채운다
+      if (marks && def.acceptsChildren && !kids.length) children.push(notice(marks.emptyContainer));
+      return box(await def.render(node.props ?? {}, { ...ctx, children }));
+    } catch (err) {
+      this.logger.warn(`block "${node.block}" render failed: ${String(err)}`);
+      return marks ? box(notice(marks.blockFailed(node.block))) : `<!-- block "${escapeHtml(node.block)}" failed -->`;
+    }
+  }
+
+  /** 사이트 언어로 된 코어 문장 하나 (미리보기 창 안내처럼 테마 밖에서 쓰는 것) */
+  async editorText(key: string): Promise<string> {
+    const site = await this.siteInfo();
+    return escapeHtml(makeTranslator({ locale: site.locale, catalogs: CORE_CATALOGS })(key));
+  }
+
+  /**
+   * 배치 편집기 미리보기 — 저장하지 않은 초안을 **실제 테마로** 그린다.
+   *
+   * 손님이 보는 모습(비로그인)으로 그리고, 렌더 캐시·점검 모드를 거치지 않는다. 캐시에 들어가면
+   * 공개되지 않은 편집 내용이 손님에게 나간다.
+   */
+  async renderDraft(draft: PageDraft): Promise<string> {
+    const path = draft.slug.replace(/^\/+|\/+$/g, "") || "home";
+    const result = await this.compute(path, {}, null, null, true, { draft });
+    return result.html;
   }
 
   private async siteInfo(): Promise<{

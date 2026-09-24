@@ -276,6 +276,9 @@ jobs:
       - name: E2E 스모크 테스트 (운영자 권한 범위 — 이 운영자는 주문만)
         run: bash scripts/smoke-admin-scopes.sh
 
+      - name: E2E 스모크 테스트 (페이지 배치 편집기 — 초안 미리보기 · 블록 트리)
+        run: bash scripts/smoke-layout-editor.sh
+
       - name: E2E 스모크 테스트 (게시판 읽기 규칙 · 게시판별 본인인증)
         run: bash scripts/smoke-board-cert.sh
 

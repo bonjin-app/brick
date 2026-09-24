@@ -7,15 +7,58 @@ import { pages } from "@brick/database";
 import { AdminGuard } from "../auth/auth.guard.js";
 import { AuditService } from "../audit/audit.service.js";
 import { AuthService } from "../auth/auth.service.js";
-import { PageRenderService, type BlockNode } from "./page-render.service.js";
+import { PageRenderService, type BlockNode, type PageDraft } from "./page-render.service.js";
+import { EDIT_RUNTIME } from "./edit-runtime.js";
 import { PublishSchedulerService } from "./publish-scheduler.service.js";
 import { RevisionsService } from "./revisions.service.js";
-import { HookBus } from "@brick/core";
-import { DB, HOOKS } from "../../runtime.module.js";
+import { HookBus, type CacheProvider } from "@brick/core";
+import { CACHE, DB, HOOKS } from "../../runtime.module.js";
 import { isUniqueViolation } from "@brick/core";
 import { msg } from "../../common/localized-error.js";
 
 const SLUG_RE = /^[a-z0-9][a-z0-9\-/]{0,200}$/;
+
+/** 블록 트리의 한도 — 편집기가 다루고 렌더러가 그릴 수 있는 크기 */
+const TREE_MAX_DEPTH = 12;
+const TREE_MAX_NODES = 2000;
+/** 초안 미리보기는 편집기 창 하나의 수명이다 — 창이 열려 있으면 편집할 때마다 새로 맡긴다 */
+const DRAFT_TTL_SECONDS = 600;
+const DRAFT_SESSION_RE = /^[A-Za-z0-9-]{8,64}$/;
+
+/**
+ * 블록 트리 모양 검사. 저장과 초안 미리보기가 같이 쓴다.
+ *
+ * 전에는 저장이 아무 JSON 이나 받았다 — `children` 이 문자열이거나 `block` 이 없는 노드가 저장되면
+ * 공개 렌더는 조용히 그 블록을 건너뛰지만 배치 편집기는 트리를 따라가다 깨진다. 모양이 틀린 트리를
+ * 저장하지 않는다.
+ */
+export function blockTreeProblem(blocks: unknown): ReturnType<typeof msg> | null {
+  if (blocks === undefined) return null;
+  if (!Array.isArray(blocks)) return msg("err.treeNotArray");
+  let count = 0;
+  const walk = (nodes: unknown[], depth: number): ReturnType<typeof msg> | null => {
+    if (depth > TREE_MAX_DEPTH) return msg("err.treeTooDeep", { max: TREE_MAX_DEPTH });
+    for (const n of nodes) {
+      count += 1;
+      if (count > TREE_MAX_NODES) return msg("err.treeTooMany", { max: TREE_MAX_NODES });
+      if (!n || typeof n !== "object" || Array.isArray(n)) return msg("err.treeBadNode");
+      const node = n as { block?: unknown; props?: unknown; children?: unknown };
+      if (typeof node.block !== "string" || !/^[a-z0-9][a-z0-9-]*\/[a-z0-9][a-z0-9-]*$/.test(node.block)) {
+        return msg("err.treeBadNode");
+      }
+      if (node.props !== undefined && (node.props === null || typeof node.props !== "object" || Array.isArray(node.props))) {
+        return msg("err.treeBadProps", { block: node.block });
+      }
+      if (node.children !== undefined) {
+        if (!Array.isArray(node.children)) return msg("err.treeBadChildren", { block: node.block });
+        const deeper = walk(node.children, depth + 1);
+        if (deeper) return deeper;
+      }
+    }
+    return null;
+  };
+  return walk(blocks, 1);
+}
 
 interface PageDto {
   slug: string;
@@ -47,6 +90,7 @@ export class PagesController {
     private readonly audit: AuditService,
     private readonly auth: AuthService,
     @Inject(HOOKS) private readonly hooks: HookBus,
+    @Inject(CACHE) private readonly cache: CacheProvider,
   ) {}
 
   /**
@@ -165,6 +209,63 @@ export class PagesController {
       .header("cache-control", "no-store")
       .header("x-robots-tag", "noindex")
       .send(result.html);
+  }
+
+  // ── 배치 편집기: 저장하지 않은 초안 미리보기 ─────────
+  //
+  // 편집기는 블록 목록을 폼으로만 보여 줬다 — 무엇이 어떻게 놓이는지는 저장하고 사이트를 열어야
+  // 알았다. 이제 편집할 때마다 초안을 맡기고, 편집기 옆 창이 그 초안을 **실제 테마로** 그린다.
+  //
+  // 왜 맡기고(POST) 따로 그리나(GET): 미리보기 창이 사이트와 같은 주소·같은 보안 정책(CSP)으로
+  // 떠야 테마의 글꼴·스크립트가 공개 화면과 똑같이 돈다. 편집기가 HTML 을 받아 srcdoc 으로 넣으면
+  // 관리 화면의 정책을 물려받아 테마의 외부 글꼴 같은 것이 막히고, 미리보기가 거짓말을 한다.
+
+  /** 초안을 맡긴다 — 편집기 창 하나(session)마다 한 칸, 10분 */
+  @Post("admin/pages/draft-preview")
+  @UseGuards(AdminGuard)
+  async draftPreviewPut(@Body() body: Partial<PageDraft> & { session?: string }, @Req() req: FastifyRequest) {
+    const userId = (req as { user?: { id: string } }).user?.id;
+    const session = String(body?.session ?? "");
+    if (!userId || !DRAFT_SESSION_RE.test(session)) throw new BadRequestException(msg("err.draftSession"));
+    const problem = blockTreeProblem(body.blocks ?? []);
+    if (problem) throw new BadRequestException(problem);
+    const slug = String(body.slug ?? "").trim();
+    const draft: PageDraft = {
+      // 입력 중인 주소는 틀릴 수 있다 — 미리보기는 막지 않고 홈으로 그린다(메뉴 강조만 달라진다)
+      slug: SLUG_RE.test(slug) ? slug : "home",
+      title: String(body.title ?? "").slice(0, 300),
+      blocks: (body.blocks ?? []) as BlockNode[],
+      seo: {
+        title: typeof body.seo?.title === "string" ? body.seo.title.slice(0, 300) : undefined,
+        description: typeof body.seo?.description === "string" ? body.seo.description.slice(0, 1000) : undefined,
+      },
+    };
+    // 운영자 한 사람의 칸이다 — 다른 운영자가 세션 이름을 알아도 남의 초안을 보지 못한다
+    await this.cache.set(`page-draft:${userId}:${session}`, draft, DRAFT_TTL_SECONDS);
+    return { ok: true, url: `/api/admin/pages/draft-preview/${session}` };
+  }
+
+  /** 맡긴 초안을 그린다 — 블록마다 위치를 달고 편집기와 이야기하는 스크립트를 붙여서 */
+  @Get("admin/pages/draft-preview/:session")
+  @UseGuards(AdminGuard)
+  async draftPreviewGet(@Param("session") session: string, @Req() req: FastifyRequest, @Res() reply: FastifyReply) {
+    const userId = (req as { user?: { id: string } }).user?.id;
+    const draft = userId && DRAFT_SESSION_RE.test(session)
+      ? await this.cache.get<PageDraft>(`page-draft:${userId}:${session}`)
+      : null;
+    const send = (status: number, html: string) => reply
+      .status(status)
+      .type("text/html; charset=utf-8")
+      .header("cache-control", "no-store")
+      .header("x-robots-tag", "noindex")
+      .send(html);
+    if (!draft) {
+      // 만료 — 편집기가 다음 편집(또는 창이 다시 준비될 때)에 다시 맡긴다. 그 뜻을 창 안에 보여 준다
+      const text = await this.renderer.editorText("editor.expired");
+      return send(404, `<!doctype html><meta charset="utf-8"><title>Preview</title><p style="font:14px system-ui;padding:24px">${text}</p>${EDIT_RUNTIME}`);
+    }
+    const html = await this.renderer.renderDraft(draft);
+    return send(200, /<\/body>/i.test(html) ? html.replace(/<\/body>/i, `${EDIT_RUNTIME}</body>`) : html + EDIT_RUNTIME);
   }
 
   // ── 이전 버전 (리비전) ───────────────────────────
@@ -385,6 +486,8 @@ export class PagesController {
     }
     if (dto.slug.includes("//") || dto.slug.endsWith("/")) throw new BadRequestException("주소는 영문 소문자·숫자·하이픈만 쓸 수 있습니다.");
     if (!dto.title?.trim()) throw new BadRequestException("제목을 입력해주세요.");
+    const treeProblem = blockTreeProblem(dto.blocks);
+    if (treeProblem) throw new BadRequestException(treeProblem);
     /*
      * 상태는 아는 값만 받는다.
      *

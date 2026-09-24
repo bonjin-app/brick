@@ -628,10 +628,12 @@ export class PluginsController {
       const plugin = name.split("/")[0];
       return plugin === "core" ? translateCoreLabel(locale, text) : this.loader.trCatalog(plugin, text);
     };
-    return [...this.loader.blocks.values()].map(({ name, displayName, propsSchema }) => ({
+    return [...this.loader.blocks.values()].map(({ name, displayName, propsSchema, acceptsChildren }) => ({
       name,
       displayName: tr(name, displayName) ?? displayName,
       propsSchema: localizeSchema(propsSchema, (text) => tr(name, text) ?? text),
+      // 배치 편집기가 "이 안에 블록을 넣을 수 있는가" 를 안다 — 없으면 다단 레이아웃의 칸을 채울 길이 없다
+      ...(acceptsChildren ? { acceptsChildren: true } : {}),
     }));
   }
 

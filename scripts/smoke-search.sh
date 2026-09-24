@@ -395,9 +395,10 @@ PG_ID="$(curl -s -b "$CK" -X POST "$API/api/pages" -H 'content-type: application
 [[ -n "$PG_ID" ]] && ok "페이지 생성" || bad "페이지 생성"
 # 잘못된 블록으로도 500 이 나지 않아야 한다.
 # "unknown block" 주석으로 넘기려는 코드가 escapeHtml(undefined) 에서 터졌다.
-check "블록 이름이 없어도 500 이 아니다" \
+# 이제는 저장 전에 트리 모양을 검사해 400 으로 거절한다(배치 편집기가 틀린 트리를 따라가다 깨지지 않게).
+check "블록 이름이 없으면 500 이 아니라 400 으로 거절" \
   "$(code -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' \
-      -d '{"slug":"malformed-block","title":"잘못된 블록","blocks":[{"props":{"text":"x"}}],"status":"draft"}')" "201"
+      -d '{"slug":"malformed-block","title":"잘못된 블록","blocks":[{"props":{"text":"x"}}],"status":"draft"}')" "400"
 check "모르는 블록 이름도 500 이 아니다" \
   "$(code -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' \
       -d '{"slug":"unknown-block","title":"모르는 블록","blocks":[{"block":"nope/missing","props":{}}],"status":"draft"}')" "201"
