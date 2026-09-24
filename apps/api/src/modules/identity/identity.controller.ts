@@ -38,7 +38,9 @@ export class IdentityController {
   @UseGuards(AuthGuard)
   async mine(@Req() req: AuthedRequest) {
     const s = await this.identity.status(req.user.id);
-    return { verified: s.verified, adult: s.adult, verifiedAt: s.verifiedAt };
+    // required — 이 사이트가 회원에게 본인인증을 요구하는가(로그인 화면이 인증 화면으로 보낼지 정한다)
+    const required = req.user.role === "member" && (await this.identity.isRequired());
+    return { verified: s.verified, adult: s.adult, verifiedAt: s.verifiedAt, required };
   }
 
   /**

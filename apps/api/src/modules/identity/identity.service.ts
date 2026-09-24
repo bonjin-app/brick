@@ -11,6 +11,8 @@ const REQUEST_TTL_MINUTES = 30;
 
 /** 한 사람 한 계정 설정 키 */
 export const ONE_PERSON_KEY = "member.one_person_one_account";
+/** 회원 본인인증 필수 설정 키 */
+export const REQUIRED_KEY = "member.identity_required";
 
 /**
  * 끝나고 돌아갈 곳 — **사이트 안 경로만** 받는다.
@@ -79,6 +81,15 @@ export class IdentityService {
       }
     }
     return out;
+  }
+
+  /**
+   * 회원에게 본인인증을 요구하는가 — 설정이 켜져 있고 **인증 수단이 준비돼 있을 때만.**
+   * 수단이 없는데 요구하면 아무도 인증할 수 없어 모든 회원이 잠긴다.
+   */
+  async isRequired(): Promise<boolean> {
+    if ((await this.setting<boolean>(REQUIRED_KEY)) !== true) return false;
+    return (await this.readyProviders()).length > 0;
   }
 
   async status(userId: string): Promise<IdentityStatus> {

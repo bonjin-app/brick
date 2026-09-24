@@ -28,6 +28,8 @@ writeFileSync(OUT, "");
 
 /** paymentId → 결제 */
 const payments = new Map();
+/** 다음 n 번의 결제 조회를 500 으로 실패시킨다 (`/__control/fail-get`) — PG 가 잠시 닿지 않는 상황 */
+let failGets = 0;
 /** identityVerificationId → 본인인증 */
 const identities = new Map();
 let cancelSeq = 0;
@@ -71,6 +73,10 @@ const server = createServer((req, res) => {
       payments.set(p.id, p);
       return send(res, 200, { ok: true });
     }
+    if (req.method === "POST" && path === "/__control/fail-get") {
+      failGets = Number(body.n ?? 0) || 0;
+      return send(res, 200, { ok: true, failGets });
+    }
     // ── 테스트 제어: 손님이 가상계좌에 입금했다 ──
     if (req.method === "POST" && path === "/__control/deposit") {
       const p = payments.get(String(body.paymentId));
@@ -112,6 +118,10 @@ const server = createServer((req, res) => {
     if (req.method === "GET" && getMatch) {
       const id = decodeURIComponent(getMatch[1]);
       record({ kind: "get", paymentId: id, authOk });
+      if (failGets > 0) {
+        failGets -= 1;
+        return send(res, 500, { type: "INTERNAL", message: "일시적인 오류입니다." });
+      }
       if (!authOk) return send(res, 401, { type: "UNAUTHORIZED", message: "인증 정보가 올바르지 않습니다." });
       const p = payments.get(id);
       if (!p) return send(res, 404, { type: "PAYMENT_NOT_FOUND", message: "결제 건이 존재하지 않습니다." });
@@ -122,11 +132,16 @@ const server = createServer((req, res) => {
     if (req.method === "POST" && cancelMatch) {
       const id = decodeURIComponent(cancelMatch[1]);
       record({ kind: "cancel", paymentId: id, authOk, amount: body.amount ?? null,
-               currentCancellableAmount: body.currentCancellableAmount ?? null, reason: body.reason ?? "" });
+               currentCancellableAmount: body.currentCancellableAmount ?? null, reason: body.reason ?? "",
+               refundAccount: body.refundAccount ?? null });
       if (!authOk) return send(res, 401, { type: "UNAUTHORIZED", message: "인증 정보가 올바르지 않습니다." });
       const p = payments.get(id);
       if (!p) return send(res, 404, { type: "PAYMENT_NOT_FOUND", message: "결제 건이 존재하지 않습니다." });
       const remaining = p.amount.total - p.amount.cancelled;
+      // 실제처럼: 입금된 가상계좌는 환불 계좌가 있어야 취소된다
+      if (p.method?.type === "PaymentMethodVirtualAccount" && p.status === "PAID" && !body.refundAccount) {
+        return send(res, 400, { type: "INVALID_REQUEST", message: "가상계좌 환불에는 환불 계좌 정보가 필요합니다." });
+      }
       if (body.currentCancellableAmount !== undefined && Number(body.currentCancellableAmount) !== remaining) {
         return send(res, 409, { type: "CANCELLABLE_AMOUNT_CONSISTENCY_BROKEN",
           message: `취소 가능 잔액 검증에 실패했습니다. (요청 ${body.currentCancellableAmount} / 실제 ${remaining})` });

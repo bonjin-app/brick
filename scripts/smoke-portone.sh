@@ -277,7 +277,13 @@ check "결제 미완료 규칙은 입금 대기 주문을 취소하지 않는다
 check "입금 전 웹훅 — 받기는 한다" "$(webhook "$O_VA-va1")" "200"
 check "입금 전이면 결제 완료가 아니다 (포트원에 다시 물었다)" "$(psql_q "SELECT payment_status FROM shop_orders WHERE order_no='$O_VA'")" "unpaid"
 deposit "$O_VA-va1"
-check "입금 뒤 웹훅" "$(webhook "$O_VA-va1")" "200"
+# 입금 통지가 왔는데 포트원 조회가 잠시 실패했다 — 입금 대기를 잃으면 다시 확정할 길이 없다
+curl -s -o /dev/null -X POST "http://127.0.0.1:$PO_PORT/__control/fail-get" -H 'content-type: application/json' -d '{"n":1}'
+check "조회가 잠시 실패한 통지 — 받기는 한다" "$(webhook "$O_VA-va1")" "200"
+check "결제 완료는 아니다" "$(psql_q "SELECT payment_status FROM shop_orders WHERE order_no='$O_VA'")" "unpaid"
+check "입금 대기를 잃지 않는다 (failed 가 되면 같은 거래를 다시 확정할 수 없다)" \
+  "$(psql_q "SELECT p.status FROM shop_payments p JOIN shop_orders o ON o.id=p.order_id WHERE o.order_no='$O_VA'")" "waiting"
+check "입금 뒤 웹훅 (포트원이 다시 보낸다)" "$(webhook "$O_VA-va1")" "200"
 check "결제 완료" "$(psql_q "SELECT status, payment_status FROM shop_orders WHERE order_no='$O_VA'")" "paid|paid"
 check "입금 대기 기록이 결제로 확정 (새 기록을 만들지 않는다)" "$(psql_q "SELECT count(*), max(p.status) FROM shop_payments p JOIN shop_orders o ON o.id=p.order_id WHERE o.order_no='$O_VA'")" "1|paid"
 check "같은 웹훅이 다시 와도 그대로 (재전송)" "$(webhook "$O_VA-va1"; psql_q "SELECT count(*) FROM shop_payments p JOIN shop_orders o ON o.id=p.order_id WHERE o.order_no='$O_VA'")" "2001"
@@ -315,8 +321,57 @@ curl -s -o /dev/null -b "$CK" -X PUT "$SHOP/admin/orders/$LATE_ID" -H 'content-t
 deposit "$O_LATE-l1"
 webhook "$O_LATE-l1" >/dev/null
 check "주문은 취소 그대로" "$(psql_q "SELECT status FROM shop_orders WHERE order_no='$O_LATE'")" "cancelled"
-check "들어온 돈은 환불 요청됐다" "$(po_last cancel paymentId)" "$O_LATE-l1"
-check "기록이 남는다" "$(psql_q "SELECT p.status FROM shop_payments p JOIN shop_orders o ON o.id=p.order_id WHERE o.order_no='$O_LATE'")" "refunded"
+check "들어온 돈은 환불을 시도했다" "$(po_last cancel paymentId)" "$O_LATE-l1"
+# 가상계좌는 손님 계좌 없이 돌려줄 수 없다 — 자동 환불은 거절되고 운영자가 볼 수 있게 남는다
+check "수동 환불이 필요하다고 기록한다" "$(psql_q "SELECT p.status || '|' || p.failure_reason FROM shop_payments p JOIN shop_orders o ON o.id=p.order_id WHERE o.order_no='$O_LATE'")" "paid|주문이 취소된 뒤 승인됨 — 환불 실패, 수동 환불 필요"
+LATE_REF="$(printf '{"orderNo":"%s","refund_bank":"KAKAO","refund_account_no":"3333012345678","refund_holder":"늦은손님"}' "$O_LATE")"
+check "운영자가 손님 계좌로 환불한다" "$(curl -s -b "$CK" -X POST "$SHOP/admin/payments/refund" -H 'content-type: application/json' -d "$LATE_REF" | jq_get "['refundedNow']")" "14000"
+check "그때 기록이 환불로" "$(psql_q "SELECT p.status FROM shop_payments p JOIN shop_orders o ON o.id=p.order_id WHERE o.order_no='$O_LATE'")" "refunded"
+
+echo "── 관리자가 결제된 주문을 취소·환불로 바꾸면 돈을 먼저 돌려준다"
+# 전에는 상태만 바꿨다 — 카드 결제를 취소해도 PG 취소가 나가지 않았고, "환불" 로 바꾸면 환불액 0원인 채
+# 손님에게 "환불이 완료되었습니다" 가 나갔다
+O_ADM="$(mkorder 1)"; paid_by_customer "$O_ADM-ok" 14000; confirm "$O_ADM" "$O_ADM-ok" >/dev/null
+ADM_ID="$(psql_q "SELECT id FROM shop_orders WHERE order_no='$O_ADM'")"
+check "결제된 주문을 취소로" "$(code -b "$CK" -X PUT "$SHOP/admin/orders/$ADM_ID" -H 'content-type: application/json' -d '{"status":"cancelled"}')" "200"
+check "PG 에 전액 취소가 나갔다" "$(po_last cancel paymentId)" "$O_ADM-ok"
+check "주문은 운영자가 고른 대로 취소" "$(psql_q "SELECT status FROM shop_orders WHERE order_no='$O_ADM'")" "cancelled"
+check "결제 기록은 환불 (금액까지)" "$(psql_q "SELECT status, refunded_amount FROM shop_payments WHERE provider_tid='$O_ADM-ok'")" "refunded|14000"
+O_ADM2="$(mkorder 1)"; paid_by_customer "$O_ADM2-ok" 14000; confirm "$O_ADM2" "$O_ADM2-ok" >/dev/null
+ADM2_ID="$(psql_q "SELECT id FROM shop_orders WHERE order_no='$O_ADM2'")"
+check "환불완료로" "$(code -b "$CK" -X PUT "$SHOP/admin/orders/$ADM2_ID" -H 'content-type: application/json' -d '{"status":"refunded"}')" "200"
+check "실제로 환불됐다" "$(psql_q "SELECT status, refunded_amount FROM shop_payments WHERE provider_tid='$O_ADM2-ok'")" "refunded|14000"
+check "PG 에도" "$(po_last cancel paymentId)" "$O_ADM2-ok"
+# 허용되지 않은 전이는 환불을 내보내기 **전에** 거절한다 — 돈이 나간 뒤 상태 전이가 막히면 어긋난다
+O_SHIP="$(mkorder 1)"; paid_by_customer "$O_SHIP-ok" 14000; confirm "$O_SHIP" "$O_SHIP-ok" >/dev/null
+SHIP_ID="$(psql_q "SELECT id FROM shop_orders WHERE order_no='$O_SHIP'")"
+curl -s -o /dev/null -b "$CK" -X PUT "$SHOP/admin/orders/$SHIP_ID" -H 'content-type: application/json' -d '{"status":"preparing"}'
+curl -s -o /dev/null -b "$CK" -X PUT "$SHOP/admin/orders/$SHIP_ID" -H 'content-type: application/json' -d '{"status":"shipped"}'
+check "배송중 → 취소는 허용되지 않는다" "$(code -b "$CK" -X PUT "$SHOP/admin/orders/$SHIP_ID" -H 'content-type: application/json' -d '{"status":"cancelled"}')" "400"
+check "그래서 환불도 나가지 않았다" "$(psql_q "SELECT status, refunded_amount FROM shop_payments WHERE provider_tid='$O_SHIP-ok'")" "paid|0"
+# PG 가 취소를 거절하면 상태를 바꾸지 않는다
+O_REJ="$(mkorder 1)"; paid_by_customer "$O_REJ-ok" 14000; confirm "$O_REJ" "$O_REJ-ok" >/dev/null
+curl -s -o /dev/null -X POST "http://127.0.0.1:$PO_PORT/__control/phantom-cancel" -H 'content-type: application/json' -d "{\"paymentId\":\"$O_REJ-ok\",\"amount\":1000}"
+REJ_ID="$(psql_q "SELECT id FROM shop_orders WHERE order_no='$O_REJ'")"
+check "PG 가 거절한 환불" "$(code -b "$CK" -X PUT "$SHOP/admin/orders/$REJ_ID" -H 'content-type: application/json' -d '{"status":"cancelled"}')" "402"
+check "주문 상태는 그대로 (환불되지 않은 채 취소로 보이지 않는다)" "$(psql_q "SELECT status FROM shop_orders WHERE order_no='$O_REJ'")" "paid"
+
+echo "── 입금된 가상계좌의 환불 — 손님 계좌가 있어야 한다"
+VA_REF="$(curl -s -b "$CK" -X POST "$SHOP/admin/payments/refund" -H 'content-type: application/json' -d "$(printf '{"orderNo":"%s"}' "$O_VA")")"
+contains "계좌 없이는 무엇이 필요한지 먼저 말한다" "$VA_REF" "환불 받을 계좌"
+check "PG 에 보내지 않았다" "$(python3 -c "
+import json
+print(sum(1 for l in open('$POLOG', encoding='utf-8') if json.loads(l).get('kind')=='cancel' and json.loads(l).get('paymentId')=='$O_VA-va1'))")" "0"
+check "모르는 은행은 거절" "$(code -b "$CK" -X POST "$SHOP/admin/payments/refund" -H 'content-type: application/json' -d "$(printf '{"orderNo":"%s","refund_bank":"MOON","refund_account_no":"110123456789","refund_holder":"손님"}' "$O_VA")")" "400"
+check "계좌번호 형식" "$(code -b "$CK" -X POST "$SHOP/admin/payments/refund" -H 'content-type: application/json' -d "$(printf '{"orderNo":"%s","refund_bank":"SHINHAN","refund_account_no":"12","refund_holder":"손님"}' "$O_VA")")" "400"
+check "계좌를 주면 환불된다" "$(curl -s -b "$CK" -X POST "$SHOP/admin/payments/refund" -H 'content-type: application/json' -d "$(printf '{"orderNo":"%s","refund_bank":"shinhan","refund_account_no":"110-123-456789","refund_holder":"손님"}' "$O_VA")" | jq_get "['refundedNow']")" "14000"
+contains "포트원에 환불 계좌를 실었다 (은행 코드·숫자만)" "$(python3 -c "
+import json
+hit=None
+for l in open('$POLOG', encoding='utf-8'):
+    m=json.loads(l)
+    if m.get('kind')=='cancel' and m.get('paymentId')=='$O_VA-va1': hit=m
+print(json.dumps(hit.get('refundAccount') if hit else None, ensure_ascii=False))")" '{"bank": "SHINHAN", "number": "110123456789", "holderName": "손님"}'
 
 echo "── 시크릿이 새지 않는다"
 absent "서버 로그에 시크릿이 없다" "$(cat "$TMP/api.log")" "SECRET_VALUE_DO_NOT_LEAK"

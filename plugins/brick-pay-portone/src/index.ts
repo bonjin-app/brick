@@ -290,6 +290,7 @@ export default definePlugin(async (ctx) => {
       reason: string;
       idempotencyKey?: string;
       currentCancellable?: number;
+      refundAccount?: { bank: string; number: string; holder: string };
     }) {
       const cfg = await load();
       if (!cfg.apiSecret) return { ok: false, failureReason: "포트원이 설정되지 않았습니다." };
@@ -306,6 +307,10 @@ export default definePlugin(async (ctx) => {
            * 대신 이 장치를 둔다). 호출자가 모르면 보내지 않는다.
            */
           ...(params.currentCancellable !== undefined ? { currentCancellableAmount: params.currentCancellable } : {}),
+          // 가상계좌 — 입금된 돈은 손님 계좌로 보내야 돌려줄 수 있다
+          ...(params.refundAccount
+            ? { refundAccount: { bank: params.refundAccount.bank, number: params.refundAccount.number, holderName: params.refundAccount.holder } }
+            : {}),
         },
       );
       if (!res.ok) {

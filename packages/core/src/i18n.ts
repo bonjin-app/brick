@@ -453,6 +453,7 @@ const CORE_ERROR_EN: MessageCatalog = {
   "회원 테이블을 찾지 못했습니다.": "The member table was not found.",
   "회원가입이 닫혀 있습니다.": "Registration is closed.",
   "회원을 찾을 수 없습니다.": "Member not found.",
+  "이 사이트는 본인인증한 회원만 이용할 수 있습니다. 본인인증을 먼저 해주세요.": "This site is only for members who have verified their identity. Please verify your identity first.",
   "이 관리 화면을 다룰 권한이 없습니다.": "You do not have permission for this admin screen.",
   "관리 화면 권한의 형식이 올바르지 않습니다.": "The admin screen permissions are not in a valid format.",
   "알림 종류를 찾을 수 없습니다.": "Notification type not found.",

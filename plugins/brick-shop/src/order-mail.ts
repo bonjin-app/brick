@@ -317,8 +317,13 @@ const BANK_NAMES: Record<string, string> = {
   BUSAN: "부산은행", DAEGU: "대구은행", KWANGJU: "광주은행", JEONBUK: "전북은행", KYONGNAM: "경남은행",
   JEJU: "제주은행", KDB: "산업은행",
 };
+/** 환불 계좌로 받을 수 있는 은행 코드 (관리 화면의 선택지와 같다) */
+export const BANK_CODES = Object.keys(BANK_NAMES);
+export const BANK_OPTIONS = Object.entries(BANK_NAMES).map(([value, label]) => ({ value, label }));
 export function virtualAccountText(bank: string, account: string, holder: string | null): string {
-  const name = BANK_NAMES[bank.toUpperCase()] ?? bank;
+  // 은행 이름도 사이트 언어로 (원문이 번역 키다)
+  const known = BANK_NAMES[bank.toUpperCase()];
+  const name = known ? t(known) : bank;
   return `${name} ${account}${holder ? ` (${t("ordermail.vaHolder", { holder })})` : ""}`.trim();
 }
 

@@ -78,6 +78,8 @@ const EDITABLE_SETTINGS: Record<string, "string" | "boolean"> = {
   // 한 사람 한 계정 — 본인인증(CI)이 같은 사람이 두 번째 계정에서 인증하지 못하게 한다.
   // 인증 자체를 강제하지는 않는다(성인 상품·게시판이 필요할 때 요구한다)
   "member.one_person_one_account": "boolean",
+  // 회원 본인인증 필수 — 인증하지 않은 회원은 쓰기(글·주문 등)를 못 한다. 인증 수단이 없으면 강제하지 않는다
+  "member.identity_required": "boolean",
   // 모더레이션 (그누보드 기본 설정 동등성) — 줄바꿈/쉼표 구분 목록
   "moderation.banned_words": "string",         // 글·댓글·쪽지·이름에 못 쓰는 단어
   "moderation.denied_names": "string",         // 닉네임 금지 목록 (기본: admin·관리자·운영자 등은 항상)

@@ -308,6 +308,25 @@ CART="$(curl -s -b "$U" "$SHOP/cart")"
 contains "장바구니에는 담기지만" "$CART" "싱글몰트"
 absent "사진은 싣지 않는다" "$CART" "whisky.jpg"
 
+echo "── 회원 본인인증 필수 (사이트 설정)"
+cart_add() {  # cart_add <쿠키|-> → 상태코드
+  local jar=()
+  [[ "$1" != "-" ]] && jar=(-b "$1")
+  code ${jar[@]+"${jar[@]}"} -X POST "$SHOP/cart" -H 'content-type: application/json' -d "$(printf '{"productId":"%s","quantity":1}' "$MUG")"
+}
+MUG="$(psql_q "SELECT id FROM shop_products WHERE slug='mug'")"
+check "끈 상태 — 인증 안 한 회원도 담는다" "$(cart_add "$U")" "200"
+check "설정을 켠다" "$(code -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"member.identity_required":true}')" "200"
+contains "로그인 화면이 인증 화면으로 보낼지 안다" "$(curl -s -b "$U" "$API/api/me/identity")" '"verified":false,"adult":false,"verifiedAt":null,"required":true'
+check "인증 안 한 회원 — 쓰기(장바구니)는 막힌다" "$(cart_add "$U")" "403"
+REQ="$(curl -s -b "$U" -X POST "$SHOP/cart" -H 'content-type: application/json' -d "$(printf '{"productId":"%s","quantity":1}' "$MUG")")"
+contains "이유와 함께 본인인증 길 (field)" "$REQ" '"field":"identity"'
+check "읽기는 막지 않는다 (둘러보고 인증하러 간다)" "$(code -b "$U" "$SHOP/products")" "200"
+check "인증한 회원은 쓴다" "$(cart_add "$M")" "200"
+check "비회원은 대상이 아니다" "$(cart_add -)" "200"
+check "운영진도 아니다" "$(cart_add "$CK")" "200"
+check "끄면 다시 쓴다" "$(code -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"member.identity_required":false}'; cart_add "$U")" "200200"
+
 echo "── 탈퇴하면 인증 기록이 지워진다"
 AID="$(psql_q "SELECT id FROM users WHERE email='a@id.test'")"
 ID_ROWS="SELECT (SELECT count(*) FROM user_certifications WHERE user_id='$AID') || '|' || (SELECT count(*) FROM identity_verifications WHERE user_id='$AID')"
@@ -323,8 +342,12 @@ contains "오류 문장도 번역된다" "$(complete "$U" bidnotexisting)" "The 
 contains "성인 상품 주문 거절도 번역된다" "$(order "$U" >/dev/null; cat "$TMP/o.out")" "adults-only product"
 
 echo "── 플러그인을 끄면 인증 수단도 사라진다"
+curl -s -o /dev/null -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"member.identity_required":true}'
+check "켜 둔 필수 설정 — 수단이 있을 때는 막는다" "$(cart_add "$U")" "403"
 curl -s -o /dev/null -b "$CK" -X POST "$API/api/plugins/brick-pay-portone/deactivate"
 check "목록에서 빠진다" "$(curl -s "$API/api/identity/providers")" '{"items":[]}'
+check "인증 수단이 없으면 필수 설정을 강제하지 않는다 (아무도 인증할 수 없다)" "$(cart_add "$U")" "200"
+contains "로그인 화면도 보내지 않는다" "$(curl -s -b "$U" "$API/api/me/identity")" '"required":false'
 check "시작할 수 없다 (꺼진 확장이 요금을 쓰지 않는다)" "$(code -b "$U" -X POST "$API/api/me/identity/start" -H 'content-type: application/json' -d '{"provider":"portone"}')" "400"
 
 echo "── 시크릿이 새지 않는다"

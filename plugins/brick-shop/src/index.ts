@@ -16,7 +16,7 @@ import { CASH_RECEIPT_RESOURCE, CATEGORY_RESOURCE, COLLECTION_RESOURCE, GRADE_RE
          TAX_INVOICE_RESOURCE } from "./admin-resources.js";
 import { registerStorefrontBlocks } from "./blocks.js";
 import { importProducts } from "./import.js";
-import { ORDER_EVENTS, sendOrderMail, virtualAccountText } from "./order-mail.js";
+import { BANK_CODES, ORDER_EVENTS, sendOrderMail, virtualAccountText } from "./order-mail.js";
 import {
   createInquiry, createReview, deleteInquiry, deleteReview, findPurchase,
   listInquiries, listReviews, replyToInquiry, replyToReview, REVIEW_SORTS, setReviewVisible, updateReview,
@@ -699,19 +699,37 @@ export default definePlugin(async (ctx) => {
     });
   });
 
-  /** 환불 (관리자) — 부분 환불 지원 */
+  /** 환불 (관리자) — 부분 환불 지원. 가상계좌 결제는 환불 받을 계좌가 필요하다 */
   ctx.registerRoute("POST", "/admin/payments/refund", async (req) => {
     requireAdmin(req);
-    const b = req.body as { orderNo?: string; amount?: number; reason?: string };
+    const b = req.body as { orderNo?: string; amount?: number; reason?: string;
+      refund_bank?: string; refund_account_no?: string; refund_holder?: string };
     if (!b?.orderNo) throw new ShopError(400, "orderNo가 필요합니다.");
+    const account = parseRefundAccount(b);
     return refundPayment(db, {
       orderNo: b.orderNo,
       amount: b.amount,
       reason: b.reason || "관리자 환불",
       actorId: req.user?.id ?? null,
       pointsPort: pointsPort(),
+      ...(account ? { refundAccount: account } : {}),
     });
   });
+
+  /**
+   * 환불 받을 계좌 — 셋 다 비었으면 없음, 하나라도 있으면 셋 다 올바라야 한다(반쯤 적은 계좌로
+   * PG 에 보내면 PG 의 말로 거절된다). 은행은 PG 의 은행 코드다.
+   */
+  function parseRefundAccount(b: { refund_bank?: string; refund_account_no?: string; refund_holder?: string }) {
+    const bank = String(b.refund_bank ?? "").trim().toUpperCase();
+    const number = String(b.refund_account_no ?? "").replace(/[\s-]/g, "");
+    const holder = String(b.refund_holder ?? "").trim();
+    if (!bank && !number && !holder) return null;
+    if (!BANK_CODES.includes(bank)) throw new ShopError(400, "환불 받을 은행을 골라주세요.", "refund_bank");
+    if (!/^\d{6,20}$/.test(number)) throw new ShopError(400, "환불 받을 계좌번호는 숫자 6~20자리여야 합니다.", "refund_account_no");
+    if (!holder || holder.length > 30) throw new ShopError(400, "환불 받을 계좌의 예금주를 입력해주세요.", "refund_holder");
+    return { bank, number, holder };
+  }
 
   /** 주문의 결제 내역 (관리자) */
   ctx.registerRoute("GET", "/admin/payments/:orderNo", async (req) => {
@@ -1224,7 +1242,46 @@ export default definePlugin(async (ctx) => {
 
   ctx.registerRoute("PUT", "/admin/orders/:id", async (req) => {
     requireAdmin(req);
-    const b = req.body as { status?: string; tracking_no?: string; note?: string };
+    const b = req.body as {
+      status?: string; tracking_no?: string; note?: string;
+      refund_bank?: string; refund_account_no?: string; refund_holder?: string;
+    };
+    /*
+     * 결제된 주문을 "취소" 나 "환불" 로 바꾸면 **돈을 먼저 돌려준다.**
+     *
+     * 전에는 상태만 바꿨다 — 카드로 결제된 주문을 운영자가 취소해도 PG 취소가 한 번도 나가지 않았고
+     * (결제 기록은 paid 그대로), "환불" 로 바꾸면 손님에게 "환불이 완료되었습니다" 가 나갔는데 실제
+     * 환불액은 0원이었다. 관리 화면의 상태 칸에서 고르는 흔한 동작이다.
+     *
+     * 전이가 허용되는지 **먼저** 본다 — 환불이 나간 뒤 상태 전이가 거절되면 돈과 기록이 어긋난다.
+     * 환불이 실패하면 상태를 바꾸지 않는다. 결제 기록이 없는 결제완료(옮겨 온 주문 등)는 돌려줄
+     * 곳이 없으므로 지금처럼 상태만 바꾼다.
+     */
+    if (b.status === "cancelled" || b.status === "refunded") {
+      const { rows: live } = await db.execute(sql`
+        SELECT o.order_no, o.status FROM shop_orders o
+        WHERE o.id = ${req.params.id}::uuid
+          AND EXISTS (SELECT 1 FROM shop_payments p WHERE p.order_id = o.id AND p.status IN ('paid', 'partial_refunded'))
+        LIMIT 1
+      `);
+      if (live[0]) {
+        const from = String(live[0].status) as OrderStatus;
+        if (!STATUS_TRANSITIONS[from]?.includes(b.status as OrderStatus)) {
+          // 허용되지 않은 전이의 안내는 상태 머신이 한다(화면의 말로, 다음 선택지까지)
+          await changeOrderStatus(db, req.params.id, b.status as OrderStatus, { actorId: req.user?.id ?? null });
+        }
+        const account = parseRefundAccount(b);
+        const r = await refundPayment(db, {
+          orderNo: String(live[0].order_no),
+          reason: b.note?.trim() || (b.status === "cancelled" ? "관리자 취소" : "관리자 환불"),
+          actorId: req.user?.id ?? null,
+          pointsPort: pointsPort(),
+          finalStatus: b.status,
+          ...(account ? { refundAccount: account } : {}),
+        });
+        return { ok: true, refunded: r.refundedNow };
+      }
+    }
     if (b.status) {
       await changeOrderStatus(db, req.params.id, b.status as OrderStatus, {
         note: b.note || undefined,

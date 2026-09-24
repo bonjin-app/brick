@@ -1,6 +1,7 @@
 import type { AdminResource } from "@brick/plugin-sdk";
 import { ORDER_STATUS, STATUS_LABEL, PRODUCT_STATUS_LABEL } from "./types.js";
 import { REASON_CODES, RETURN_STATUS, RETURN_STATUS_LABEL } from "./returns.js";
+import { BANK_OPTIONS } from "./order-mail.js";
 
 /**
  * 관리자 리소스 선언.
@@ -210,8 +211,13 @@ export const ORDER_RESOURCE: AdminResource = {
     { name: "total", label: "결제금액", type: "money", readOnly: true, inList: true },
     { name: "status", label: "주문 상태", type: "select", inList: true,
       options: ORDER_STATUS.map((s) => ({ value: s, label: STATUS_LABEL[s] })),
-      help: "허용된 전이만 가능합니다 (예: 배송중 → 배송완료)." },
+      help: "허용된 전이만 가능합니다 (예: 배송중 → 배송완료). 결제된 주문을 취소·환불로 바꾸면 결제를 먼저 환불합니다(환불이 실패하면 상태를 바꾸지 않습니다)." },
     { name: "tracking_no", label: "운송장 번호", type: "text" },
+    // 가상계좌로 결제된 주문의 취소·환불에만 쓴다 — 카드는 승인 취소라 계좌가 필요 없다
+    { name: "refund_bank", label: "환불 받을 은행", type: "select", options: [{ value: "", label: "—" }, ...BANK_OPTIONS],
+      help: "가상계좌로 결제된 주문을 취소·환불할 때만 필요합니다. 손님에게 받은 계좌를 적으세요." },
+    { name: "refund_account_no", label: "환불 받을 계좌번호", type: "text" },
+    { name: "refund_holder", label: "환불 받을 계좌 예금주", type: "text" },
     { name: "note", label: "변경 메모", type: "text", help: "상태 이력에 함께 기록됩니다." },
     { name: "items_summary", label: "주문 상품", type: "text", readOnly: true, inList: true },
     { name: "receiver_name", label: "받는 사람", type: "text", readOnly: true },

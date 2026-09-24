@@ -9,6 +9,7 @@ import type { MailProvider, QueueProvider } from "@brick/core";
 import { SITE_TZ, isRawResponse, rankOf, translateCoreLabel, type PluginUploadedFile } from "@brick/core";
 import { PluginLoaderService } from "./plugin-loader.service.js";
 import { AdminGuard, ManagerGuard } from "../auth/auth.guard.js";
+import { IdentityService } from "../identity/identity.service.js";
 import { AuthService } from "../auth/auth.service.js";
 import { ExtensionInstallerService } from "../extensions/extension-installer.service.js";
 import { ExtensionUpdaterService } from "../extensions/extension-updater.service.js";
@@ -36,6 +37,7 @@ export class PluginsController {
     @Inject(QUEUE) private readonly queue: QueueProvider,
     private readonly themes: ThemesService,
     private readonly maintenance: MaintenanceModeService,
+    private readonly identity: IdentityService,
   ) {}
 
   @Get("plugins")
@@ -177,6 +179,18 @@ export class PluginsController {
      */
     if (isWrite(req.method) && !bypassesMaintenance(user?.role) && (await this.maintenance.isOn())) {
       throw new ServiceUnavailableException(msg("err.maintenance"));
+    }
+
+    /*
+     * 회원 본인인증 필수(사이트 설정) — 인증하지 않은 회원은 글·댓글·주문·장바구니 같은 **쓰기**를
+     * 할 수 없다. 여기 한 곳에서 막는다: 플러그인마다 검사하게 하면 새 기능이 생길 때마다 뚫린다.
+     * 읽기는 막지 않는다(둘러보고 인증하러 가는 길이 있어야 한다). 비회원·운영진·관리 경로는
+     * 대상이 아니다. `field: identity` 로 화면이 본인인증 길을 붙인다.
+     */
+    if (isWrite(req.method) && !match.adminOnly && user?.role === "member" && (await this.identity.isRequired())) {
+      if (!(await this.identity.status(user.id)).verified) {
+        throw new ForbiddenException({ message: "이 사이트는 본인인증한 회원만 이용할 수 있습니다. 본인인증을 먼저 해주세요.", field: "identity" });
+      }
     }
 
     try {

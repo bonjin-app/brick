@@ -182,6 +182,11 @@ export interface PaymentGateway {
      * 멱등키를 지원하지 않는 PG 에게는 이것이 그 역할을 한다.
      */
     currentCancellable?: number;
+    /**
+     * 환불 받을 계좌 — 가상계좌처럼 **손님 계좌로 돌려줘야 하는** 결제에만 온다(카드는 승인 취소라
+     * 필요 없다). 은행은 PG 의 은행 코드(`SHINHAN` 등)다.
+     */
+    refundAccount?: { bank: string; number: string; holder: string };
   }): Promise<{
     ok: boolean;
     raw?: unknown;
@@ -465,6 +470,10 @@ export async function refundPayment(
     reason: string;
     actorId?: string | null;
     pointsPort?: PointsPort | null;
+    /** 전액 환불 뒤 주문 상태 — 기본 "환불". 운영자가 결제된 주문을 "취소" 로 바꾼 경우 "취소" */
+    finalStatus?: "refunded" | "cancelled";
+    /** 환불 받을 계좌 — 가상계좌로 결제한 주문에 필요하다 */
+    refundAccount?: { bank: string; number: string; holder: string };
   },
 ): Promise<{
   ok: boolean;
@@ -480,7 +489,7 @@ export async function refundPayment(
   remaining: number;
 }> {
   const { rows } = await db.execute(sql`
-    SELECT p.id, p.provider, p.provider_tid, p.amount, p.refunded_amount, o.id AS order_id, o.status
+    SELECT p.id, p.provider, p.provider_tid, p.amount, p.refunded_amount, p.va_account, o.id AS order_id, o.status
     FROM shop_payments p JOIN shop_orders o ON o.id = p.order_id
     WHERE o.order_no = ${params.orderNo} AND p.status IN ('paid', 'partial_refunded')
     ORDER BY p.created_at DESC LIMIT 1
@@ -501,6 +510,14 @@ export async function refundPayment(
     throw new ShopError(400, t("refund.overLimit", { amount: money(remaining) }));
   }
 
+  /*
+   * 가상계좌로 받은 돈은 **손님 계좌로 보내야** 돌려줄 수 있다(카드처럼 승인을 취소하는 것이 아니다).
+   * 계좌 없이 PG 에 보내면 거절되고, 그 이유는 PG 의 말로 온다 — 먼저 무엇이 필요한지 말한다.
+   */
+  if (payment.va_account && !params.refundAccount) {
+    throw new ShopError(400, "가상계좌로 결제한 주문은 환불 받을 계좌(은행·계좌번호·예금주)가 있어야 환불할 수 있습니다.", "refund_account_no");
+  }
+
   // 이 취소 동작을 가리키는 멱등키.
   //
   // `already`(지금까지 환불한 누적액)를 넣는 것이 핵심이다. 같은 금액을 두 번
@@ -515,6 +532,7 @@ export async function refundPayment(
     reason: params.reason,
     idempotencyKey,
     currentCancellable: remaining,
+    ...(params.refundAccount ? { refundAccount: params.refundAccount } : {}),
   });
   if (!result.ok) throw new ShopError(402, result.failureReason ?? "환불 처리에 실패했습니다.");
 
@@ -526,9 +544,20 @@ export async function refundPayment(
     WHERE id = ${String(payment.id)}
   `);
 
-  // 전액 환불이면 주문도 환불 상태로 전이 → 재고가 복원된다
-  if (fullyRefunded) {
-    await changeOrderStatus(db, String(payment.order_id), "refunded", {
+  /*
+   * 이미 취소된 주문(취소된 뒤 들어온 결제를 나중에 손님 계좌로 돌려주는 경우)은 상태를 옮기지 않는다 —
+   * 취소 → 환불 전이는 없고, 여기서 예외가 나면 **돈은 돌려줬는데 오류로 끝난다.** 이력만 남긴다.
+   */
+  const orderCancelled = String(payment.status) === "cancelled";
+  if (fullyRefunded && orderCancelled) {
+    await db.execute(sql`
+      INSERT INTO shop_order_events (id, order_id, from_status, to_status, note, actor_id)
+      VALUES (${uuidv7()}, ${String(payment.order_id)}::uuid, 'cancelled', 'cancelled',
+              ${`취소된 주문의 결제 전액 환불 ${amount.toLocaleString("ko-KR")}원: ${params.reason}`}, ${params.actorId ?? null}::uuid)
+    `);
+  } else if (fullyRefunded) {
+    // 전액 환불이면 주문도 환불(또는 운영자가 고른 취소) 상태로 전이 → 재고가 복원된다
+    await changeOrderStatus(db, String(payment.order_id), params.finalStatus ?? "refunded", {
       note: `전액 환불: ${params.reason}`,
       actorId: params.actorId ?? null,
       pointsPort: params.pointsPort ?? null,

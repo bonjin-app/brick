@@ -45,7 +45,7 @@ export default function LoginPage() {
       setBusy(false);
       return;
     }
-    if (res.ok) window.location.href = safeNext();
+    if (res.ok) { window.location.href = await afterLogin(safeNext()); return; }
     else {
       setError(data.message ?? t("login.fail"));
       setBusy(false);
@@ -62,7 +62,7 @@ export default function LoginPage() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ challengeToken, code }),
     });
-    if (res.ok) { window.location.href = safeNext(); return; }
+    if (res.ok) { window.location.href = await afterLogin(safeNext()); return; }
     setError((await res.json().catch(() => ({}))).message ?? t("login.fail"));
     setBusy(false);
   }
@@ -159,3 +159,19 @@ function safeNext(): string {
   }
   return "/";
 }
+
+/**
+ * 로그인 뒤 갈 곳 — 사이트가 회원 본인인증을 요구하고 아직 하지 않았으면 본인인증 화면으로
+ * (끝나면 원래 가려던 곳으로 돌아온다). 확인이 실패하면 그냥 원래 가려던 곳으로 — 로그인은 끝났다.
+ */
+async function afterLogin(next: string): Promise<string> {
+  try {
+    const r = await fetch("/api/me/identity");
+    if (!r.ok) return next;
+    const d = (await r.json()) as { required?: boolean; verified?: boolean };
+    return d.required && !d.verified ? `/identity?next=${encodeURIComponent(next)}` : next;
+  } catch {
+    return next;
+  }
+}
+
