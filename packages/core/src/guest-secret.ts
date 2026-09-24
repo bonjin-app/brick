@@ -11,16 +11,21 @@
  * 잠긴 동안은 맞는 비밀번호도 시험하지 않는다. 시험해 주면 잠금이 대입을 늦추기만 할 뿐
  * 막지 못한다(맞으면 200, 틀리면 429 — 응답이 답을 알려 준다).
  *
- * 한계: 요청 제한은 인메모리라 인스턴스마다 따로 센다(운영 문서의 스케일링 표 참고).
+ * 한도는 DB 에 센다 — 서버가 여러 대여도, 재시작해도 하나다.
+ */
+/**
+ * 요청 제한 — DB 에 센다. 서버가 여러 대여도, 재시작해도 한도는 하나다.
  */
 export interface PluginRateLimit {
+  /** 한 번 세고 허용 여부를 돌려준다 — **원자적**(동시 요청도 한도만큼만 허용). 막히면 세지 않는다 */
+  consume(key: string, limit: number, windowMs: number): Promise<{ allowed: boolean; retryAfterSeconds: number }>;
   /** 막혔는가 (세지 않는다) */
-  check(key: string, limit: number, windowMs: number): { allowed: boolean; retryAfterSeconds: number };
+  check(key: string, limit: number, windowMs: number): Promise<{ allowed: boolean; retryAfterSeconds: number }>;
   /** 한 번 센다 */
-  hit(key: string, windowMs: number): void;
+  hit(key: string, windowMs: number): Promise<void>;
   /** 가장 최근의 한 번을 되돌린다 */
-  undo(key: string): void;
-  reset(key: string): void;
+  undo(key: string): Promise<void>;
+  reset(key: string): Promise<void>;
 }
 
 export const GUEST_SECRET_WINDOW_MS = 15 * 60_000;
@@ -41,23 +46,24 @@ export async function checkGuestSecret(
 ): Promise<boolean> {
   const target = `guest-secret:target:${opts.target}`;
   const ip = `guest-secret:ip:${opts.ip || "-"}`;
-  for (const [key, limit] of [[target, GUEST_SECRET_TARGET_LIMIT], [ip, GUEST_SECRET_IP_LIMIT]] as const) {
-    const r = rateLimit.check(key, limit, GUEST_SECRET_WINDOW_MS);
-    if (!r.allowed) throw tooMany(r.retryAfterSeconds);
-  }
   /*
    * 검증 **전에** 센다. 검증(scrypt)은 비동기라 수십 ms 걸리는데, 실패를 검증 뒤에 세면
-   * 동시에 쏟아진 요청이 모두 검증을 기다리는 동안 아무것도 세어지지 않아 **전부** 확인을
-   * 통과한다(처음 구현이 그랬다: 동시 20건이 한 건도 막히지 않았다 — 1천 건이면 1천 번을
-   * 시험한다). 위의 확인과 여기의 기록 사이에 await 가 없으므로 이벤트 루프에서 끊기지
-   * 않는다. 맞으면 되돌린다.
+   * 동시에 쏟아진 요청이 모두 검증을 기다리는 동안 아무것도 세어지지 않아 **전부** 통과한다
+   * (처음 구현이 그랬다: 동시 20건이 한 건도 막히지 않았다). consume 은 세기와 한도 확인을
+   * 키마다 잠금 안에서 한 번에 하므로, 서버가 여러 대여도 동시 요청은 한도만큼만 지나간다.
+   * 맞으면 되돌린다 — 맞게 넣은 손님의 반복 조회까지 세면 정당한 손님이 잠긴다.
    */
-  rateLimit.hit(target, GUEST_SECRET_WINDOW_MS);
-  rateLimit.hit(ip, GUEST_SECRET_WINDOW_MS);
+  const t = await rateLimit.consume(target, GUEST_SECRET_TARGET_LIMIT, GUEST_SECRET_WINDOW_MS);
+  if (!t.allowed) throw tooMany(t.retryAfterSeconds);
+  const i = await rateLimit.consume(ip, GUEST_SECRET_IP_LIMIT, GUEST_SECRET_WINDOW_MS);
+  if (!i.allowed) {
+    await rateLimit.undo(target);
+    throw tooMany(i.retryAfterSeconds);
+  }
   const ok = await verify();
   if (ok) {
-    rateLimit.reset(target);
-    rateLimit.undo(ip);
+    await rateLimit.reset(target);
+    await rateLimit.undo(ip);
   }
   return ok;
 }

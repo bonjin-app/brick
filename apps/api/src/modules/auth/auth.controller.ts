@@ -51,7 +51,7 @@ export class AuthController {
       { key: `ip:${req.ip}`, limit: 50 },
     ];
     for (const { key, limit } of keys) {
-      const { allowed, retryAfterSeconds } = this.rateLimit.consume(key, limit, 15 * 60_000);
+      const { allowed, retryAfterSeconds } = await this.rateLimit.consume(key, limit, 15 * 60_000);
       if (!allowed) {
         reply.header("retry-after", String(retryAfterSeconds));
         throw new HttpException(
@@ -63,7 +63,15 @@ export class AuthController {
 
     // 비밀번호만 먼저 검증한다 — 2단계 인증이 켜져 있으면 세션을 주지 않는다
     const user = await this.auth.authenticate(email, body?.password ?? "");
-    for (const { key } of keys) this.rateLimit.reset(key);
+    /*
+     * 성공하면 **이 계정의** 버킷은 비우고, IP 버킷은 **이번 시도 한 번만** 되돌린다.
+     *
+     * 전에는 IP 버킷까지 통째로 비웠다. IP 한도는 여러 계정에 흔한 비밀번호를 뿌리는
+     * 공격을 막는 유일한 장치인데, 공격자가 자기 계정으로 가끔 로그인에 성공하면 그때마다
+     * 0 이 되어 한도가 영영 차지 않았다(계정 70개에 뿌리는 동안 한 번도 막히지 않았다).
+     */
+    await this.rateLimit.reset(keys[0].key);
+    await this.rateLimit.undo(keys[1].key);
 
     if (await this.twoFactor.isEnabled(user.id)) {
       // 세션 쿠키를 심지 않는다. 도전 토큰은 코드 검증에만 쓴다.
@@ -102,7 +110,7 @@ export class AuthController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ) {
     // 도전 자체에 시도 한계가 있지만, 도전을 계속 새로 만드는 것도 막아야 한다
-    const { allowed, retryAfterSeconds } = this.rateLimit.consume(
+    const { allowed, retryAfterSeconds } = await this.rateLimit.consume(
       `2fa:ip:${req.ip}`,
       30,
       15 * 60_000,
@@ -186,7 +194,7 @@ export class AuthController {
       { key: `reset:ip:${req.ip}`, limit: 10 },
     ];
     for (const { key, limit } of limits) {
-      if (!this.rateLimit.consume(key, limit, 60 * 60_000).allowed) {
+      if (!(await this.rateLimit.consume(key, limit, 60 * 60_000)).allowed) {
         // 제한에 걸려도 열거 정보를 주지 않기 위해 동일 응답을 유지한다
         return { ok: true };
       }
@@ -207,7 +215,7 @@ export class AuthController {
     @Body() body: { token: string; password: string },
     @Req() req: FastifyRequest,
   ) {
-    if (!this.rateLimit.consume(`reset-submit:${req.ip}`, 20, 60 * 60_000).allowed) {
+    if (!(await this.rateLimit.consume(`reset-submit:${req.ip}`, 20, 60 * 60_000)).allowed) {
       throw new HttpException("요청이 너무 많습니다. 잠시 후 다시 시도하세요.", HttpStatus.TOO_MANY_REQUESTS);
     }
     const ok = await this.reset.complete(body?.token ?? "", body?.password ?? "");
@@ -248,7 +256,7 @@ export class AuthController {
     @Res() reply: FastifyReply,
   ) {
     // 소셜 로그인 시작도 남용될 수 있다 (공급자에 대한 요청 증폭)
-    if (!this.rateLimit.consume(`oauth:${req.ip}`, 30, 15 * 60_000).allowed) {
+    if (!(await this.rateLimit.consume(`oauth:${req.ip}`, 30, 15 * 60_000)).allowed) {
       throw new HttpException("요청이 너무 많습니다. 잠시 후 다시 시도하세요.", HttpStatus.TOO_MANY_REQUESTS);
     }
 

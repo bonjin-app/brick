@@ -86,7 +86,7 @@ export class AccountSecurityController {
    */
   private async requirePassword(req: FastifyRequest, password: string): Promise<void> {
     const userId = this.userId(req);
-    const { allowed, retryAfterSeconds } = this.rateLimit.consume(
+    const { allowed, retryAfterSeconds } = await this.rateLimit.consume(
       `reauth:${userId}`,
       10,
       15 * 60_000,
@@ -99,7 +99,7 @@ export class AccountSecurityController {
     }
     const ok = await this.auth.verifyPassword(userId, password);
     if (!ok) throw new UnauthorizedException("비밀번호가 맞지 않습니다.");
-    this.rateLimit.reset(`reauth:${userId}`);
+    await this.rateLimit.reset(`reauth:${userId}`);
   }
 
   @Get()
@@ -152,7 +152,7 @@ export class AccountSecurityController {
   @Post("2fa/complete")
   async complete(@Req() req: FastifyRequest, @Body() body: { code: string }) {
     const userId = this.userId(req);
-    const { allowed } = this.rateLimit.consume(`2fa-enroll:${userId}`, 10, 15 * 60_000);
+    const { allowed } = await this.rateLimit.consume(`2fa-enroll:${userId}`, 10, 15 * 60_000);
     if (!allowed) {
       throw new HttpException("너무 많이 시도했습니다.", HttpStatus.TOO_MANY_REQUESTS);
     }

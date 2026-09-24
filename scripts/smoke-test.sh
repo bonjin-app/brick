@@ -620,10 +620,10 @@ check "대기 중인 주기 작업은 하나만 남고, 사슬은 이어진다" 
 check "시도를 다 쓴 실패는 주인에게 한 번 알린다" \
   "$(node "$ROOT/scripts/queue-lease-probe.mjs" fail)" "onFailed=1 status=failed"
 
-echo "── 요청 제한은 버킷마다 자기 시간 창을 지킨다"
+echo "── 요청 제한은 버킷마다 자기 시간 창을 지키고, 세기가 원자적이다"
 # 15분 창 호출의 정리가 60분 창 버킷(비밀번호 재설정 제출 등)을 15분 만에 지워 한도가 풀렸다
-check "60분 한도는 15분 창 요청이 정리를 불러도 60분 동안 막는다" \
-  "$(node "$ROOT/scripts/rate-limit-probe.mjs")" "exhausted=true after21m=true"
+check "60분 한도는 60분 동안 막고, 동시에 20번 세어도 한도(5)만큼만 허용한다" \
+  "$(node "$ROOT/scripts/rate-limit-probe.mjs")" "exhausted=true after21m=true concurrent=5"
 
 echo "── 잠금은 잡은 연결에서 풀린다 (한 번에 하나만 돌아야 하는 일 — 정기결제 청구 등)"
 # advisory lock 은 연결 단위다. 풀에 대고 잡고 풀면, 사이에 쿼리가 하나만 끼어도 해제가

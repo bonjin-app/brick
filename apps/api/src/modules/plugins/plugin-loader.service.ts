@@ -618,6 +618,7 @@ export class PluginLoaderService implements OnModuleInit {
       queue: this.queue,
       lock: this.lock,
       rateLimit: {
+        consume: (key, limit, windowMs) => this.rateLimiter.consume(`plugin:${pluginName}:${key}`, limit, windowMs),
         check: (key, limit, windowMs) => this.rateLimiter.check(`plugin:${pluginName}:${key}`, limit, windowMs),
         hit: (key, windowMs) => this.rateLimiter.hit(`plugin:${pluginName}:${key}`, windowMs),
         undo: (key) => this.rateLimiter.undo(`plugin:${pluginName}:${key}`),

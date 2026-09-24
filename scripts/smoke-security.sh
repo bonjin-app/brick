@@ -447,6 +447,38 @@ check "우회 주소는 모두 거절하고 정상 경로는 받는다" \
   "$(node --experimental-strip-types --no-warnings "$ROOT/scripts/safe-path-probe.ts")" \
   '["/account?tab=orders#top","거절","거절","거절","거절","거절","거절","거절"]'
 
+echo "── 로그인 대입 한도는 서버가 여러 대여도, 재시작해도 하나다"
+# 요청 제한이 서버 메모리에 있었다 — 서버를 둘로 늘리면 계정당 5회가 10회가 되고,
+# 배포로 재시작할 때마다 모든 잠금이 풀렸다(운영 문서에 "알려진 한계" 로 적혀 있었다).
+# 같은 DB 를 쓰는 두 번째 서버를 띄워 한 계정에 번갈아 틀린다. 이 절과 다음 절은 이
+# IP 의 로그인 한도를 채우므로 맨 끝에 둔다.
+boot2 "$TMP/api2-rl.log" || bad "두 번째 서버 기동"
+VICTIM="victim-$$@sec.test"
+wrong_login() {  # wrong_login <서버> <이메일> → 상태 코드
+  code -X POST "$1/api/auth/login" -H 'content-type: application/json' -d "{\"email\":\"$2\",\"password\":\"not-the-password\"}"
+}
+RL_CODES=""
+for i in 1 2 3 4 5; do
+  if (( i % 2 )); then RL_CODES="$RL_CODES $(wrong_login "$API" "$VICTIM")"; else RL_CODES="$RL_CODES $(wrong_login "$API2" "$VICTIM")"; fi
+done
+check "두 서버에 번갈아 다섯 번은 틀린 비밀번호로 답한다" "$RL_CODES" " 401 401 401 401 401"
+check "여섯 번째는 어느 서버에서도 막힌다 (계정당 5회가 서버 수만큼 늘지 않는다)" "$(wrong_login "$API2" "$VICTIM")" "429"
+boot2 "$TMP/api2-rl2.log" || bad "두 번째 서버 재시작"
+check "재시작해도 잠금이 남는다 (배포마다 풀리지 않는다)" "$(wrong_login "$API2" "$VICTIM")" "429"
+
+echo "── 자기 계정으로 로그인에 성공해도 IP 한도가 초기화되지 않는다 (비밀번호 뿌리기)"
+# IP 한도(15분에 50회)는 여러 계정에 흔한 비밀번호를 뿌리는 공격을 막는 유일한 장치다.
+# 그런데 로그인에 성공하면 **IP 버킷까지** 통째로 비웠다 — 공격자가 자기 계정으로 가끔
+# 로그인하면 한도가 영영 차지 않는다. 계정마다 한 번씩, 아홉 번마다 자기 계정 로그인.
+SPRAY_HIT=""
+for i in $(seq 1 70); do
+  RC="$(wrong_login "$API" "spray-$i-$$@sec.test")"
+  [[ "$RC" == "429" ]] && { SPRAY_HIT="$i"; break; }
+  (( i % 9 == 0 )) && curl -s -o /dev/null -X POST "$API/api/auth/login" -H 'content-type: application/json' --data-binary "@$TMP/ln.json"
+done
+[[ -n "$SPRAY_HIT" ]] && ok "자기 계정 로그인을 섞어도 IP 한도에 걸린다 (${SPRAY_HIT}번째 계정에서)" \
+  || bad "자기 계정 로그인을 섞으면 IP 한도가 영영 차지 않는다 (70개 계정에 뿌리는 동안 한 번도 막히지 않았다)"
+
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 # 실측을 남긴다(설정됐을 때만) — README 의 표가 실제와 같은지 CI 가 대조한다.
 # 표의 숫자는 조용히 썩는다: 단언을 더해도 아무도 그 줄을 고치지 않는다.

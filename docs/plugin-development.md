@@ -475,7 +475,7 @@ await ctx.db.transaction(async (tx) => {
 | `ctx.settings` | `plugin:<name>:` 네임스페이스가 적용된 설정 저장소 |
 | `ctx.cache` / `ctx.queue` / `ctx.storage` | Provider 추상화 (지금 구현은 PostgreSQL·로컬 디스크뿐이다) |
 | `ctx.lock` | 클러스터 전체에서 **한 번에 하나만** 돌아야 하는 일 — `withLock(키, fn)`, 잡혀 있으면 `null` |
-| `ctx.rateLimit` | 요청 제한 — `check`(세지 않고 확인) · `hit` · `undo` · `reset`. 키는 플러그인별로 나뉜다. 인메모리라 인스턴스마다 따로 센다 |
+| `ctx.rateLimit` | 요청 제한(비동기) — `consume`(원자적으로 세고 확인) · `check`(세지 않고 확인) · `hit` · `undo` · `reset`. 키는 플러그인별로 나뉜다. DB 에 세므로 서버가 여러 대여도 한도는 하나다 |
 | `ctx.hooks` | action/filter 버스 |
 
 ### 주기 작업 — 사슬은 하나만, 실행은 한 번에 하나만

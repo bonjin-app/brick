@@ -8,6 +8,7 @@ import { AuditService } from "../audit/audit.service.js";
 import { SearchService } from "../search/search.service.js";
 import { EmailVerifyService } from "../members/email-verify.service.js";
 import { PasswordResetService } from "../auth/password-reset.service.js";
+import { RateLimitService } from "../auth/rate-limit.service.js";
 import { NotificationsService } from "../notifications/notifications.service.js";
 
 /**
@@ -40,6 +41,7 @@ export class MaintenanceService implements OnModuleInit, OnModuleDestroy {
     private readonly emailVerify: EmailVerifyService,
     private readonly passwordReset: PasswordResetService,
     private readonly notifications: NotificationsService,
+    private readonly rateLimit: RateLimitService,
   ) {}
 
   onModuleInit(): void {
@@ -73,6 +75,8 @@ export class MaintenanceService implements OnModuleInit, OnModuleDestroy {
       ["notifications", () => this.notifications.prune()],
       // 끝난 큐 작업 — 정기 작업만으로 하루 수백 행이 쌓였는데 아무도 지우지 않았다
       ["queue-jobs", () => this.queue.prune()],
+      // 요청 제한 기록 — 가장 긴 창이 60분이라 하루 지난 것은 셀 일이 없다
+      ["rate-limits", () => this.rateLimit.prune()],
     ];
     for (const [name, run] of jobs) {
       try {

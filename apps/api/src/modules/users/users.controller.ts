@@ -95,7 +95,7 @@ export class UsersController {
       [`register-email:${email}`, 3, "이 이메일로"],
       [`register-ip:${req.ip}`, 20, "이 네트워크에서"],
     ] as const) {
-      const { allowed, retryAfterSeconds } = this.rateLimit.consume(key, limit, 60 * 60_000);
+      const { allowed, retryAfterSeconds } = await this.rateLimit.consume(key, limit, 60 * 60_000);
       if (!allowed) {
         throw new HttpException(
           msg("err.tooManySignups", { label, minutes: Math.ceil(retryAfterSeconds / 60) }),
