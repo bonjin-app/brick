@@ -156,6 +156,17 @@ export class PluginsController {
     if (match.adminOnly && rankOf(user?.role) < rankOf("manager")) {
       throw new ForbiddenException("권한이 없습니다.");
     }
+    /*
+     * 권한 범위 — "이 운영자는 주문만". 여기 한 곳에서 막는다: 플러그인 라우트는 역할만 보고
+     * (`admin` 또는 `manager`) 범위는 모른다. 저자마다 범위를 검사하게 하면 한 번 잊은 라우트로
+     * 주문 담당이 상품 가격을 바꾼다.
+     */
+    if (match.adminOnly && user?.role === "manager" && Array.isArray(user.scopes)) {
+      const inPlugin = url.slice(`/api/plugins/${name}`.length) || "/";
+      if (!this.loader.scopeAllows(name, inPlugin, user.scopes)) {
+        throw new ForbiddenException("이 관리 화면을 다룰 권한이 없습니다.");
+      }
+    }
 
     /*
      * 점검 중에는 **쓰기를 막는다.**
@@ -249,10 +260,11 @@ export class PluginsController {
    */
   @Get("admin/nav")
   @UseGuards(ManagerGuard)
-  async adminNav(@Req() req: FastifyRequest & { user?: { role: string } }) {
+  async adminNav(@Req() req: FastifyRequest & { user?: { role: string; scopes?: string[] | null } }) {
     // 선언 라벨은 서빙 시점에 번역한다 (원문=키 — 로더 localizeAdminResource)
     await this.loader.refreshLocale();
     const isAdmin = req.user?.role === "admin";
+    const scopes = !isAdmin && Array.isArray(req.user?.scopes) ? req.user!.scopes! : null;
     return {
       menus: this.loader.adminMenus.map((m) => this.loader.localizeAdminMenu(m)),
       resources: this.loader.adminResources
@@ -260,6 +272,8 @@ export class PluginsController {
         // 관리자 전용으로 선언된 화면은 운영자에게 보여주지 않는다 —
         // 목록에 있는데 누르면 403 이면 목록이 거짓말을 하는 것이다
         .filter((r) => isAdmin || !r.adminOnly)
+        // 범위가 있는 운영자에게는 받은 화면만 — 누르면 403 인 메뉴는 거짓말이다
+        .filter((r) => !scopes || scopes.includes(r.plugin) || scopes.includes(`${r.plugin}/${r.name}`))
         .sort((a, b) => (a.order ?? 100) - (b.order ?? 100))
         .map((r) => this.loader.localizeAdminResource(r.plugin, r))
         .map((r) => ({
@@ -457,7 +471,7 @@ export class PluginsController {
   @Get("admin/resources/:plugin/:name")
   @UseGuards(ManagerGuard)
   async adminResource(
-    @Req() req: FastifyRequest & { user?: { role: string } },
+    @Req() req: FastifyRequest & { user?: { role: string; scopes?: string[] | null } },
     @Param("plugin") plugin: string,
     @Param("name") name: string,
   ) {
@@ -466,6 +480,10 @@ export class PluginsController {
     // 목록에서 가린 화면은 주소를 쳐도 열리지 않는다 (라우트의 자기 검사는 그대로다)
     if (found.adminOnly && req.user?.role !== "admin") {
       throw new ForbiddenException("관리자만 할 수 있는 작업입니다.");
+    }
+    const scopes = req.user?.role === "manager" && Array.isArray(req.user.scopes) ? req.user.scopes : null;
+    if (scopes && !scopes.includes(plugin) && !scopes.includes(`${plugin}/${name}`)) {
+      throw new ForbiddenException("이 관리 화면을 다룰 권한이 없습니다.");
     }
     await this.loader.refreshLocale();
     return this.loader.localizeAdminResource(plugin, found);
@@ -477,6 +495,21 @@ export class PluginsController {
    * 자동으로 적용하지 않는다. 무엇이 바뀌는지 보여주고 운영자가 누른다 —
    * 자동 적용은 새벽에 사이트가 바뀌는 것이고, 그것을 원하는 운영자는 없다.
    */
+  /** 운영자에게 줄 수 있는 관리 화면 — 회원 관리의 권한 범위 칸이 읽는다 */
+  @Get("admin/areas")
+  @UseGuards(AdminGuard)
+  async adminAreas() {
+    await this.loader.refreshLocale();
+    const names = new Map((await this.loader.discover()).map((m) => [m.name, m.displayName]));
+    const areas = this.loader.adminAreas();
+    const plugins = [...new Set(areas.map((a) => a.plugin))].map((p) => ({
+      key: p,
+      title: this.loader.trCatalog(p, names.get(p) ?? p),
+      areas: areas.filter((a) => a.plugin === p).map((a) => ({ key: a.key, title: a.title })),
+    }));
+    return { plugins };
+  }
+
   @Get("admin/updates")
   @UseGuards(AdminGuard)
   async checkUpdates() {

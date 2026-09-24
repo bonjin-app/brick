@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, timestamp, boolean, index, smallint } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, text, timestamp, boolean, index, smallint, jsonb } from "drizzle-orm/pg-core";
 
 /** 회원. 비밀번호는 argon2id 해시만 저장 */
 export const users = pgTable(
@@ -33,6 +33,11 @@ export const users = pgTable(
     displayNameChangedAt: timestamp("display_name_changed_at", { withTimezone: true }),
     /** 운영자만 보는 메모(문의 이력·제재 사유). 회원 본인에게는 어떤 응답에도 담지 않는다 */
     adminMemo: text("admin_memo"),
+    /**
+     * 운영자 권한 범위 — NULL 이면 모든 관리 화면, 배열이면 그 화면만
+     * ("brick-shop/orders" 한 화면 · "brick-board" 플러그인 전체).
+     */
+    adminScopes: jsonb("admin_scopes").$type<string[] | null>(),
     /** 마지막 로그인 — 휴면 판정의 기준 */
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
     /** 휴면 전환 시점. NULL 이면 정상 계정 */

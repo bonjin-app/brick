@@ -195,6 +195,7 @@ export class AuthService {
     return {
       id: row.id, email: row.email, displayName: row.displayName, role: row.role as SessionUser["role"],
       avatarUrl: row.avatarUrl ?? null,
+      scopes: Array.isArray(row.adminScopes) ? row.adminScopes.map(String) : null,
     };
   }
 }

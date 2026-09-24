@@ -7,7 +7,11 @@ import { useLocaleTag } from "../../../../lib/i18n";
 interface UserRow {
   id: string; email: string; displayName: string;
   role: string; isActive: boolean; createdAt: string; adminMemo?: string | null;
+  /** 운영자의 관리 화면 범위 — null 이면 전부 */
+  adminScopes?: string[] | null;
 }
+
+interface AreaGroup { key: string; title: string; areas: Array<{ key: string; title: string }> }
 
 const ROLES = ["admin", "manager", "member"] as const;
 
@@ -29,6 +33,32 @@ export default function AdminUsersPage() {
    */
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
+  /*
+   * 운영자 권한 범위 — "이 운영자는 주문만". 운영자 줄의 버튼을 누르면 아래에 편집 칸이 열린다.
+   * 역할이 세 단계뿐이라 주문 담당에게 상품 가격·쿠폰 권한까지 줘야 했던 것을 좁힌다.
+   */
+  const [areas, setAreas] = useState<AreaGroup[]>([]);
+  const [scopeUser, setScopeUser] = useState<UserRow | null>(null);
+  const [scopeAll, setScopeAll] = useState(true);
+  const [scopePicked, setScopePicked] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    fetch("/api/admin/areas").then((r) => (r.ok ? r.json() : { plugins: [] }))
+      .then((d) => setAreas(d.plugins ?? [])).catch(() => {});
+  }, []);
+  function openScopes(u: UserRow) {
+    setScopeUser(u);
+    setScopeAll(!Array.isArray(u.adminScopes));
+    setScopePicked(new Set(Array.isArray(u.adminScopes) ? u.adminScopes : []));
+  }
+  function togglePick(key: string, on: boolean) {
+    setScopePicked((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(key); else next.delete(key);
+      return next;
+    });
+  }
+  const scopeSummary = (u: UserRow) =>
+    !Array.isArray(u.adminScopes) ? t("users.scopeAll") : t("users.scopeN", { n: u.adminScopes.length });
 
   const reload = useCallback(() => {
     const qs = search ? `?q=${encodeURIComponent(search)}` : "";
@@ -148,6 +178,13 @@ export default function AdminUsersPage() {
                 <select value={u.role} onChange={(e) => patch(u.id, { role: e.target.value })}>
                   {ROLES.map((v) => <option key={v} value={v}>{t(v === "admin" ? "users.roleAdmin" : v === "manager" ? "users.roleManager" : "users.roleMember")}</option>)}
                 </select>
+                {u.role === "manager" && (
+                  <button type="button" className="btn-link" style={{ display: "block", marginTop: 4, fontSize: 12.5 }}
+                    aria-label={t("users.scopeEditFor", { name: u.displayName })}
+                    onClick={() => openScopes(u)}>
+                    {t("users.scopeLabel")}: {scopeSummary(u)}
+                  </button>
+                )}
               </td>
               <td data-label={t("common.status")}>
                 <button onClick={() => patch(u.id, { isActive: !u.isActive })} style={{ cursor: "pointer" }}>
@@ -175,6 +212,53 @@ export default function AdminUsersPage() {
       <p style={{ color: "var(--color-muted)", fontSize: 13, marginTop: 12 }}>
         {t("users.selfNote")}
       </p>
+
+      {scopeUser && (
+        <section aria-labelledby="scope-title"
+          style={{ background: "var(--color-bg)", borderRadius: 8, padding: 20, marginTop: 16, maxWidth: 720 }}>
+          <h2 id="scope-title" style={{ fontSize: 17, margin: "0 0 6px" }}>{t("users.scopeTitle", { name: scopeUser.displayName })}</h2>
+          <p style={{ margin: "0 0 12px", color: "var(--color-text-soft)", fontSize: 13.5 }}>{t("users.scopeHint")}</p>
+          <label style={{ display: "block", margin: "6px 0" }}>
+            <input type="radio" name="scope-mode" checked={scopeAll} onChange={() => setScopeAll(true)} /> {t("users.scopeModeAll")}
+          </label>
+          <label style={{ display: "block", margin: "6px 0 12px" }}>
+            <input type="radio" name="scope-mode" checked={!scopeAll} onChange={() => setScopeAll(false)} /> {t("users.scopeModePick")}
+          </label>
+          {!scopeAll && (
+            <div style={{ display: "grid", gap: 14, marginBottom: 14 }}>
+              {areas.length === 0 && <p style={{ color: "var(--color-muted)", fontSize: 13 }}>{t("users.scopeNone")}</p>}
+              {areas.map((g) => (
+                <fieldset key={g.key} style={{ border: "1px solid var(--color-line)", borderRadius: 6, padding: "8px 12px" }}>
+                  <legend style={{ fontWeight: 600, fontSize: 14 }}>
+                    <label>
+                      <input type="checkbox" checked={scopePicked.has(g.key)} onChange={(e) => togglePick(g.key, e.target.checked)} />{" "}
+                      {g.title} — {t("users.scopeWhole")}
+                    </label>
+                  </legend>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 16px" }}>
+                    {g.areas.map((a) => (
+                      <label key={a.key} style={{ fontSize: 13.5, minHeight: 32, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <input type="checkbox" disabled={scopePicked.has(g.key)}
+                          checked={scopePicked.has(g.key) || scopePicked.has(a.key)}
+                          onChange={(e) => togglePick(a.key, e.target.checked)} />
+                        {a.title}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              ))}
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn-primary" type="button"
+              onClick={async () => {
+                await patch(scopeUser.id, { adminScopes: scopeAll ? null : [...scopePicked] });
+                setScopeUser(null);
+              }}>{t("users.scopeSave")}</button>
+            <button type="button" className="btn-link" onClick={() => setScopeUser(null)}>{t("common.cancel")}</button>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

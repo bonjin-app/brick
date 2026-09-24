@@ -778,6 +778,47 @@ export class PluginLoaderService implements OnModuleInit {
   }
 
   /**
+   * 관리 화면 하나가 쓰는 경로들 — **리소스 선언에서 만든다.** 목록·수정(basePath 아래)과
+   * 그 화면이 부르는 선택지(optionsFrom)·가져오기 경로. 플러그인 저자가 권한 표를 따로
+   * 적게 하면 새 라우트를 더할 때마다 잊는다.
+   */
+  private areaPrefixes(r: AdminResource): string[] {
+    const out = [r.basePath];
+    for (const f of r.fields ?? []) if (f.optionsFrom) out.push(f.optionsFrom);
+    for (const f of r.filters ?? []) if (f.optionsFrom) out.push(f.optionsFrom);
+    for (const a of r.bulkActions ?? []) if (a.input?.optionsFrom) out.push(a.input.optionsFrom);
+    if (r.importFrom?.path) out.push(r.importFrom.path);
+    return out.map((x) => x.split("?")[0].replace(/\/+$/, "")).filter((x) => x.startsWith("/admin"));
+  }
+
+  /**
+   * 권한 범위가 있는 운영자가 이 관리 경로에 닿아도 되는가.
+   *
+   * 플러그인 전체를 받았으면 전부. 아니면 받은 화면이 쓰는 경로일 때만 — **어느 화면에도 속하지
+   * 않는 관리 경로**(매출 보고서·환불 API 처럼 화면 없이 API 로만 있는 것)는 플러그인 전체를
+   * 받은 운영자만 닿는다. 모르는 것은 닫는 쪽으로 틀린다.
+   */
+  scopeAllows(plugin: string, path: string, scopes: string[]): boolean {
+    if (scopes.includes(plugin)) return true;
+    const p = path.split("?")[0].replace(/\/+$/, "");
+    return this.adminResources.some(
+      (r) =>
+        r.plugin === plugin &&
+        scopes.includes(`${plugin}/${r.name}`) &&
+        this.areaPrefixes(r).some((pre) => p === pre || p.startsWith(`${pre}/`)),
+    );
+  }
+
+  /** 운영자에게 줄 수 있는 관리 화면 — 관리자 전용으로 선언한 화면은 빠진다 */
+  adminAreas(): Array<{ key: string; plugin: string; title: string }> {
+    return this.adminResources
+      .filter((r) => !r.adminOnly)
+      .slice()
+      .sort((a, b) => a.plugin.localeCompare(b.plugin) || (a.order ?? 100) - (b.order ?? 100))
+      .map((r) => ({ key: `${r.plugin}/${r.name}`, plugin: r.plugin, title: this.trCatalog(r.plugin, r.title) }));
+  }
+
+  /**
    * 켜진 플러그인이 선언한 알림 종류. 이름·설명은 선언한 플러그인의 카탈로그로 번역한다 —
    * 보여 주는 쪽(알림톡 확장·알림 문구 화면)은 남의 카탈로그를 모른다.
    */

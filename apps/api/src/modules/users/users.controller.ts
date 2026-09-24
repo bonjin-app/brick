@@ -361,7 +361,7 @@ export class UsersController {
         .select({
           id: users.id, email: users.email, displayName: users.displayName,
           role: users.role, isActive: users.isActive, createdAt: users.createdAt,
-          adminMemo: users.adminMemo,
+          adminMemo: users.adminMemo, adminScopes: users.adminScopes,
         })
         .from(users)
         .where(where)
@@ -378,7 +378,7 @@ export class UsersController {
   @UseGuards(AdminGuard)
   async updateUser(
     @Param("id") id: string,
-    @Body() body: { role?: string; isActive?: boolean; adminMemo?: string | null },
+    @Body() body: { role?: string; isActive?: boolean; adminMemo?: string | null; adminScopes?: unknown },
     @Req() req: FastifyRequest & { user: { id: string } },
   ) {
     // 자기 자신의 권한을 내리거나 계정을 잠그는 것을 막는다 (관리자 전멸 방지)
@@ -398,8 +398,26 @@ export class UsersController {
       patch.adminMemo = memo || null;
     }
 
+    /*
+     * 운영자 권한 범위 — null 이면 모든 관리 화면, 배열이면 그 화면만.
+     * 이름 모양만 본다(꺼 둔 플러그인의 화면도 다시 켜면 그대로 쓰인다). 빈 배열은 "아무 화면도
+     * 없음" 이다 — 운영자 역할은 두되 관리 화면은 닫아 두는 것도 운영의 한 방법이다.
+     */
+    if (body.adminScopes !== undefined) {
+      if (body.adminScopes === null) {
+        patch.adminScopes = null;
+      } else if (
+        Array.isArray(body.adminScopes) && body.adminScopes.length <= 200 &&
+        body.adminScopes.every((x) => typeof x === "string" && /^[a-z0-9-]{1,64}(\/[a-z0-9-]{1,64})?$/.test(x))
+      ) {
+        patch.adminScopes = [...new Set(body.adminScopes as string[])];
+      } else {
+        throw new BadRequestException("관리 화면 권한의 형식이 올바르지 않습니다.");
+      }
+    }
+
     const [before] = await this.db
-      .select({ email: users.email, role: users.role, isActive: users.isActive })
+      .select({ email: users.email, role: users.role, isActive: users.isActive, adminScopes: users.adminScopes })
       .from(users).where(eq(users.id, id)).limit(1);
 
     await this.db.update(users).set(patch).where(eq(users.id, id));
@@ -412,8 +430,13 @@ export class UsersController {
     if (body.isActive !== undefined && before) changes.push(body.isActive ? "계정 활성화" : "계정 정지");
     // 메모 본문은 감사 로그에 남기지 않는다 — 로그 열람 권한과 메모 열람 권한이 다를 수 있다
     if (body.adminMemo !== undefined) changes.push("관리자 메모 수정");
+    if (body.adminScopes !== undefined) {
+      const fmt = (v: unknown) => (Array.isArray(v) ? (v.length ? v.join(", ") : "없음") : "전체");
+      changes.push(`관리 화면 ${fmt(before?.adminScopes)} → ${fmt(patch.adminScopes)}`);
+    }
     await this.audit.fromRequest(req as never, {
       action: body.role !== undefined ? "user.role_change"
+        : body.adminScopes !== undefined ? "user.scope_change"
         : body.isActive !== undefined ? "user.status_change"
         : "user.memo_change",
       targetType: "user",
