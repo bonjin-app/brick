@@ -383,6 +383,20 @@ contains "금액 필드 선언 (type: money → 셸이 접미사를 붙인다)" 
 DASH_EN="$(curl -s -b "$CK" "$API/api/admin/dashboard")"
 contains "대시보드 카드 제목도 영어" "$DASH_EN" '"title":"Orders today"'
 contains "카드 부가문구(ctx.t)도 영어" "$DASH_EN" "Yesterday 0"
+
+# 블록 **안쪽** 문구 두 종류가 검사를 빠져나갔다: 보간 안의 중첩 템플릿에 든 "더보기",
+# 그리고 따옴표 문자열에 담았다가 HTML 에 끼우는 방문자 라벨("오늘" — 영어 카탈로그에
+# 번역까지 있었는데 코드가 부르지 않았다). 실제로 그려서 본다.
+# 방문자 블록은 brick-site 가 켜져 있어야 그려진다 — 처음엔 켜지 않아 블록이 아예 없었고,
+# "한국어 라벨이 남지 않는다" 가 **빈 화면을 보고** 통과했다.
+curl -s -b "$CK" -X POST "$API/api/plugins/brick-site/activate" >/dev/null
+curl -s -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' \
+  -d '{"slug":"home-en","title":"홈","status":"published","blocks":[{"block":"brick-board/latest-multi","props":{"boards":"news"}},{"block":"brick-site/visit-counter","props":{"style":"box","showBest":true}}]}' >/dev/null
+HOME_EN="$(curl -s "$API/api/render/page?path=home-en")"
+contains "최신글 모아보기의 더보기 링크가 영어" "$HOME_EN" ">More</a>"
+contains "방문자 블록이 그려졌다 (아래 두 줄이 빈 화면을 보고 통과하지 않게)" "$HOME_EN" "brick-visit-box"
+contains "방문자 블록 라벨이 영어" "$HOME_EN" "<dt>Today</dt>"
+absent "방문자 블록에 한국어 라벨이 남지 않는다" "$HOME_EN" "<dt>어제</dt>"
 # 카드 제목은 **선언 문자열**이다(원문이 번역 키) — locales/en.json 에 넣는 것을 잊으면
 # 영어 사이트에 한국어 제목이 뜬다. 카드를 새로 만들 때마다 실제로 잊는다(그래서 전수로 본다).
 KO_TITLES="$(echo "$DASH_EN" | /usr/bin/python3 -c "

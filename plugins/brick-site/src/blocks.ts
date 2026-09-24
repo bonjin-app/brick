@@ -34,12 +34,13 @@ export function registerSiteBlocks(ctx: PluginContext, db: Db): void {
       const s = await visitStats(db);
       const n = (v: number) => v.toLocaleString(ctx.locale === "en" ? "en-US" : "ko-KR");
       const rows = [
-        { label: "오늘", value: n(s.today) },
-        { label: "어제", value: n(s.yesterday) },
-        { label: "전체", value: n(s.total) },
+        // 영어 카탈로그에 번역까지 있었는데 여기서 부르지 않아 영어 사이트에도 "오늘" 이 나갔다
+        { label: ctx.t("오늘"), value: n(s.today) },
+        { label: ctx.t("어제"), value: n(s.yesterday) },
+        { label: ctx.t("전체"), value: n(s.total) },
       ];
       if (props.showBest && s.best) {
-        rows.push({ label: "최고", value: `${n(s.best.total)} (${String(s.best.day).slice(0, 10)})` });
+        rows.push({ label: ctx.t("최고"), value: `${n(s.best.total)} (${String(s.best.day).slice(0, 10)})` });
       }
 
       if (props.style === "box") {

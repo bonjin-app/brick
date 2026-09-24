@@ -169,5 +169,6 @@
   "write.secret": "비밀글",
   "write.subject": "제목",
   "write.submitEdit": "수정 완료",
-  "write.title": "글쓰기"
+  "write.title": "글쓰기",
+  "list.more": "더보기"
 }

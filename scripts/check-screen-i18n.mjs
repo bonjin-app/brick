@@ -54,11 +54,73 @@ function stripInterpolations(src) {
  * `//` 는 앞이 콜론이 아닐 때만 주석으로 본다(http:// 를 지우지 않게).
  */
 function stripComments(src) {
+  // 지우되 **자리는 남긴다**(공백으로) — 줄 번호가 원본과 맞아야 고칠 곳을 찾는다
   return src
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/(^|[^:])\/\/[^\n]*/g, "$1")
-    .replace(/(^|\s)--[^\n]*/g, "$1");
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
+    .replace(/(^|[^:])\/\/[^\n]*/g, (m, p) => p + " ".repeat(m.length - p.length))
+    .replace(/(^|\s)--[^\n]*/g, (m, p) => p + " ".repeat(m.length - p.length));
 }
+
+/*
+ * 문자열을 **모든 깊이에서** 모은다: 템플릿의 정적 부분과 따옴표 문자열.
+ *
+ * 전에는 백틱을 정규식으로 두 개씩 짝지었다. 보간 안에 템플릿이 또 있으면
+ * (`${ cond ? `<a>더보기</a>` : "" }`) 짝이 어긋나 안쪽 문자열이 짝과 짝 **사이**에
+ * 떨어져 한 번도 검사되지 않았다 — 게시판 최신글의 "더보기" 가 그렇게 남았다.
+ * 따옴표 문자열도 보지 않았다: `{ label: "오늘" }` 로 담았다가 나중에 HTML 에 끼우면
+ * 그대로 한국어가 나간다(방문자 블록이 그랬다 — 영어 카탈로그에 번역까지 있었는데
+ * 코드가 부르지 않았다).
+ */
+function literals(src) {
+  const parts = [];   // { kind: "template" | "quoted", text, index }
+  let i = 0;
+  const readQuoted = (q) => {
+    const start = i + 1;
+    i++;
+    while (i < src.length && src[i] !== q && src[i] !== "\n") { if (src[i] === "\\") i++; i++; }
+    parts.push({ kind: "quoted", text: src.slice(start, i), index: start });
+    i++;
+  };
+  const readExpr = () => {
+    let depth = 1;
+    while (i < src.length && depth > 0) {
+      const c = src[i];
+      if (c === "'" || c === '"') { readQuoted(c); continue; }
+      if (c === "`") { readTemplate(); continue; }
+      if (c === "{") depth++;
+      else if (c === "}" && --depth === 0) { i++; return; }
+      i++;
+    }
+  };
+  const readTemplate = () => {
+    i++;
+    let start = i;
+    while (i < src.length && src[i] !== "`") {
+      if (src[i] === "\\") { i += 2; continue; }
+      if (src[i] === "$" && src[i + 1] === "{") {
+        parts.push({ kind: "template", text: src.slice(start, i), index: start });
+        i += 2; readExpr(); start = i; continue;
+      }
+      i++;
+    }
+    parts.push({ kind: "template", text: src.slice(start, i), index: start });
+    i++;
+  };
+  while (i < src.length) {
+    const c = src[i];
+    if (c === "'" || c === '"') { readQuoted(c); continue; }
+    if (c === "`") { readTemplate(); continue; }
+    i++;
+  }
+  return parts;
+}
+
+/*
+ * 따옴표 문자열 중 **화면에 나가지 않는 것**: 번역 함수의 인자(원문이 곧 키),
+ * 그리고 선언(블록 이름·속성 설명·편집기 초깃값 — 위의 "한계" 참고).
+ */
+const TRANSLATED_ARG = /(?:\bt|\.t|\btt|\blabel|\bwithJosa)\(\s*$/;
+const DECLARATION = /(?:displayName|title|description|help|placeholder|summary|default)\s*:\s*$/;
 
 console.log("▶ 손님 화면을 그리는 코드에 한국어가 박혀 있지 않다");
 
@@ -72,12 +134,21 @@ for (const plugin of readdirSync(join(ROOT, "plugins"))) {
     files++;
     const file = join(dir, name);
     const src = stripComments(readFileSync(file, "utf8"));
-    for (const m of src.matchAll(/`([^`]*)`/gs)) {
-      const text = stripInterpolations(m[1]);
-      if (!HANGUL.test(text)) continue;
-      const before = src.slice(0, m.index).split("\n").length;
-      for (const [i, line] of text.split("\n").entries()) {
-        if (HANGUL.test(line)) bad.push(`${file.slice(ROOT.length)}:${before + i}  ${line.trim().slice(0, 70)}`);
+    // `"앞" + "뒤"` 로 이어 붙인 문자열은 앞 문자열의 분류를 따른다(긴 설명을 줄 나눠 적는다)
+    let skippedEnd = -1;
+    for (const part of literals(src)) {
+      if (part.kind === "quoted") {
+        const before = src.slice(Math.max(0, part.index - 60), part.index - 1);
+        const continues = skippedEnd >= 0 && /^["']?\s*\+\s*$/.test(src.slice(skippedEnd, part.index - 1));
+        if (continues || TRANSLATED_ARG.test(before) || DECLARATION.test(before)) {
+          skippedEnd = part.index + part.text.length;
+          continue;
+        }
+      }
+      if (!HANGUL.test(part.text)) continue;
+      const first = src.slice(0, part.index).split("\n").length;
+      for (const [i, line] of part.text.split("\n").entries()) {
+        if (HANGUL.test(line)) bad.push(`${file.slice(ROOT.length)}:${first + i}  ${line.trim().slice(0, 70)}`);
       }
     }
   }

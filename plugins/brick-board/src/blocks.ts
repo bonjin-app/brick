@@ -326,7 +326,7 @@ export function registerBoardBlocks(pluginCtx: PluginContext, db: Db): void {
             : `      <li class="brick-board-empty">${escapeHtml(t("list.emptyPosts"))}</li>`;
           return `  <section class="brick-latest-card">
     <h3><a href="${base}">${escapeHtml(b.title)}</a>${
-      props.showMore !== false ? `<a class="brick-more" href="${base}">더보기</a>` : ""
+      props.showMore !== false ? `<a class="brick-more" href="${base}">${escapeHtml(t("list.more"))}</a>` : ""
     }</h3>
     <ul class="brick-latest-posts">
 ${items}
