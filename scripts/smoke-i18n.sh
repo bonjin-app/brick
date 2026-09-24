@@ -490,6 +490,13 @@ contains "코어 항목이 영어" "$LOSS_EN" "Personal information"
 absent   "코어 항목에 한국어가 남지 않는다" "$LOSS_EN" "개인정보"
 contains "플러그인 항목도 영어" "$LOSS_EN" '"label":"Points"'
 
+echo "── 웹 번역 함수는 값을 글자 그대로 끼운다"
+# 전에는 replace(문자열, 값) 이라 값 안의 $&·$'·$$ 가 치환 패턴으로 해석되고 첫 자리만
+# 바뀌었다. 값은 상품명·회원 이름·서버 오류 원문이다. (Node 의 타입 제거로 실제 함수를 부른다)
+check "같은 자리표시자 두 번 · \$\$ · \$' · \$& 가 모두 그대로" \
+  "$(node --experimental-strip-types --no-warnings "$ROOT/scripts/web-translator-probe.ts")" \
+  '["홍길동 님, 홍길동 님의 주문","상품: $$ 특가 — 끝","상품: A$'"'"'B — 끝","상품: X$&Y — 끝"]'
+
 echo "── 한국어로 복귀"
 curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' \
   -d '{"site.locale":"ko"}' >/dev/null

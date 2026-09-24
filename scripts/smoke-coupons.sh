@@ -322,6 +322,36 @@ check "없는 코드는 0건" "$(curl -s -b "$CK" "$SHOP/admin/coupons?q=$(urlen
 check "%% 는 와일드카드가 아니다" "$(curl -s -b "$CK" "$SHOP/admin/coupons?q=%25" | jq_get "['total']")" "0"
 
 
+echo "── 쿠폰함의 한 장은 동시 주문에서도 한 번만 쓰인다"
+# 두 탭에서 같은 쿠폰으로 동시에 주문하는 모습이다. 쿠폰함 소비 SQL 의 조건이 하위 쿼리
+# 안에만 있어서, 그 단계 혼자로는 한 장이 두 번 쓰일 수 있었다(쿠폰 행 잠금을 빼고 재 보면
+# 두 건이 할인됐다). 지금은 앞 단계의 잠금과 그 단계 자신의 조건이 둘 다 막는다 — 이 절은
+# 결과만 본다: **둘 다** 빠지면 여기서 걸린다(하나만 빠지면 남은 쪽이 막아 통과한다).
+RACE_C="$(curl -s -b "$CK" -X POST "$SHOP/admin/coupons" -H 'content-type: application/json' \
+  -d '{"code":"RACEGIFT","name":"동시 사용 시험","discount_type":"fixed","discount_value":5000,"requires_issue":true}' | jq_get "['id']")"
+contains "c2 에게 한 장 지급" "$(curl -s -b "$CK" -X POST "$SHOP/admin/coupons/$RACE_C/issue" \
+  -H 'content-type: application/json' -d '{"emails":["c2@cp.test"]}')" '"issued":1'
+# 주문마다 **다른 상품**을 산다. 같은 상품이면 재고 차감이 그 상품 행을 잠가 주문들을
+# 한 줄로 세우므로, 쿠폰 쪽 보호가 없어도 통과해 버린다(처음에 그렇게 통과했다).
+RACE_PIDS=()
+for i in 1 2 3 4 5 6; do
+  RP="$(curl -s -b "$CK" -X POST "$SHOP/admin/products" -H 'content-type: application/json' \
+    -d "{\"slug\":\"race-coupon-$i\",\"name\":\"동시 쿠폰 상품 $i\",\"price\":20000,\"stock\":5,\"status\":\"selling\"}" | jq_get "['id']")"
+  printf '{"items":[{"productId":"%s","quantity":1}],"couponCode":"RACEGIFT","orderer":{"ordererName":"손님","ordererPhone":"010-1111-2222","postcode":"06236","address1":"서울"}}' "$RP" > "$TMP/race-$i.json"
+done
+for i in 1 2 3 4 5 6; do
+  curl -s -b "$C2" -X POST "$SHOP/orders" -H 'content-type: application/json' --data-binary "@$TMP/race-$i.json" > "$TMP/race-$i.out" &
+  RACE_PIDS+=($!)
+done
+# 그 요청들만 기다린다 — 인자 없는 wait 는 수트가 띄운 API 서버까지 기다려 끝나지 않는다
+wait "${RACE_PIDS[@]}"
+check "쿠폰이 붙은 주문은 한 건뿐 (한 장으로 여러 번 할인받지 않는다)" \
+  "$(psql_q "SELECT count(*) FROM shop_orders WHERE coupon_code = 'RACEGIFT'")" "1"
+check "쿠폰 사용 수도 1" "$(psql_q "SELECT used_count FROM shop_coupons WHERE code = 'RACEGIFT'")" "1"
+check "쿠폰함의 그 장은 그 한 건의 주문을 가리킨다" \
+  "$(psql_q "SELECT uc.used_order_no = o.order_no FROM shop_user_coupons uc JOIN shop_coupons c ON c.id = uc.coupon_id
+             JOIN shop_orders o ON o.coupon_code = 'RACEGIFT' WHERE c.code = 'RACEGIFT'")" "true"
+
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 # 실측을 남긴다(설정됐을 때만) — README 의 표가 실제와 같은지 CI 가 대조한다.
 # 표의 숫자는 조용히 썩는다: 단언을 더해도 아무도 그 줄을 고치지 않는다.

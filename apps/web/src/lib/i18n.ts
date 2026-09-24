@@ -428,7 +428,16 @@ export function translatorFor<K extends string>(
         new RegExp(`\\{${k}:([^}]+)\\}`, "g"),
         (_m, pair: string) => josa(value, pair),
       );
-      message = message.replace(`{${k}}`, value);
+      /*
+       * split/join 으로 끼운다 — `replace(문자열, 값)` 이 아니다.
+       *
+       * replace 는 값 안의 `$&`·`$'`·`` $` ``·`$$` 를 **치환 패턴**으로 해석한다. 값은
+       * 상품명·회원 이름·서버 오류 원문처럼 사람이 정한 글자라, "$$ 특가" 는 "$ 특가" 로,
+       * "A$'B" 는 문장 뒷부분을 끼워 넣은 글자로 바뀌어 화면에 나갔다. 그리고 replace 는
+       * **첫 자리만** 바꿔서, 같은 자리표시자가 두 번 나오는 문장은 뒤의 것이 그대로 남았다.
+       * (서버 쪽 makeTranslator 는 처음부터 함수 치환이라 둘 다 없었다.)
+       */
+      message = message.split(`{${k}}`).join(value);
     }
     return message;
   };

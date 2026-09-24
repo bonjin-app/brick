@@ -902,7 +902,7 @@ ${CAPTCHA_WIDGET_JS}
         // 토큰은 1회용이므로 실패하면 새 문제를 받아야 한다
         if (!res.ok) cap.reload();
         say(res.ok
-          ? ${JSON.stringify(t("restock.done"))}.replace("{email}", res.d.email)
+          ? ${JSON.stringify(t("restock.done"))}.split("{email}").join(res.d.email)
           : (res.d.message || ${JSON.stringify(t("restock.fail"))}), !res.ok);
         if (res.ok) form.querySelector('input[name="email"]').value = "";
       })

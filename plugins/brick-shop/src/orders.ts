@@ -164,9 +164,22 @@ export async function createOrder(
       `);
       if (!rows.length) throw new ShopError(400, "쿠폰을 사용할 수 없습니다. 한도가 소진되었을 수 있습니다.");
 
-      // 발급형 쿠폰은 쿠폰함의 한 장을 소비한다.
-      // used_at IS NULL 조건의 UPDATE 라 동시 주문에서 같은 장이 두 번
-      // 쓰이지 않는다 (복구 코드 소비와 같은 방식 — ADR-55).
+      /*
+       * 발급형 쿠폰은 쿠폰함의 한 장을 소비한다 — 동시 주문에서도 **한 번만**.
+       *
+       * 전에는 `used_at IS NULL` 이 하위 쿼리 안에만 있었다(주석은 복구 코드 소비와
+       * 같은 방식이라고 했지만, 복구 코드는 그 조건을 대상 행에 직접 건다). PostgreSQL 은
+       * 잠금을 기다렸다가 다시 검사할 때 **바깥 조건만** 다시 본다. 바깥 조건이
+       * `id = (이미 고른 값)` 뿐이면, 먼저 간 주문이 그 장을 쓴 뒤에도 뒤의 주문이 통과한다.
+       *
+       * 실제로 두 번 쓰이지는 않았다 — **바로 위의 사용 수 올리기가 쿠폰 행을 잠가** 같은
+       * 쿠폰을 쓰는 주문을 한 줄로 세우고, 뒤의 주문은 새 스냅샷에서 이미 쓰인 장을 본다.
+       * 그 잠금을 빼고 서로 다른 상품 여섯 건을 동시에 주문하면 옛 SQL 은 한 장으로 두 건을
+       * 할인했다. 이 단계의 안전이 앞 단계의 순서에 우연히 기대고 있었던 것이다.
+       *
+       * 그래서 조건을 대상 행에도 건다(다시 검사할 때 이미 쓰인 장이면 걸러진다). 하위
+       * 쿼리의 SKIP LOCKED 는 여러 장을 가진 회원의 동시 주문이 서로 다른 장을 집게 한다.
+       */
       if (q.couponRequiresIssue && q.couponId && params.userId) {
         const { rows: spent } = await tx.execute(sql`
           UPDATE shop_user_coupons SET used_at = now(), used_order_no = ${orderNo}
@@ -175,7 +188,9 @@ export async function createOrder(
             WHERE coupon_id = ${q.couponId}::uuid AND user_id = ${params.userId}::uuid
               AND used_at IS NULL
             LIMIT 1
+            FOR UPDATE SKIP LOCKED
           )
+            AND used_at IS NULL
           RETURNING id
         `);
         if (!spent.length) {
