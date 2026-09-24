@@ -1,7 +1,11 @@
 import { sql } from "drizzle-orm";
 import type { BoardRow, Db, SessionUser } from "./types.js";
 import { BoardError, effectiveReadRole, hasRole } from "./types.js";
-import { verifyGuestPassword } from "./guest.js";
+/**
+ * 비회원 비밀번호 확인 — 호출하는 쪽이 대입 방어(checkGuestSecret)를 씌워 넘긴다.
+ * 이 파일은 요청(IP)을 모르므로 확인 방법을 받아 쓴다.
+ */
+export type GuestCheck = (password: string, stored: string | null) => Promise<boolean>;
 import { t } from "./i18n.js";
 
 /** slug로 게시판을 읽고, 없으면 404 */
@@ -118,11 +122,12 @@ export function canModifyPost(
   return Boolean(user && user.id === post.author_id);
 }
 
-export function assertCanModify(
+export async function assertCanModify(
   post: { author_id: string | null; guest_password: string | null },
   user: SessionUser | null,
   guestPassword: string | undefined,
-): void {
+  check: GuestCheck,
+): Promise<void> {
   if (hasRole(user, "manager")) return;
 
   if (post.author_id) {
@@ -131,7 +136,7 @@ export function assertCanModify(
   }
   // 비회원 글
   if (!guestPassword) throw new BoardError(401, "비밀번호를 입력해주세요.");
-  if (!verifyGuestPassword(guestPassword, post.guest_password)) {
+  if (!(await check(guestPassword, post.guest_password))) {
     throw new BoardError(403, "비밀번호가 일치하지 않습니다.");
   }
 }
@@ -140,14 +145,15 @@ export function assertCanModify(
  * 비밀글 열람 권한.
  * 작성자·manager 이상만 볼 수 있다. 비회원 비밀글은 비밀번호로 확인한다.
  */
-export function canReadSecret(
+export async function canReadSecret(
   post: { author_id: string | null; guest_password: string | null; is_secret: boolean },
   user: SessionUser | null,
   guestPassword: string | undefined,
-): boolean {
+  check: GuestCheck,
+): Promise<boolean> {
   if (!post.is_secret) return true;
   if (hasRole(user, "manager")) return true;
   if (post.author_id && user && user.id === post.author_id) return true;
-  if (!post.author_id && guestPassword) return verifyGuestPassword(guestPassword, post.guest_password);
+  if (!post.author_id && guestPassword) return await check(guestPassword, post.guest_password);
   return false;
 }

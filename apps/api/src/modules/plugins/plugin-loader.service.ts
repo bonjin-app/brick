@@ -12,6 +12,7 @@ import type { PluginManifest } from "@brick/shared";
 import type { PluginContext, PluginInstance, BlockDefinition, PluginRouteHandler, PluginDb, AdminResource, HookBus, CacheProvider, QueueProvider, LockProvider, StorageProvider, MailProvider, CaptchaProvider, PersonalDataEraser, SitemapSource,
   SearchSource, LinkTargetSource, DashboardCard, HeaderAction, PluginScreen, Locale, MessageCatalog } from "@brick/core";
 import { AVAILABLE_LOCALES, DEFAULT_LOCALE, makeTranslator, normalizeLocale } from "@brick/core";
+import { RateLimitService } from "../auth/rate-limit.service.js";
 import { DB, HOOKS, CACHE, QUEUE, LOCK, STORAGE, MAIL, CAPTCHA, ENV } from "../../runtime.module.js";
 import type { BrickEnv } from "../../config/env.js";
 import { ImageService } from "../images/image.service.js";
@@ -137,6 +138,7 @@ export class PluginLoaderService implements OnModuleInit {
     @Inject(CACHE) private readonly cache: CacheProvider,
     @Inject(QUEUE) private readonly queue: QueueProvider,
     @Inject(LOCK) private readonly lock: LockProvider,
+    private readonly rateLimiter: RateLimitService,
     @Inject(STORAGE) private readonly storage: StorageProvider,
     @Inject(MAIL) private readonly mail: MailProvider,
     private readonly notifications: NotificationsService,
@@ -615,6 +617,12 @@ export class PluginLoaderService implements OnModuleInit {
       cache: this.cache,
       queue: this.queue,
       lock: this.lock,
+      rateLimit: {
+        check: (key, limit, windowMs) => this.rateLimiter.check(`plugin:${pluginName}:${key}`, limit, windowMs),
+        hit: (key, windowMs) => this.rateLimiter.hit(`plugin:${pluginName}:${key}`, windowMs),
+        undo: (key) => this.rateLimiter.undo(`plugin:${pluginName}:${key}`),
+        reset: (key) => this.rateLimiter.reset(`plugin:${pluginName}:${key}`),
+      },
       storage: this.storage,
       mail: this.mail,
       notify: (input) => this.notifications.notify(input),

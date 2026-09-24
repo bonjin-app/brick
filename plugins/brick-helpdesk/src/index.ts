@@ -1,4 +1,5 @@
 import { definePlugin, isUniqueViolation } from "@brick/plugin-sdk";
+import { checkGuestSecret } from "@brick/plugin-sdk";
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import {
@@ -23,6 +24,15 @@ import { registerHelpdeskBlocks } from "./blocks.js";
  * 기본값이 안전한 쪽이어야 한다.
  */
 export default definePlugin(async (ctx) => {
+  /*
+   * 비회원 문의는 문의번호(순번)와 조회 비밀번호(네 자리부터)만으로 열린다. 시도 횟수
+   * 제한이 없으면 문의번호를 돌려 가며 흔한 비밀번호를 뿌리거나 한 건에 1만 번을 시도해
+   * 남의 문의(이름·이메일·연락처·주문 내용)를 연다. 대상별·IP별로 실패를 센다.
+   */
+  const guestGuard = (req: { ip: string }) => (target: string, verify: () => Promise<boolean>) =>
+    checkGuestSecret(ctx.rateLimit, { target, ip: req.ip }, verify,
+      () => new HelpError(429, "비밀번호를 여러 번 틀렸습니다. 잠시 뒤 다시 시도해주세요."));
+
   const db = ctx.db as Db;
 
   const settings = async (): Promise<HelpSettings> => ({
@@ -116,6 +126,7 @@ export default definePlugin(async (ctx) => {
       id: req.params.id,
       viewer: req.user,
       guestPassword: req.query.pw,
+      guard: guestGuard(req),
     });
   });
 
@@ -125,6 +136,7 @@ export default definePlugin(async (ctx) => {
       ticketNo: req.params.ticketNo,
       viewer: req.user,
       guestPassword: req.query.pw,
+      guard: guestGuard(req),
     });
   });
 
@@ -136,6 +148,7 @@ export default definePlugin(async (ctx) => {
       id: req.params.id,
       viewer: req.user,
       guestPassword: body?.pw,
+      guard: guestGuard(req),
     });
     if (!found.canReply) throw new HelpError(403, "답변할 수 없습니다.");
 
@@ -217,7 +230,7 @@ export default definePlugin(async (ctx) => {
 
   ctx.registerRoute("GET", "/admin/tickets/:id", async (req) => {
     requireManager(req);
-    return await getTicket(db, { id: req.params.id, viewer: req.user });
+    return await getTicket(db, { id: req.params.id, viewer: req.user, guard: guestGuard(req) });
   });
 
   ctx.registerRoute("PUT", "/admin/tickets/:id", async (req) => {

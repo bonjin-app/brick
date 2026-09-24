@@ -6,7 +6,8 @@ import {
   parseExtraFields, pgArray, pickExtraValues, rankOf, type Db, type SessionUser,
 } from "./types.js";
 import { t } from "./i18n.js";
-import { hashGuestPassword } from "./guest.js";
+import { hashGuestPassword, verifyGuestPassword } from "./guest.js";
+import { checkGuestSecret } from "@brick/plugin-sdk";
 import { assertCanModify, canModifyPost, canReadSecret, checkWriteInterval, loadBoard, requireRole } from "./access.js";
 import { attachFiles, claimDownload, deleteAttachments, listAttachments } from "./attachments.js";
 import { createPost, isBlankContent, listPosts, normalizeLinks, refreshThumb, type WritePostInput } from "./posts.js";
@@ -24,6 +25,15 @@ const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,50}$/;
  *  추천/비추천 · 비회원 글쓰기 · 검색 · 도배 방지 · RSS
  */
 export default definePlugin(async (ctx) => {
+  /*
+   * 비회원 비밀번호 확인 — 대입 방어를 씌운다(대상별 다섯 번·IP별 스무 번, 15분).
+   * 비회원 글·댓글·비밀글은 비밀번호 하나로 열리고 흔히 숫자 네 자리라, 시도 횟수 제한이
+   * 없으면 대입으로 열린다. 잠긴 동안은 맞는 비밀번호도 시험하지 않는다.
+   */
+  const guestCheck = (req: { ip: string }, target: string) => (password: string, stored: string | null) =>
+    checkGuestSecret(ctx.rateLimit, { target, ip: req.ip }, () => verifyGuestPassword(password, stored),
+      () => new BoardError(429, "비밀번호를 여러 번 틀렸습니다. 잠시 뒤 다시 시도해주세요."));
+
   const db = ctx.db as Db;
 
   /** 라우트 요청에서 세션 사용자 추출 */
@@ -156,7 +166,7 @@ export default definePlugin(async (ctx) => {
     requireRole(user, String(post.read_role), "act.readBoard");
 
     const guestPw = req.query.pw;
-    if (!canReadSecret(post as never, user, guestPw)) {
+    if (!(await canReadSecret(post as never, user, guestPw, guestCheck(req, `post:${req.params.id}`)))) {
       throw new BoardError(403, "비밀글입니다. 작성자만 열람할 수 있습니다.");
     }
 
@@ -217,7 +227,7 @@ export default definePlugin(async (ctx) => {
     `);
     const post = rows[0];
     if (!post) throw new BoardError(404, "글을 찾을 수 없습니다.");
-    assertCanModify(post as never, userOf(req), body.guestPassword);
+    await assertCanModify(post as never, userOf(req), body.guestPassword, guestCheck(req, `post:${req.params.id}`));
 
     const title = String(body.title ?? "").trim();
     // 수정 경로에서도 새니타이즈를 빼먹으면 우회 통로가 된다 — 금지 단어도 같다
@@ -257,7 +267,7 @@ export default definePlugin(async (ctx) => {
     `);
     const post = rows[0];
     if (!post) throw new BoardError(404, "글을 찾을 수 없습니다.");
-    assertCanModify(post as never, userOf(req), body.guestPassword ?? req.query.pw);
+    await assertCanModify(post as never, userOf(req), body.guestPassword ?? req.query.pw, guestCheck(req, `post:${req.params.id}`));
 
     // 스토리지 파일은 CASCADE로 지워지지 않으므로 먼저 정리한다
     await deleteAttachments(db, ctx.storage, String(post.id));
@@ -276,7 +286,7 @@ export default definePlugin(async (ctx) => {
     `);
     const post = rows[0];
     if (!post) throw new BoardError(404, "글을 찾을 수 없습니다.");
-    assertCanModify(post as never, userOf(req), req.query.pw);
+    await assertCanModify(post as never, userOf(req), req.query.pw, guestCheck(req, `post:${req.params.id}`));
 
     const board = await loadBoard(db, String(post.slug));
     const files = await req.files();
@@ -393,7 +403,7 @@ export default definePlugin(async (ctx) => {
       const pw = String(body.guestPassword ?? "");
       if (guestName.length < 2) throw new BoardError(400, "이름을 입력해주세요.");
       if (pw.length < 4) throw new BoardError(400, "비밀번호를 4자 이상 입력해주세요.");
-      guestHash = hashGuestPassword(pw);
+      guestHash = await hashGuestPassword(pw);
     }
 
     let depth = 0;
@@ -469,7 +479,7 @@ export default definePlugin(async (ctx) => {
     `);
     const comment = rows[0];
     if (!comment) throw new BoardError(404, "댓글을 찾을 수 없습니다.");
-    assertCanModify(comment as never, userOf(req), body.guestPassword ?? req.query.pw);
+    await assertCanModify(comment as never, userOf(req), body.guestPassword ?? req.query.pw, guestCheck(req, `comment:${req.params.id}`));
 
     await db.transaction(async (tx) => {
       await tx.execute(sql`DELETE FROM board_comments WHERE id = ${req.params.id}::uuid`);

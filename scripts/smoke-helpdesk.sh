@@ -33,6 +33,18 @@ absent()   { [[ "$2" != *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 가 노출됨)";
 code()     { curl -s -o /dev/null -w "%{http_code}" "$@"; }
 jq_get()   { python3 -c "import sys,json;d=json.load(sys.stdin);print(d$1)" 2>/dev/null || echo ""; }
 render_html() { python3 -c "import sys,json;print(json.load(sys.stdin).get('html',''))" 2>/dev/null || echo ""; }
+psql_q() {
+  node -e '
+    const { Client } = require("'"$ROOT"'/apps/api/node_modules/pg");
+    (async () => {
+      const c = new Client(process.env.DATABASE_URL);
+      await c.connect();
+      const r = await c.query(process.argv[1]);
+      console.log(r.rows.map((x) => Object.values(x).join("|")).join("\n"));
+      await c.end();
+    })().catch((e) => { console.error(e.message); process.exit(1); });
+  ' "$1"
+}
 
 echo "▶ 1:1 문의 · FAQ 스모크 테스트"
 
@@ -415,6 +427,35 @@ check "FAQ 검색: 없는 말은 0건" \
 check "FAQ 검색: %% 는 와일드카드가 아니다" \
   "$(curl -s -b "$CK" "$API/api/plugins/brick-helpdesk/admin/faqs?q=%25" | jq_get "['total']")" "0"
 
+
+echo "── 비회원 문의는 대입으로 열리지 않는다 (문의번호는 순번, 비밀번호는 네 자리부터)"
+# 시도 횟수 제한이 없어서 두 가지로 열렸다: 한 문의에 1만 번, 또는 문의번호를 돌려 가며
+# 흔한 비밀번호("1234")를 한 번씩. 대상별·IP별로 **실패만** 센다. 같은 IP 에서 대량으로
+# 틀리므로 맨 끝에 둔다.
+# 비회원 접수는 IP 당 1분에 1건이라 여기서 여러 건을 만들 수 없다. 앞에서 접수한 비회원
+# 문의(비밀번호 guestpw)를 복제해 쓴다 — 해시가 같으므로 비밀번호도 같다.
+clone_guest() {  # clone_guest <번호 꼬리> → id
+  local nid; nid="$(node -e 'console.log(require("node:crypto").randomUUID())')"
+  psql_q "INSERT INTO help_tickets (id, ticket_no, author_name, author_email, category, title, content, guest_password_hash)
+          SELECT '$nid', 'QBF-$1', author_name, author_email, category, '대입 시험 $1', content, guest_password_hash
+          FROM help_tickets WHERE id = '$G_ID'" >/dev/null
+  echo "$nid"
+}
+T1="$(clone_guest 00)"
+# 비밀번호 칸이 빈 채로 여는 것(메일 링크를 처음 열 때)은 세지 않는다 — 여러 번 열어도 잠기지 않는다
+for i in 1 2 3 4 5 6 7; do curl -s -o /dev/null "$HD/tickets/$T1"; done
+contains "비밀번호 없이 여러 번 열어도 잠기지 않는다" "$(curl -s "$HD/tickets/$T1?pw=guestpw")" "비회원이 남긴 내용"
+for i in 1 2 3 4 5; do curl -s -o /dev/null "$HD/tickets/$T1?pw=000$i"; done
+check "한 문의에 다섯 번 틀리면 더 시험하지 못한다" "$(code "$HD/tickets/$T1?pw=0006")" "429"
+check "잠긴 동안은 맞는 비밀번호도 시험할 수 없다" "$(code "$HD/tickets/$T1?pw=guestpw")" "429"
+check "답글 경로도 같은 문을 지난다" "$(code -X POST "$HD/tickets/$T1/replies" -H 'content-type: application/json' -d '{"content":"추가 문의입니다","pw":"guestpw"}')" "429"
+# 여러 문의에 흔한 비밀번호를 한 번씩 — 대상별 한도로는 못 막는다. IP 로 센다(15분에 20번)
+SPRAY_CODES=""
+for i in $(seq 1 16); do
+  TID="$(clone_guest "$(printf '%02d' "$i")")"
+  SPRAY_CODES="$SPRAY_CODES $(code "$HD/tickets/$TID?pw=1234")"
+done
+contains "여러 문의에 흔한 비밀번호를 뿌리면 IP 로 막힌다" "$SPRAY_CODES" "429"
 
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 # 실측을 남긴다(설정됐을 때만) — README 의 표가 실제와 같은지 CI 가 대조한다.

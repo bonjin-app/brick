@@ -1,6 +1,7 @@
 import type { CacheProvider } from "../providers/cache.js";
 import type { QueueProvider } from "../providers/queue.js";
 import type { LockProvider } from "../providers/lock.js";
+import type { PluginRateLimit } from "../guest-secret.js";
 import type { StorageProvider } from "../providers/storage.js";
 import type { MailProvider } from "../providers/mail.js";
 import type { SmsProvider } from "../providers/sms.js";
@@ -60,6 +61,11 @@ export interface PluginContext {
    * 관리자의 "지금 실행" 버튼이 주기 작업과 겹치면 둘 다 돈다.
    */
   readonly lock: LockProvider;
+  /**
+   * 요청 제한 — 키는 플러그인 이름으로 자동으로 나뉜다. 비회원 비밀번호처럼 **실패만**
+   * 세야 하는 곳은 `checkGuestSecret`(@brick/plugin-sdk)을 쓴다.
+   */
+  readonly rateLimit: PluginRateLimit;
   readonly storage: StorageProvider;
   /** 메일 발송 (SMTP 미설정 시 콘솔 출력으로 폴백) */
   readonly mail: MailProvider;

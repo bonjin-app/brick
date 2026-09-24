@@ -80,7 +80,7 @@ export async function createPost(
       throw new BoardError(400, "이름을 2~20자로 입력해주세요.");
     }
     if (pw.length < 4) throw new BoardError(400, "비밀번호를 4자 이상 입력해주세요.");
-    guestPasswordHash = hashGuestPassword(pw);
+    guestPasswordHash = await hashGuestPassword(pw);
   }
 
   const id = uuidv7();

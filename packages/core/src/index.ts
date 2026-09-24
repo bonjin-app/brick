@@ -13,3 +13,4 @@ export * from "./roles.js";
 export * from "./text.js";
 export * from "./i18n.js";
 export * from "./time.js";
+export * from "./guest-secret.js";

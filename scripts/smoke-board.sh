@@ -666,8 +666,47 @@ absent "안 쓰는 게시판의 글쓰기에는 칸이 없다" \
   "$(curl -s -b "$MEMBER" "$API/api/render/page?path=board%2Fmembers&write=1" | python3 -c "import sys,json;print(json.load(sys.stdin).get('html',''))")" \
   'name="extra.'
 
+echo "── 비회원 비밀번호를 쏟아부어도 사이트가 멈추지 않고, 대입은 막힌다"
+# 비회원 글·비밀글은 비밀번호 하나로 열린다(흔히 숫자 네 자리). 검증은 scrypt 인데
+# **동기(scryptSync)** 라서 한 번에 약 70ms 동안 이벤트 루프 전체가 멈췄다 — 로그인도
+# 필요 없이 틀린 비밀번호를 초당 열다섯 번만 보내면 게시판만이 아니라 사이트의 모든
+# 요청이 서지 않는다. 그리고 시도 횟수 제한이 없어 네 자리는 대입으로 열린다.
+# 이 절은 같은 IP 에서 틀린 비밀번호를 대량으로 보내므로 맨 끝에 둔다.
+printf '{"title":"대입 시험 글","content":"본문입니다","category":"질문","guestName":"손님","guestPassword":"4821"}' > "$TMP/bf.json"
+BFP="$(jpost "$BD/boards/free/posts" "$TMP/bf.json" | python3 -c "import sys,json;print(json.load(sys.stdin).get('id',''))")"
+[[ -n "$BFP" ]] && ok "대입 시험용 비회원 글" || bad "대입 시험용 비회원 글"
+BF_PIDS=()
+for i in $(seq 1 20); do
+  printf '{"title":"x","content":"y","guestPassword":"%04d"}' "$i" > "$TMP/bf-$i.json"
+done
+for i in $(seq 1 20); do
+  # 줄바꿈을 붙인다 — 없으면 스무 개가 한 줄로 이어져 "몇 줄에 429 가 있나" 가 1 이 된다
+  curl -s -o "$TMP/bf-$i.out" -w '%{http_code}\n' -X PUT "$BD/posts/$BFP" -H 'content-type: application/json' \
+    --data-binary "@$TMP/bf-$i.json" > "$TMP/bf-$i.code" &
+  BF_PIDS+=($!)
+done
+# 대입이 쏟아지는 동안 **관계없는** 요청이 제때 답하는가
+sleep 0.1
+HZ_MS="$(curl -s -o /dev/null -w '%{time_total}' "$API/healthz" | python3 -c "import sys;print(int(float(sys.stdin.read())*1000))")"
+wait "${BF_PIDS[@]}"
+# 문턱은 넉넉하다(요청 제한까지 사라지면 1.6초가 걸렸다). 동기 검증 자체는 아래 탐침이
+# 직접 잰다 — 요청 제한이 켜져 있으면 검증이 다섯 번만 일어나 여기서는 문턱 근처(약 300ms)라
+# 잡는 장치로 믿을 수 없다(역검증에서 그랬다).
+[[ "$HZ_MS" -lt 800 ]] && ok "대입이 쏟아지는 동안에도 사이트가 답한다 (${HZ_MS}ms)" || bad "대입이 쏟아지는 동안 사이트가 멈췄다 (${HZ_MS}ms)"
+LAG="$(node "$ROOT/scripts/guest-hash-probe.mjs" | sed 's/maxLagMs=//')"
+[[ "$LAG" -lt 100 ]] && ok "비밀번호 검증이 이벤트 루프를 막지 않는다 (검증 10건 동안 최대 지연 ${LAG}ms)" \
+  || bad "비밀번호 검증이 이벤트 루프를 막는다 (최대 지연 ${LAG}ms — 동기 scrypt?)"
+LIMITED="$(cat "$TMP"/bf-*.code | grep -c 429 || true)"
+# 동시에 쏟아져도 대상별 한도(5)만큼만 시험한다 — 실패를 검증 **뒤에** 세면 동시 요청이 모두
+# 검증을 기다리는 동안 아무것도 세어지지 않아 전부 통과한다(처음 구현이 그랬다: 0건)
+check "동시에 쏟아져도 다섯 번만 시험하고 나머지는 막는다" "$LIMITED" "15"
+printf '{"title":"x","content":"y","guestPassword":"4821"}' > "$TMP/bf-right.json"
+check "잠긴 동안은 맞는 비밀번호도 시험할 수 없다 (아니면 대입이 계속된다)" \
+  "$(code -X PUT "$BD/posts/$BFP" -H 'content-type: application/json' --data-binary "@$TMP/bf-right.json")" "429"
+
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 # 실측을 남긴다(설정됐을 때만) — README 의 표가 실제와 같은지 CI 가 대조한다.
 # 표의 숫자는 조용히 썩는다: 단언을 더해도 아무도 그 줄을 고치지 않는다.
 [[ -n "${BRICK_SMOKE_LOG:-}" ]] && echo "$(basename "${BASH_SOURCE[0]}") ${PASS} ${FAIL}" >> "$BRICK_SMOKE_LOG"
 [[ $FAIL -eq 0 ]] || { echo; echo "── 서버 로그 ──"; tail -40 "$TMP/api.log"; exit 1; }
+

@@ -161,6 +161,11 @@ export async function getTicket(
     ticketNo?: string;
     viewer: { id: string; role: string } | null;
     guestPassword?: string;
+    /**
+     * 비회원 비밀번호 확인에 씌울 대입 방어 — 호출하는 라우트가 요청(IP)을 알고 만든다.
+     * 필수다: 빠뜨린 경로가 곧 대입이 통하는 경로가 된다.
+     */
+    guard: (target: string, verify: () => Promise<boolean>) => Promise<boolean>;
   },
 ) {
   const where = params.id
@@ -179,11 +184,12 @@ export async function getTicket(
   const isOwner = Boolean(params.viewer && String(t.user_id) === params.viewer.id);
   let guestOk = false;
 
-  if (!isManager && !isOwner && t.guest_password_hash) {
-    guestOk = await verifyGuestPassword(
-      String(t.guest_password_hash),
-      String(params.guestPassword ?? ""),
-    );
+  // 비밀번호를 넣지 않은 요청은 시험하지도, 실패로 세지도 않는다 — 메일 링크를 처음 여는
+  // 손님(비밀번호 칸이 아직 비어 있다)이 그것만으로 잠기면 안 된다
+  if (!isManager && !isOwner && t.guest_password_hash && params.guestPassword) {
+    const pw = String(params.guestPassword);
+    guestOk = await params.guard(`ticket:${String(t.id)}`,
+      () => verifyGuestPassword(String(t.guest_password_hash), pw));
   }
 
   if (!isManager && !isOwner && !guestOk) {

@@ -475,6 +475,7 @@ await ctx.db.transaction(async (tx) => {
 | `ctx.settings` | `plugin:<name>:` 네임스페이스가 적용된 설정 저장소 |
 | `ctx.cache` / `ctx.queue` / `ctx.storage` | Provider 추상화 (지금 구현은 PostgreSQL·로컬 디스크뿐이다) |
 | `ctx.lock` | 클러스터 전체에서 **한 번에 하나만** 돌아야 하는 일 — `withLock(키, fn)`, 잡혀 있으면 `null` |
+| `ctx.rateLimit` | 요청 제한 — `check`(세지 않고 확인) · `hit` · `undo` · `reset`. 키는 플러그인별로 나뉜다. 인메모리라 인스턴스마다 따로 센다 |
 | `ctx.hooks` | action/filter 버스 |
 
 ### 주기 작업 — 사슬은 하나만, 실행은 한 번에 하나만
@@ -506,6 +507,24 @@ await ctx.queue.enqueue(JOB, {}, { delaySeconds: 60, dedupeKey: JOB });
 3. **`onFailed`** — 시도를 다 쓴 실패와, 마지막 시도 중 워커가 죽은 경우에 불립니다.
    뒤의 것은 핸들러 안의 try/catch 로는 알 수 없습니다. 끝내 실패한 작업은 관리자
    대시보드에도 경고로 뜹니다.
+
+### 비회원 비밀번호 — `checkGuestSecret` 을 쓴다
+
+비회원 글·문의처럼 **비밀번호 하나로 열리는 것**을 만든다면 직접 비교하지 말고 SDK 의
+`checkGuestSecret` 을 거치게 하세요. 직접 비교하면 두 가지가 뚫립니다 — 한 대상에 1만 번(네
+자리는 반드시 열린다), 여러 대상에 흔한 비밀번호 한 번씩(대상별 제한만으로는 못 막는다).
+
+```ts
+import { checkGuestSecret } from "@brick/plugin-sdk";
+
+const ok = await checkGuestSecret(ctx.rateLimit, { target: `ticket:${id}`, ip: req.ip },
+  () => verify(password, storedHash),               // 비동기 해시로 — scryptSync 는 서버 전체를 멈춘다
+  () => new MyError(429, "비밀번호를 여러 번 틀렸습니다. 잠시 뒤 다시 시도해주세요."));
+```
+
+대상별·IP별로 **실패만** 세고, 검증 **전에** 세서 동시에 쏟아져도 한도만큼만 시험합니다.
+비밀번호를 넣지 않은 요청(메일 링크를 처음 여는 순간)은 부르지 마세요 — 그것까지 세면
+정당한 손님이 잠깁니다.
 
 ### 에러 → HTTP 상태코드
 

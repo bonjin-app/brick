@@ -33,6 +33,9 @@ export { josa, hasJongseong } from "@brick/core";
 // 권한 등급 — 권한 비교를 베끼면 한쪽만 고쳐지고 그것이 권한 구멍이 된다
 export { ROLE_RANK, rankOf, hasRole } from "@brick/core";
 export type { RoleBearer } from "@brick/core";
+// 비회원 비밀번호 방어 — 대입(대상별·IP별)과 잠금. 플러그인마다 베끼면 한 곳만 막힌다
+export { checkGuestSecret, GUEST_SECRET_TARGET_LIMIT, GUEST_SECRET_IP_LIMIT } from "@brick/core";
+export type { PluginRateLimit } from "@brick/core";
 // 비회원 폼용 캡차 위젯 — 플러그인마다 베끼면 한 곳만 고쳐진다
 export { captchaFieldHtml, CAPTCHA_WIDGET_JS, CAPTCHA_WIDGET_CSS } from "@brick/core";
 export type { CaptchaWidgetLabels } from "@brick/core";
