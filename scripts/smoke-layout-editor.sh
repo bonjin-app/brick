@@ -209,7 +209,7 @@ check "제목 블록은 아니다" \
 
 echo "── 초안 맡기기"
 SESSION="sess-$(date +%s)-a1"
-DRAFT="$(printf '{"session":"%s","slug":"about","title":"회사 소개 초안","seo":{},"blocks":[{"block":"core/heading","props":{"text":"배치 초안 제목","level":2}},{"block":"core/columns","props":{"gap":24},"children":[{"block":"core/paragraph","props":{"text":"왼쪽 칸 문장"}},{"block":"core/paragraph","props":{"text":"오른쪽 칸 문장"}}]},{"block":"core/columns","props":{},"children":[]},{"block":"nope/none","props":{}},{"block":"core/features","props":{"title":"특징","items":"| 빈 제목 줄\\n첫 카드 | 첫 설명\\n둘째 카드 | 둘째 설명 | /go"}},{"block":"core/stats","props":{"items":"| 라벨만\\n99%% | 만족도"}},{"block":"core/cta","props":{"title":"지금","buttonLabel":"지금 보기","buttonUrl":"/shop"}},{"block":"core/features","props":{}},{"block":"core/divider","props":{}}]}' "$SESSION")"
+DRAFT="$(printf '{"session":"%s","slug":"about","title":"회사 소개 초안","seo":{},"blocks":[{"block":"core/heading","props":{"text":"배치 초안 제목","level":2}},{"block":"core/columns","props":{"gap":24},"children":[{"block":"core/paragraph","props":{"text":"왼쪽 칸 문장"}},{"block":"core/paragraph","props":{"text":"오른쪽 칸 문장"}}]},{"block":"core/columns","props":{},"children":[]},{"block":"nope/none","props":{}},{"block":"core/features","props":{"title":"특징","items":"| 빈 제목 줄\\n첫 카드 | 첫 설명\\n둘째 카드 | 둘째 설명 | /go"}},{"block":"core/stats","props":{"items":"| 라벨만\\n99%% | 만족도"}},{"block":"core/cta","props":{"title":"지금","buttonLabel":"지금 보기","buttonUrl":"/shop"}},{"block":"core/features","props":{}},{"block":"core/divider","props":{}},{"block":"core/testimonials","props":{"items":"| 이름만\\n좋아요 | 김손님 | 회사"}},{"block":"core/image-gallery","props":{"items":"javascript:alert(1) | 나쁜 링크\\n/uploads/a.jpg | 두 번째 사진"}}]}' "$SESSION")"
 put_draft() {  # put_draft <쿠키|없음> <본문> → 상태코드
   if [[ "$1" == "-" ]]; then code -X POST "$API/api/admin/pages/draft-preview" -H 'content-type: application/json' -d "$2"
   else code -b "$1" -X POST "$API/api/admin/pages/draft-preview" -H 'content-type: application/json' -d "$2"; fi
@@ -270,6 +270,10 @@ contains "편집기와 이야기하는 스크립트가 붙는다" "$HTML" "brick
 contains "제목은 그 자리에서 고칠 수 있게 표시한다" "$HTML" 'data-brick-prop="text">배치 초안 제목</h2>'
 contains "특징 카드의 제목은 그 칸(원문 순서 줄·칸)으로 표시한다" "$HTML" '<h3 data-brick-prop="items" data-brick-row="2" data-brick-col="0">둘째 카드</h3>'
 contains "블록이 걸러 낸 줄이 있어도 원문 순서로 센다 (숫자 강조)" "$HTML" '<strong data-brick-prop="items" data-brick-row="1" data-brick-col="0">99%</strong>'
+contains "고객 후기의 인용문 — 거른 줄이 있어도 원문 순서 줄로 표시한다" "$HTML" '<blockquote data-brick-prop="items" data-brick-row="1" data-brick-col="0">좋아요</blockquote>'
+contains "고객 후기의 소속도 그 칸으로" "$HTML" '<span data-brick-prop="items" data-brick-row="1" data-brick-col="2">회사</span>'
+contains "갤러리 캡션 — 안전하지 않은 주소 줄을 걸러도 원문 순서 줄로" "$HTML" '<figcaption data-brick-prop="items" data-brick-row="1" data-brick-col="1">두 번째 사진</figcaption>'
+absent "안전하지 않은 주소는 여전히 그리지 않는다" "$HTML" "javascript:alert"
 contains "버튼 문구도 그 자리에서 고칠 수 있다" "$HTML" 'href="/shop" data-brick-prop="buttonLabel">지금 보기</a>'
 contains "고치는 중인 링크 안을 눌러도 이동하지 않는다" "$HTML" "if (e.target.closest && e.target.closest('a')) e.preventDefault();"
 contains "문단은 여러 줄로 고칠 수 있게 표시한다" "$HTML" 'data-brick-prop="text" data-brick-multiline="1">왼쪽 칸 문장</p>'

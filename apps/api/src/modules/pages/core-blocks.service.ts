@@ -355,12 +355,13 @@ ${eyebrow ? `    <span class="brick-eyebrow"${ed(ctx, "eyebrow")}>${esc(eyebrow)
           items: { type: "string", title: "한 줄에 하나: 인용문 | 이름 | 소속(선택)", format: "multiline" },
         },
       },
-      render: async (props) => {
-        const items = rows(props.items, 3).filter(([q]) => q);
+      render: async (props, ctx) => {
+        // 인용문이 빈 줄은 거른다 — 그 자리에서 고친 칸이 제 줄로 돌아가도록 원문 순서(i)를 함께 쓴다
+        const items = rowsAt(props.items, 3).filter(({ cells: [q] }) => q);
         if (!items.length) return "";
         const heading = String(props.title ?? "").trim();
-        return `<section class="brick-testimonials">${heading ? `<h2>${esc(heading)}</h2>` : ""}<div class="brick-grid">${items
-          .map(([quote, name, org]) => `<figure class="brick-quote"><blockquote>${esc(quote)}</blockquote>${name ? `<figcaption><strong>${esc(name)}</strong>${org ? `<span>${esc(org)}</span>` : ""}</figcaption>` : ""}</figure>`)
+        return `<section class="brick-testimonials">${heading ? `<h2${ed(ctx, "title")}>${esc(heading)}</h2>` : ""}<div class="brick-grid">${items
+          .map(({ cells: [quote, name, org], i }) => `<figure class="brick-quote"><blockquote${edCell(ctx, "items", i, 0)}>${esc(quote)}</blockquote>${name ? `<figcaption><strong${edCell(ctx, "items", i, 1)}>${esc(name)}</strong>${org ? `<span${edCell(ctx, "items", i, 2)}>${esc(org)}</span>` : ""}</figcaption>` : ""}</figure>`)
           .join("")}</div></section>`;
       },
     });
@@ -377,14 +378,17 @@ ${eyebrow ? `    <span class="brick-eyebrow"${ed(ctx, "eyebrow")}>${esc(eyebrow)
           columns: { type: "number", title: "열 수 (2~5)", default: 3 },
         },
       },
-      render: async (props) => {
-        const items = rows(props.items, 3).map(([u, cap, link]) => [safeUrl(u), cap, link]).filter(([u]) => u);
+      render: async (props, ctx) => {
+        // 주소가 안전하지 않은 줄은 거른다 — 캡션을 그 자리에서 고치면 원문 순서(i)의 줄로 돌아간다
+        const items = rowsAt(props.items, 3)
+          .map(({ cells: [u, cap, link], i }) => ({ u: safeUrl(u), cap, link, i }))
+          .filter(({ u }) => u);
         if (!items.length) return "";
         const cols = Math.min(5, Math.max(2, Number(props.columns ?? 3) || 3));
         const heading = String(props.title ?? "").trim();
-        return `<section class="brick-image-gallery">${heading ? `<h2>${esc(heading)}</h2>` : ""}<div class="brick-image-grid" style="--cols:${cols}">${items
-          .map(([u, cap, link]) => {
-            const fig = `<figure><img src="${esc(u)}" alt="${esc(cap)}" loading="lazy" />${cap ? `<figcaption>${esc(cap)}</figcaption>` : ""}</figure>`;
+        return `<section class="brick-image-gallery">${heading ? `<h2${ed(ctx, "title")}>${esc(heading)}</h2>` : ""}<div class="brick-image-grid" style="--cols:${cols}">${items
+          .map(({ u, cap, link, i }) => {
+            const fig = `<figure><img src="${esc(u)}" alt="${esc(cap)}" loading="lazy" />${cap ? `<figcaption${edCell(ctx, "items", i, 1)}>${esc(cap)}</figcaption>` : ""}</figure>`;
             return link ? `<a href="${esc(link)}">${fig}</a>` : fig;
           })
           .join("")}</div></section>`;
