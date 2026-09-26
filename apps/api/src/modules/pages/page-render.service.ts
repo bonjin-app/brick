@@ -492,10 +492,12 @@ export class PageRenderService {
       }
       // 그 자리에서 고칠 수 있는 속성 — 편집기가 받는 것은 스키마에 있는 글자 속성뿐이다(이름만 적어 둔다)
       const editable = marks
-        ? (prop: string, opts?: { multiline?: boolean }) =>
-            /^[A-Za-z][A-Za-z0-9_]{0,40}$/.test(prop)
-              ? ` data-brick-prop="${prop}"${opts?.multiline ? ' data-brick-multiline="1"' : ""}`
-              : ""
+        ? (prop: string, opts?: { multiline?: boolean; row?: number; col?: number }) => {
+            if (!/^[A-Za-z][A-Za-z0-9_]{0,40}$/.test(prop)) return "";
+            const cell = (n: unknown) => Number.isInteger(n) && (n as number) >= 0 && (n as number) < 10000;
+            const at = cell(opts?.row) && cell(opts?.col) ? ` data-brick-row="${opts!.row}" data-brick-col="${opts!.col}"` : "";
+            return ` data-brick-prop="${prop}"${!at && opts?.multiline ? ' data-brick-multiline="1"' : ""}${at}`;
+          }
         : undefined;
       return box(await def.render(node.props ?? {}, { ...ctx, children, ...(editable ? { editable } : {}) }));
     } catch (err) {

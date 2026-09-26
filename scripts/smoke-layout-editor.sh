@@ -98,6 +98,22 @@ TREE_OUT="$(node --input-type=module -e '
   ].map(String).join(","));
   const t1 = T.applyTextEdit(t0, "0", "text", "제목", schemaOf).tree;
   out.push("text-same:" + (T.applyTextEdit(t1, "0", "text", "제목", schemaOf).tree === t1) + "," + T.applyTextEdit(t0, "0", "text", "가".repeat(30000), schemaOf).tree[0].props.text.length);
+  // 11-2. 목록형 속성의 한 칸 — 그 줄·그 칸만, 나머지 줄은 글자 그대로
+  const cellTree = [{ block: "a/f", props: { items: "제목1 |설명1\n\n제목2|설명2 | /x | truck" } }];
+  const cellSchema = (b) => (b === "a/f" ? { items: { type: "string" }, n: { type: "number" } } : undefined);
+  r = T.applyCellEdit(cellTree, "0", "items", 1, 1, "새 설명", cellSchema);
+  out.push("cell-ok:" + JSON.stringify(r.tree[0].props.items) + "," + JSON.stringify(cellTree[0].props.items));
+  r = T.applyCellEdit(cellTree, "0", "items", 0, 0, "칸|늘리기\n줄", cellSchema);
+  out.push("cell-sep:" + JSON.stringify(r.tree[0].props.items.split("\n")[0]));
+  r = T.applyCellEdit(cellTree, "0", "items", 0, 2, "/link", cellSchema);
+  out.push("cell-grow:" + JSON.stringify(r.tree[0].props.items.split("\n")[0]));
+  out.push("cell-reject:" + [
+    T.applyCellEdit(cellTree, "0", "items", 5, 0, "x", cellSchema),
+    T.applyCellEdit(cellTree, "0", "items", 0.5, 0, "x", cellSchema),
+    T.applyCellEdit(cellTree, "0", "n", 0, 0, "x", cellSchema),
+    T.applyCellEdit(cellTree, "0", "items", 0, 0, 7, cellSchema),
+  ].map(String).join(","));
+  out.push("cell-same:" + (T.applyCellEdit(cellTree, "0", "items", 1, 0, "제목2", cellSchema).tree === cellTree));
   // 12. 미리보기 안에서 끌어다 놓기 — 앞·뒤·안, 트리에서 다시 확인한다
   r = T.applyMove(base(), "2", "1.0", "before", accepts);
   out.push("move-before:" + names(r.tree) + "@" + T.pathKey(r.path));
@@ -131,6 +147,11 @@ check "제자리 이동은 같은 트리" "$(line noop)" "true@2"
 check "미리보기에서 고친 글자를 그 블록에 반영한다 (원본은 그대로)" "$(line text-ok)" '{"text":"고친 글자"}@1.0,{}'
 check "스키마의 글자 속성이 아니면 받지 않는다 (숫자 속성·__proto__·글자 아닌 값·없는 경로·스키마 없는 블록)" "$(line text-reject)" "null,null,null,null,null,null"
 check "같은 값은 같은 트리 · 너무 긴 값은 자른다" "$(line text-same)" "true,20000"
+check "목록의 한 칸만 고친다 — 다른 줄·빈 줄은 글자 그대로" "$(line cell-ok)" '"제목1 |설명1\n\n제목2 | 새 설명 | /x | truck","제목1 |설명1\n\n제목2|설명2 | /x | truck"'
+check "고친 칸에 칸 구분자·줄바꿈이 오면 공백으로 (카드가 갈라지지 않게)" "$(line cell-sep)" '"칸 늘리기 줄 | 설명1"'
+check "없던 칸을 채우면 그 칸까지만 늘린다" "$(line cell-grow)" '"제목1 | 설명1 | /link"'
+check "없는 줄·정수 아닌 줄·글자 아닌 속성·글자 아닌 값은 받지 않는다" "$(line cell-reject)" "null,null,null,null"
+check "같은 값이면 같은 트리" "$(line cell-same)" "true"
 check "미리보기에서 끌어 놓기 — 다단 안의 칸 앞으로" "$(line move-before)" '[{"a/h"},{"core/columns",[{"a/p"},{"a/l"},{"a/r"}]},{"core/columns",[]}]@1.0'
 check "미리보기에서 끌어 놓기 — 칸 뒤로 (빠진 자리만큼 경로가 당겨진다)" "$(line move-after)" '[{"core/columns",[{"a/l"},{"a/r"},{"a/h"}]},{"a/p"},{"core/columns",[]}]@0.2'
 check "미리보기에서 끌어 놓기 — 빈 다단 안으로" "$(line move-inside)" '[{"core/columns",[{"a/l"},{"a/r"}]},{"a/p"},{"core/columns",[{"a/h"}]}]@2.0'
@@ -188,7 +209,7 @@ check "제목 블록은 아니다" \
 
 echo "── 초안 맡기기"
 SESSION="sess-$(date +%s)-a1"
-DRAFT="$(printf '{"session":"%s","slug":"about","title":"회사 소개 초안","seo":{},"blocks":[{"block":"core/heading","props":{"text":"배치 초안 제목","level":2}},{"block":"core/columns","props":{"gap":24},"children":[{"block":"core/paragraph","props":{"text":"왼쪽 칸 문장"}},{"block":"core/paragraph","props":{"text":"오른쪽 칸 문장"}}]},{"block":"core/columns","props":{},"children":[]},{"block":"nope/none","props":{}}]}' "$SESSION")"
+DRAFT="$(printf '{"session":"%s","slug":"about","title":"회사 소개 초안","seo":{},"blocks":[{"block":"core/heading","props":{"text":"배치 초안 제목","level":2}},{"block":"core/columns","props":{"gap":24},"children":[{"block":"core/paragraph","props":{"text":"왼쪽 칸 문장"}},{"block":"core/paragraph","props":{"text":"오른쪽 칸 문장"}}]},{"block":"core/columns","props":{},"children":[]},{"block":"nope/none","props":{}},{"block":"core/features","props":{"title":"특징","items":"| 빈 제목 줄\\n첫 카드 | 첫 설명\\n둘째 카드 | 둘째 설명 | /go"}},{"block":"core/stats","props":{"items":"| 라벨만\\n99%% | 만족도"}},{"block":"core/cta","props":{"title":"지금","buttonLabel":"지금 보기","buttonUrl":"/shop"}}]}' "$SESSION")"
 put_draft() {  # put_draft <쿠키|없음> <본문> → 상태코드
   if [[ "$1" == "-" ]]; then code -X POST "$API/api/admin/pages/draft-preview" -H 'content-type: application/json' -d "$2"
   else code -b "$1" -X POST "$API/api/admin/pages/draft-preview" -H 'content-type: application/json' -d "$2"; fi
@@ -241,6 +262,10 @@ print(h[i:i+400])" <<< "$HTML")"
 contains "모르는 블록도 보이게 그린다 (지울 수 있게)" "$UNKNOWN_BOX" "알 수 없는 블록 (nope/none)"
 contains "편집기와 이야기하는 스크립트가 붙는다" "$HTML" "brick: 'select'"
 contains "제목은 그 자리에서 고칠 수 있게 표시한다" "$HTML" '<h2 data-brick-prop="text">배치 초안 제목</h2>'
+contains "특징 카드의 제목은 그 칸(원문 순서 줄·칸)으로 표시한다" "$HTML" '<h3 data-brick-prop="items" data-brick-row="2" data-brick-col="0">둘째 카드</h3>'
+contains "블록이 걸러 낸 줄이 있어도 원문 순서로 센다 (숫자 강조)" "$HTML" '<strong data-brick-prop="items" data-brick-row="1" data-brick-col="0">99%</strong>'
+contains "버튼 문구도 그 자리에서 고칠 수 있다" "$HTML" 'href="/shop" data-brick-prop="buttonLabel">지금 보기</a>'
+contains "고치는 중인 링크 안을 눌러도 이동하지 않는다" "$HTML" "if (e.target.closest && e.target.closest('a')) e.preventDefault();"
 contains "문단은 여러 줄로 고칠 수 있게 표시한다" "$HTML" '<p data-brick-prop="text" data-brick-multiline="1">왼쪽 칸 문장</p>'
 contains "두 번 누르면 고치고, 고친 글자(HTML 아님)를 보낸다" "$HTML" "brick: 'text', path: node.getAttribute('data-brick-node'), prop: el.getAttribute('data-brick-prop'), value: value.slice(0, 20000)"
 contains "메시지는 같은 출처로만 보낸다" "$HTML" "P.postMessage(msg, ORIGIN)"

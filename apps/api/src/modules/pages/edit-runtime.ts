@@ -53,7 +53,10 @@ export const EDIT_RUNTIME = `<style>
     el.classList.remove('brick-editing');
     if (!save) { el.innerText = before; return; }
     if (value === before || !node) return;
-    tell({ brick: 'text', path: node.getAttribute('data-brick-node'), prop: el.getAttribute('data-brick-prop'), value: value.slice(0, 20000) });
+    var msg = { brick: 'text', path: node.getAttribute('data-brick-node'), prop: el.getAttribute('data-brick-prop'), value: value.slice(0, 20000) };
+    // 목록형 속성의 한 칸 — 편집기가 원문의 그 줄·그 칸만 바꾼다
+    if (el.hasAttribute('data-brick-row')) { msg.row = Number(el.getAttribute('data-brick-row')); msg.col = Number(el.getAttribute('data-brick-col')); }
+    tell(msg);
   }
   document.addEventListener('dblclick', function(e){
     var el = e.target && e.target.closest ? e.target.closest('[data-brick-prop]') : null;
@@ -84,7 +87,11 @@ export const EDIT_RUNTIME = `<style>
   document.addEventListener('focusout', function(e){ if (editing && e.target === editing.el) finish(true); }, true);
   document.addEventListener('click', function(e){
     // 고치는 중인 글자 안의 클릭은 커서를 옮기는 것이다 — 선택을 다시 보내지 않는다
-    if (editing && editing.el.contains(e.target)) return;
+    if (editing && editing.el.contains(e.target)) {
+      // 버튼·카드처럼 링크 안의 글자를 고치는 중이면 링크로 가지 않는다
+      if (e.target.closest && e.target.closest('a')) e.preventDefault();
+      return;
+    }
     e.preventDefault(); e.stopPropagation();
     var n = nodeOf(e.target);
     tell({ brick: 'select', path: n ? n.getAttribute('data-brick-node') : '' });

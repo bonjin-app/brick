@@ -11,6 +11,9 @@ const esc = (s: unknown) =>
 /** 배치 편집기에서 그 자리에서 고칠 수 있는 글자 — 공개 렌더에서는 빈 문자열 */
 const ed = (ctx: Pick<BlockRenderContext, "editable">, prop: string, multiline = false) =>
   ctx.editable?.(prop, { multiline }) ?? "";
+/** 목록형 속성의 한 칸 — row 는 원문(빈 줄 뺀) 순서, col 은 칸 */
+const edCell = (ctx: Pick<BlockRenderContext, "editable">, prop: string, row: number, col: number) =>
+  ctx.editable?.(prop, { row, col }) ?? "";
 
 /**
  * 코어 블록 — 플러그인 없이 기본 제공되는 페이지 빌더 재료.
@@ -132,6 +135,9 @@ export class CoreBlocksService implements OnModuleInit {
           const parts = line.split("|").map((s) => s.trim());
           return Array.from({ length: cols }, (_, i) => parts[i] ?? "");
         });
+    /** rows 와 같지만 원문 순서(i)를 함께 — 블록이 줄을 걸러 내도 그 자리에서 고친 칸이 제 줄로 돌아간다 */
+    const rowsAt = (raw: unknown, cols: number): Array<{ cells: string[]; i: number }> =>
+      rows(raw, cols).map((cells, i) => ({ cells, i }));
 
     b.set("core/hero", {
       name: "core/hero",
@@ -162,13 +168,13 @@ export class CoreBlocksService implements OnModuleInit {
          */
         if (title) ctx.setSeo?.({ title, description: text || undefined, ownHeading: true });
         const cta = [
-          [props.ctaLabel, props.ctaUrl, "brick-btn-primary"],
-          [props.altLabel, props.altUrl, ""],
+          [props.ctaLabel, props.ctaUrl, "brick-btn-primary", "ctaLabel"],
+          [props.altLabel, props.altUrl, "", "altLabel"],
         ]
           .filter(([label, url]) => String(label ?? "").trim() && String(url ?? "").trim())
           .map(
-            ([label, url, cls]) =>
-              `<a class="brick-btn brick-btn-lg ${cls}" href="${esc(url)}">${esc(label)}</a>`,
+            ([label, url, cls, key]) =>
+              `<a class="brick-btn brick-btn-lg ${cls}" href="${esc(url)}"${ed(ctx, String(key))}>${esc(label)}</a>`,
           )
           .join("");
         // 이미지 위 글자는 테마가 어둡게 깔고 흰 글자로 그린다(has-image) — 사진 밝기와 무관하게 읽힌다
@@ -191,14 +197,14 @@ ${eyebrow ? `  <span class="brick-eyebrow"${ed(ctx, "eyebrow")}>${esc(eyebrow)}<
           },
         },
       },
-      render: async (props) => {
-        const cards = rows(props.items, 4)
-          .map(([title, body, url, icon]) => {
+      render: async (props, ctx) => {
+        const cards = rowsAt(props.items, 4)
+          .map(({ cells: [title, body, url, icon], i }) => {
             // 아이콘은 테마 스프라이트의 심볼 이름 — 없는 이름이면 테마가 아무것도 그리지 않는다
             const ico = /^[a-z][a-z0-9-]{0,30}$/.test(icon)
               ? `<span class="brick-card-icon"><svg class="brick-ico" aria-hidden="true"><use href="#i-${esc(icon)}"></use></svg></span>`
               : "";
-            const inner = `${ico}<h3>${esc(title)}</h3>${body ? `<p>${esc(body)}</p>` : ""}`;
+            const inner = `${ico}<h3${edCell(ctx, "items", i, 0)}>${esc(title)}</h3>${body ? `<p${edCell(ctx, "items", i, 1)}>${esc(body)}</p>` : ""}`;
             return url
               ? `<a class="brick-card" href="${esc(url)}">${inner}</a>`
               : `<div class="brick-card">${inner}</div>`;
@@ -206,7 +212,7 @@ ${eyebrow ? `  <span class="brick-eyebrow"${ed(ctx, "eyebrow")}>${esc(eyebrow)}<
           .join("");
         if (!cards) return "";
         const heading = String(props.title ?? "").trim();
-        return `<section class="brick-features">${heading ? `<h2>${esc(heading)}</h2>` : ""}<div class="brick-grid">${cards}</div></section>`;
+        return `<section class="brick-features">${heading ? `<h2${ed(ctx, "title")}>${esc(heading)}</h2>` : ""}<div class="brick-grid">${cards}</div></section>`;
       },
     });
 
@@ -231,7 +237,7 @@ ${eyebrow ? `  <span class="brick-eyebrow"${ed(ctx, "eyebrow")}>${esc(eyebrow)}<
     <h2${ed(ctx, "title")}>${esc(props.title)}</h2>
     ${text ? `<p${ed(ctx, "text")}>${esc(text)}</p>` : ""}
   </div>
-  ${label && url ? `<a class="brick-btn brick-btn-primary brick-btn-lg" href="${esc(url)}">${esc(label)}</a>` : ""}
+  ${label && url ? `<a class="brick-btn brick-btn-primary brick-btn-lg" href="${esc(url)}"${ed(ctx, "buttonLabel")}>${esc(label)}</a>` : ""}
 </section>`;
       },
     });
@@ -313,7 +319,7 @@ ${image ? `  <div class="brick-media"><img src="${esc(image)}" alt="${esc(props.
 ${eyebrow ? `    <span class="brick-eyebrow"${ed(ctx, "eyebrow")}>${esc(eyebrow)}</span>
 ` : ""}${title ? `    <h2${ed(ctx, "title")}>${esc(title)}</h2>
 ` : ""}${text ? `    <p${ed(ctx, "text", true)}>${esc(text).replace(/\n/g, "<br />")}</p>
-` : ""}${label && url ? `    <a class="brick-btn brick-btn-primary" href="${esc(url)}">${esc(label)}</a>
+` : ""}${label && url ? `    <a class="brick-btn brick-btn-primary" href="${esc(url)}"${ed(ctx, "ctaLabel")}>${esc(label)}</a>
 ` : ""}  </div>
 </section>`;
       },
@@ -329,11 +335,11 @@ ${eyebrow ? `    <span class="brick-eyebrow"${ed(ctx, "eyebrow")}>${esc(eyebrow)
           items: { type: "string", title: "한 줄에 하나: 숫자 | 라벨", format: "multiline" },
         },
       },
-      render: async (props) => {
-        const items = rows(props.items, 2).filter(([n]) => n);
+      render: async (props, ctx) => {
+        const items = rowsAt(props.items, 2).filter(({ cells: [n] }) => n);
         if (!items.length) return "";
         return `<section class="brick-stats">${items
-          .map(([n, label]) => `<div class="brick-stat"><strong>${esc(n)}</strong>${label ? `<span>${esc(label)}</span>` : ""}</div>`)
+          .map(({ cells: [n, label], i }) => `<div class="brick-stat"><strong${edCell(ctx, "items", i, 0)}>${esc(n)}</strong>${label ? `<span${edCell(ctx, "items", i, 1)}>${esc(label)}</span>` : ""}</div>`)
           .join("")}</section>`;
       },
     });

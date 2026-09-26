@@ -966,8 +966,11 @@ export interface BlockRenderContext {
    *   `<h2${ctx.editable?.("title") ?? ""}>${esc(title)}</h2>`
    * 속성 값이 **그대로 글자로** 들어가는 요소에만 붙인다(HTML 로 가공한 값이나 여러 속성을 합친 요소에는
    * 붙이지 않는다 — 고친 글자가 속성으로 돌아갈 때 모양이 바뀐다). 여러 줄 값은 `multiline` 을 준다.
+   *
+   * 목록형 속성(한 줄에 하나, `|` 로 칸을 나눈 글자)은 **한 칸**을 가리킬 수 있다: `row` 는 빈 줄을 뺀 몇 번째
+   * 줄인가(블록이 뒤에서 걸러 낸 줄도 센다 — 화면의 순서가 아니라 원문의 순서다), `col` 은 그 줄의 몇 번째 칸인가.
    */
-  editable?: (prop: string, opts?: { multiline?: boolean }) => string;
+  editable?: (prop: string, opts?: { multiline?: boolean; row?: number; col?: number }) => string;
 }
 
 /**

@@ -211,3 +211,46 @@ export function applyMove(
   if (where !== "before" && where !== "after") return null;
   return moveNode(tree, from, to.slice(0, -1), to[to.length - 1] + (where === "after" ? 1 : 0));
 }
+
+/**
+ * 목록형 속성(한 줄에 하나, `|` 로 칸을 나눈 글자)의 **한 칸**을 미리보기에서 고쳤다.
+ *
+ * row 는 빈 줄을 뺀 몇 번째 줄인가(블록의 rows 가 세는 순서), col 은 그 줄의 몇 번째 칸인가. 그 칸만 바꾸고
+ * 나머지 줄은 **글자 그대로** 둔다. 고친 값에 칸 구분자(`|`)나 줄바꿈이 들어오면 공백으로 바꾼다 — 그대로 두면
+ * 칸이 하나 늘거나 줄이 갈라져 카드가 엉뚱하게 나뉜다. 스키마의 글자 속성이 아니거나 그런 줄이 없으면 null.
+ */
+export function applyCellEdit(
+  tree: BlockNode[],
+  pathStr: unknown,
+  prop: unknown,
+  row: unknown,
+  col: unknown,
+  value: unknown,
+  schemaOf: (block: string) => Record<string, { type?: string }> | undefined,
+): { tree: BlockNode[]; path: Path } | null {
+  if (typeof value !== "string" || !Number.isInteger(row) || !Number.isInteger(col)) return null;
+  const r = row as number;
+  const c = col as number;
+  if (r < 0 || c < 0 || c > 20) return null;
+  if (typeof pathStr !== "string" || typeof prop !== "string") return null;
+  const path = parsePath(pathStr);
+  const node = path ? getNode(tree, path) : undefined;
+  if (!path || !node) return null;
+  const schema = schemaOf(node.block);
+  if (!schema || !Object.prototype.hasOwnProperty.call(schema, prop) || schema[prop]?.type !== "string") return null;
+  const lines = String((node.props ?? {})[prop] ?? "").split("\n");
+  const filled = lines.map((l, i) => (l.trim() ? i : -1)).filter((i) => i >= 0);
+  const at = filled[r];
+  if (at === undefined) return null;
+  const cells = lines[at].split("|").map((s) => s.trim());
+  const cell = value.replace(/[|\r\n]+/g, " ").trim().slice(0, 2000);
+  // 같은 값이면 원래 트리 — 줄을 다시 쓰면 칸 사이 공백만 달라져도 되돌리기 기록이 쌓인다
+  if ((cells[c] ?? "") === cell) return { tree, path };
+  while (cells.length <= c) cells.push("");
+  // 없던 칸을 채우면 그 칸까지만 늘어난다(사이의 빈 칸은 빈 채로)
+  cells[c] = cell;
+  const line = cells.join(" | ");
+  const next = [...lines];
+  next[at] = line;
+  return { tree: updateAt(tree, path, (n) => ({ ...n, props: { ...(n.props ?? {}), [prop]: next.join("\n") } })), path };
+}

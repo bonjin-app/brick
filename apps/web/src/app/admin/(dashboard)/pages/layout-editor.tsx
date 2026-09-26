@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { useAdminT } from "../../../../lib/i18n-admin";
 import {
-  applyMove, applyTextEdit, duplicateAt, flatten, getNode, indentIntoPrevious, insertAt, isPrefix, moveNode, moveSibling,
+  applyCellEdit, applyMove, applyTextEdit, duplicateAt, flatten, getNode, indentIntoPrevious, insertAt, isPrefix, moveNode, moveSibling,
   outdent, parsePath, pathKey, removeAt, samePath, updateAt, type BlockNode, type Path,
 } from "../../../../lib/block-tree";
 
@@ -221,13 +221,16 @@ export function LayoutEditor(props: {
       const fromFront = e.source === (frontRef.current === 0 ? frameA : frameB).current?.contentWindow;
       const d = (e.data ?? {}) as {
         brick?: string; path?: string; y?: number; prop?: unknown; value?: unknown;
-        from?: unknown; to?: unknown; where?: unknown;
+        from?: unknown; to?: unknown; where?: unknown; row?: unknown; col?: unknown;
       };
       if (!fromFront || !d.brick) return;
       if (d.brick === "text") {
         // 미리보기에서 글자를 고쳤다 — 스키마의 글자 속성인지 다시 보고 반영한다
-        const r = applyTextEdit(draftRef.current.blocks, d.path, d.prop, d.value,
-          (block) => catalogRef.current.find((b) => b.name === block)?.propsSchema?.properties);
+        const schemaOf = (block: string) => catalogRef.current.find((b) => b.name === block)?.propsSchema?.properties;
+        // 목록형 속성의 한 칸이면 그 줄·그 칸만, 아니면 속성 전체
+        const r = d.row !== undefined
+          ? applyCellEdit(draftRef.current.blocks, d.path, d.prop, d.row, d.col, d.value, schemaOf)
+          : applyTextEdit(draftRef.current.blocks, d.path, d.prop, d.value, schemaOf);
         if (r && r.tree !== draftRef.current.blocks) commitRef.current(r.tree, { select: r.path });
         else if (r) setSelected(r.path);
         return;
