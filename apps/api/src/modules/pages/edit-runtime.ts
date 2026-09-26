@@ -25,7 +25,7 @@
  * 긴 페이지 아래쪽을 고치는 동안 매번 맨 위로 튄다.
  */
 export const EDIT_RUNTIME = `<style>
-.brick-edit-node.brick-edit-hover{outline:1px dashed rgba(37,99,235,.7);outline-offset:-1px;cursor:pointer}
+[data-brick-node].brick-edit-hover{outline:1px dashed rgba(37,99,235,.7);outline-offset:-1px;cursor:pointer}
 .brick-edit-selected{position:relative;outline:2px solid #2563eb!important;outline-offset:-2px}
 .brick-edit-handle{position:absolute;top:0;left:0;z-index:2147483646;background:#2563eb;color:#fff;font:600 11px/1.7 system-ui,sans-serif;padding:0 6px;border-radius:0 0 var(--radius,4px) 0;white-space:nowrap;cursor:grab;user-select:none;-webkit-user-select:none}
 .brick-edit-drop{position:fixed;z-index:2147483647;background:#2563eb;pointer-events:none;border-radius:var(--radius,2px)}
@@ -63,6 +63,9 @@ export const EDIT_RUNTIME = `<style>
     if (!el || el === (editing && editing.el)) return;
     e.preventDefault();
     finish(true);
+    // 고칠 요소가 곧 블록의 뿌리면(제목 블록) 손잡이가 그 안에 붙어 있다 — 글자에 섞이지 않게 뗀다
+    var grip = el.querySelector('.brick-edit-handle');
+    if (grip) grip.remove();
     // 원래 값도 편집 표시를 단 뒤에 읽는다 — 끝낼 때와 같은 조건으로 비교해야 고치지 않은 것을 고친 것으로 보지 않는다
     el.classList.add('brick-editing');
     editing = { el: el, before: el.innerText.replace(/\\n+$/, '') };

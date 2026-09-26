@@ -601,6 +601,40 @@ contains "손님이 읽는 이유가 남는다 (내 정기배송)" "$(psql_q "SE
 check "첫 회차 주문은 취소되고 재고가 돌아온다" \
   "$(psql_q "SELECT status FROM shop_orders WHERE order_no='$O_4'")|$(psql_q "SELECT stock - $STOCK_BEFORE FROM shop_products WHERE slug='po-sub'")" "cancelled|1"
 
+
+echo "── 정기결제 — 첫 결제를 모르는 사이 결제되고 환불된 주문은 다시 청구하지 않는다"
+stub_ctl lose-charge 1; stub_ctl fail-get 1
+curl -s -o /dev/null -b "$B" -X POST "$SHOP/subscriptions" -H 'content-type: application/json' -d "$SUB_BODY"
+PID_5="$(po_last billing-charge paymentId)"; O_5="${PID_5%-*}"
+SUB5_ID="$(psql_q "SELECT s.id FROM shop_subscriptions s JOIN shop_orders o ON o.idempotency_key = 'sub-' || s.id || '-c1' WHERE o.order_no='$O_5'")"
+check "통지(웹훅)가 그 첫 회차를 결제 완료로" "$(webhook "$PID_5"; echo; psql_q "SELECT status FROM shop_orders WHERE order_no='$O_5'")" "$(printf '200\npaid')"
+REFUND5="$(printf '{"orderNo":"%s","reason":"시험 환불"}' "$O_5")"
+check "운영자가 그 주문을 환불" "$(code -b "$CK" -X POST "$SHOP/admin/payments/refund" -H 'content-type: application/json' -d "$REFUND5")" "200"
+check "주문은 환불 상태" "$(psql_q "SELECT status FROM shop_orders WHERE order_no='$O_5'")" "refunded"
+psql_q "UPDATE shop_subscriptions SET created_at = now() - interval '10 minutes' WHERE id='$SUB5_ID'" >/dev/null
+CHARGES_5="$(po_count billing-charge)"
+sweep >/dev/null
+check "환불된 첫 회차는 다시 청구하지 않는다" "$(po_count billing-charge)" "$CHARGES_5"
+check "그 가입은 거둔다 (해지)" "$(psql_q "SELECT status, (next_charge_at IS NULL) AS undated FROM shop_subscriptions WHERE id='$SUB5_ID'")" "cancelled|true"
+
+echo "── 정기결제 — 통지 쪽 기록이 멈췄으면 청구가 이어받아 끝낸다"
+CYCLE_BEFORE="$(psql_q "SELECT cycle_no FROM shop_subscriptions WHERE id='$SUB_ID'")"
+stub_ctl lose-charge 1; stub_ctl fail-get 1; due
+sweep >/dev/null
+PID_S="$(po_last billing-charge paymentId)"; O_S="${PID_S%-*}"
+check "처리 중 — 그 회차 주문은 결제대기" "$(psql_q "SELECT status FROM shop_orders WHERE order_no='$O_S'")" "pending"
+# 통지가 같은 거래를 기록하다 멈춘 모습 — 거래 번호가 붙은 'requested' 기록 (먼저 방금 쓴 것 — 이어받지 않는다)
+psql_q "INSERT INTO shop_payments (id, order_id, provider, provider_tid, status, amount) SELECT gen_random_uuid(), id, 'portone', '$PID_S', 'requested', total FROM shop_orders WHERE order_no='$O_S'" >/dev/null
+SW="$(sweep)"
+contains "통지 쪽이 아직 쓰는 중이면 기다린다 (실패로 세지 않는다)" "$SW" '"failed":0'
+check "그 주문은 아직 결제대기" "$(psql_q "SELECT status FROM shop_orders WHERE order_no='$O_S'")" "pending"
+psql_q "UPDATE shop_payments SET updated_at = now() - interval '10 minutes' WHERE provider_tid='$PID_S'" >/dev/null
+contains "10분째 멈춘 기록은 이어받아 청구를 끝낸다" "$(sweep)" '"charged":1'
+check "그 주문이 결제 완료 · 회차가 한 칸 나아간다" \
+  "$(psql_q "SELECT status FROM shop_orders WHERE order_no='$O_S'")|$(psql_q "SELECT cycle_no - $CYCLE_BEFORE FROM shop_subscriptions WHERE id='$SUB_ID'")" "paid|1"
+check "결제 기록은 하나 (이어받은 기록이 결제 완료)" \
+  "$(psql_q "SELECT string_agg(p.status, ',') FROM shop_payments p JOIN shop_orders o ON o.id=p.order_id WHERE o.order_no='$O_S'")" "paid"
+
 echo "── 환불 전에 탈퇴하면 신청서의 계좌도 지운다"
 O_WD="$(mkorder 1)"
 issue_va "$O_WD-w1" 14000; confirm "$O_WD" "$O_WD-w1" >/dev/null; deposit "$O_WD-w1"; webhook "$O_WD-w1" >/dev/null

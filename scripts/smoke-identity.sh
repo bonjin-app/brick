@@ -354,6 +354,8 @@ for shift in range(0, 3):
 
 G0="$(gjar off)"
 contains "끈 상태 — 가입 화면에 요구하지 않는다" "$(gstate "$G0")" '"required":false'
+check "끈 사이트는 손님 인증창을 열지 않는다 (건당 요금 — 성인 상품용으로만 켠 사이트)" \
+  "$(code -b "$G0" -X POST "$API/api/identity/signup/start" -H 'content-type: application/json' -d '{"provider":"portone"}')" "404"
 R="$(reg "$G0" "free@id.test")"
 [[ "$R" == *" 201" ]] && ok "끈 상태 — 인증 없이 가입한다" || bad "끈 상태 가입 (${R:0:160})"
 check "설정을 켠다" "$(code -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"member.identity_at_signup":true}')" "200"

@@ -19,6 +19,35 @@ import { bypassesMaintenance } from "../site/maintenance-mode.js";
 import { MaintenanceModeService } from "../site/maintenance-mode.service.js";
 import { DB, CACHE } from "../../runtime.module.js";
 
+/** 여는 태그 뒤에 속성을 넣을 수 없는 요소 — 표시를 달지 않고 상자로 감싼다 */
+const NO_MARK_TAGS = new Set([
+  "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr",
+  "style", "script", "template", "noscript",
+]);
+
+/**
+ * 블록 출력이 요소 **하나**(앞뒤 공백만)면 그 여는 태그의 이름 바로 뒤 위치, 아니면 -1.
+ *
+ * 같은 이름의 태그가 열리고 닫히는 깊이를 세어, 처음으로 0 이 되는 곳이 출력의 끝인지 본다
+ * (`<div>…</div><div>…</div>` 는 둘이다). 주석·속성 값 안의 태그 모양까지 가려내지는 않는다 — 틀리면
+ * 표시가 한 겹 바깥에 붙거나 상자로 감싸질 뿐, 공개 렌더는 이 함수를 쓰지 않는다.
+ */
+export function singleRootTagEnd(html: string): number {
+  const lead = html.length - html.trimStart().length;
+  const body = html.slice(lead);
+  const open = /^<([a-zA-Z][a-zA-Z0-9-]*)(?=[\s/>])[^>]*>/.exec(body);
+  if (!open) return -1;
+  const tag = open[1].toLowerCase();
+  if (NO_MARK_TAGS.has(tag) || open[0].endsWith("/>")) return -1;
+  const re = new RegExp(`<(/?)${tag}(?=[\\s/>])[^>]*>`, "gi");
+  let depth = 0;
+  for (let m = re.exec(body); m; m = re.exec(body)) {
+    depth += m[1] ? -1 : 1;
+    if (depth === 0) return body.slice(m.index + m[0].length).trim() ? -1 : lead + 1 + tag.length;
+  }
+  return -1;
+}
+
 /** 페이지 빌더 저장 단위: 블록 트리 노드 */
 export interface BlockNode {
   block: string; // 예: "core/heading", "brick-board/latest-posts"
@@ -36,6 +65,8 @@ export interface BlockNode {
 export interface EditMarks {
   /** 빈 컨테이너·모르는 블록·실패한 블록을 **눌러서 고를 수 있게** 보이는 자리로 그릴 때의 문장 */
   emptyContainer: string;
+  /** 아무것도 그리지 않은 블록(항목이 없는 카드 묶음 등) — 크기가 0 이면 누를 수도, 끌어다 놓을 수도 없다 */
+  emptyBlock: (name: string) => string;
   unknownBlock: (name: string) => string;
   blockFailed: (name: string) => string;
 }
@@ -413,6 +444,7 @@ export class PageRenderService {
     const marks: EditMarks | null = editing
       ? {
           emptyContainer: t("editor.emptyContainer"),
+          emptyBlock: (name) => t("editor.emptyBlock", { name }),
           unknownBlock: (name) => t("editor.unknownBlock", { name }),
           blockFailed: (name) => t("editor.blockFailed", { name }),
         }
@@ -473,8 +505,17 @@ export class PageRenderService {
      * 공개 렌더에서는 모르는 블록·실패한 블록을 **주석으로** 숨긴다(손님에게 고장을 보이지 않는다).
      * 편집기에서는 반대다 — 보이지 않으면 누를 수 없고, 누를 수 없으면 지울 수도 없다.
      */
-    const box = (inner: string) =>
-      marks ? `<div class="brick-edit-node" data-brick-node="${at.join(".")}">${inner}</div>` : inner;
+    /*
+     * 블록의 출력이 **요소 하나**면 표시를 그 요소에 직접 단다. 상자로 감싸면 테마의 `.brick-main > .brick-hero:first-child`
+     * 같은 직계 자식 규칙이 어긋나 미리보기의 여백이 공개 화면과 달라진다(미리보기가 거짓말을 한다). 요소 하나가
+     * 아니면(스타일·스크립트를 함께 내는 확장 블록, 빈 요소) 지금처럼 상자로 감싼다.
+     */
+    const box = (inner: string) => {
+      if (!marks) return inner;
+      const mark = ` data-brick-node="${at.join(".")}"`;
+      const cut = singleRootTagEnd(inner);
+      return cut >= 0 ? inner.slice(0, cut) + mark + inner.slice(cut) : `<div class="brick-edit-node"${mark}>${inner}</div>`;
+    };
     const notice = (text: string) => `<div class="brick-edit-missing">${escapeHtml(text)}</div>`;
     const def = this.loader.blocks.get(node.block);
     if (!def) {
@@ -499,7 +540,10 @@ export class PageRenderService {
             return ` data-brick-prop="${prop}"${!at && opts?.multiline ? ' data-brick-multiline="1"' : ""}${at}`;
           }
         : undefined;
-      return box(await def.render(node.props ?? {}, { ...ctx, children, ...(editable ? { editable } : {}) }));
+      const html = await def.render(node.props ?? {}, { ...ctx, children, ...(editable ? { editable } : {}) });
+      // 아무것도 그리지 않은 블록 — 편집기에서는 누르고 끌어다 놓을 자리를 준다(공개 화면에는 그대로 없다)
+      if (marks && !html.trim()) return box(notice(marks.emptyBlock(node.block)));
+      return box(html);
     } catch (err) {
       this.logger.warn(`block "${node.block}" render failed: ${String(err)}`);
       return marks ? box(notice(marks.blockFailed(node.block))) : `<!-- block "${escapeHtml(node.block)}" failed -->`;

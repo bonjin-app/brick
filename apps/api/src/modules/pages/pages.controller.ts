@@ -43,7 +43,9 @@ export function blockTreeProblem(blocks: unknown): ReturnType<typeof msg> | null
       if (count > TREE_MAX_NODES) return msg("err.treeTooMany", { max: TREE_MAX_NODES });
       if (!n || typeof n !== "object" || Array.isArray(n)) return msg("err.treeBadNode");
       const node = n as { block?: unknown; props?: unknown; children?: unknown };
-      if (typeof node.block !== "string" || !/^[a-z0-9][a-z0-9-]*\/[a-z0-9][a-z0-9-]*$/.test(node.block)) {
+      // 이름 모양은 로더가 받는 만큼 받는다(플러그인 이름/블록 이름 — 로더는 이름 규칙을 두지 않는다). 좁게 보면
+      // 멀쩡히 그려지는 확장 블록이 든 페이지를 저장할 수 없게 된다. 공백·제어 문자와 이름 없는 쪽만 거절한다
+      if (typeof node.block !== "string" || node.block.length > 200 || !/^[^\s/]+\/\S+$/.test(node.block)) {
         return msg("err.treeBadNode");
       }
       if (node.props !== undefined && (node.props === null || typeof node.props !== "object" || Array.isArray(node.props))) {

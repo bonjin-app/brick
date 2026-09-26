@@ -209,7 +209,7 @@ check "제목 블록은 아니다" \
 
 echo "── 초안 맡기기"
 SESSION="sess-$(date +%s)-a1"
-DRAFT="$(printf '{"session":"%s","slug":"about","title":"회사 소개 초안","seo":{},"blocks":[{"block":"core/heading","props":{"text":"배치 초안 제목","level":2}},{"block":"core/columns","props":{"gap":24},"children":[{"block":"core/paragraph","props":{"text":"왼쪽 칸 문장"}},{"block":"core/paragraph","props":{"text":"오른쪽 칸 문장"}}]},{"block":"core/columns","props":{},"children":[]},{"block":"nope/none","props":{}},{"block":"core/features","props":{"title":"특징","items":"| 빈 제목 줄\\n첫 카드 | 첫 설명\\n둘째 카드 | 둘째 설명 | /go"}},{"block":"core/stats","props":{"items":"| 라벨만\\n99%% | 만족도"}},{"block":"core/cta","props":{"title":"지금","buttonLabel":"지금 보기","buttonUrl":"/shop"}}]}' "$SESSION")"
+DRAFT="$(printf '{"session":"%s","slug":"about","title":"회사 소개 초안","seo":{},"blocks":[{"block":"core/heading","props":{"text":"배치 초안 제목","level":2}},{"block":"core/columns","props":{"gap":24},"children":[{"block":"core/paragraph","props":{"text":"왼쪽 칸 문장"}},{"block":"core/paragraph","props":{"text":"오른쪽 칸 문장"}}]},{"block":"core/columns","props":{},"children":[]},{"block":"nope/none","props":{}},{"block":"core/features","props":{"title":"특징","items":"| 빈 제목 줄\\n첫 카드 | 첫 설명\\n둘째 카드 | 둘째 설명 | /go"}},{"block":"core/stats","props":{"items":"| 라벨만\\n99%% | 만족도"}},{"block":"core/cta","props":{"title":"지금","buttonLabel":"지금 보기","buttonUrl":"/shop"}},{"block":"core/features","props":{}},{"block":"core/divider","props":{}}]}' "$SESSION")"
 put_draft() {  # put_draft <쿠키|없음> <본문> → 상태코드
   if [[ "$1" == "-" ]]; then code -X POST "$API/api/admin/pages/draft-preview" -H 'content-type: application/json' -d "$2"
   else code -b "$1" -X POST "$API/api/admin/pages/draft-preview" -H 'content-type: application/json' -d "$2"; fi
@@ -240,6 +240,12 @@ check "그린다" "$(head -1 "$HDR" | awk '{print $2}')" "200"
 contains "저장하지 않은 내용이 보인다" "$HTML" "배치 초안 제목"
 contains "첫 블록에 위치 0" "$HTML" 'data-brick-node="0"'
 contains "다단 안의 둘째 칸에 위치 1.1" "$HTML" 'data-brick-node="1.1"'
+# 테마의 직계 자식 규칙(.brick-main > .brick-hero:first-child 등)이 공개 화면과 같게 맞도록 — 요소 하나인 블록은 상자로 감싸지 않는다
+contains "요소 하나인 블록은 표시를 그 요소에 직접 단다 (제목)" "$HTML" '<h2 data-brick-node="0" data-brick-prop="text">배치 초안 제목</h2>'
+contains "요소 하나인 블록은 표시를 그 요소에 직접 단다 (특징 카드)" "$HTML" '<section data-brick-node="4" class="brick-features">'
+absent "그런 블록을 상자로 감싸지 않는다" "$HTML" '<div class="brick-edit-node" data-brick-node="0">'
+contains "속성을 달 수 없는 요소(구분선 hr)는 상자로 감싼다" "$HTML" '<div class="brick-edit-node" data-brick-node="8">'
+contains "아무것도 그리지 않은 블록도 누르고 끌어 놓을 자리가 있다" "$HTML" "비어 있는 블록 (core/features)"
 contains "다단 안의 문장도 그린다" "$HTML" "오른쪽 칸 문장"
 EMPTY_BOX="$(python3 -c "
 import re, sys
@@ -261,12 +267,12 @@ i = h.find('data-brick-node=\"3\"')
 print(h[i:i+400])" <<< "$HTML")"
 contains "모르는 블록도 보이게 그린다 (지울 수 있게)" "$UNKNOWN_BOX" "알 수 없는 블록 (nope/none)"
 contains "편집기와 이야기하는 스크립트가 붙는다" "$HTML" "brick: 'select'"
-contains "제목은 그 자리에서 고칠 수 있게 표시한다" "$HTML" '<h2 data-brick-prop="text">배치 초안 제목</h2>'
+contains "제목은 그 자리에서 고칠 수 있게 표시한다" "$HTML" 'data-brick-prop="text">배치 초안 제목</h2>'
 contains "특징 카드의 제목은 그 칸(원문 순서 줄·칸)으로 표시한다" "$HTML" '<h3 data-brick-prop="items" data-brick-row="2" data-brick-col="0">둘째 카드</h3>'
 contains "블록이 걸러 낸 줄이 있어도 원문 순서로 센다 (숫자 강조)" "$HTML" '<strong data-brick-prop="items" data-brick-row="1" data-brick-col="0">99%</strong>'
 contains "버튼 문구도 그 자리에서 고칠 수 있다" "$HTML" 'href="/shop" data-brick-prop="buttonLabel">지금 보기</a>'
 contains "고치는 중인 링크 안을 눌러도 이동하지 않는다" "$HTML" "if (e.target.closest && e.target.closest('a')) e.preventDefault();"
-contains "문단은 여러 줄로 고칠 수 있게 표시한다" "$HTML" '<p data-brick-prop="text" data-brick-multiline="1">왼쪽 칸 문장</p>'
+contains "문단은 여러 줄로 고칠 수 있게 표시한다" "$HTML" 'data-brick-prop="text" data-brick-multiline="1">왼쪽 칸 문장</p>'
 contains "두 번 누르면 고치고, 고친 글자(HTML 아님)를 보낸다" "$HTML" "brick: 'text', path: node.getAttribute('data-brick-node'), prop: el.getAttribute('data-brick-prop'), value: value.slice(0, 20000)"
 contains "메시지는 같은 출처로만 보낸다" "$HTML" "P.postMessage(msg, ORIGIN)"
 # 스크립트는 템플릿 문자열 안에 산다 — 이스케이프 하나가 빠지면(\n 이 진짜 줄바꿈이 되는 등) 통째로 문법 오류가 되어
@@ -303,6 +309,10 @@ BAD_SAVE="$(printf '{"slug":"layout-bad","title":"틀린 트리","status":"publi
 check "속성이 객체가 아니면 저장하지 않는다" "$(code -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' -d "$BAD_SAVE")" "400"
 NO_NAME="$(printf '{"slug":"layout-bad","title":"틀린 트리","status":"published","blocks":[{"props":{}}]}')"
 check "블록 이름이 없으면 저장하지 않는다" "$(code -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' -d "$NO_NAME")" "400"
+ODD_NAME="$(printf '{"slug":"layout-odd","title":"확장 블록 이름","status":"draft","blocks":[{"block":"Acme_Tabs/Tabs.v2","props":{}}]}')"
+check "로더가 받는 확장 블록 이름(대문자·밑줄·점)은 저장한다" "$(code -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' -d "$ODD_NAME")" "201"
+SPACE_NAME="$(printf '{"slug":"layout-space","title":"공백 이름","status":"draft","blocks":[{"block":"core/ heading","props":{}}]}')"
+check "공백이 든 블록 이름은 받지 않는다" "$(code -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' -d "$SPACE_NAME")" "400"
 GOOD="$(printf '{"slug":"layout-ok","title":"배치 저장","status":"published","blocks":[{"block":"core/columns","props":{"gap":16},"children":[{"block":"core/paragraph","props":{"text":"저장된 왼쪽"}},{"block":"core/paragraph","props":{"text":"저장된 오른쪽"}}]}]}')"
 check "다단 안에 블록을 넣은 트리를 저장한다" "$(code -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' -d "$GOOD")" "201"
 PUB="$(curl -s "$API/api/render/page?path=layout-ok" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("html",""))')"

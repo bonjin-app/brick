@@ -54,6 +54,13 @@ export class IdentityController {
     if (await this.auth.resolveFromRequest(req)) {
       throw new HttpException("이미 로그인했습니다. 회원 정보에서 본인인증을 해주세요.", HttpStatus.CONFLICT);
     }
+    /*
+     * 가입 전 인증을 켠 사이트에서만 연다. 본인인증은 건당 요금이 나가는데, 이 경로는 손님에게 열려 있다 — 성인
+     * 상품만 쓰려고 본인인증을 켠 사이트에서도 누구나 인증창을 열어 운영자에게 청구서를 보낼 수 있었다.
+     */
+    if (!(await this.identity.signupRequired())) {
+      throw new HttpException("이 사이트는 가입 전 본인인증을 쓰지 않습니다.", HttpStatus.NOT_FOUND);
+    }
     // 손님에게 열린 유료 호출이다 — 주소마다 한도를 둔다(회원 인증보다 좁게)
     const { allowed } = await this.rateLimit.consume(`identity-signup-start:${req.ip ?? "?"}`, 10, 60 * 60_000);
     if (!allowed) {

@@ -209,7 +209,7 @@ async function chargeOrder(
   | { ok: false; pending: true }
   | { ok: false; pending?: false; reason: string; customerReason: string }
 > {
-  const paymentId = uuidv7();
+  let paymentId = uuidv7();
   await db.execute(sql`
     INSERT INTO shop_payments (id, order_id, provider, status, amount)
     VALUES (${paymentId}, ${params.orderId}::uuid, ${params.gateway.provider}, 'requested', ${params.amount})
@@ -285,12 +285,25 @@ async function chargeOrder(
      */
     await db.execute(sql`DELETE FROM shop_payments WHERE id = ${paymentId}`);
     const { rows: first } = await db.execute(sql`
-      SELECT status FROM shop_payments
+      SELECT id, status, order_id, (updated_at < now() - interval '5 minutes') AS stale FROM shop_payments
       WHERE provider = ${params.gateway.provider} AND provider_tid = ${result.providerTid}
     `);
-    // 통지 쪽이 아직 확정 중이면 그쪽이 끝낸다 — 처리 중으로 물러난다(주문도 실패 기록도 건드리지 않는다)
-    if (first[0]?.status === "paid") return { ok: true };
-    return { ok: false, pending: true };
+    const other = first[0];
+    if (other?.status === "paid") return { ok: true };
+    /*
+     * 통지 쪽이 아직 확정 중이면 그쪽이 끝낸다 — 처리 중으로 물러난다. 다만 그 기록이 **멈췄으면**(확정 도중 서버가
+     * 죽어 5분 넘게 'requested', 또는 'failed') 아무도 끝내지 않는다 — 스윕마다 같은 거래를 다시 물어 처리 중으로
+     * 물러나며 그 회차가 영원히 멈춘다. PG 가 이 청구의 결제와 금액을 방금 확인했으니, 그 기록을 이어받아 끝낸다.
+     */
+    const adoptable = other && String(other.order_id) === params.orderId
+      && (other.status === "failed" || (other.status === "requested" && other.stale === true));
+    if (!adoptable) return { ok: false, pending: true };
+    paymentId = String(other.id);
+    await db.execute(sql`
+      UPDATE shop_payments SET status = 'paid', method = ${result.method ?? "카드"}, failure_reason = NULL,
+        raw = ${JSON.stringify(result.raw ?? null)}::jsonb, approved_at = now(), updated_at = now()
+      WHERE id = ${paymentId}
+    `);
   }
   await db.execute(sql`
     UPDATE shop_orders SET payment_method = ${params.gateway.provider}, updated_at = now()
@@ -753,6 +766,15 @@ async function settleFirstCharges(
       // 첫 회차 주문이 없거나 이미 취소됐다(운영자가 취소했다 등) — 열 구독이 아니다
       if (!s.order_id || s.order_status === "cancelled") {
         await drop("첫 회차 주문 없음", t("pay.failed"));
+        continue;
+      }
+      /*
+       * 청구는 **아직 결제대기인 주문**에만 한다. 결제되지 않았다는 것만 보면, 통지로 결제됐다가 운영자가 환불한
+       * 주문(환불)까지 다시 청구하게 된다 — 같은 결제 ID 를 다시 받아 주는 PG 에서는 손님이 두 번 낸다.
+       * 결제대기도 결제됨도 아니면(환불 등) 이 가입은 열 것이 아니다.
+       */
+      if (s.payment_status !== "paid" && s.order_status !== "pending") {
+        await drop(`첫 회차 주문이 ${String(s.order_status)} 상태`, t("pay.failed"));
         continue;
       }
       if (s.payment_status !== "paid") {
