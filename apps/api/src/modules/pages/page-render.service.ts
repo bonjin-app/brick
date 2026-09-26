@@ -486,7 +486,10 @@ export class PageRenderService {
         ? await Promise.all(kids.map((c, j) => this.renderOne(c, ctx, marks, [...at, j])))
         : [];
       // 빈 컨테이너는 높이가 0 이라 미리보기에서 누를 곳이 없다 — 편집기에서만 자리를 채운다
-      if (marks && def.acceptsChildren && !kids.length) children.push(notice(marks.emptyContainer));
+      // brick-edit-empty — 미리보기에서 끌어다 놓을 때 "이 컨테이너 안으로" 의 자리가 된다(모르는 블록 안내와 구별한다)
+      if (marks && def.acceptsChildren && !kids.length) {
+        children.push(`<div class="brick-edit-missing brick-edit-empty">${escapeHtml(marks.emptyContainer)}</div>`);
+      }
       // 그 자리에서 고칠 수 있는 속성 — 편집기가 받는 것은 스키마에 있는 글자 속성뿐이다(이름만 적어 둔다)
       const editable = marks
         ? (prop: string, opts?: { multiline?: boolean }) =>

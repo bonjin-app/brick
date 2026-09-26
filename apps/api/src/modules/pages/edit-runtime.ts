@@ -16,13 +16,20 @@
  *    보내는 것은 **글자(innerText)** 다 — HTML 을 보내지 않는다. 편집기가 그 블록의 스키마에 있는 글자 속성인지
  *    다시 보고 저장하며, 블록은 그 값을 이스케이프해 그린다.
  *
+ * 5. **미리보기 안에서 끌어다 놓는다** — 고른 블록의 이름표가 손잡이다(블록 전체를 끌게 하면 글자 선택·고치기가
+ *    망가진다). 다른 블록 위를 지나면 앞·뒤를 가리키는 선이 보이고(가로로 나란한 칸이면 좌·우), 빈 컨테이너의
+ *    "빈 칸" 에 놓으면 그 안으로 들어간다. 놓으면 옮길 블록·놓은 블록·앞/뒤/안을 편집기에 보내고, 편집기가
+ *    트리에서 다시 확인해 옮긴다(자기 안쪽으로는 못 옮긴다).
+ *
  * 스크롤 위치는 주소의 `#y=` 로 되돌린다 — 편집할 때마다 미리보기를 새로 그리므로, 그대로 두면
  * 긴 페이지 아래쪽을 고치는 동안 매번 맨 위로 튄다.
  */
 export const EDIT_RUNTIME = `<style>
 .brick-edit-node.brick-edit-hover{outline:1px dashed rgba(37,99,235,.7);outline-offset:-1px;cursor:pointer}
 .brick-edit-selected{position:relative;outline:2px solid #2563eb!important;outline-offset:-2px}
-.brick-edit-selected::before{content:attr(data-brick-tag);position:absolute;top:0;left:0;z-index:2147483646;background:#2563eb;color:#fff;font:600 11px/1.7 system-ui,sans-serif;padding:0 6px;border-radius:0 0 var(--radius,4px) 0;pointer-events:none;white-space:nowrap}
+.brick-edit-handle{position:absolute;top:0;left:0;z-index:2147483646;background:#2563eb;color:#fff;font:600 11px/1.7 system-ui,sans-serif;padding:0 6px;border-radius:0 0 var(--radius,4px) 0;white-space:nowrap;cursor:grab;user-select:none;-webkit-user-select:none}
+.brick-edit-drop{position:fixed;z-index:2147483647;background:#2563eb;pointer-events:none;border-radius:var(--radius,2px)}
+.brick-edit-drop-inside{outline:3px dashed #2563eb!important;outline-offset:-3px}
 [data-brick-prop]:hover{cursor:text}
 .brick-editing{outline:2px dashed #2563eb!important;outline-offset:2px;cursor:text;min-width:1em;white-space:pre-wrap}
 .brick-edit-missing{border:2px dashed #d97706;border-radius:var(--radius,6px);padding:14px;margin:4px 0;color:#92400e;background:#fffbeb;font:13px/1.5 system-ui,sans-serif}
@@ -96,13 +103,86 @@ export const EDIT_RUNTIME = `<style>
     if (e.source !== P || e.origin !== ORIGIN) return;
     var d = e.data || {};
     if (d.brick !== 'highlight') return;
-    if (sel) { sel.classList.remove('brick-edit-selected'); sel.removeAttribute('data-brick-tag'); }
+    if (sel) {
+      sel.classList.remove('brick-edit-selected');
+      var old = sel.querySelector(':scope > .brick-edit-handle');
+      if (old) old.remove();
+    }
     sel = d.path ? document.querySelector('[data-brick-node="' + String(d.path).replace(/[^0-9.]/g, '') + '"]') : null;
     if (!sel) return;
     sel.classList.add('brick-edit-selected');
-    sel.setAttribute('data-brick-tag', String(d.label || ''));
+    // 이름표가 곧 손잡이다 — 이것만 끌린다
+    var h = document.createElement('span');
+    h.className = 'brick-edit-handle';
+    h.setAttribute('draggable', 'true');
+    h.setAttribute('aria-hidden', 'true');
+    h.textContent = '⋮⋮ ' + String(d.label || '');
+    sel.appendChild(h);
     if (d.reveal) sel.scrollIntoView({ block: 'nearest' });
   });
+  // ── 끌어다 놓기 ──
+  var drag = null, target = null, line = null, inside = null;
+  function pathOf(n){ return n.getAttribute('data-brick-node') || ''; }
+  // b 가 a 자신이거나 a 의 안쪽인가 — 자기 안으로는 놓을 수 없다
+  function within(a, b){ return b === a || b.indexOf(a + '.') === 0; }
+  function clearDrop(){
+    if (line) { line.remove(); line = null; }
+    if (inside) { inside.classList.remove('brick-edit-drop-inside'); inside = null; }
+    target = null;
+  }
+  // 옆 형제와 윗변이 같으면 가로로 나란한 칸이다(다단 레이아웃) — 그때는 좌·우로 판정한다
+  function isRow(n){
+    var p = pathOf(n).split('.'); var last = Number(p.pop());
+    var near = [last + 1, last - 1].map(function(i){ return document.querySelector('[data-brick-node="' + p.concat(i).join('.') + '"]'); })
+      .filter(function(x){ return x; })[0];
+    if (!near) return false;
+    return Math.abs(near.getBoundingClientRect().top - n.getBoundingClientRect().top) < 4;
+  }
+  function showLine(r, row, before){
+    if (!line) { line = document.createElement('div'); line.className = 'brick-edit-drop'; document.body.appendChild(line); }
+    var s = line.style;
+    if (row) { s.left = ((before ? r.left : r.right) - 2) + 'px'; s.top = r.top + 'px'; s.width = '4px'; s.height = r.height + 'px'; }
+    else { s.left = r.left + 'px'; s.top = ((before ? r.top : r.bottom) - 2) + 'px'; s.width = r.width + 'px'; s.height = '4px'; }
+  }
+  document.addEventListener('dragstart', function(e){
+    var h = e.target && e.target.closest ? e.target.closest('.brick-edit-handle') : null;
+    // 손잡이가 아니면 끌지 않는다 — 그림·링크를 끌어 새 창으로 여는 브라우저 기본 동작도 막는다
+    if (!h || editing) { e.preventDefault(); return; }
+    var n = nodeOf(h);
+    if (!n) { e.preventDefault(); return; }
+    drag = pathOf(n);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', drag);
+  }, true);
+  document.addEventListener('dragover', function(e){
+    if (!drag) return;
+    var empty = e.target && e.target.closest ? e.target.closest('.brick-edit-empty') : null;
+    var box = empty ? nodeOf(empty) : null;
+    if (box && !within(drag, pathOf(box))) {
+      e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+      if (line) { line.remove(); line = null; }
+      if (inside !== box) { if (inside) inside.classList.remove('brick-edit-drop-inside'); inside = box; box.classList.add('brick-edit-drop-inside'); }
+      target = { path: pathOf(box), where: 'inside' };
+      return;
+    }
+    var n = nodeOf(e.target);
+    if (!n || within(drag, pathOf(n))) { clearDrop(); return; }
+    e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+    if (inside) { inside.classList.remove('brick-edit-drop-inside'); inside = null; }
+    var r = n.getBoundingClientRect(), row = isRow(n);
+    var before = row ? e.clientX < r.left + r.width / 2 : e.clientY < r.top + r.height / 2;
+    showLine(r, row, before);
+    target = { path: pathOf(n), where: before ? 'before' : 'after' };
+  }, true);
+  document.addEventListener('drop', function(e){
+    if (!drag) return;
+    e.preventDefault();
+    var t = target, from = drag;
+    clearDrop(); drag = null;
+    if (t && t.path !== from) tell({ brick: 'move', from: from, to: t.path, where: t.where });
+  }, true);
+  document.addEventListener('dragend', function(){ clearDrop(); drag = null; }, true);
+
   var timer;
   window.addEventListener('scroll', function(){
     clearTimeout(timer);

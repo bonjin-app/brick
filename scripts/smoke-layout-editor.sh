@@ -98,6 +98,20 @@ TREE_OUT="$(node --input-type=module -e '
   ].map(String).join(","));
   const t1 = T.applyTextEdit(t0, "0", "text", "제목", schemaOf).tree;
   out.push("text-same:" + (T.applyTextEdit(t1, "0", "text", "제목", schemaOf).tree === t1) + "," + T.applyTextEdit(t0, "0", "text", "가".repeat(30000), schemaOf).tree[0].props.text.length);
+  // 12. 미리보기 안에서 끌어다 놓기 — 앞·뒤·안, 트리에서 다시 확인한다
+  r = T.applyMove(base(), "2", "1.0", "before", accepts);
+  out.push("move-before:" + names(r.tree) + "@" + T.pathKey(r.path));
+  r = T.applyMove(base(), "0", "1.1", "after", accepts);
+  out.push("move-after:" + names(r.tree) + "@" + T.pathKey(r.path));
+  r = T.applyMove(base(), "0", "3", "inside", accepts);
+  out.push("move-inside:" + names(r.tree) + "@" + T.pathKey(r.path));
+  out.push("move-reject:" + [
+    T.applyMove(base(), "0", "2", "inside", accepts),
+    T.applyMove(base(), "1", "1.0", "before", accepts),
+    T.applyMove(base(), "0", "2", "sideways", accepts),
+    T.applyMove(base(), "0", "7", "before", accepts),
+    T.applyMove(base(), 0, "2", "before", accepts),
+  ].map(String).join(","));
   console.log(out.join("\n"));
 ' "$ROOT/apps/web/src/lib/block-tree.ts" 2>&1 || true)"
 # 시험 코드가 던지면(연산이 깨졌다) 스모크를 멈추지 않고 아래 검사들이 실패로 드러나게 한다
@@ -117,6 +131,10 @@ check "제자리 이동은 같은 트리" "$(line noop)" "true@2"
 check "미리보기에서 고친 글자를 그 블록에 반영한다 (원본은 그대로)" "$(line text-ok)" '{"text":"고친 글자"}@1.0,{}'
 check "스키마의 글자 속성이 아니면 받지 않는다 (숫자 속성·__proto__·글자 아닌 값·없는 경로·스키마 없는 블록)" "$(line text-reject)" "null,null,null,null,null,null"
 check "같은 값은 같은 트리 · 너무 긴 값은 자른다" "$(line text-same)" "true,20000"
+check "미리보기에서 끌어 놓기 — 다단 안의 칸 앞으로" "$(line move-before)" '[{"a/h"},{"core/columns",[{"a/p"},{"a/l"},{"a/r"}]},{"core/columns",[]}]@1.0'
+check "미리보기에서 끌어 놓기 — 칸 뒤로 (빠진 자리만큼 경로가 당겨진다)" "$(line move-after)" '[{"core/columns",[{"a/l"},{"a/r"},{"a/h"}]},{"a/p"},{"core/columns",[]}]@0.2'
+check "미리보기에서 끌어 놓기 — 빈 다단 안으로" "$(line move-inside)" '[{"core/columns",[{"a/l"},{"a/r"}]},{"a/p"},{"core/columns",[{"a/h"}]}]@2.0'
+check "컨테이너 아닌 블록 안·자기 안쪽·모르는 방향·없는 경로·글자 아닌 경로는 받지 않는다" "$(line move-reject)" "null,null,null,null,null"
 
 if [[ "${BRICK_SMOKE_KEEP_DB:-}" != "1" ]]; then
   node "$ROOT/scripts/reset-test-db.mjs" || exit 1
@@ -208,6 +226,13 @@ h = sys.stdin.read()
 i = h.find('data-brick-node=\"2\"')
 print(h[i:i+600])" <<< "$HTML")"
 contains "빈 다단 레이아웃은 눌러서 고를 수 있게 자리를 채운다" "$EMPTY_BOX" "빈 칸"
+contains "빈 다단의 자리는 끌어다 넣을 곳으로 표시한다" "$EMPTY_BOX" "brick-edit-empty"
+absent "모르는 블록 안내는 넣을 곳이 아니다" "$(python3 -c "
+import sys
+h = sys.stdin.read()
+i = h.find('data-brick-node=\"3\"')
+print(h[i:i+400])" <<< "$HTML")" "brick-edit-empty"
+contains "고른 블록의 이름표를 끌어 미리보기 안에서 옮기고, 옮길 것을 편집기에 보낸다" "$HTML" "tell({ brick: 'move', from: from, to: t.path, where: t.where })"
 UNKNOWN_BOX="$(python3 -c "
 import sys
 h = sys.stdin.read()

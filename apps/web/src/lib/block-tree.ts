@@ -184,3 +184,30 @@ export function applyTextEdit(
   if ((node.props ?? {})[prop] === next) return { tree, path };
   return { tree: updateAt(tree, path, (n) => ({ ...n, props: { ...(n.props ?? {}), [prop]: next } })), path };
 }
+
+/**
+ * 미리보기 안에서 끌어다 놓은 것을 트리에 반영한다.
+ *
+ * 미리보기 창이 보낸 값이라 다시 본다: 두 경로 모두 있는 노드여야 하고, `inside` 는 놓은 블록이 컨테이너일 때만,
+ * 자기 자신이나 자기 안쪽으로는 옮기지 않는다(moveNode 가 막는다). 아니면 null.
+ */
+export function applyMove(
+  tree: BlockNode[],
+  fromStr: unknown,
+  toStr: unknown,
+  where: unknown,
+  accepts: (block: string) => boolean,
+): { tree: BlockNode[]; path: Path } | null {
+  if (typeof fromStr !== "string" || typeof toStr !== "string") return null;
+  const from = parsePath(fromStr);
+  const to = parsePath(toStr);
+  if (!from || !to || !getNode(tree, from)) return null;
+  const target = getNode(tree, to);
+  if (!target) return null;
+  if (where === "inside") {
+    if (!accepts(target.block)) return null;
+    return moveNode(tree, from, to, target.children?.length ?? 0);
+  }
+  if (where !== "before" && where !== "after") return null;
+  return moveNode(tree, from, to.slice(0, -1), to[to.length - 1] + (where === "after" ? 1 : 0));
+}
