@@ -1073,5 +1073,6 @@
   "송장번호가 있으면 그 한 줄 (없으면 빈칸)": "One line with the tracking number if there is one (blank otherwise)",
   "자동 취소였다면 그 이유 (아니면 빈칸)": "Why it was cancelled, if it was cancelled automatically (blank otherwise)",
   "카드 등록 정보가 올바르지 않습니다. 카드 등록을 처음부터 다시 해 주세요.": "The card registration details are invalid. Please start the card registration again.",
-  "이미 다른 계정에 등록된 카드입니다.": "This card is already registered to another account."
+  "이미 다른 계정에 등록된 카드입니다.": "This card is already registered to another account.",
+  "identity.adultPurpose": "{selling} on sale · {total} in total — only adults verified by identity verification can view and order them"
 }

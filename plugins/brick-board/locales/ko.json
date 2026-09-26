@@ -177,5 +177,6 @@
   "err.certAdult": "성인 인증(19세 이상)이 필요한 게시판입니다. 본인인증으로 나이를 확인해주세요.",
   "err.certMinor": "본인인증 결과 19세 미만이라 이 게시판을 이용할 수 없습니다.",
   "cert.loginAndVerify": "로그인하고 본인인증하기",
-  "cert.verify": "본인인증하기"
+  "cert.verify": "본인인증하기",
+  "identity.boardPurpose": "본인인증한 회원만 {verified}개 · 성인만 {adult}개"
 }

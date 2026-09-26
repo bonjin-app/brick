@@ -9,7 +9,7 @@ import { eq, sql } from "drizzle-orm";
 import type { BrickDb } from "@brick/database";
 import { installedPlugins, siteSettings } from "@brick/database";
 import type { PluginManifest } from "@brick/shared";
-import type { PluginContext, PluginInstance, BlockDefinition, PluginRouteHandler, PluginDb, AdminResource, HookBus, CacheProvider, QueueProvider, LockProvider, StorageProvider, MailProvider, CaptchaProvider, PersonalDataEraser, SitemapSource, NotificationEvent,
+import type { PluginContext, PluginInstance, BlockDefinition, PluginRouteHandler, PluginDb, AdminResource, HookBus, CacheProvider, QueueProvider, LockProvider, StorageProvider, MailProvider, CaptchaProvider, PersonalDataEraser, SitemapSource, NotificationEvent, IdentityPurpose,
   SearchSource, LinkTargetSource, DashboardCard, HeaderAction, PluginScreen, Locale, MessageCatalog } from "@brick/core";
 import { AVAILABLE_LOCALES, DEFAULT_LOCALE, makeTranslator, normalizeLocale } from "@brick/core";
 import { RateLimitService } from "../auth/rate-limit.service.js";
@@ -124,6 +124,8 @@ export class PluginLoaderService implements OnModuleInit {
   readonly headerActions: Array<HeaderAction & { plugin: string }> = [];
   /** 플러그인이 선언한 알림 종류 — 알림 통로(알림톡 등)의 관리 화면이 읽는다 */
   readonly notificationEventList: Array<NotificationEvent & { plugin: string }> = [];
+  /** 본인인증을 쓰는 곳 — 관리자 → 본인인증 화면이 목적별로 모은다 */
+  readonly identityPurposeList: Array<IdentityPurpose & { plugin: string }> = [];
   /**
    * 플러그인이 선언한 화면 — 페이지 행 없이도 그려진다.
    * 같은 slug 의 페이지가 있으면 페이지가 이긴다(운영자가 그 화면을 가질 수 있어야 한다).
@@ -357,6 +359,9 @@ export class PluginLoaderService implements OnModuleInit {
     // 끈 플러그인의 발송기를 남겨 두면 꺼진 확장이 계속 요금을 쓴다
     this.notifications.clearSmsGateway(name);
     this.identity.clearProviders(name);
+    for (let i = this.identityPurposeList.length - 1; i >= 0; i--) {
+      if (this.identityPurposeList[i].plugin === name) this.identityPurposeList.splice(i, 1);
+    }
     for (let i = this.notificationEventList.length - 1; i >= 0; i--) {
       if (this.notificationEventList[i].plugin === name) this.notificationEventList.splice(i, 1);
     }
@@ -755,6 +760,15 @@ export class PluginLoaderService implements OnModuleInit {
         this.notificationEventList.push({ ...event, vars: [...event.vars], plugin: pluginName });
       },
       notificationEvents: () => this.listNotificationEvents(),
+      registerIdentityPurpose: (purpose) => {
+        if (!/^[a-z][a-z0-9-]{0,39}$/.test(purpose.key) || typeof purpose.summary !== "function") {
+          this.logger.warn(`plugin "${pluginName}" 의 본인인증 목적 "${purpose.key}" 이 올바르지 않아 무시합니다`);
+          return;
+        }
+        const at = this.identityPurposeList.findIndex((p) => p.plugin === pluginName && p.key === purpose.key);
+        if (at >= 0) this.identityPurposeList.splice(at, 1);
+        this.identityPurposeList.push({ ...purpose, plugin: pluginName });
+      },
       registerScreen: (screen) => {
         const path = screen.path.replace(/^\/+|\/+$/g, "");
         // 블록 이름은 등록과 같은 규칙으로 네임스페이스를 붙인다
@@ -822,6 +836,13 @@ export class PluginLoaderService implements OnModuleInit {
    * 켜진 플러그인이 선언한 알림 종류. 이름·설명은 선언한 플러그인의 카탈로그로 번역한다 —
    * 보여 주는 쪽(알림톡 확장·알림 문구 화면)은 남의 카탈로그를 모른다.
    */
+  /** 본인인증을 쓰는 곳 — 이름은 그 플러그인의 카탈로그로 번역해 준다(원문이 키) */
+  listIdentityPurposes(): Array<{ plugin: string; key: string; label: string; summary: IdentityPurpose["summary"] }> {
+    return this.identityPurposeList.map((p) => ({
+      plugin: p.plugin, key: p.key, label: this.trCatalog(p.plugin, p.label), summary: p.summary,
+    }));
+  }
+
   listNotificationEvents(): Array<NotificationEvent & { plugin: string }> {
     return this.notificationEventList.map((e) => ({
       ...e,

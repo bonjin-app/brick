@@ -447,6 +447,30 @@ contains "가입 표시가 없으면 손님에게는 여전히 로그인 안내"
 curl -s -o /dev/null -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"member.identity_at_signup":false}'
 check "끄면 인증 안 한 회원도 다시 쓴다" "$(cart_add "$U")" "200"
 
+echo "── 관리자 → 본인인증 (어디서 받고 얼마나 쓰나)"
+ov() { curl -s -b "$CK" "$API/api/admin/identity/overview"; }
+ovq() { ov | python3 -c "import sys,json; d=json.load(sys.stdin); print(eval(sys.argv[1]))" "$1" 2>/dev/null || echo ""; }
+check "회원은 볼 수 없다" "$(code -b "$U" "$API/api/admin/identity/overview")" "403"
+check "손님은 볼 수 없다" "$(code "$API/api/admin/identity/overview")" "401"
+check "켜진 인증 수단" "$(ovq "[p['name'] for p in d['providers']]")" "['portone']"
+check "사이트 설정 셋을 그대로 보여 준다" "$(ovq "d['settings']")" "{'required': False, 'signup': False, 'onePerson': False}"
+check "쇼핑몰이 선언한 목적 — 성인 상품 (개수·관리 화면)" \
+  "$(ovq "[(p['key'], p['count'] > 0, p['manageUrl']) for p in d['purposes'] if p['plugin']=='brick-shop']")" "[('adult-products', True, '/admin/x/brick-shop/products')]"
+contains "그 목적의 설명은 사이트 언어로" "$(ovq "[p['detail'] for p in d['purposes'] if p['key']=='adult-products'][0]")" "판매 중"
+check "게시판을 켜기 전에는 게시판 목적이 없다" "$(ovq "[p['key'] for p in d['purposes'] if p['plugin']=='brick-board']")" "[]"
+curl -s -o /dev/null -b "$CK" -X POST "$API/api/plugins/brick-board/activate"
+ADULT_BOARD="$(printf '{"slug":"adults","title":"성인 게시판","read_role":"member","write_role":"member","cert_required":"adult"}')"
+curl -s -o /dev/null -b "$CK" -X POST "$API/api/plugins/brick-board/admin/boards" -H 'content-type: application/json' -d "$ADULT_BOARD"
+check "게시판이 선언한 목적 — 성인만 게시판 하나" \
+  "$(ovq "[(p['key'], p['count'], p['manageUrl']) for p in d['purposes'] if p['plugin']=='brick-board']")" "[('board-cert', 1, '/admin/x/brick-board/boards')]"
+USAGE="$(ovq "(d['usage']['days'], d['usage']['requests'] > 0, d['usage']['verified'] > 0, d['usage']['guest'] > 0, d['usage']['certified'] > 0)")"
+check "최근 30일 사용량 — 요청·성공·가입 전 손님·인증한 회원" "$USAGE" "(30, True, True, True, True)"
+TODAY="$(python3 -c 'import datetime;print((datetime.datetime.utcnow()+datetime.timedelta(hours=9)).date().isoformat())')"
+check "날마다 센다 (사이트 시간대의 오늘)" "$(ovq "d['usage']['daily'][0]['date']")" "$TODAY"
+check "합계와 날마다의 합이 같다" "$(ovq "sum(x['requests'] for x in d['usage']['daily']) == d['usage']['requests']")" "True"
+curl -s -o /dev/null -b "$CK" -X POST "$API/api/plugins/brick-board/deactivate"
+check "게시판을 끄면 그 목적도 걷힌다" "$(ovq "[p['key'] for p in d['purposes'] if p['plugin']=='brick-board']")" "[]"
+
 echo "── 탈퇴하면 인증 기록이 지워진다"
 AID="$(psql_q "SELECT id FROM users WHERE email='a@id.test'")"
 ID_ROWS="SELECT (SELECT count(*) FROM user_certifications WHERE user_id='$AID') || '|' || (SELECT count(*) FROM identity_verifications WHERE user_id='$AID')"

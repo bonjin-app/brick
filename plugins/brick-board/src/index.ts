@@ -61,6 +61,26 @@ export default definePlugin(async (ctx) => {
 
   const db = ctx.db as Db;
 
+  // 본인인증을 쓰는 곳 — 관리자 → 본인인증 화면이 목적별로 모은다
+  ctx.registerIdentityPurpose({
+    key: "board-cert",
+    label: "게시판별 본인인증",
+    summary: async () => {
+      const { rows } = await db.execute(sql`
+        SELECT count(*) FILTER (WHERE cert_required = 'verified')::int AS verified,
+               count(*) FILTER (WHERE cert_required = 'adult')::int AS adult
+        FROM board_boards
+      `);
+      const verified = Number(rows[0]?.verified ?? 0);
+      const adult = Number(rows[0]?.adult ?? 0);
+      return {
+        count: verified + adult,
+        detail: t("identity.boardPurpose", { verified, adult }),
+        manageUrl: "/admin/x/brick-board/boards",
+      };
+    },
+  });
+
   /** 라우트 요청에서 세션 사용자 추출 */
   const userOf = (req: { user: unknown }): SessionUser | null => (req.user as SessionUser | null) ?? null;
   /** 요청 IP — 코어가 프록시 헤더를 해석해 넣어준다 (도배 방지에 쓴다) */

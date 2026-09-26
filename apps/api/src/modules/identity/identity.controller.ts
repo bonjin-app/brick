@@ -1,7 +1,7 @@
 import { Body, Controller, Get, HttpCode, HttpException, HttpStatus, Post, Req, Res, UseGuards } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { AuthService } from "../auth/auth.service.js";
-import { AuthGuard } from "../auth/auth.guard.js";
+import { AdminGuard, AuthGuard } from "../auth/auth.guard.js";
 import { RateLimitService } from "../auth/rate-limit.service.js";
 import { PluginLoaderService } from "../plugins/plugin-loader.service.js";
 import { IdentityService, SIGNUP_COOKIE, signupCookie } from "./identity.service.js";
@@ -33,6 +33,41 @@ export class IdentityController {
     private readonly loader: PluginLoaderService,
     private readonly auth: AuthService,
   ) {}
+
+  /**
+   * 관리자 → 본인인증 — **어디서 인증을 받고, 얼마나 쓰고 있나**를 한 화면에.
+   *
+   * 인증을 요구하는 곳이 흩어져 있었다(사이트 설정의 셋, 쇼핑몰의 성인 상품, 게시판마다의 요구). 코어는 플러그인의
+   * 표를 모르므로 쓰는 쪽이 목적을 선언하고(`registerIdentityPurpose`), 여기서 모아 부른다. 한 플러그인의 요약이
+   * 실패해도 그 줄만 "확인할 수 없음" 이다.
+   */
+  @Get("admin/identity/overview")
+  @UseGuards(AdminGuard)
+  async overview() {
+    const providers = await this.identity.readyProviders();
+    const purposes = await Promise.all(this.loader.listIdentityPurposes().map(async (p) => {
+      try {
+        const s = await p.summary();
+        return {
+          plugin: p.plugin, key: p.key, label: p.label,
+          count: Math.max(0, Math.floor(Number(s.count) || 0)),
+          detail: String(s.detail ?? "").slice(0, 300),
+          // 관리 화면 안 주소만 — 확장이 바깥 주소를 넣어도 링크로 만들지 않는다
+          manageUrl: typeof s.manageUrl === "string" && /^\/admin\//.test(s.manageUrl) ? s.manageUrl : null,
+        };
+      } catch {
+        return { plugin: p.plugin, key: p.key, label: p.label, count: null, detail: "", manageUrl: null, failed: true };
+      }
+    }));
+    return {
+      providers: providers.map(({ plugin, provider }) => ({
+        name: provider.name, plugin, displayName: this.loader.trCatalog(plugin, provider.displayName),
+      })),
+      settings: await this.identity.policySettings(),
+      purposes,
+      usage: await this.identity.usage(30),
+    };
+  }
 
   // ── 가입 전 본인인증 (손님) ────────────────────────
   //

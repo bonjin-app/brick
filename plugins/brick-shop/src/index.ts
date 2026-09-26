@@ -108,6 +108,25 @@ export default definePlugin(async (ctx) => {
   // 주문 알림의 종류와 변수 — 알림톡처럼 운영자가 템플릿을 연결하는 통로가 이 목록을 보여 준다
   for (const event of ORDER_EVENTS) ctx.registerNotificationEvent(event);
 
+  // 본인인증을 쓰는 곳 — 관리자 → 본인인증 화면이 목적별로 모은다
+  ctx.registerIdentityPurpose({
+    key: "adult-products",
+    label: "성인 상품 (19세 이상)",
+    summary: async () => {
+      const { rows } = await db.execute(sql`
+        SELECT count(*) FILTER (WHERE status = 'selling')::int AS selling, count(*)::int AS total
+        FROM shop_products WHERE adult_only = true
+      `);
+      const selling = Number(rows[0]?.selling ?? 0);
+      const total = Number(rows[0]?.total ?? 0);
+      return {
+        count: total,
+        detail: t("identity.adultPurpose", { selling, total }),
+        manageUrl: "/admin/x/brick-shop/products",
+      };
+    },
+  });
+
   /**
    * 주문 안내 메일.
    *

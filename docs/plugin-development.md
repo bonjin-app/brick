@@ -373,6 +373,13 @@ export default definePlugin((ctx) => {
   // 안에 다른 블록을 담는 블록은 acceptsChildren: true 와 ctx.children — 배치 편집기가 그 안에 넣는 길을 연다
   // (docs/layout-editor.md 의 "플러그인 개발자")
 
+  // 본인인증을 요구하는 기능이면 목적을 선언한다 — 관리자 → 본인인증 화면이 모아 보여 준다
+  ctx.registerIdentityPurpose({
+    key: "vip-room",
+    label: "VIP 방 입장",                       // 원문이 번역 키 (locales/en.json)
+    summary: async () => ({ count: 3, detail: ctx.t("identity.vipDetail"), manageUrl: "/admin/x/my-plugin/rooms" }),
+  });
+
   // 훅: 코어/다른 플러그인의 이벤트 구독
   ctx.hooks.onAction("board.post.created", "my-plugin", async (payload) => { /* ... */ });
 

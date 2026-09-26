@@ -85,6 +85,26 @@ export interface NotificationEvent {
   defaults?: () => { subject: string; body: string; sms?: string };
 }
 
+/**
+ * 본인인증을 **어디에 쓰는가** — 플러그인이 선언한다.
+ *
+ * 본인인증을 요구하는 곳이 흩어져 있었다(성인 상품은 상품 편집, 게시판별 요구는 게시판 설정). 건당 요금이 나가는
+ * 기능인데 운영자는 "우리 사이트는 어디서 인증을 받나" 를 한 화면에서 볼 수 없었다. 코어는 쇼핑몰·게시판의 표를
+ * 모른다 — 그래서 쓰는 쪽이 목적과 지금의 규모를 말한다.
+ */
+export interface IdentityPurpose {
+  /** 플러그인 안에서 겹치지 않는 이름 (예: "adult-products") */
+  key: string;
+  /** 관리 화면에 보일 이름. 원문이 번역 키다(locales/en.json) */
+  label: string;
+  /**
+   * 지금 얼마나 쓰이는가 — 관리 화면을 열 때 부른다. `count` 가 0 이면 "쓰지 않음" 으로 보인다.
+   * `detail` 은 사이트 언어로 그린 한 줄(ctx.t), `manageUrl` 은 그것을 고치는 관리 화면 주소.
+   * 던지면 그 줄만 "확인할 수 없음" 이 된다 — 한 플러그인의 오류가 화면 전체를 죽이지 않는다.
+   */
+  summary: () => Promise<{ count: number; detail: string; manageUrl?: string }>;
+}
+
 export interface PluginContext {
   readonly pluginName: string;
   readonly hooks: HookBus;
@@ -381,6 +401,12 @@ export interface PluginContext {
 
   /** 지금 켜진 플러그인들이 선언한 알림 종류 전부 (알림 통로 플러그인이 관리 화면에 쓴다) */
   notificationEvents(): Array<NotificationEvent & { plugin: string }>;
+
+  /**
+   * 본인인증을 쓰는 곳을 선언한다 — 관리자 → 본인인증 화면이 목적별로 모아 보여 준다.
+   * 같은 key 를 다시 선언하면 나중 것이 이긴다. 플러그인을 끄면 걷힌다.
+   */
+  registerIdentityPurpose(purpose: IdentityPurpose): void;
 
   /**
    * 플러그인이 **자기 화면**을 가진다.

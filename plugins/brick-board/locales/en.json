@@ -326,5 +326,7 @@
   "본인인증한 회원만": "Verified members only",
   "성인 인증한 회원만 (19세 이상)": "Age-verified members only (19+)",
   "목록·글·댓글·첨부·글쓰기 모두 확인한 회원만 쓸 수 있고, 통합검색·사이트맵·RSS·최근 글 위젯에서는 빠집니다. 본인인증 수단(예: 포트원)이 켜져 있어야 합니다. 운영진은 통과합니다.": "Only verified members can use the list, posts, comments, attachments and writing, and the board is left out of search, the sitemap, RSS and latest-post widgets. An identity verification method (for example PortOne) must be enabled. Staff are exempt.",
-  "본인인증 요구 값이 올바르지 않습니다.": "The identity verification setting is not valid."
+  "본인인증 요구 값이 올바르지 않습니다.": "The identity verification setting is not valid.",
+  "identity.boardPurpose": "{verified} for verified members only · {adult} for adults only",
+  "게시판별 본인인증": "Per-board identity verification"
 }

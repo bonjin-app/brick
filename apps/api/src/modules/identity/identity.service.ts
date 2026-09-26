@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 import { createHmac, randomBytes } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { siteSettings, type BrickDb } from "@brick/database";
-import { isAdultByBirthYear, type IdentityProvider, type IdentityStatus } from "@brick/core";
+import { SITE_TZ, isAdultByBirthYear, type IdentityProvider, type IdentityStatus } from "@brick/core";
 import { DB, ENV } from "../../runtime.module.js";
 import type { BrickEnv } from "../../config/env.js";
 
@@ -122,6 +122,57 @@ export class IdentityService {
     const on = (await this.setting<boolean>(REQUIRED_KEY)) === true || (await this.setting<boolean>(SIGNUP_KEY)) === true;
     if (!on) return false;
     return (await this.readyProviders()).length > 0;
+  }
+
+  /** 사이트 설정 셋 — 관리자 → 본인인증 화면이 그대로 보여 준다(수단이 없어 강제하지 않는 것도 함께 보이게 원래 값) */
+  async policySettings(): Promise<{ required: boolean; signup: boolean; onePerson: boolean }> {
+    return {
+      required: (await this.setting<boolean>(REQUIRED_KEY)) === true,
+      signup: (await this.setting<boolean>(SIGNUP_KEY)) === true,
+      onePerson: (await this.setting<boolean>(ONE_PERSON_KEY)) === true,
+    };
+  }
+
+  /**
+   * 최근 사용량 — 본인인증은 건당 요금이 나간다. 요청(인증창을 연 수)·성공·실패·끝나지 않음, 회원/손님(가입 전)으로
+   * 나누고 날마다 센다. 날짜는 사이트 시간대로 자른다(판매 리포트와 같은 기준).
+   *
+   * 요청 기록은 30일, **가입하지 않은 손님의 인증은 하루** 뒤에 지워진다(사람 해시를 계정 없이 오래 두지 않는다) —
+   * 그래서 그런 인증은 이 집계에서 빠진다. 화면이 그 사실을 함께 말한다.
+   */
+  async usage(days = 30): Promise<{
+    days: number; requests: number; verified: number; failed: number; open: number;
+    member: number; guest: number; certified: number;
+    daily: Array<{ date: string; requests: number; verified: number }>;
+  }> {
+    const n = Math.min(90, Math.max(1, Math.floor(days)));
+    const tz = SITE_TZ;
+    const { rows: [sum] } = (await this.db.execute(sql`
+      SELECT count(*)::int AS requests,
+             count(*) FILTER (WHERE status = 'verified')::int AS verified,
+             count(*) FILTER (WHERE status = 'failed')::int AS failed,
+             count(*) FILTER (WHERE status = 'pending')::int AS open,
+             count(*) FILTER (WHERE guest_hash IS NULL)::int AS member,
+             count(*) FILTER (WHERE guest_hash IS NOT NULL)::int AS guest
+      FROM identity_verifications WHERE created_at > now() - make_interval(days => ${n})
+    `)) as unknown as { rows: Array<Record<string, number>> };
+    const { rows: daily } = (await this.db.execute(sql`
+      SELECT to_char((created_at AT TIME ZONE ${tz})::date, 'YYYY-MM-DD') AS date,
+             count(*)::int AS requests, count(*) FILTER (WHERE status = 'verified')::int AS verified
+      FROM identity_verifications WHERE created_at > now() - make_interval(days => ${n})
+      GROUP BY 1 ORDER BY 1 DESC
+    `)) as unknown as { rows: Array<{ date: string; requests: number; verified: number }> };
+    const { rows: [cert] } = (await this.db.execute(sql`
+      SELECT count(*)::int AS n FROM user_certifications
+    `)) as unknown as { rows: Array<{ n: number }> };
+    return {
+      days: n,
+      requests: Number(sum?.requests ?? 0), verified: Number(sum?.verified ?? 0),
+      failed: Number(sum?.failed ?? 0), open: Number(sum?.open ?? 0),
+      member: Number(sum?.member ?? 0), guest: Number(sum?.guest ?? 0),
+      certified: Number(cert?.n ?? 0),
+      daily: daily.map((d) => ({ date: String(d.date), requests: Number(d.requests), verified: Number(d.verified) })),
+    };
   }
 
   /** 가입할 때 본인인증을 요구하는가 — 역시 인증 수단이 준비돼 있을 때만(없으면 아무도 가입할 수 없다) */
