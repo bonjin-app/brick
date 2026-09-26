@@ -747,6 +747,13 @@ check "게시판 관리자는 공지를 올린다" "$(curl -s -b "$MOD" "$BD/pos
 MEMBER_NOTICE="$(curl -s -b "$WRITER" -X POST "$BD/boards/club/posts" -H 'content-type: application/json' -d "$NOTICE" | python3 -c "import sys,json;print(json.load(sys.stdin).get('id',''))")"
 check "일반 회원의 공지 표시는 무시된다" "$(curl -s -b "$WRITER" "$BD/posts/$MEMBER_NOTICE" | python3 -c "import sys,json;print(json.load(sys.stdin)['post'].get('is_notice'))")" "False"
 check "관리 화면(게시판 설정)에는 닿지 않는다" "$(code -b "$MOD" "$BD/admin/boards")" "403"
+# 비밀글의 첨부 — 읽을 수 없는 사람은 첨부 주소를 알아도 받지 못한다(읽기와 같은 규칙: 작성자·게시판 관리자·운영진)
+curl -s -o /dev/null -b "$WRITER" -X POST "$BD/posts/$CP2/files" -F "file=@$TMP/a.png"
+SFID="$(curl -s -b "$WRITER" "$BD/posts/$CP2" | python3 -c "import sys,json;print(json.load(sys.stdin)['attachments'][0]['id'])" 2>/dev/null)"
+[[ -n "$SFID" ]] && ok "비밀글에 첨부를 단다" || bad "비밀글 첨부 준비"
+check "비밀글의 첨부는 다른 회원이 받지 못한다 (주소를 알아도)" "$(code -b "$MEMBER" "$BD/files/$SFID")" "403"
+check "작성자는 받는다" "$(code -b "$WRITER" "$BD/files/$SFID")" "200"
+check "게시판 관리자도 받는다" "$(code -b "$MOD" "$BD/files/$SFID")" "200"
 # 삭제 단추의 data-delete-post 는 화면 스크립트에도 들어 있어(선택자) 단추가 있는지 가리지 못한다 — 그 글의 수정 링크로 본다
 contains "화면에도 수정 단추가 보인다 (집행과 같은 규칙)" "$(curl -s -b "$MOD" "$API/api/render/page?path=board/club/$CP1")" "/$CP1/edit\\\""
 absent "다른 회원의 화면에는 없다" "$(curl -s -b "$MEMBER" "$API/api/render/page?path=board/club/$CP1")" "/$CP1/edit\\\""

@@ -433,15 +433,23 @@ export default definePlugin(async (ctx) => {
   /** 다운로드 — 권한 검사 후 스토리지 URL로 안내 */
   ctx.registerRoute("GET", "/files/:id", async (req) => {
     const { rows } = await db.execute(sql`
-      SELECT a.id, b.download_role, b.slug FROM board_attachments a
+      SELECT a.id, a.post_id, b.download_role, b.slug, p.is_secret, p.author_id, p.guest_password
+      FROM board_attachments a
       JOIN board_posts p ON p.id = a.post_id
       JOIN board_boards b ON b.id = p.board_id
       WHERE a.id = ${req.params.id}::uuid LIMIT 1
     `);
     if (!rows[0]) throw new BoardError(404, "파일을 찾을 수 없습니다.");
     // 내려받기 권한만 보면 읽을 수 없는 게시판(그룹 권한·비공개·본인인증)의 첨부가 열린다
-    await requireBoardRead(String(rows[0].slug), userOf(req));
-    requireRole(userOf(req), String(rows[0].download_role), "act.download");
+    const user = boardActor(userOf(req), await requireBoardRead(String(rows[0].slug), userOf(req)));
+    requireRole(user, String(rows[0].download_role), "act.download");
+    /*
+     * 비밀글의 첨부 — 글을 읽을 수 없는 사람은 첨부도 받지 못한다(작성자·게시판 관리자·운영진, 비회원 글은 비밀번호).
+     * 전에는 이 검사가 없어 첨부 주소를 아는 회원이면 남의 비밀글 첨부를 받을 수 있었다. 글 읽기와 같은 함수를 쓴다.
+     */
+    if (!(await canReadSecret(rows[0] as never, user, req.query.pw, guestCheck(req, `post:${String(rows[0].post_id)}`)))) {
+      throw new BoardError(403, "비밀글의 첨부파일입니다. 작성자만 받을 수 있습니다.");
+    }
 
     const file = await claimDownload(db, req.params.id);
     if (!file) throw new BoardError(404, "파일을 찾을 수 없습니다.");

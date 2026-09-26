@@ -332,5 +332,6 @@
   "err.tooManyModerators": "You can assign up to {max} board moderators.",
   "err.unknownModerators": "These emails cannot be board moderators (no account, or withdrawn/suspended): {emails}",
   "게시판 관리자": "Board moderators",
-  "이 게시판만 맡길 회원의 이메일을 한 줄에 하나씩 적으세요(최대 20명). 그 회원은 이 게시판 안에서만 운영진처럼 다른 사람의 글·댓글을 고치고 지우며, 비밀글을 보고 공지를 올립니다. 게시판 설정·다른 게시판·관리 화면에는 닿지 않습니다. 운영진은 적지 않아도 모든 게시판을 관리합니다.": "Emails of members who look after only this board, one per line (up to 20). Inside this board only, they can edit and delete other people's posts and comments, read secret posts and post notices, like staff. They cannot reach board settings, other boards or the admin screens. Staff manage every board without being listed."
+  "이 게시판만 맡길 회원의 이메일을 한 줄에 하나씩 적으세요(최대 20명). 그 회원은 이 게시판 안에서만 운영진처럼 다른 사람의 글·댓글을 고치고 지우며, 비밀글을 보고 공지를 올립니다. 게시판 설정·다른 게시판·관리 화면에는 닿지 않습니다. 운영진은 적지 않아도 모든 게시판을 관리합니다.": "Emails of members who look after only this board, one per line (up to 20). Inside this board only, they can edit and delete other people's posts and comments, read secret posts and post notices, like staff. They cannot reach board settings, other boards or the admin screens. Staff manage every board without being listed.",
+  "비밀글의 첨부파일입니다. 작성자만 받을 수 있습니다.": "This file belongs to a secret post. Only its author can download it."
 }
