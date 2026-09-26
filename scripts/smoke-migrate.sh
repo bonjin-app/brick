@@ -201,6 +201,14 @@ contains "게시판 그룹을 만든다" "$RUN" '"groups":{"created":2}'
 check "게시판이 그룹에 붙는다" \
   "$(psql_q "SELECT g.title FROM board_boards b JOIN board_groups g ON g.id = b.group_id WHERE b.slug='free'")" "커뮤니티"
 
+echo "── 게시판·그룹 관리자 (그누보드 bo_admin · gr_admin)"
+# 옮기지 않으면 그 사람들은 이전한 날부터 자기 게시판을 관리하지 못한다(운영자 레벨이 아니면 일반 회원이 된다)
+MODS="$(psql_q "SELECT b.slug || ':' || string_agg(u.email, ',' ORDER BY u.email) FROM board_moderators m JOIN board_boards b ON b.id = m.board_id JOIN users u ON u.id = m.user_id GROUP BY b.slug ORDER BY b.slug")"
+contains "게시판 관리자(bo_admin)를 그 게시판의 관리자로 (그룹 관리자와 함께)" "$MODS" "free:hong@old.test,weird@old.test"
+contains "그룹 관리자(gr_admin)는 그 그룹의 모든 게시판의 관리자로" "$MODS" "notice:weird@old.test"
+contains "지정한 수를 알린다" "$RUN" "게시판 관리자"
+contains "옮긴 회원 중에 없는 아이디는 지정하지 못했다고 말한다" "$RUN" "ghost_mod"
+
 contains "내용관리를 페이지로 옮긴다" "$RUN" '"contents":{"created":2}'
 check "제목" "$(psql_q "SELECT title FROM pages WHERE slug='company'")" "회사소개"
 contains "HTML 본문이 살아 있다" "$(psql_q "SELECT blocks::text FROM pages WHERE slug='company'")" "2012년에 시작했습니다"

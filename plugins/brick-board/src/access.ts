@@ -23,6 +23,7 @@ export async function selectBoard(db: Db, slug: string): Promise<BoardRow | null
            b.categories, b.page_size, b.allow_reply, b.allow_secret, b.allow_vote, b.allow_upload,
            b.max_files, b.write_interval, b.list_style, b.notify_email, b.notify_comment, b.category_required,
            b.extra_fields, b.cert_required,
+           ARRAY(SELECT m.user_id::text FROM board_moderators m WHERE m.board_id = b.id) AS moderator_ids,
            b.group_id, g.title AS group_title, g.read_role AS group_read_role
     FROM board_boards b LEFT JOIN board_groups g ON g.id = b.group_id
     WHERE b.slug = ${slug} AND b.is_visible = true LIMIT 1
@@ -44,6 +45,18 @@ export async function loadBoard(db: Db, slug: string): Promise<BoardRow> {
   return row;
 }
 
+
+/**
+ * 이 게시판 안의 권한 검사에 쓸 사용자 — **게시판 관리자**(운영자가 이 게시판에 지정한 회원)면 운영진으로 본다.
+ *
+ * 게시판 안의 검사(다른 사람 글 고치기·지우기, 비밀글, 공지, 도배 제한, 본인인증 요구)는 전부 "운영진인가" 를 묻는다.
+ * 검사마다 게시판 관리자 조건을 덧붙이면 새 검사가 생길 때마다 빠뜨린다 — 그래서 게시판을 읽은 자리에서 한 번
+ * 바꿔 넘긴다. **게시판 밖(관리 API·다른 게시판)에는 이 값을 넘기지 않는다** — 원래 사용자로 검사한다.
+ */
+export function boardActor(user: SessionUser | null, board: { moderator_ids?: string[] | null }): SessionUser | null {
+  if (!user || hasRole(user, "manager")) return user;
+  return (board.moderator_ids ?? []).includes(user.id) ? { ...user, role: "manager" } : user;
+}
 
 /** 권한 검사 — 부족하면 401(비로그인) 또는 403(권한 부족)으로 구분해 던진다 */
 export function requireRole(

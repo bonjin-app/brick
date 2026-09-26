@@ -624,6 +624,20 @@ export class MigrateService {
       return;
     }
 
+    /*
+     * 게시판 관리자 — 그누보드는 게시판마다 bo_admin(회원 아이디 하나), 그룹마다 gr_admin 을 둔다. 옮기지 않으면
+     * 그 사람들은 이전한 날부터 자기 게시판을 관리하지 못한다(운영자 레벨이 아니면 일반 회원이 되므로).
+     * 그룹 관리자는 그 그룹의 모든 게시판의 관리자가 된다. 옮기지 않은 회원(탈퇴·빠짐)은 알려 준다.
+     */
+    const canModerate = await this.tableExists("board_moderators");
+    const groupAdmins = new Map<string, string>();
+    for (const g of readRows(dump, `${prefix}group`, tables)) {
+      const admin = String(g.gr_admin ?? "").trim();
+      if (admin) groupAdmins.set(String(g.gr_id ?? "").trim(), admin);
+    }
+    let moderatorsSet = 0;
+    const moderatorsMissing = new Set<string>();
+
     for (const row of readRows(dump, `${prefix}board`, tables)) {
       const table = String(row.bo_table ?? "");
       if (!table) continue;
@@ -671,12 +685,32 @@ export class MigrateService {
         result.boards.created += 1;
       }
 
+      if (canModerate) {
+        const admins = [String(row.bo_admin ?? "").trim(), groupAdmins.get(String(row.gr_id ?? "").trim()) ?? ""].filter(Boolean);
+        for (const gnuId of new Set(admins)) {
+          const userId = memberMap.get(gnuId);
+          if (!userId) { moderatorsMissing.add(gnuId); continue; }
+          const { rows: added } = await this.db.execute(sql`
+            INSERT INTO board_moderators (board_id, user_id) VALUES (${boardId}::uuid, ${userId}::uuid)
+            ON CONFLICT DO NOTHING RETURNING user_id
+          `);
+          moderatorsSet += added.length;
+        }
+      }
+
       const writeTable = `${prefix}write_${table}`;
       if (tables.has(writeTable)) {
         // 게시판이 정의한 여분 필드만 글에서 가져온다 — 이름 없는 칸의 값은 보여줄 자리가 없다
         await this.importPosts(dump, tables, writeTable, boardId, memberMap, result, plan,
           gnuExtraFields(row).map((f) => f.key), table, prefix);
       }
+    }
+    if (moderatorsSet) warnings.push(`게시판 관리자 ${moderatorsSet}건을 지정했습니다 (그누보드의 게시판·그룹 관리자).`);
+    if (moderatorsMissing.size) {
+      warnings.push(
+        `게시판 관리자로 지정돼 있었지만 옮긴 회원 중에 없는 아이디가 있어 지정하지 못했습니다: ${[...moderatorsMissing].join(", ")} ` +
+          "— 관리자 → 게시판에서 직접 지정하세요.",
+      );
     }
   }
 

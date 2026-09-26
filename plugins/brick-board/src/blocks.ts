@@ -5,7 +5,7 @@ import { effectiveReadRole, escapeHtml, hasRole, shortDate, PUBLIC_POST_SQL, typ
 import { BOARD_CSS, boardScript } from "./client-script.js";
 import { renderDetail, renderList, renderWrite, resolveView } from "./views.js";
 import { bindI18n, t } from "./i18n.js";
-import { certBlock, selectBoard } from "./access.js";
+import { boardActor, certBlock, selectBoard } from "./access.js";
 
 /**
  * 게시판 블록 — 페이지 빌더로 배치한다.
@@ -75,6 +75,8 @@ export function registerBoardBlocks(pluginCtx: PluginContext, db: Db): void {
         return `<div class="brick-board"><p class="brick-board-empty">
   ${escapeHtml(t("board.notFound"))}</p></div>${BOARD_CSS}`;
       }
+      // 이 게시판의 관리자면 이 화면 안에서 운영진처럼(수정·삭제 단추, 비밀글, 공지 칸) — API 의 집행과 같은 규칙
+      ctx = { ...ctx, user: boardActor(ctx.user as never, board) as never };
 
       // 읽기 권한을 통과하지 못하면 내용을 서버 렌더에 담지 않는다.
       // (비로그인 요청은 캐시되므로 담으면 유출된다)

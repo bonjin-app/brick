@@ -9,7 +9,7 @@ import {
 import { t } from "./i18n.js";
 import { hashGuestPassword, verifyGuestPassword } from "./guest.js";
 import { checkGuestSecret, fillTemplate } from "@brick/plugin-sdk";
-import { assertCanModify, canModifyPost, canReadSecret, checkWriteInterval, loadBoard, requireCert, requireRole, type IdentityOf } from "./access.js";
+import { assertCanModify, boardActor, canModifyPost, canReadSecret, checkWriteInterval, loadBoard, requireCert, requireRole, type IdentityOf } from "./access.js";
 import { attachFiles, claimDownload, deleteAttachments, listAttachments } from "./attachments.js";
 import { createPost, isBlankContent, listPosts, normalizeLinks, refreshThumb, type WritePostInput } from "./posts.js";
 import { sanitizeHtml, toPlainText } from "./sanitize.js";
@@ -131,9 +131,22 @@ export default definePlugin(async (ctx) => {
    */
   const requireBoardRead = async (slug: string, user: ReturnType<typeof userOf>) => {
     const board = await loadBoard(db, slug);
-    requireRole(user, board.read_role, "act.readBoard");
-    await requireCert(board, user, identityOf);
+    const actor = boardActor(user, board);
+    requireRole(actor, board.read_role, "act.readBoard");
+    await requireCert(board, actor, identityOf);
     return board;
+  };
+
+  /**
+   * 글·댓글만 알고 게시판은 모르는 자리(수정·삭제·첨부)의 사용자 — 그 게시판의 관리자면 운영진으로 본다.
+   * 그 게시판에 지정됐는지만 한 번 묻는다(다른 게시판의 관리자라도 여기서는 아니다).
+   */
+  const actorOnBoard = async (user: ReturnType<typeof userOf>, boardId: unknown) => {
+    if (!user || hasRole(user, "manager") || !boardId) return user;
+    const { rows } = await db.execute(sql`
+      SELECT 1 FROM board_moderators WHERE board_id = ${String(boardId)}::uuid AND user_id = ${user.id}::uuid
+    `);
+    return rows.length ? { ...user, role: "manager" } : user;
   };
 
   /** 게시판 목록 */
@@ -155,8 +168,9 @@ export default definePlugin(async (ctx) => {
   /** 글 목록 */
   ctx.registerRoute("GET", "/boards/:slug/posts", async (req) => {
     const board = await loadBoard(db, req.params.slug);
-    requireRole(userOf(req), board.read_role, "act.readBoard");
-    await requireCert(board, userOf(req), identityOf);
+    const actor = boardActor(userOf(req), board);
+    requireRole(actor, board.read_role, "act.readBoard");
+    await requireCert(board, actor, identityOf);
     return listPosts(db, {
       board,
       page: Number(req.query.page ?? 1),
@@ -170,16 +184,18 @@ export default definePlugin(async (ctx) => {
   ctx.registerRoute("POST", "/boards/:slug/posts", async (req) => {
     const board = await loadBoard(db, req.params.slug);
     const user = userOf(req);
-    requireRole(user, board.write_role, "act.write");
-    await requireCert(board, user, identityOf);
+    // 이 게시판의 관리자는 여기서 운영진처럼(공지·도배 제한·본인인증 요구). 작성자는 여전히 그 회원이다
+    const actor = boardActor(user, board);
+    requireRole(actor, board.write_role, "act.write");
+    await requireCert(board, actor, identityOf);
     await requireCaptchaForGuest(user, req.body as never);
-    await checkWriteInterval(db, board, user, ipOf(req));
+    await checkWriteInterval(db, board, actor, ipOf(req));
     await assertClean(`${String((req.body as WritePostInput).title ?? "")} ${String((req.body as WritePostInput).content ?? "")}`);
 
     const result = await createPost(db, {
       board,
       input: req.body as WritePostInput,
-      user,
+      user: actor,
       ip: ipOf(req),
     });
     await ctx.hooks.doAction("board.post.created", {
@@ -226,8 +242,7 @@ export default definePlugin(async (ctx) => {
     const post = rows[0];
     if (!post) throw new BoardError(404, "글을 찾을 수 없습니다.");
 
-    const user = userOf(req);
-    await requireBoardRead(String(post.board_slug), user);
+    const user = boardActor(userOf(req), await requireBoardRead(String(post.board_slug), userOf(req)));
 
     const guestPw = req.query.pw;
     if (!(await canReadSecret(post as never, user, guestPw, guestCheck(req, `post:${req.params.id}`)))) {
@@ -284,14 +299,14 @@ export default definePlugin(async (ctx) => {
   ctx.registerRoute("PUT", "/posts/:id", async (req) => {
     const body = req.body as WritePostInput & { guestPassword?: string };
     const { rows } = await db.execute(sql`
-      SELECT p.id, p.author_id, p.guest_password, b.categories, b.allow_secret, b.category_required,
+      SELECT p.id, p.author_id, p.guest_password, p.board_id, b.categories, b.allow_secret, b.category_required,
              b.extra_fields
       FROM board_posts p JOIN board_boards b ON b.id = p.board_id
       WHERE p.id = ${req.params.id}::uuid LIMIT 1
     `);
     const post = rows[0];
     if (!post) throw new BoardError(404, "글을 찾을 수 없습니다.");
-    await assertCanModify(post as never, userOf(req), body.guestPassword, guestCheck(req, `post:${req.params.id}`));
+    await assertCanModify(post as never, await actorOnBoard(userOf(req), post.board_id), body.guestPassword, guestCheck(req, `post:${req.params.id}`));
 
     const title = String(body.title ?? "").trim();
     // 수정 경로에서도 새니타이즈를 빼먹으면 우회 통로가 된다 — 금지 단어도 같다
@@ -327,11 +342,11 @@ export default definePlugin(async (ctx) => {
   ctx.registerRoute("DELETE", "/posts/:id", async (req) => {
     const body = (req.body ?? {}) as { guestPassword?: string };
     const { rows } = await db.execute(sql`
-      SELECT id, author_id, guest_password FROM board_posts WHERE id = ${req.params.id}::uuid LIMIT 1
+      SELECT id, author_id, guest_password, board_id FROM board_posts WHERE id = ${req.params.id}::uuid LIMIT 1
     `);
     const post = rows[0];
     if (!post) throw new BoardError(404, "글을 찾을 수 없습니다.");
-    await assertCanModify(post as never, userOf(req), body.guestPassword ?? req.query.pw, guestCheck(req, `post:${req.params.id}`));
+    await assertCanModify(post as never, await actorOnBoard(userOf(req), post.board_id), body.guestPassword ?? req.query.pw, guestCheck(req, `post:${req.params.id}`));
 
     // 스토리지 파일은 CASCADE로 지워지지 않으므로 먼저 정리한다
     await deleteAttachments(db, ctx.storage, String(post.id));
@@ -344,13 +359,13 @@ export default definePlugin(async (ctx) => {
   /** 업로드 (글 작성 후 별도 호출 — multipart) */
   ctx.registerRoute("POST", "/posts/:id/files", async (req) => {
     const { rows } = await db.execute(sql`
-      SELECT p.id, p.author_id, p.guest_password, p.file_count, b.slug
+      SELECT p.id, p.author_id, p.guest_password, p.file_count, p.board_id, b.slug
       FROM board_posts p JOIN board_boards b ON b.id = p.board_id
       WHERE p.id = ${req.params.id}::uuid LIMIT 1
     `);
     const post = rows[0];
     if (!post) throw new BoardError(404, "글을 찾을 수 없습니다.");
-    await assertCanModify(post as never, userOf(req), req.query.pw, guestCheck(req, `post:${req.params.id}`));
+    await assertCanModify(post as never, await actorOnBoard(userOf(req), post.board_id), req.query.pw, guestCheck(req, `post:${req.params.id}`));
 
     const board = await loadBoard(db, String(post.slug));
     const files = await req.files();
@@ -548,12 +563,13 @@ export default definePlugin(async (ctx) => {
   ctx.registerRoute("DELETE", "/comments/:id", async (req) => {
     const body = (req.body ?? {}) as { guestPassword?: string };
     const { rows } = await db.execute(sql`
-      SELECT id, post_id, author_id, guest_password FROM board_comments
-      WHERE id = ${req.params.id}::uuid LIMIT 1
+      SELECT c.id, c.post_id, c.author_id, c.guest_password, p.board_id FROM board_comments c
+      JOIN board_posts p ON p.id = c.post_id
+      WHERE c.id = ${req.params.id}::uuid LIMIT 1
     `);
     const comment = rows[0];
     if (!comment) throw new BoardError(404, "댓글을 찾을 수 없습니다.");
-    await assertCanModify(comment as never, userOf(req), body.guestPassword ?? req.query.pw, guestCheck(req, `comment:${req.params.id}`));
+    await assertCanModify(comment as never, await actorOnBoard(userOf(req), comment.board_id), body.guestPassword ?? req.query.pw, guestCheck(req, `comment:${req.params.id}`));
 
     await db.transaction(async (tx) => {
       await tx.execute(sql`DELETE FROM board_comments WHERE id = ${req.params.id}::uuid`);
@@ -727,7 +743,9 @@ ${items}
              categories, page_size, allow_reply, allow_secret, allow_vote, allow_upload,
              max_files, write_interval, sort_order, is_visible,
              list_style, notify_email, notify_comment, group_id, category_required, extra_fields, cert_required,
-             (SELECT count(*) FROM board_posts p WHERE p.board_id = b.id) AS post_count
+             (SELECT count(*) FROM board_posts p WHERE p.board_id = b.id) AS post_count,
+             (SELECT string_agg(u.email, E'\n' ORDER BY u.email) FROM board_moderators m JOIN users u ON u.id = m.user_id
+               WHERE m.board_id = b.id) AS moderators
       FROM board_boards b ORDER BY sort_order, title
     `);
     // 관리 화면의 배열 필드는 편집 편의를 위해 쉼표 문자열로 바꿔 보낸다
@@ -809,9 +827,39 @@ ${items}
     };
   };
 
+  /**
+   * 게시판 관리자 — 관리 화면은 이메일로 받는다(한 줄에 하나 또는 쉼표). 없는 주소·탈퇴·정지한 계정은 무엇이
+   * 틀렸는지 말하고 거절한다(조용히 빼면 운영자는 지정한 줄 안다). 운영진은 이미 모든 게시판을 관리하므로 적지
+   * 않아도 되고, 적으면 그대로 둔다. `moderators` 가 오지 않으면(이 칸을 모르는 요청) 지금 값을 건드리지 않는다.
+   */
+  const resolveModerators = async (raw: unknown): Promise<string[] | null> => {
+    if (raw === undefined) return null;
+    const emails = [...new Set(String(raw ?? "").split(/[\s,]+/).map((e) => e.trim().toLowerCase()).filter(Boolean))];
+    if (emails.length > 20) throw new BoardError(400, t("err.tooManyModerators", { max: 20 }));
+    if (!emails.length) return [];
+    const { rows } = await db.execute(sql`
+      SELECT id, lower(email) AS email FROM users
+      WHERE lower(email) IN (${sql.join(emails.map((e) => sql`${e}`), sql`, `)}) AND is_active = true AND withdrawn_at IS NULL
+    `);
+    const found = new Map(rows.map((r) => [String(r.email), String(r.id)]));
+    const missing = emails.filter((e) => !found.has(e));
+    if (missing.length) throw new BoardError(400, t("err.unknownModerators", { emails: missing.join(", ") }));
+    return emails.map((e) => found.get(e)!);
+  };
+  const saveModerators = async (boardId: string, ids: string[] | null) => {
+    if (ids === null) return;
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`DELETE FROM board_moderators WHERE board_id = ${boardId}::uuid`);
+      for (const id of ids) {
+        await tx.execute(sql`INSERT INTO board_moderators (board_id, user_id) VALUES (${boardId}::uuid, ${id}::uuid)`);
+      }
+    });
+  };
+
   ctx.registerRoute("POST", "/admin/boards", async (req) => {
     requireManager(req);
     const v = parseBoard(req.body as Record<string, unknown>);
+    const moderators = await resolveModerators((req.body as Record<string, unknown>)?.moderators);
     const id = uuidv7();
     try {
       await db.execute(sql`
@@ -835,6 +883,7 @@ ${items}
       }
       throw err;
     }
+    await saveModerators(id, moderators);
     await ctx.cache.invalidateTag("pages");
     return { id };
   });
@@ -842,6 +891,7 @@ ${items}
   ctx.registerRoute("PUT", "/admin/boards/:id", async (req) => {
     requireManager(req);
     const v = parseBoard(req.body as Record<string, unknown>);
+    const moderators = await resolveModerators((req.body as Record<string, unknown>)?.moderators);
     try {
       const { rows } = await db.execute(sql`
         UPDATE board_boards SET
@@ -865,6 +915,7 @@ ${items}
       }
       throw err;
     }
+    await saveModerators(req.params.id, moderators);
     await ctx.cache.invalidateTag("pages");
     return { ok: true };
   });
@@ -1089,6 +1140,12 @@ ${items}
     order: 20,
     async erase({ tx, userId, deletePosts }) {
       const done: string[] = [];
+
+      // 게시판 관리자 지정 — 계정이 익명화되어 남으므로 CASCADE 가 없다. 떠난 사람이 게시판을 관리하는 권한은 없다
+      const { rows: mods } = await tx.execute(sql`
+        DELETE FROM board_moderators WHERE user_id = ${userId}::uuid RETURNING board_id
+      `);
+      if (mods.length) done.push(`게시판 관리자 지정 ${mods.length}건 해제`);
 
       if (deletePosts) {
         const { rows: posts } = await tx.execute(sql`

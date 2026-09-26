@@ -57,6 +57,8 @@ export const BOARD_RESOURCE: AdminResource = {
     { name: "comment_role", label: "댓글 권한", type: "select", options: ROLE_OPTIONS },
     { name: "download_role", label: "다운로드 권한", type: "select", options: ROLE_OPTIONS },
 
+    { name: "moderators", label: "게시판 관리자", type: "textarea",
+      help: "이 게시판만 맡길 회원의 이메일을 한 줄에 하나씩 적으세요(최대 20명). 그 회원은 이 게시판 안에서만 운영진처럼 다른 사람의 글·댓글을 고치고 지우며, 비밀글을 보고 공지를 올립니다. 게시판 설정·다른 게시판·관리 화면에는 닿지 않습니다. 운영진은 적지 않아도 모든 게시판을 관리합니다." },
     { name: "cert_required", label: "본인인증 요구", type: "select",
       options: [
         { value: "", label: "요구하지 않음" },

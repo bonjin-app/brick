@@ -709,6 +709,55 @@ printf '{"title":"x","content":"y","guestPassword":"4821"}' > "$TMP/bf-right.jso
 check "잠긴 동안은 맞는 비밀번호도 시험할 수 없다 (아니면 대입이 계속된다)" \
   "$(code -X PUT "$BD/posts/$BFP" -H 'content-type: application/json' --data-binary "@$TMP/bf-right.json")" "429"
 
+
+echo "── 게시판 관리자 (이 게시판만 맡긴 회원 — 그누보드 bo_admin)"
+for u in mod writer; do
+  printf '{"email":"%s@bd.test","password":"memberpass1","agreements":{"terms":true,"privacy":true},"displayName":"%s"}' "$u" "$u" > "$TMP/reg-$u.json"
+  jpost "$API/api/register" "$TMP/reg-$u.json" >/dev/null
+  printf '{"email":"%s@bd.test","password":"memberpass1"}' "$u" > "$TMP/l-$u.json"
+  curl -s -c "$TMP/$u.txt" -X POST "$API/api/auth/login" -H 'content-type: application/json' --data-binary "@$TMP/l-$u.json" >/dev/null
+done
+MOD="$TMP/mod.txt"; WRITER="$TMP/writer.txt"
+club_body() { printf '{"slug":"club","title":"동호회","read_role":"member","write_role":"member","comment_role":"member","download_role":"member","write_interval":0%s}' "$1"; }
+R="$(curl -s -b "$ADMIN" -w ' %{http_code}' -X POST "$BD/admin/boards" -H 'content-type: application/json' -d "$(club_body ',"moderators":"nobody@bd.test"')")"
+[[ "$R" == *" 400" && "$R" == *"nobody@bd.test"* ]] && ok "없는 회원은 무엇이 틀렸는지 말하고 거절" || bad "없는 회원 지정 (${R:0:160})"
+CLUB_ID="$(curl -s -b "$ADMIN" -X POST "$BD/admin/boards" -H 'content-type: application/json' -d "$(club_body ',"moderators":"MOD@bd.test"')" | python3 -c "import sys,json;print(json.load(sys.stdin).get('id',''))")"
+[[ -n "$CLUB_ID" ]] && ok "게시판 관리자를 지정해 게시판을 만든다 (이메일 대소문자 무시)" || bad "게시판 관리자 지정"
+mods_of() { curl -s -b "$ADMIN" "$BD/admin/boards" | python3 -c "import sys,json; print(next((b.get('moderators') or '' for b in json.load(sys.stdin)['items'] if b['slug']=='club'), 'NONE'))"; }
+check "관리 화면에 지정된 관리자가 보인다" "$(mods_of)" "mod@bd.test"
+wpost() {  # wpost <쿠키> <게시판> <제목> [비밀] → 글 id
+  local body; body="$(printf '{"title":"%s","content":"<p>본문</p>","isSecret":%s}' "$3" "${4:-false}")"
+  curl -s -b "$1" -X POST "$BD/boards/$2/posts" -H 'content-type: application/json' -d "$body" | python3 -c "import sys,json;print(json.load(sys.stdin).get('id',''))"
+}
+CP1="$(wpost "$WRITER" club "회원의 글")"
+CP2="$(wpost "$WRITER" club "회원의 비밀글" true)"
+FP1="$(wpost "$WRITER" free "자유게시판의 회원 글")"
+CC1="$(curl -s -b "$WRITER" -X POST "$BD/posts/$CP1/comments" -H 'content-type: application/json' -d '{"content":"회원의 댓글"}' | python3 -c "import sys,json;print(json.load(sys.stdin).get('id',''))")"
+[[ -n "$CP1" && -n "$CP2" && -n "$FP1" && -n "$CC1" ]] && ok "다른 회원이 글·비밀글·댓글을 쓴다" || bad "준비 ($CP1/$CP2/$FP1/$CC1)"
+check "게시판 관리자는 그 게시판의 비밀글을 읽는다" "$(code -b "$MOD" "$BD/posts/$CP2")" "200"
+check "다른 회원은 못 읽는다" "$(code -b "$MEMBER" "$BD/posts/$CP2")" "403"
+EDIT="$(printf '{"title":"관리자가 고친 제목","content":"<p>고침</p>"}')"
+check "게시판 관리자는 그 게시판의 남의 글을 고친다" "$(code -b "$MOD" -X PUT "$BD/posts/$CP1" -H 'content-type: application/json' -d "$EDIT")" "200"
+check "다른 회원은 못 고친다" "$(code -b "$MEMBER" -X PUT "$BD/posts/$CP1" -H 'content-type: application/json' -d "$EDIT")" "403"
+check "게시판 관리자는 그 게시판의 남의 댓글을 지운다" "$(code -b "$MOD" -X DELETE "$BD/comments/$CC1")" "200"
+check "다른 게시판에서는 관리자가 아니다 (남의 글을 못 고친다)" "$(code -b "$MOD" -X PUT "$BD/posts/$FP1" -H 'content-type: application/json' -d "$EDIT")" "403"
+NOTICE="$(printf '{"title":"관리자 공지","content":"<p>공지</p>","isNotice":true}')"
+MN="$(curl -s -b "$MOD" -X POST "$BD/boards/club/posts" -H 'content-type: application/json' -d "$NOTICE" | python3 -c "import sys,json;print(json.load(sys.stdin).get('id',''))")"
+check "게시판 관리자는 공지를 올린다" "$(curl -s -b "$MOD" "$BD/posts/$MN" | python3 -c "import sys,json;print(json.load(sys.stdin)['post'].get('is_notice'))")" "True"
+MEMBER_NOTICE="$(curl -s -b "$WRITER" -X POST "$BD/boards/club/posts" -H 'content-type: application/json' -d "$NOTICE" | python3 -c "import sys,json;print(json.load(sys.stdin).get('id',''))")"
+check "일반 회원의 공지 표시는 무시된다" "$(curl -s -b "$WRITER" "$BD/posts/$MEMBER_NOTICE" | python3 -c "import sys,json;print(json.load(sys.stdin)['post'].get('is_notice'))")" "False"
+check "관리 화면(게시판 설정)에는 닿지 않는다" "$(code -b "$MOD" "$BD/admin/boards")" "403"
+# 삭제 단추의 data-delete-post 는 화면 스크립트에도 들어 있어(선택자) 단추가 있는지 가리지 못한다 — 그 글의 수정 링크로 본다
+contains "화면에도 수정 단추가 보인다 (집행과 같은 규칙)" "$(curl -s -b "$MOD" "$API/api/render/page?path=board/club/$CP1")" "/$CP1/edit\\\""
+absent "다른 회원의 화면에는 없다" "$(curl -s -b "$MEMBER" "$API/api/render/page?path=board/club/$CP1")" "/$CP1/edit\\\""
+check "설정을 다시 저장할 때 관리자 칸을 보내지 않으면 그대로 둔다" \
+  "$(code -b "$ADMIN" -X PUT "$BD/admin/boards/$CLUB_ID" -H 'content-type: application/json' -d "$(club_body '')"; echo; mods_of)" "$(printf '200\nmod@bd.test')"
+check "비우면 해제된다" "$(code -b "$ADMIN" -X PUT "$BD/admin/boards/$CLUB_ID" -H 'content-type: application/json' -d "$(club_body ',"moderators":""')"; echo; mods_of)" "$(printf '200\n')"
+check "해제되면 남의 글을 못 고친다" "$(code -b "$MOD" -X PUT "$BD/posts/$CP1" -H 'content-type: application/json' -d "$EDIT")" "403"
+curl -s -o /dev/null -b "$ADMIN" -X PUT "$BD/admin/boards/$CLUB_ID" -H 'content-type: application/json' -d "$(club_body ',"moderators":"mod@bd.test"')"
+contains "탈퇴" "$(curl -s -b "$MOD" -X POST "$API/api/me/withdraw" -H 'content-type: application/json' -d '{"password":"memberpass1","deletePosts":false}')" '"ok":true'
+check "탈퇴하면 게시판 관리자 지정도 풀린다" "$(mods_of)" ""
+
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 # 실측을 남긴다(설정됐을 때만) — README 의 표가 실제와 같은지 CI 가 대조한다.
 # 표의 숫자는 조용히 썩는다: 단언을 더해도 아무도 그 줄을 고치지 않는다.

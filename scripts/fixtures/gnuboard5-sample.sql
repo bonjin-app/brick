@@ -111,12 +111,13 @@ CREATE TABLE `g5_group` (
   `gr_id` varchar(10) NOT NULL DEFAULT '',
   `gr_subject` varchar(255) NOT NULL DEFAULT '',
   `gr_order` int(11) NOT NULL DEFAULT '0',
+  `gr_admin` varchar(255) NOT NULL DEFAULT '',
   PRIMARY KEY (`gr_id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8;
 
 INSERT INTO `g5_group` VALUES
-('community','커뮤니티',1),
-('archive','자료실',2);
+('community','커뮤니티',1,'weird'),
+('archive','자료실',2,'');
 
 CREATE TABLE `g5_board_file` (
   `bo_table` varchar(20) NOT NULL DEFAULT '',
@@ -173,14 +174,15 @@ CREATE TABLE `g5_board` (
   `bo_upload_count` tinyint(4) NOT NULL DEFAULT '0',
   `bo_1_subj` varchar(255) NOT NULL DEFAULT '',
   `bo_2_subj` varchar(255) NOT NULL DEFAULT '',
+  `bo_admin` varchar(255) NOT NULL DEFAULT '',
   PRIMARY KEY (`bo_table`)
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8;
 
 INSERT INTO `g5_board` VALUES
-('notice','community','공지사항','공지 안내입니다',1,10,2,2,15,0,0,2,'',''),
-('free','community','자유게시판','',1,2,2,2,20,1,1,2,'연락처','지역'),
-('secret_room','community','비밀게시판','',8,8,8,8,20,0,1,0,'',''),
-('empty','community','글없는게시판','',1,2,2,2,20,0,0,0,'','');
+('notice','community','공지사항','공지 안내입니다',1,10,2,2,15,0,0,2,'','',''),
+('free','community','자유게시판','',1,2,2,2,20,1,1,2,'연락처','지역','hong'),
+('secret_room','community','비밀게시판','',8,8,8,8,20,0,1,0,'','','ghost_mod'),
+('empty','community','글없는게시판','',1,2,2,2,20,0,0,0,'','','');
 
 -- ─────────────────────────────────────────────────────
 CREATE TABLE `g5_write_notice` (

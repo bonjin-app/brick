@@ -32,6 +32,8 @@ export { ROLE_RANK, rankOf, hasRole, type RoleBearer } from "@brick/plugin-sdk";
 
 export interface BoardRow {
   id: string;
+  /** 게시판 관리자(운영자가 이 게시판에 지정한 회원)의 id — 이 게시판 안에서만 운영진처럼 */
+  moderator_ids?: string[];
   slug: string;
   title: string;
   description: string | null;
