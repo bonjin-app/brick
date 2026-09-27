@@ -226,7 +226,6 @@
   "댓글 알림": "Comment notifications",
   "댓글을 찾을 수 없습니다.": "Comment not found.",
   "댓글이 너무 깁니다.": "The comment is too long.",
-  "댓글이 달리면 원글 작성자(회원)에게 메일로 알립니다.": "Emails the post's author (members only) when a comment is added.",
   "더 이상 답변을 달 수 없습니다.": "No further replies can be added.",
   "더보기 링크": "\"More\" link",
   "도배 방지 (초)": "Flood control (seconds)",
@@ -333,5 +332,11 @@
   "err.unknownModerators": "These emails cannot be board moderators (no account, or withdrawn/suspended): {emails}",
   "게시판 관리자": "Board moderators",
   "이 게시판만 맡길 회원의 이메일을 한 줄에 하나씩 적으세요(최대 20명). 그 회원은 이 게시판 안에서만 운영진처럼 다른 사람의 글·댓글을 고치고 지우며, 비밀글을 보고 공지를 올립니다. 게시판 설정·다른 게시판·관리 화면에는 닿지 않습니다. 운영진은 적지 않아도 모든 게시판을 관리합니다.": "Emails of members who look after only this board, one per line (up to 20). Inside this board only, they can edit and delete other people's posts and comments, read secret posts and post notices, like staff. They cannot reach board settings, other boards or the admin screens. Staff manage every board without being listed.",
-  "비밀글의 첨부파일입니다. 작성자만 받을 수 있습니다.": "This file belongs to a secret post. Only its author can download it."
+  "비밀글의 첨부파일입니다. 작성자만 받을 수 있습니다.": "This file belongs to a secret post. Only its author can download it.",
+  "mail.replySubject": "[{board}] New reply to your comment: {title}",
+  "mail.replyBody": "{author} replied to your comment on \"{title}\".\n\n{excerpt}\n\n{url}",
+  "댓글이 달리면 원글 작성자(회원)에게, 답글이 달리면 그 댓글의 작성자(회원)에게 알립니다 (알림함·메일).": "Notifies the post's author (members) of new comments, and a comment's author (members) of replies to it (inbox and email).",
+  "게시판 — 내 댓글에 답글": "Board — reply to my comment",
+  "답글을 쓴 사람": "Replier",
+  "답글 앞부분 (비밀 답글·비밀글이면 내용 대신 표시)": "Start of the reply (a marker instead, for secret replies or secret posts)"
 }

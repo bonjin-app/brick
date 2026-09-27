@@ -332,6 +332,36 @@ ORDER2="$(curl -s -X POST "$SHOP/orders" -H 'content-type: application/json' --d
 curl -s -X PUT "http://127.0.0.1:${SMS_PORT}/_fail" -H 'content-type: application/json' -d '{"n":0}' >/dev/null
 kill "$SMS_PID" 2>/dev/null || true
 
+echo "── 내 댓글에 답글이 달리면 알림이 온다 (원글 작성자만 받던 것)"
+replies_of() { psql_q "SELECT count(*) FROM notifications n JOIN users u ON u.id = n.user_id WHERE u.email = '$1@nt.test' AND n.kind = 'board.reply'"; }
+last_reply_of() { psql_q "SELECT n.title || ' / ' || n.body AS t FROM notifications n JOIN users u ON u.id = n.user_id WHERE u.email = '$1@nt.test' AND n.kind = 'board.reply' ORDER BY n.id DESC LIMIT 1"; }
+cmt() {  # cmt <쿠키> <글> <내용> [부모] [비밀] → 댓글 id
+  local body; body="$(printf '{"content":"%s","parentId":%s,"isSecret":%s}' "$3" "${4:-null}" "${5:-false}")"
+  curl -s -b "$1" -X POST "$BD/posts/$2/comments" -H 'content-type: application/json' -d "$body" | jget "['id']"
+}
+CQ="$(cmt "$OTHER" "$POST_ID" "배송 문의드립니다")"
+RA="$(cmt "$MEMBER" "$POST_ID" "내일 보내 드립니다" "\"$CQ\"")"
+[[ -n "$CQ" && -n "$RA" ]] && ok "다른 회원이 댓글을 달고 글쓴이가 답한다" || bad "답글 준비 ($CQ/$RA)"
+sleep 1
+check "댓글 작성자에게 답글 알림이 간다" "$(replies_of other)" "1"
+contains "누가 무엇에 답했는지 적혀 있다" "$(last_reply_of other)" "내일 보내 드립니다"
+contains "어느 글인지도" "$(last_reply_of other)" "알림 시험 글"
+contains "알림함에서 그 글로 간다" "$(curl -s -b "$OTHER" "$API/api/notifications")" "\"url\":\"/board/free/$POST_ID#comments\""
+cmt "$OTHER" "$POST_ID" "감사합니다" "\"$CQ\"" >/dev/null
+sleep 1
+check "자기 댓글에 단 답글은 자기에게 알리지 않는다" "$(replies_of other)" "1"
+BEFORE="$(psql_q "SELECT count(*) FROM notifications n JOIN users u ON u.id = n.user_id WHERE u.email = 'member@nt.test'")"
+CM="$(cmt "$MEMBER" "$POST_ID" "글쓴이의 덧붙임")"
+cmt "$ADMIN" "$POST_ID" "확인했습니다" "\"$CM\"" >/dev/null
+sleep 1
+check "글쓴이의 댓글에 단 답글은 \"내 글에 댓글\" 한 번만 간다 (두 번 가지 않는다)" \
+  "$(psql_q "SELECT count(*) FROM notifications n JOIN users u ON u.id = n.user_id WHERE u.email = 'member@nt.test'"; replies_of member)" "$(printf '%s\n0' "$((BEFORE + 1))")"
+cmt "$MEMBER" "$POST_ID" "주소는 비밀 9999 입니다" "\"$CQ\"" true >/dev/null
+sleep 1
+R="$(last_reply_of other)"
+[[ "$(replies_of other)" == "2" && "$R" == *"(비밀댓글)"* && "$R" != *"9999"* ]] && ok "비밀 답글은 내용을 빼고 알린다" || bad "비밀 답글 알림 (${R:0:120})"
+contains "운영자가 답글 알림 문구도 고칠 수 있다" "$(curl -s -b "$ADMIN" "$API/api/admin/notification-templates")" '"event":"board.reply"'
+
 echo
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 [[ -n "${BRICK_SMOKE_LOG:-}" ]] && echo "$(basename "${BASH_SOURCE[0]}") ${PASS} ${FAIL}" >> "$BRICK_SMOKE_LOG"

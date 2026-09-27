@@ -85,7 +85,7 @@ export const BOARD_RESOURCE: AdminResource = {
     { name: "notify_email", label: "새 글 알림 메일", type: "text",
       help: "새 글이 등록되면 이 주소로 알립니다. 비우면 보내지 않습니다." },
     { name: "notify_comment", label: "댓글 알림", type: "boolean",
-      help: "댓글이 달리면 원글 작성자(회원)에게 메일로 알립니다." },
+      help: "댓글이 달리면 원글 작성자(회원)에게, 답글이 달리면 그 댓글의 작성자(회원)에게 알립니다 (알림함·메일)." },
 
     { name: "allow_reply", label: "답변형 허용", type: "boolean",
       help: "글에 답변을 달아 계층으로 표시합니다." },

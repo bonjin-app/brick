@@ -49,6 +49,27 @@ export default definePlugin(async (ctx) => {
     ],
     defaults: commentTemplate,
   });
+  /*
+   * 답글 알림 — 내 댓글에 누가 답하면. 원글 작성자만 알림을 받으면, 질문을 댓글로 남긴 사람은
+   * 글쓴이가 답했는지 알려면 그 글을 계속 다시 열어 봐야 한다(그누보드는 댓글 작성자에게도 메일을
+   * 보내는 설정이 있다 — cf_email_wr_comment_all).
+   */
+  const replyTemplate = () => ({
+    subject: ctx.t("mail.replySubject", { board: "#{게시판명}", title: "#{글제목}" }),
+    body: ctx.t("mail.replyBody", { author: "#{댓글작성자}", title: "#{글제목}", excerpt: "#{댓글요약}", url: "#{글주소}" }),
+  });
+  ctx.registerNotificationEvent({
+    event: "board.reply",
+    label: "게시판 — 내 댓글에 답글",
+    vars: [
+      { name: "게시판명", description: "게시판 이름", sample: "자유게시판" },
+      { name: "글제목", description: "원글 제목", sample: "첫 글입니다" },
+      { name: "댓글작성자", description: "답글을 쓴 사람", sample: "홍길동" },
+      { name: "댓글요약", description: "답글 앞부분 (비밀 답글·비밀글이면 내용 대신 표시)", sample: "네, 가능합니다" },
+      { name: "글주소", description: "원글 주소", sample: "https://example.com/board/free/1#comments" },
+    ],
+    defaults: replyTemplate,
+  });
 
   /*
    * 비회원 비밀번호 확인 — 대입 방어를 씌운다(대상별 다섯 번·IP별 스무 번, 15분).
@@ -519,12 +540,14 @@ export default definePlugin(async (ctx) => {
     }
 
     let depth = 0;
+    let parentAuthor: string | null = null;
     if (body.parentId) {
       const { rows: parent } = await db.execute(sql`
-        SELECT depth FROM board_comments WHERE id = ${body.parentId}::uuid AND post_id = ${String(post.id)}::uuid
+        SELECT depth, author_id FROM board_comments WHERE id = ${body.parentId}::uuid AND post_id = ${String(post.id)}::uuid
       `);
       if (!parent[0]) throw new BoardError(404, "부모 댓글을 찾을 수 없습니다.");
       depth = Math.min(3, Number(parent[0].depth) + 1);
+      parentAuthor = parent[0].author_id ? String(parent[0].author_id) : null;
     }
 
     const id = uuidv7();
@@ -550,19 +573,22 @@ export default definePlugin(async (ctx) => {
       authorId: user?.id ?? null,
     });
     /**
-     * 댓글 알림 — 원글 작성자(회원)에게. 자기 글에 자기가 단 댓글은 알리지 않는다.
-     * 비밀댓글은 원글 작성자가 사이트에서 읽을 수 있지만(canSeeSecretComment), 메일은 사이트 밖으로
-     * 나가므로 내용을 빼고 "댓글이 달렸다" 는 사실만 알린다.
+     * 댓글 알림 — 원글 작성자(회원)에게, 답글이면 그 댓글의 작성자(회원)에게도. 자기가 단 댓글은
+     * 자기에게 알리지 않고, 원글 작성자의 댓글에 단 답글은 "내 글에 댓글" 하나로 알린다(두 번 가지 않게).
+     * 비밀댓글은 받는 사람이 사이트에서 읽을 수 있지만(canSeeSecretComment), 메일은 사이트 밖으로
+     * 나가므로 내용을 빼고 "댓글이 달렸다" 는 사실만 알린다. 비밀글의 답글도 같다 — 글이 나중에
+     * 비밀글이 되었다면 부모 댓글 작성자는 그 글을 못 읽을 수 있다.
      *
      * `ctx.notify` 는 메일과 **사이트 안 알림함** 두 곳으로 간다. 메일만 보내던
      * 시절에는 SMTP 가 없는 사이트에서(기본값이다) 이 알림이 통째로 사라졌다 —
      * 작성자는 자기 글에 댓글이 달린 줄 몰랐다. 실패는 댓글 등록을 막지 않는다.
      */
-    if (post.notify_comment && post.author_id && post.author_id !== (user?.id ?? null)) {
+    const me = user?.id ?? null;
+    const postAuthor = post.author_id ? String(post.author_id) : null;
+    const notifyMember = (to: string, event: string, tpl: { subject: string; body: string }, hide: boolean) => {
       void (async () => {
         const { rows: u } = await db.execute(sql`
-          SELECT id FROM users WHERE id = ${String(post.author_id)}::uuid
-            AND is_active = true AND withdrawn_at IS NULL LIMIT 1
+          SELECT id FROM users WHERE id = ${to}::uuid AND is_active = true AND withdrawn_at IS NULL LIMIT 1
         `);
         if (!u[0]) return; // 탈퇴·정지한 회원에게는 보내지 않는다
         const title = String(post.title ?? "").slice(0, 200);
@@ -572,20 +598,25 @@ export default definePlugin(async (ctx) => {
           게시판명: String(post.board_title),
           글제목: title,
           댓글작성자: user ? user.displayName : (guestName ?? ""),
-          댓글요약: Boolean(body.isSecret) ? ctx.t("mail.secretComment") : content.slice(0, 200),
+          댓글요약: hide ? ctx.t("mail.secretComment") : content.slice(0, 200),
           글주소: `${ctx.site.url}${path}`,
         };
-        const tpl = commentTemplate();
         await ctx.notify({
-          userId: String(post.author_id),
-          kind: "board.comment",
-          event: "board.comment",
+          userId: to,
+          kind: event,
+          event,
           vars,
           title: fillTemplate(tpl.subject, vars),
           body: fillTemplate(tpl.body, vars),
           url: path,
         });
       })().catch(() => undefined);
+    };
+    if (post.notify_comment && postAuthor && postAuthor !== me) {
+      notifyMember(postAuthor, "board.comment", commentTemplate(), Boolean(body.isSecret));
+    }
+    if (post.notify_comment && parentAuthor && parentAuthor !== me && parentAuthor !== postAuthor) {
+      notifyMember(parentAuthor, "board.reply", replyTemplate(), Boolean(body.isSecret) || Boolean(post.is_secret));
     }
     return { id };
   });
