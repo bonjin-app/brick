@@ -10,7 +10,7 @@ import { t } from "./i18n.js";
 import { hashGuestPassword, verifyGuestPassword } from "./guest.js";
 import { checkGuestSecret, fillTemplate } from "@brick/plugin-sdk";
 import { removeComments } from "./comments.js";
-import { assertCanModify, boardActor, canModifyPost, canReadSecret, canSeeSecretComment, checkWriteInterval, loadBoard, requireCert, requireRole, type IdentityOf } from "./access.js";
+import { assertAuthorMayChange, assertCanModify, boardActor, canModifyPost, canReadSecret, canSeeSecretComment, checkWriteInterval, loadBoard, requireCert, requireRole, type IdentityOf } from "./access.js";
 import { attachFiles, claimDownload, deleteAttachments, listAttachments } from "./attachments.js";
 import { createPost, isBlankContent, listPosts, normalizeLinks, refreshThumb, type WritePostInput } from "./posts.js";
 import { sanitizeHtml, toPlainText } from "./sanitize.js";
@@ -89,17 +89,14 @@ export default definePlugin(async (ctx) => {
    * 전에는 댓글·스크랩이 게시판 읽기만 보고 추천은 그것마저 보지 않아, 읽지 못하는 글에
    * 댓글을 달고(작성자에게 알림까지 갔다) 추천 수를 바꾸고 스크랩 목록에 제목을 담을 수 있었다.
    */
-  const requireReadablePost = async (
+  const readPostAs = async (
     req: { ip: string; query: Record<string, string | undefined> },
     post: Record<string, unknown>,
     user: SessionUser | null,
-    message: string,
-  ): Promise<SessionUser | null> => {
+  ): Promise<{ actor: SessionUser | null; readable: boolean }> => {
     const actor = boardActor(user, await requireBoardRead(String(post.slug), user));
-    if (!(await canReadSecret(post as never, actor, req.query.pw, guestCheck(req, `post:${String(post.id)}`), db))) {
-      throw new BoardError(403, message);
-    }
-    return actor;
+    // 거절 문장은 부르는 쪽이 던진다 — 던지는 자리의 리터럴이어야 번역 검사(check-error-i18n)가 본다
+    return { actor, readable: await canReadSecret(post as never, actor, req.query.pw, guestCheck(req, `post:${String(post.id)}`), db) };
   };
 
   // 본인인증을 쓰는 곳 — 관리자 → 본인인증 화면이 목적별로 모은다
@@ -344,13 +341,15 @@ export default definePlugin(async (ctx) => {
     const body = req.body as WritePostInput & { guestPassword?: string };
     const { rows } = await db.execute(sql`
       SELECT p.id, p.author_id, p.guest_password, p.board_id, b.categories, b.allow_secret, b.category_required,
-             b.extra_fields
+             b.extra_fields, b.count_modify
       FROM board_posts p JOIN board_boards b ON b.id = p.board_id
       WHERE p.id = ${req.params.id}::uuid LIMIT 1
     `);
     const post = rows[0];
     if (!post) throw new BoardError(404, "글을 찾을 수 없습니다.");
-    await assertCanModify(post as never, await actorOnBoard(userOf(req), post.board_id), body.guestPassword, guestCheck(req, `post:${req.params.id}`));
+    const editor = await actorOnBoard(userOf(req), post.board_id);
+    await assertCanModify(post as never, editor, body.guestPassword, guestCheck(req, `post:${req.params.id}`));
+    await assertAuthorMayChange(db, post, editor, "modify");
 
     const title = String(body.title ?? "").trim();
     // 수정 경로에서도 새니타이즈를 빼먹으면 우회 통로가 된다 — 금지 단어도 같다
@@ -386,11 +385,14 @@ export default definePlugin(async (ctx) => {
   ctx.registerRoute("DELETE", "/posts/:id", async (req) => {
     const body = (req.body ?? {}) as { guestPassword?: string };
     const { rows } = await db.execute(sql`
-      SELECT id, author_id, guest_password, board_id FROM board_posts WHERE id = ${req.params.id}::uuid LIMIT 1
+      SELECT p.id, p.author_id, p.guest_password, p.board_id, p.thread_id, p.thread_path, b.count_delete
+      FROM board_posts p JOIN board_boards b ON b.id = p.board_id WHERE p.id = ${req.params.id}::uuid LIMIT 1
     `);
     const post = rows[0];
     if (!post) throw new BoardError(404, "글을 찾을 수 없습니다.");
-    await assertCanModify(post as never, await actorOnBoard(userOf(req), post.board_id), body.guestPassword ?? req.query.pw, guestCheck(req, `post:${req.params.id}`));
+    const remover = await actorOnBoard(userOf(req), post.board_id);
+    await assertCanModify(post as never, remover, body.guestPassword ?? req.query.pw, guestCheck(req, `post:${req.params.id}`));
+    await assertAuthorMayChange(db, post, remover, "delete");
 
     // 스토리지 파일은 CASCADE로 지워지지 않으므로 먼저 정리한다
     await deleteAttachments(db, ctx.storage, String(post.id));
@@ -521,7 +523,8 @@ export default definePlugin(async (ctx) => {
     if (!post) throw new BoardError(404, "글을 찾을 수 없습니다.");
 
     const user = userOf(req);
-    const actor = await requireReadablePost(req, post, user, "비밀글입니다. 작성자만 댓글을 달 수 있습니다.");
+    const { actor, readable } = await readPostAs(req, post, user);
+    if (!readable) throw new BoardError(403, "비밀글입니다. 작성자만 댓글을 달 수 있습니다.");
     requireRole(actor, String(post.comment_role), "act.comment");
     await requireCaptchaForGuest(user, body);
 
@@ -653,7 +656,7 @@ export default definePlugin(async (ctx) => {
       WHERE p.id = ${req.params.id}::uuid LIMIT 1
     `);
     if (!rows[0]) throw new BoardError(404, "글을 찾을 수 없습니다.");
-    await requireReadablePost(req, rows[0], user, "비밀글입니다. 작성자만 추천할 수 있습니다.");
+    if (!(await readPostAs(req, rows[0], user)).readable) throw new BoardError(403, "비밀글입니다. 작성자만 추천할 수 있습니다.");
     if (!rows[0].allow_vote) throw new BoardError(400, "이 게시판은 추천을 허용하지 않습니다.");
 
     // 1인 1표: 같은 값을 다시 누르면 취소, 다른 값이면 변경.
@@ -713,7 +716,7 @@ export default definePlugin(async (ctx) => {
       WHERE p.id = ${req.params.id}::uuid LIMIT 1
     `);
     if (!rows[0]) throw new BoardError(404, "글을 찾을 수 없습니다.");
-    await requireReadablePost(req, rows[0], user, "비밀글입니다. 작성자만 스크랩할 수 있습니다.");
+    if (!(await readPostAs(req, rows[0], user)).readable) throw new BoardError(403, "비밀글입니다. 작성자만 스크랩할 수 있습니다.");
 
     return db.transaction(async (tx) => {
       const { rows: existing } = await tx.execute(sql`
@@ -805,6 +808,7 @@ ${items}
              categories, page_size, allow_reply, allow_secret, allow_vote, allow_upload,
              max_files, write_interval, sort_order, is_visible,
              list_style, notify_email, notify_comment, group_id, category_required, extra_fields, cert_required,
+             count_delete, count_modify,
              (SELECT count(*) FROM board_posts p WHERE p.board_id = b.id) AS post_count,
              (SELECT string_agg(u.email, E'\n' ORDER BY u.email) FROM board_moderators m JOIN users u ON u.id = m.user_id
                WHERE m.board_id = b.id) AS moderators
@@ -866,6 +870,8 @@ ${items}
       allowUpload: b.allow_upload !== false,
       maxFiles: num(b.max_files, 3, 0, 10),
       writeInterval: num(b.write_interval, 5, 0, 3600),
+      countDelete: num(b.count_delete, 0, 0, 1000),
+      countModify: num(b.count_modify, 0, 0, 1000),
       sortOrder: num(b.sort_order, 0, -9999, 9999),
       isVisible: b.is_visible !== false,
       // 목록 스킨 — 모르는 값은 기본으로 (관리 화면 select 밖에서 들어와도 안전하게)
@@ -929,14 +935,16 @@ ${items}
           id, slug, title, description, read_role, write_role, comment_role, download_role,
           categories, page_size, allow_reply, allow_secret, allow_vote, allow_upload,
           max_files, write_interval, sort_order, is_visible,
-          list_style, notify_email, notify_comment, group_id, category_required, extra_fields, cert_required
+          list_style, notify_email, notify_comment, group_id, category_required, extra_fields, cert_required,
+          count_delete, count_modify
         ) VALUES (
           ${id}, ${v.slug}, ${v.title}, ${v.description}, ${v.readRole}, ${v.writeRole},
           ${v.commentRole}, ${v.downloadRole}, ${JSON.stringify(v.categories)}::jsonb, ${v.pageSize},
           ${v.allowReply}, ${v.allowSecret}, ${v.allowVote}, ${v.allowUpload},
           ${v.maxFiles}, ${v.writeInterval}, ${v.sortOrder}, ${v.isVisible},
           ${v.listStyle}, ${v.notifyEmail}, ${v.notifyComment}, ${v.groupId}::uuid, ${v.categoryRequired},
-          ${JSON.stringify(v.extraFields)}::jsonb, ${v.certRequired}
+          ${JSON.stringify(v.extraFields)}::jsonb, ${v.certRequired},
+          ${v.countDelete}, ${v.countModify}
         )
       `);
     } catch (err) {
@@ -967,7 +975,8 @@ ${items}
           sort_order = ${v.sortOrder}, is_visible = ${v.isVisible},
           list_style = ${v.listStyle}, notify_email = ${v.notifyEmail}, notify_comment = ${v.notifyComment},
           group_id = ${v.groupId}::uuid, category_required = ${v.categoryRequired},
-          extra_fields = ${JSON.stringify(v.extraFields)}::jsonb, cert_required = ${v.certRequired}
+          extra_fields = ${JSON.stringify(v.extraFields)}::jsonb, cert_required = ${v.certRequired},
+          count_delete = ${v.countDelete}, count_modify = ${v.countModify}
         WHERE id = ${req.params.id}::uuid RETURNING id
       `);
       if (!rows.length) throw new BoardError(404, "게시판을 찾을 수 없습니다.");

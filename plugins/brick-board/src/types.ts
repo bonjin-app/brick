@@ -49,6 +49,9 @@ export interface BoardRow {
   allow_upload: boolean;
   max_files: number;
   write_interval: number;
+  /** 다른 사람의 댓글이 이 수 이상이면 작성자가 지우지·고치지 못한다 (0 = 제한 없음, 그누보드 bo_count_delete·modify) */
+  count_delete?: number;
+  count_modify?: number;
   /** 목록 스킨 — basic(표) | gallery(썸네일 격자) | webzine(카드 목록) */
   list_style: string;
   /** 새 글 알림을 받을 주소. 비우면 보내지 않는다 */

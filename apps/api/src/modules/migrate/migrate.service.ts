@@ -630,6 +630,11 @@ export class MigrateService {
      * 그룹 관리자는 그 그룹의 모든 게시판의 관리자가 된다. 옮기지 않은 회원(탈퇴·빠짐)은 알려 준다.
      */
     const canModerate = await this.tableExists("board_moderators");
+    const { rows: limitCols } = await this.db.execute(sql`
+      SELECT count(*)::int AS n FROM information_schema.columns
+      WHERE table_name = 'board_boards' AND column_name IN ('count_delete', 'count_modify')
+    `);
+    const canLimitChanges = Number(limitCols[0]?.n ?? 0) === 2;
     const groupAdmins = new Map<string, string>();
     for (const g of readRows(dump, `${prefix}group`, tables)) {
       const admin = String(g.gr_admin ?? "").trim();
@@ -682,6 +687,14 @@ export class MigrateService {
              ${groupMap.get(String(row.gr_id ?? "")) ?? null}::uuid,
              true, now())
         `);
+        // 댓글 달린 글의 삭제·수정 한도(bo_count_delete · bo_count_modify) — 게시판 플러그인이 그 칸을 가졌을 때만
+        if (canLimitChanges) {
+          const lim = (v: unknown) => Math.min(1000, Math.max(0, Math.floor(Number(v ?? 0)) || 0));
+          await this.db.execute(sql`
+            UPDATE board_boards SET count_delete = ${lim(row.bo_count_delete)}, count_modify = ${lim(row.bo_count_modify)}
+            WHERE id = ${boardId}::uuid
+          `);
+        }
         result.boards.created += 1;
       }
 

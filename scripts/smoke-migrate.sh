@@ -208,6 +208,8 @@ contains "게시판 관리자(bo_admin)를 그 게시판의 관리자로 (그룹
 contains "그룹 관리자(gr_admin)는 그 그룹의 모든 게시판의 관리자로" "$MODS" "notice:weird@old.test"
 contains "지정한 수를 알린다" "$RUN" "게시판 관리자"
 contains "옮긴 회원 중에 없는 아이디는 지정하지 못했다고 말한다" "$RUN" "ghost_mod"
+check "댓글 달린 글의 삭제·수정 한도(bo_count_delete · bo_count_modify)를 옮긴다" \
+  "$(psql_q "SELECT string_agg(slug || ':' || count_delete || '/' || count_modify, ',' ORDER BY slug) AS x FROM board_boards WHERE slug IN ('free','notice')")" "free:3/5,notice:1/1"
 
 contains "내용관리를 페이지로 옮긴다" "$RUN" '"contents":{"created":2}'
 check "제목" "$(psql_q "SELECT title FROM pages WHERE slug='company'")" "회사소개"

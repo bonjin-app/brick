@@ -183,5 +183,7 @@
   "err.unknownModerators": "게시판 관리자로 지정할 수 없는 이메일입니다(가입하지 않았거나 탈퇴·정지한 계정): {emails}",
   "mail.replySubject": "[{board}] 내 댓글에 답글이 달렸습니다: {title}",
   "mail.replyBody": "{author} 님이 \"{title}\" 글의 내 댓글에 답글을 남겼습니다.\n\n{excerpt}\n\n{url}",
-  "comment.deleted": "삭제된 댓글입니다."
+  "comment.deleted": "삭제된 댓글입니다.",
+  "err.countDelete": "다른 사람의 댓글이 {n}개 이상 달린 글은 지울 수 없습니다.",
+  "err.countModify": "다른 사람의 댓글이 {n}개 이상 달린 글은 고칠 수 없습니다."
 }

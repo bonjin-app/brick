@@ -38,6 +38,11 @@ const PLUGINS = join(ROOT, "plugins");
 /** throw new XxxError(400, "…") · throw new XxxException("…") */
 const THROW_RE = /throw new \w*(?:Error|Exception)\(\s*(?:\d{3},\s*)?(["'`])((?:[^\\]|\\.)*?)\1/g;
 const HANGUL = /[가-힣]/;
+/*
+ * 삼항식으로 고른 문장 — `throw new X(409, cond ? "…" : "…")`. 첫 인자만 보던 때 게시판의
+ * "댓글 달린 글" 거절이 이 모양으로 값을 박아 넣은 채 빠져나갔다. 두 갈래를 모두 본다.
+ */
+const THROW_TERNARY_RE = /throw new \w*(?:Error|Exception)\(\s*(?:\d{3},\s*)?[^"'`;()?\n]*\?\s*(["'`])([^"'`\n]*)\1\s*:\s*(["'`])([^"'`\n]*)\3/g;
 
 /**
  * 던진 문장이 **그 자체로 완결된 원문**인가.
@@ -117,6 +122,14 @@ for (const plugin of readdirSync(PLUGINS)) {
       if (!isWholeMessage(m, code)) continue;
       plain += 1;
       if (typeof en[msg] !== "string") missing.add(msg);
+    }
+    for (const m of code.matchAll(THROW_TERNARY_RE)) {
+      for (const [q, msg] of [[m[1], m[2]], [m[3], m[4]]]) {
+        if (!HANGUL.test(msg)) continue;
+        if (q === "`" && msg.includes("${")) { interpolated.add(msg); continue; }
+        plain += 1;
+        if (typeof en[msg] !== "string") missing.add(msg);
+      }
     }
     for (const msg of constMessages(code)) {
       if (!HANGUL.test(msg)) continue;

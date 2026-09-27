@@ -175,14 +175,16 @@ CREATE TABLE `g5_board` (
   `bo_1_subj` varchar(255) NOT NULL DEFAULT '',
   `bo_2_subj` varchar(255) NOT NULL DEFAULT '',
   `bo_admin` varchar(255) NOT NULL DEFAULT '',
+  `bo_count_delete` tinyint(4) NOT NULL DEFAULT '1',
+  `bo_count_modify` tinyint(4) NOT NULL DEFAULT '1',
   PRIMARY KEY (`bo_table`)
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8;
 
 INSERT INTO `g5_board` VALUES
-('notice','community','공지사항','공지 안내입니다',1,10,2,2,15,0,0,2,'','',''),
-('free','community','자유게시판','',1,2,2,2,20,1,1,2,'연락처','지역','hong'),
-('secret_room','community','비밀게시판','',8,8,8,8,20,0,1,0,'','','ghost_mod'),
-('empty','community','글없는게시판','',1,2,2,2,20,0,0,0,'','','');
+('notice','community','공지사항','공지 안내입니다',1,10,2,2,15,0,0,2,'','','',1,1),
+('free','community','자유게시판','',1,2,2,2,20,1,1,2,'연락처','지역','hong',3,5),
+('secret_room','community','비밀게시판','',8,8,8,8,20,0,1,0,'','','ghost_mod',0,0),
+('empty','community','글없는게시판','',1,2,2,2,20,0,0,0,'','','',1,1);
 
 -- ─────────────────────────────────────────────────────
 CREATE TABLE `g5_write_notice` (

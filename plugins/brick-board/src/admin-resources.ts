@@ -95,6 +95,10 @@ export const BOARD_RESOURCE: AdminResource = {
     { name: "max_files", label: "첨부 개수 제한", type: "number", help: "0~10" },
     { name: "write_interval", label: "도배 방지 (초)", type: "number",
       help: "같은 사용자가 다음 글을 쓸 수 있게 되기까지의 시간. 0이면 제한 없음." },
+    { name: "count_delete", label: "댓글 달린 글 삭제 제한", type: "number",
+      help: "다른 사람의 댓글이 이 수 이상 달리면 작성자가 글을 지우지 못합니다(운영진·게시판 관리자는 됩니다). 0이면 제한 없음. 답변글이 달린 글은 이 값과 관계없이 작성자가 지우지 못합니다." },
+    { name: "count_modify", label: "댓글 달린 글 수정 제한", type: "number",
+      help: "다른 사람의 댓글이 이 수 이상 달리면 작성자가 글을 고치지 못합니다. 0이면 제한 없음." },
 
     { name: "sort_order", label: "표시 순서", type: "number" },
     { name: "is_visible", label: "공개", type: "boolean", inList: true },

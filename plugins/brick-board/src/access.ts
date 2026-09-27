@@ -22,7 +22,7 @@ export async function selectBoard(db: Db, slug: string): Promise<BoardRow | null
     SELECT b.id, b.slug, b.title, b.description, b.read_role, b.write_role, b.comment_role, b.download_role,
            b.categories, b.page_size, b.allow_reply, b.allow_secret, b.allow_vote, b.allow_upload,
            b.max_files, b.write_interval, b.list_style, b.notify_email, b.notify_comment, b.category_required,
-           b.extra_fields, b.cert_required,
+           b.extra_fields, b.cert_required, b.count_delete, b.count_modify,
            ARRAY(SELECT m.user_id::text FROM board_moderators m WHERE m.board_id = b.id) AS moderator_ids,
            b.group_id, g.title AS group_title, g.read_role AS group_read_role
     FROM board_boards b LEFT JOIN board_groups g ON g.id = b.group_id
@@ -194,6 +194,43 @@ export async function assertCanModify(
   if (!guestPassword) throw new BoardError(401, "비밀번호를 입력해주세요.");
   if (!(await check(guestPassword, post.guest_password))) {
     throw new BoardError(403, "비밀번호가 일치하지 않습니다.");
+  }
+}
+
+/**
+ * 작성자가 지금 이 글을 지우거나 고쳐도 되는가 — 권한(assertCanModify)을 통과한 **뒤에** 본다.
+ * 운영진(그 게시판 관리자 포함)은 해당하지 않는다. 그누보드 bbs/delete.php 와 같은 두 가지:
+ *
+ *  - 답변글이 달린 글은 지우지 못한다 — 답변글이 원글 없이 남는다("답변글부터 지워 주세요").
+ *  - 다른 사람의 댓글이 게시판의 한도(count_delete · count_modify) 이상 달린 글은 지우지·고치지 못한다 —
+ *    토론이 달린 글을 작성자가 통째로 없애거나 바꾸면 남은 댓글이 무엇에 대한 것인지 사라진다. 0 은 제한 없음.
+ */
+export async function assertAuthorMayChange(
+  db: Pick<Db, "execute">,
+  post: Record<string, unknown>, // id · thread_id · thread_path · author_id · count_delete · count_modify
+  user: SessionUser | null,
+  action: "delete" | "modify",
+): Promise<void> {
+  if (hasRole(user, "manager")) return;
+  if (action === "delete") {
+    const path = String(post.thread_path ?? "");
+    const { rows } = await db.execute(sql`
+      SELECT 1 FROM board_posts
+      WHERE thread_id = ${String(post.thread_id ?? post.id)}::uuid AND id <> ${String(post.id)}::uuid
+        AND (${path} = '' OR thread_path LIKE ${`${path}.%`})
+      LIMIT 1
+    `);
+    if (rows.length) throw new BoardError(409, "답변글이 달린 글은 지울 수 없습니다. 답변글부터 지워 주세요.");
+  }
+  const limit = Number(action === "delete" ? post.count_delete : post.count_modify) || 0;
+  if (limit <= 0) return;
+  const { rows } = await db.execute(sql`
+    SELECT count(*)::int AS n FROM board_comments
+    WHERE post_id = ${String(post.id)}::uuid AND deleted_at IS NULL
+      AND (${post.author_id ? String(post.author_id) : null}::uuid IS NULL OR author_id IS DISTINCT FROM ${post.author_id ? String(post.author_id) : null}::uuid)
+  `);
+  if (Number(rows[0]?.n ?? 0) >= limit) {
+    throw new BoardError(409, t(action === "delete" ? "err.countDelete" : "err.countModify", { n: limit }));
   }
 }
 

@@ -838,6 +838,31 @@ check "틀린 비밀번호로도 못 읽는다" "$(code "$BD/posts/$GR?pw=wrong9
 FORM() { curl -s -b "$MEMBER" "$API/api/render/page?path=board/free/write&replyTo=$1"; }
 absent "답변 양식은 다른 게시판의 글 제목을 보여 주지 않는다" "$(FORM "$STP")" "운영진 글"
 contains "같은 게시판의 글이면 보여 준다 (대조)" "$(FORM "$FP1")" "자유게시판의 회원 글"
+# 답변글이 달린 글은 작성자가 지우지 못한다 — 답변글이 원글 없이 남는다(그누보드 bbs/delete.php 와 같다)
+RP() { printf '{"title":"%s","content":"<p>답</p>","replyTo":"%s"}' "$1" "$2"; }
+DP1="$(wpost "$WRITER" club "답변이 달릴 글")"
+DR1="$(curl -s -b "$MEMBER" -X POST "$BD/boards/club/posts" -H 'content-type: application/json' -d "$(RP "다른 회원의 답" "$DP1")" | pid)"
+[[ -n "$DP1" && -n "$DR1" ]] && ok "다른 회원이 답변글을 단다" || bad "답변글 준비 ($DP1/$DR1)"
+R="$(curl -s -b "$WRITER" -w ' %{http_code}' -X DELETE "$BD/posts/$DP1")"
+[[ "$R" == *" 409" && "$R" == *"답변글부터"* ]] && ok "답변글이 달린 글은 작성자가 지우지 못하고 이유를 말한다" || bad "답변글 달린 글 삭제 (${R:0:160})"
+DR2="$(curl -s -b "$WRITER" -X POST "$BD/boards/club/posts" -H 'content-type: application/json' -d "$(RP "내가 단 답" "$DP1")" | pid)"
+check "형제 답변글이 있어도 아래에 답이 없는 답변글은 지운다" "$(code -b "$WRITER" -X DELETE "$BD/posts/$DR2")" "200"
+check "답변글이 지워지면 원글도 지운다" "$(code -b "$MEMBER" -X DELETE "$BD/posts/$DR1"; echo; code -b "$WRITER" -X DELETE "$BD/posts/$DP1")" "$(printf '200\n200')"
+DP2="$(wpost "$WRITER" club "운영진이 지울 글")"
+curl -s -o /dev/null -b "$MEMBER" -X POST "$BD/boards/club/posts" -H 'content-type: application/json' -d "$(RP "답" "$DP2")"
+check "운영진(게시판 관리자)은 답변글이 달린 글도 지운다" "$(code -b "$MOD" -X DELETE "$BD/posts/$DP2")" "200"
+# 다른 사람의 댓글이 한도 이상 달린 글 (그누보드 bo_count_delete · bo_count_modify)
+check "한도를 저장한다" "$(code -b "$ADMIN" -X PUT "$BD/admin/boards/$CLUB_ID" -H 'content-type: application/json' -d "$(club_body ',"count_delete":2,"count_modify":1')"; echo; curl -s -b "$ADMIN" "$BD/admin/boards" | python3 -c "import sys,json;b=next(b for b in json.load(sys.stdin)['items'] if b['slug']=='club');print(b['count_delete'],b['count_modify'])")" "$(printf '200\n2 1')"
+LP="$(wpost "$WRITER" club "토론이 달릴 글")"
+curl -s -o /dev/null -b "$WRITER" -X POST "$BD/posts/$LP/comments" -H 'content-type: application/json' -d '{"content":"내 댓글은 세지 않는다"}'
+check "자기 댓글만 있으면 고친다" "$(code -b "$WRITER" -X PUT "$BD/posts/$LP" -H 'content-type: application/json' -d "$EDIT")" "200"
+curl -s -o /dev/null -b "$MEMBER" -X POST "$BD/posts/$LP/comments" -H 'content-type: application/json' -d '{"content":"첫 의견"}'
+check "다른 사람의 댓글이 한도에 닿으면 고치지 못한다" "$(code -b "$WRITER" -X PUT "$BD/posts/$LP" -H 'content-type: application/json' -d "$EDIT")" "409"
+curl -s -o /dev/null -b "$MOD" -X POST "$BD/posts/$LP/comments" -H 'content-type: application/json' -d '{"content":"둘째 의견"}'
+R="$(curl -s -b "$WRITER" -w ' %{http_code}' -X DELETE "$BD/posts/$LP")"
+[[ "$R" == *" 409" && "$R" == *"2개 이상"* ]] && ok "지우기 한도에 닿으면 지우지 못하고 이유를 말한다" || bad "댓글 한도 삭제 (${R:0:160})"
+check "게시판 관리자는 고치고 지운다" "$(code -b "$MOD" -X PUT "$BD/posts/$LP" -H 'content-type: application/json' -d "$EDIT"; echo; code -b "$MOD" -X DELETE "$BD/posts/$LP")" "$(printf '200\n200')"
+curl -s -o /dev/null -b "$ADMIN" -X PUT "$BD/admin/boards/$CLUB_ID" -H 'content-type: application/json' -d "$(club_body '')"
 # 삭제 단추의 data-delete-post 는 화면 스크립트에도 들어 있어(선택자) 단추가 있는지 가리지 못한다 — 그 글의 수정 링크로 본다
 contains "화면에도 수정 단추가 보인다 (집행과 같은 규칙)" "$(curl -s -b "$MOD" "$API/api/render/page?path=board/club/$CP1")" "/$CP1/edit\\\""
 absent "다른 회원의 화면에는 없다" "$(curl -s -b "$MEMBER" "$API/api/render/page?path=board/club/$CP1")" "/$CP1/edit\\\""
