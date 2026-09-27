@@ -82,7 +82,7 @@ start_server() {
   # readyz 에 응답한 것이 **우리 프로세스인지** 확인한다
   if command -v lsof >/dev/null 2>&1; then
     local holder
-    holder="$(lsof -nP -iTCP:"$API_PORT" -sTCP:LISTEN 2>/dev/null | awk 'NR>1 {print $2}' | head -1)"
+    holder="$(lsof -nP -iTCP:"$API_PORT" -sTCP:LISTEN 2>/dev/null | awk 'NR>1 {print $2}' | sed -n 1p)"
     if [[ -n "$holder" && "$holder" != "$API_PID" ]]; then
       echo "포트 $API_PORT 를 다른 프로세스($holder)가 잡고 있습니다"; exit 1
     fi

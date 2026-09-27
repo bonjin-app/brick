@@ -129,10 +129,13 @@ TREE_OUT="$(node --input-type=module -e '
     T.applyMove(base(), 0, "2", "before", accepts),
   ].map(String).join(","));
   console.log(out.join("\n"));
-' "$ROOT/apps/web/src/lib/block-tree.ts" 2>&1 || true)"
+' "$ROOT/apps/web/src/lib/block-tree.ts" 2>"$TMP/tree-err.txt" || true)"
+# stderr 는 따로 받아 **뒤에** 붙인다 — 2>&1 로 합치면 Node 의 경고(MODULE_TYPELESS_PACKAGE_JSON)가 비동기로 나가는
+# stdout 줄 사이에 끼어 한 줄을 깨뜨렸다(가끔만). 던진 예외는 여전히 아래 검사가 본다
+TREE_OUT="$TREE_OUT"$'\n'"$(cat "$TMP/tree-err.txt")"
 # 시험 코드가 던지면(연산이 깨졌다) 스모크를 멈추지 않고 아래 검사들이 실패로 드러나게 한다
 [[ "$TREE_OUT" == *Error* ]] && echo "  (트리 연산 시험이 던졌습니다: $(echo "$TREE_OUT" | grep -m1 Error))"
-line() { echo "$TREE_OUT" | grep "^$1:" | head -1 | cut -d: -f2-; }
+line() { echo "$TREE_OUT" | grep "^$1:" | sed -n 1p | cut -d: -f2-; }
 check "같은 목록 아래로 — 놓은 자리 그대로" "$(line down)" '[{"core/columns",[{"a/l"},{"a/r"}]},{"a/p"},{"a/h"},{"core/columns",[]}]@2'
 check "뒤쪽 다단 안으로 — 빠진 자리만큼 경로가 당겨진다" "$(line into-later)" '[{"core/columns",[{"a/l"},{"a/r"}]},{"a/p"},{"core/columns",[{"a/h"}]}]@2.0'
 check "자기 자신·자기 안쪽으로는 옮기지 않는다" "$(line self)" "null,null"
@@ -286,7 +289,7 @@ RUNTIME_OK="$(python3 -c "import sys,re; m=re.findall(r'<script>([\s\S]*?)</scri
 check "편집기 스크립트가 문법 오류 없이 읽힌다" "$RUNTIME_OK" "ok"
 contains "테마의 화면 틀로 그린다 (페이지 제목)" "$HTML" "회사 소개 초안"
 PUBLIC_HOME="$(curl -s "$API/api/render/page?path=" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("html",""))')"
-THEME_CSS="$(echo "$PUBLIC_HOME" | grep -oE '<link[^>]+rel="stylesheet"[^>]*>' | head -1)"
+THEME_CSS="$(echo "$PUBLIC_HOME" | grep -oE '<link[^>]+rel="stylesheet"[^>]*>' | sed -n 1p)"
 [[ -n "$THEME_CSS" && "$HTML" == *"$THEME_CSS"* ]] && ok "공개 화면과 같은 테마 스타일시트" || bad "테마 스타일시트 ($THEME_CSS)"
 contains "손님이 보는 모습으로 그린다 (로그인 링크)" "$HTML" "/login"
 HDRS="$(tr -d '\r' < "$HDR" | tr 'A-Z' 'a-z')"

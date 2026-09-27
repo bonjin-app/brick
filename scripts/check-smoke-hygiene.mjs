@@ -29,6 +29,8 @@
  * 우리인지 따로 확인해야 한다(`assert_own_api`, scripts/lib-smoke.sh).
  *
  * ── 5. 인자로 넘기는 "$(…)" 안에 쉼표 JSON 을 쓰지 않았는가 (bash 3.2 중괄호 확장 — 아래)
+ *
+ * ── 6. pipefail 아래에서 `| head` 로 파이프를 먼저 닫지 않았는가 (아래)
  */
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -170,6 +172,30 @@ for (const name of readdirSync(join(ROOT, "scripts"))) {
     checked++;
     bad.push([`scripts/${name}:${i + 1}`, "-d \"{\\\"…\\\",…}\"",
       "인자로 넘기는 \"$(…)\" 안의 쉼표 JSON — bash 3.2 가 중괄호를 확장해 단언이 무조건 통과합니다 (printf 로 변수에 만드세요)"]);
+  });
+}
+
+/*
+ * 6. `set -o pipefail` 아래에서 **`| head`** 가 대입이나 단독 명령의 파이프라인에 있지 않은가.
+ *
+ * head 는 필요한 줄만 읽고 파이프를 닫는다. 앞의 명령이 아직 쓰는 중이면 SIGPIPE 로 죽고(141),
+ * pipefail 은 그것을 파이프라인의 실패로 올리며, `set -e` 는 **아무 말 없이 수트를 끝낸다** — 로그에는
+ * `echo: write error: Broken pipe` 한 줄뿐이고 결과 줄도 없다. 앞의 명령이 언제 쓰기를 마치느냐에 달려
+ * **가끔만** 난다: 업그레이드 수트가 부하가 걸린 날 그렇게 멈췄다(다시 돌리면 통과). 입력을 끝까지 읽는
+ * `sed -n 1p` / `sed -n "1,${N}p"` 로 쓴다. 인자·조건 안의 "$(…)" 는 상태가 버려지므로 안전하다.
+ */
+for (const name of readdirSync(join(ROOT, "scripts"))) {
+  if (!name.endsWith(".sh")) continue;
+  const text = readFileSync(join(ROOT, "scripts", name), "utf8");
+  if (!/^\s*set\s+-[a-z]*o\s+pipefail|^\s*set\s+-o\s+pipefail/m.test(text)) continue;
+  text.split("\n").forEach((line, i) => {
+    if (/^\s*#/.test(line) || !/\|\s*head\b/.test(line)) return;
+    const assign = /^\s*[A-Za-z_][A-Za-z0-9_]*="\$\(/.test(line);
+    const bare = !line.includes("$(") && !/^\s*(if|while|until|\[\[)\b/.test(line) && !/\|\|/.test(line);
+    if (!assign && !bare) return;
+    checked++;
+    bad.push([`scripts/${name}:${i + 1}`, "| head",
+      "pipefail 아래에서 head 가 파이프를 먼저 닫으면 앞 명령이 SIGPIPE 로 죽고 set -e 가 수트를 조용히 끝냅니다 (sed -n 1p 를 쓰세요)"]);
   });
 }
 

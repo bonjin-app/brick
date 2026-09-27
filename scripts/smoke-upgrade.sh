@@ -85,7 +85,7 @@ TOTAL=$(echo "$ALL_FILES" | wc -l | tr -d ' ')
 KEEP=$(echo "$ALL_FILES" | xargs -n1 basename | awk -v u="$OLD_UNTIL" '$0 <= u "~"' | wc -l | tr -d ' ')
 HOLD_BACK=$(( TOTAL - KEEP ))
 [[ "$KEEP" -lt 1 ]] && { echo "마이그레이션이 너무 적어 시험할 수 없습니다"; exit 1; }
-echo "$ALL_FILES" | head -n "$KEEP" | xargs -I{} cp {} "$MIG_OLD/"
+echo "$ALL_FILES" | sed -n "1,${KEEP}p" | xargs -I{} cp {} "$MIG_OLD/"
 NEW_FILES=$(echo "$ALL_FILES" | tail -n "$HOLD_BACK" | xargs -n1 basename | tr '\n' ' ')
 echo "── 옛 버전으로 설치 (뒤로 미룬 것: $NEW_FILES)"
 

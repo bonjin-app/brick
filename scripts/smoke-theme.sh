@@ -160,11 +160,11 @@ contains "고른 다크는 UA 위젯까지" "$STYLE_CSS" '[data-theme=dark]{colo
 contains "고른 라이트도 마찬가지" "$STYLE_CSS" '[data-theme=light]{color-scheme:light}'
 
 echo "── 에셋 캐시버스터는 파일을 고치면 바뀐다"
-V1="$(grep -o 'style\.css?v=[^"]*' <<< "$HOME_HTML" | head -1)"
+V1="$(grep -o 'style\.css?v=[^"]*' <<< "$HOME_HTML" | sed -n 1p)"
 [[ -n "$V1" ]] && ok "스타일 링크에 버전이 붙는다 ($V1)" || bad "스타일 링크에 버전이 없다"
 touch "$ROOT/themes/default/assets/style.css"
 sleep 6  # mtime 메모 캐시(5초)가 만료될 시간
-V2="$(render "" | grep -o 'style\.css?v=[^"]*' | head -1)"
+V2="$(render "" | grep -o 'style\.css?v=[^"]*' | sed -n 1p)"
 [[ -n "$V2" && "$V1" != "$V2" ]] && ok "고치면 버전이 바뀐다 ($V2)" \
   || bad "테마를 고쳐도 버전이 그대로다 — 손님이 옛 CSS 를 본다 ($V1 → $V2)"
 
@@ -348,9 +348,9 @@ TL2="$(render "")"
 contains "링크가 없으면 글자만" "$TL2" '<span>5만원 이상 무료배송</span>'
 absent "그때 링크 태그는 없다" "$TL2" '<a href="">5만원'
 # 문구를 바꾸면 키도 바뀐다 — 손님이 닫아 둔 옛 공지 때문에 새 공지가 묻히면 안 된다
-KEY1="$(echo "$TL2" | grep -o 'data-key="[^"]*"' | head -1)"
+KEY1="$(echo "$TL2" | grep -o 'data-key="[^"]*"' | sed -n 1p)"
 curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"site.topbar":"오늘만 10% 할인"}' -o /dev/null
-KEY2="$(render "" | grep -o 'data-key="[^"]*"' | head -1)"
+KEY2="$(render "" | grep -o 'data-key="[^"]*"' | sed -n 1p)"
 [[ -n "$KEY1" && "$KEY1" != "$KEY2" ]] && ok "문구가 바뀌면 키도 바뀐다 ($KEY1 → $KEY2)" || bad "문구가 바뀌면 키도 바뀐다 ($KEY1 → $KEY2)"
 check "javascript: 링크는 거부" "$(code -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"site.topbar_url":"javascript:alert(1)"}')" "400"
 # 다섯 테마 모두 띠배너 스타일을 갖는다 (계약)
