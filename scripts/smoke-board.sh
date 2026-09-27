@@ -754,6 +754,27 @@ SFID="$(curl -s -b "$WRITER" "$BD/posts/$CP2" | python3 -c "import sys,json;prin
 check "비밀글의 첨부는 다른 회원이 받지 못한다 (주소를 알아도)" "$(code -b "$MEMBER" "$BD/files/$SFID")" "403"
 check "작성자는 받는다" "$(code -b "$WRITER" "$BD/files/$SFID")" "200"
 check "게시판 관리자도 받는다" "$(code -b "$MOD" "$BD/files/$SFID")" "200"
+# 글 하나에 닿는 행동(댓글·추천·스크랩)도 읽기와 같은 규칙 — 전에는 읽지 못하는 비밀글에 댓글을 달고(작성자에게 알림까지)
+# 추천 수를 바꾸고 스크랩 목록에 제목을 담았다
+SC='{"content":"몰래 단 댓글"}'
+check "읽지 못하는 비밀글에는 댓글을 달지 못한다" "$(code -b "$MEMBER" -X POST "$BD/posts/$CP2/comments" -H 'content-type: application/json' -d "$SC")" "403"
+check "추천도 못 한다" "$(code -b "$MEMBER" -X POST "$BD/posts/$CP2/vote" -H 'content-type: application/json' -d '{"value":1}')" "403"
+check "스크랩도 못 한다" "$(code -b "$MEMBER" -X POST "$BD/posts/$CP2/scrap")" "403"
+check "그 글의 추천 수는 그대로다" "$(curl -s -b "$WRITER" "$BD/posts/$CP2" | python3 -c "import sys,json;print(json.load(sys.stdin)['post'].get('up_count'))")" "0"
+contains "작성자는 자기 비밀글에 댓글을 단다" "$(curl -s -b "$WRITER" -X POST "$BD/posts/$CP2/comments" -H 'content-type: application/json' -d '{"content":"작성자 댓글"}')" '"id"'
+contains "게시판 관리자도 단다" "$(curl -s -b "$MOD" -X POST "$BD/posts/$CP2/comments" -H 'content-type: application/json' -d '{"content":"관리자 답변"}')" '"id"'
+contains "게시판 관리자는 추천도 한다" "$(curl -s -b "$MOD" -X POST "$BD/posts/$CP2/vote" -H 'content-type: application/json' -d '{"value":1}')" '"up":1'
+# 비회원 비밀글은 비밀번호로 — 읽기와 같다
+GSP="$(curl -s -X POST "$BD/boards/free/posts" -H 'content-type: application/json' -d '{"title":"비회원 비밀글","content":"<p>x</p>","isSecret":true,"guestName":"손님","guestPassword":"gs12345"}' | python3 -c "import sys,json;print(json.load(sys.stdin).get('id',''))")"
+GC='{"content":"비회원 댓글","guestName":"손님","guestPassword":"gs12345"}'
+check "비회원 비밀글에 비밀번호 없이 댓글을 달지 못한다" "$(code -X POST "$BD/posts/$GSP/comments" -H 'content-type: application/json' -d "$GC")" "403"
+contains "비밀번호를 대면 단다" "$(curl -s -X POST "$BD/posts/$GSP/comments?pw=gs12345" -H 'content-type: application/json' -d "$GC")" '"id"'
+# 게시판 읽기 권한 — 추천은 이것마저 보지 않았다
+printf '{"slug":"staffonly","title":"운영진 전용","read_role":"manager","write_role":"manager","comment_role":"manager","write_interval":0}' > "$TMP/staff.json"
+curl -s -o /dev/null -b "$ADMIN" -X POST "$BD/admin/boards" -H 'content-type: application/json' --data-binary "@$TMP/staff.json"
+STP="$(wpost "$ADMIN" staffonly "운영진 글")"
+[[ -n "$STP" ]] && ok "운영진 전용 게시판에 글을 쓴다" || bad "운영진 전용 게시판 준비"
+check "읽을 수 없는 게시판의 글은 추천하지 못한다" "$(code -b "$MEMBER" -X POST "$BD/posts/$STP/vote" -H 'content-type: application/json' -d '{"value":1}')" "403"
 # 삭제 단추의 data-delete-post 는 화면 스크립트에도 들어 있어(선택자) 단추가 있는지 가리지 못한다 — 그 글의 수정 링크로 본다
 contains "화면에도 수정 단추가 보인다 (집행과 같은 규칙)" "$(curl -s -b "$MOD" "$API/api/render/page?path=board/club/$CP1")" "/$CP1/edit\\\""
 absent "다른 회원의 화면에는 없다" "$(curl -s -b "$MEMBER" "$API/api/render/page?path=board/club/$CP1")" "/$CP1/edit\\\""

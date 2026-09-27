@@ -61,6 +61,25 @@ export default definePlugin(async (ctx) => {
 
   const db = ctx.db as Db;
 
+  /**
+   * 글 하나에 닿는 행동(댓글·추천·스크랩)의 공통 관문 — 글 읽기와 **같은** 규칙이다.
+   * 게시판 읽기 권한과 비밀글(작성자·운영진·그 게시판 관리자, 비회원 글은 `?pw`)을 본다.
+   * 전에는 댓글·스크랩이 게시판 읽기만 보고 추천은 그것마저 보지 않아, 읽지 못하는 글에
+   * 댓글을 달고(작성자에게 알림까지 갔다) 추천 수를 바꾸고 스크랩 목록에 제목을 담을 수 있었다.
+   */
+  const requireReadablePost = async (
+    req: { ip: string; query: Record<string, string | undefined> },
+    post: Record<string, unknown>,
+    user: SessionUser | null,
+    message: string,
+  ): Promise<SessionUser | null> => {
+    const actor = boardActor(user, await requireBoardRead(String(post.slug), user));
+    if (!(await canReadSecret(post as never, actor, req.query.pw, guestCheck(req, `post:${String(post.id)}`)))) {
+      throw new BoardError(403, message);
+    }
+    return actor;
+  };
+
   // 본인인증을 쓰는 곳 — 관리자 → 본인인증 화면이 목적별로 모은다
   ctx.registerIdentityPurpose({
     key: "board-cert",
@@ -468,7 +487,8 @@ export default definePlugin(async (ctx) => {
       captchaToken?: string; captchaAnswer?: string;
     };
     const { rows } = await db.execute(sql`
-      SELECT p.id, p.title, p.author_id, b.slug, b.title AS board_title, b.comment_role, b.notify_comment
+      SELECT p.id, p.title, p.author_id, p.is_secret, p.guest_password,
+             b.slug, b.title AS board_title, b.comment_role, b.notify_comment
       FROM board_posts p JOIN board_boards b ON b.id = p.board_id
       WHERE p.id = ${req.params.id}::uuid LIMIT 1
     `);
@@ -476,8 +496,8 @@ export default definePlugin(async (ctx) => {
     if (!post) throw new BoardError(404, "글을 찾을 수 없습니다.");
 
     const user = userOf(req);
-    await requireBoardRead(String(post.slug), user);
-    requireRole(user, String(post.comment_role), "act.comment");
+    const actor = await requireReadablePost(req, post, user, "비밀글입니다. 작성자만 댓글을 달 수 있습니다.");
+    requireRole(actor, String(post.comment_role), "act.comment");
     await requireCaptchaForGuest(user, body);
 
     // 댓글은 서식을 허용하지 않는다 — 평문으로 저장하고 렌더 시 이스케이프한다.
@@ -597,10 +617,12 @@ export default definePlugin(async (ctx) => {
     if (value !== 1 && value !== -1) throw new BoardError(400, "value는 1 또는 -1이어야 합니다.");
 
     const { rows } = await db.execute(sql`
-      SELECT p.id, b.allow_vote FROM board_posts p JOIN board_boards b ON b.id = p.board_id
+      SELECT p.id, p.author_id, p.is_secret, p.guest_password, b.slug, b.allow_vote
+      FROM board_posts p JOIN board_boards b ON b.id = p.board_id
       WHERE p.id = ${req.params.id}::uuid LIMIT 1
     `);
     if (!rows[0]) throw new BoardError(404, "글을 찾을 수 없습니다.");
+    await requireReadablePost(req, rows[0], user, "비밀글입니다. 작성자만 추천할 수 있습니다.");
     if (!rows[0].allow_vote) throw new BoardError(400, "이 게시판은 추천을 허용하지 않습니다.");
 
     // 1인 1표: 같은 값을 다시 누르면 취소, 다른 값이면 변경.
@@ -655,11 +677,12 @@ export default definePlugin(async (ctx) => {
 
     // 읽을 수 있는 글만 스크랩할 수 있다
     const { rows } = await db.execute(sql`
-      SELECT p.id, b.slug FROM board_posts p JOIN board_boards b ON b.id = p.board_id
+      SELECT p.id, p.author_id, p.is_secret, p.guest_password, b.slug
+      FROM board_posts p JOIN board_boards b ON b.id = p.board_id
       WHERE p.id = ${req.params.id}::uuid LIMIT 1
     `);
     if (!rows[0]) throw new BoardError(404, "글을 찾을 수 없습니다.");
-    await requireBoardRead(String(rows[0].slug), user);
+    await requireReadablePost(req, rows[0], user, "비밀글입니다. 작성자만 스크랩할 수 있습니다.");
 
     return db.transaction(async (tx) => {
       const { rows: existing } = await tx.execute(sql`
