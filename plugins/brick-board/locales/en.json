@@ -338,5 +338,6 @@
   "댓글이 달리면 원글 작성자(회원)에게, 답글이 달리면 그 댓글의 작성자(회원)에게 알립니다 (알림함·메일).": "Notifies the post's author (members) of new comments, and a comment's author (members) of replies to it (inbox and email).",
   "게시판 — 내 댓글에 답글": "Board — reply to my comment",
   "답글을 쓴 사람": "Replier",
-  "답글 앞부분 (비밀 답글·비밀글이면 내용 대신 표시)": "Start of the reply (a marker instead, for secret replies or secret posts)"
+  "답글 앞부분 (비밀 답글·비밀글이면 내용 대신 표시)": "Start of the reply (a marker instead, for secret replies or secret posts)",
+  "comment.deleted": "This comment was deleted."
 }

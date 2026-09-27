@@ -9,6 +9,7 @@ import {
 import { t } from "./i18n.js";
 import { hashGuestPassword, verifyGuestPassword } from "./guest.js";
 import { checkGuestSecret, fillTemplate } from "@brick/plugin-sdk";
+import { removeComments } from "./comments.js";
 import { assertCanModify, boardActor, canModifyPost, canReadSecret, canSeeSecretComment, checkWriteInterval, loadBoard, requireCert, requireRole, type IdentityOf } from "./access.js";
 import { attachFiles, claimDownload, deleteAttachments, listAttachments } from "./attachments.js";
 import { createPost, isBlankContent, listPosts, normalizeLinks, refreshThumb, type WritePostInput } from "./posts.js";
@@ -297,7 +298,7 @@ export default definePlugin(async (ctx) => {
     const [attachments, comments] = await Promise.all([
       listAttachments(db, String(post.id)),
       db.execute(sql`
-        SELECT id, parent_id, author_id, author_name, content, is_secret, depth, created_at
+        SELECT id, parent_id, author_id, author_name, content, is_secret, depth, created_at, deleted_at IS NOT NULL AS deleted
         FROM board_comments WHERE post_id = ${String(post.id)}::uuid ORDER BY created_at
       `).then((r) => r.rows),
     ]);
@@ -325,10 +326,12 @@ export default definePlugin(async (ctx) => {
       post: { ...safe, view_count: Number(post.view_count) + 1 },
       attachments,
       comments: comments.map((c) =>
-        // 비밀댓글은 읽을 수 있는 사람만 내용을 본다 (화면과 같은 함수)
-        !canSeeSecretComment(c, post, user, (id) => commentAuthor.get(id))
-          ? { ...c, content: "비밀 댓글입니다." }
-          : c,
+        c.deleted
+          ? { ...c, content: "삭제된 댓글입니다." }
+          : // 비밀댓글은 읽을 수 있는 사람만 내용을 본다 (화면과 같은 함수)
+            !canSeeSecretComment(c, post, user, (id) => commentAuthor.get(id))
+            ? { ...c, content: "비밀 댓글입니다." }
+            : c,
       ),
       myVote,
       scrapped,
@@ -543,7 +546,8 @@ export default definePlugin(async (ctx) => {
     let parentAuthor: string | null = null;
     if (body.parentId) {
       const { rows: parent } = await db.execute(sql`
-        SELECT depth, author_id FROM board_comments WHERE id = ${body.parentId}::uuid AND post_id = ${String(post.id)}::uuid
+        SELECT depth, author_id FROM board_comments
+        WHERE id = ${body.parentId}::uuid AND post_id = ${String(post.id)}::uuid AND deleted_at IS NULL
       `);
       if (!parent[0]) throw new BoardError(404, "부모 댓글을 찾을 수 없습니다.");
       depth = Math.min(3, Number(parent[0].depth) + 1);
@@ -626,19 +630,13 @@ export default definePlugin(async (ctx) => {
     const { rows } = await db.execute(sql`
       SELECT c.id, c.post_id, c.author_id, c.guest_password, p.board_id FROM board_comments c
       JOIN board_posts p ON p.id = c.post_id
-      WHERE c.id = ${req.params.id}::uuid LIMIT 1
+      WHERE c.id = ${req.params.id}::uuid AND c.deleted_at IS NULL LIMIT 1
     `);
     const comment = rows[0];
     if (!comment) throw new BoardError(404, "댓글을 찾을 수 없습니다.");
     await assertCanModify(comment as never, await actorOnBoard(userOf(req), comment.board_id), body.guestPassword ?? req.query.pw, guestCheck(req, `comment:${req.params.id}`));
 
-    await db.transaction(async (tx) => {
-      await tx.execute(sql`DELETE FROM board_comments WHERE id = ${req.params.id}::uuid`);
-      await tx.execute(sql`
-        UPDATE board_posts SET comment_count = greatest(0, comment_count - 1)
-        WHERE id = ${String(comment.post_id)}::uuid
-      `);
-    });
+    await db.transaction((tx) => removeComments(tx, [req.params.id]));
     return { ok: true };
   });
 
@@ -1216,10 +1214,12 @@ ${items}
           DELETE FROM board_posts WHERE author_id = ${userId}::uuid RETURNING id
         `);
         if (posts.length) done.push(`게시글 ${posts.length}건 삭제`);
-        const { rows: cmts } = await tx.execute(sql`
-          DELETE FROM board_comments WHERE author_id = ${userId}::uuid RETURNING id
+        // 남의 글에 단 댓글 — 그 아래 남이 단 답글은 남긴다(자리만 남는다)
+        const { rows: mine } = await tx.execute(sql`
+          SELECT id FROM board_comments WHERE author_id = ${userId}::uuid AND deleted_at IS NULL
         `);
-        if (cmts.length) done.push(`댓글 ${cmts.length}건 삭제`);
+        const removed = await removeComments(tx, mine.map((r) => String(r.id)));
+        if (removed) done.push(`댓글 ${removed}건 삭제`);
       } else {
         const { rows: posts } = await tx.execute(sql`
           UPDATE board_posts SET author_id = NULL, author_name = '탈퇴한 회원'

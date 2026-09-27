@@ -788,6 +788,31 @@ R="$(curl -s -b "$THIRD" "$BD/posts/$CP1")"
 [[ "$R" == *'"id":"'"$SQ"'"'* && "$R" != *"비밀 질문 0101"* && "$R" != *"비밀 답변 7777"* ]] && ok "다른 회원에게는 둘 다 가려진다" || bad "다른 회원의 비밀댓글 (${R:0:160})"
 R="$(curl -s -b "$THIRD" "$API/api/render/page?path=board/club/$CP1")"
 [[ "$R" == *"data-id=\\\"$SQ\\\""* && "$R" != *"비밀 질문 0101"* && "$R" != *"비밀 답변 7777"* ]] && ok "화면에서도 가려진다" || bad "다른 회원의 화면 (${R:0:160})"
+# 답글이 달린 댓글을 지우면 — 전에는 CASCADE 가 남이 단 답글까지 지웠고 댓글 수는 하나만 줄었다
+CP3="$(wpost "$WRITER" club "댓글 삭제 시험")"
+ccmt() {  # ccmt <쿠키> <내용> [부모] → 댓글 id
+  local body; body="$(printf '{"content":"%s","parentId":%s}' "$2" "${3:-null}")"
+  curl -s -b "$1" -X POST "$BD/posts/$CP3/comments" -H 'content-type: application/json' -d "$body" | python3 -c "import sys,json;print(json.load(sys.stdin).get('id',''))"
+}
+cstate() {  # 댓글 수 | 댓글마다 내용
+  curl -s -b "$WRITER" "$BD/posts/$CP3" | python3 -c "import sys,json;d=json.load(sys.stdin);print(str(d['post']['comment_count'])+'|'+','.join(c['content'] for c in d['comments']))"
+}
+K1="$(ccmt "$MEMBER" "질문 하나")"; K2="$(ccmt "$WRITER" "글쓴이 답" "\"$K1\"")"; K3="$(ccmt "$MEMBER" "고맙습니다" "\"$K2\"")"
+[[ -n "$K1" && -n "$K2" && -n "$K3" ]] && ok "댓글·답글·답글의 답글을 단다" || bad "댓글 사슬 준비 ($K1/$K2/$K3)"
+check "지울 수 있다" "$(code -b "$MEMBER" -X DELETE "$BD/comments/$K1")" "200"
+check "남이 단 답글은 남고, 지운 댓글은 자리만 남는다 (댓글 수는 실제와 같다)" "$(cstate)" "2|삭제된 댓글입니다.,글쓴이 답,고맙습니다"
+check "지운 자리에는 작성자가 남지 않는다" "$(curl -s -b "$WRITER" "$BD/posts/$CP3" | K="$K1" python3 -c "import sys,json,os;c=next(c for c in json.load(sys.stdin)['comments'] if c['id']==os.environ['K']);print(repr(c['author_name'])+' '+repr(c['author_id']))")" "'' None"
+R="$(curl -s -b "$THIRD" "$API/api/render/page?path=board/club/$CP3")"
+[[ "$R" == *"삭제된 댓글입니다."* && "$R" == *"글쓴이 답"* && "$R" != *"질문 하나"* ]] && ok "화면에도 자리와 답글이 보인다" || bad "지운 댓글 화면 (${R:0:160})"
+RB="$(printf '{"content":"x","parentId":"%s"}' "$K1")"
+check "지운 자리에는 답글을 달 수 없다" "$(code -b "$THIRD" -X POST "$BD/posts/$CP3/comments" -H 'content-type: application/json' -d "$RB")" "404"
+check "지운 댓글을 다시 지우면 없는 댓글이다" "$(code -b "$MEMBER" -X DELETE "$BD/comments/$K1")" "404"
+check "가운데 답글을 지워도 아래 답글은 남는다" "$(code -b "$WRITER" -X DELETE "$BD/comments/$K2"; echo; cstate)" "$(printf '200\n1|삭제된 댓글입니다.,삭제된 댓글입니다.,고맙습니다')"
+check "마지막 답글을 지우면 위의 빈 자리도 함께 사라진다" "$(code -b "$MEMBER" -X DELETE "$BD/comments/$K3"; echo; cstate)" "$(printf '200\n0|')"
+# 탈퇴하며 글을 지워도 — 남이 단 답글은 남고, 댓글 수는 줄어든다(전에는 줄지 않았다)
+T1="$(ccmt "$THIRD" "떠날 사람의 댓글")"; ccmt "$WRITER" "남는 답글" "\"$T1\"" >/dev/null; ccmt "$THIRD" "떠날 사람의 다른 댓글" >/dev/null
+contains "탈퇴 (글도 지운다)" "$(curl -s -b "$THIRD" -X POST "$API/api/me/withdraw" -H 'content-type: application/json' -d '{"password":"memberpass1","deletePosts":true}')" '"ok":true'
+check "남이 단 답글은 남고 댓글 수가 맞다" "$(cstate)" "1|삭제된 댓글입니다.,남는 답글"
 # 삭제 단추의 data-delete-post 는 화면 스크립트에도 들어 있어(선택자) 단추가 있는지 가리지 못한다 — 그 글의 수정 링크로 본다
 contains "화면에도 수정 단추가 보인다 (집행과 같은 규칙)" "$(curl -s -b "$MOD" "$API/api/render/page?path=board/club/$CP1")" "/$CP1/edit\\\""
 absent "다른 회원의 화면에는 없다" "$(curl -s -b "$MEMBER" "$API/api/render/page?path=board/club/$CP1")" "/$CP1/edit\\\""

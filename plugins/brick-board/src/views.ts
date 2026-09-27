@@ -434,7 +434,7 @@ ${imageFiles.map((f) => `    <figure><img src="${escapeHtml(f.url)}" alt="${esca
   </div>`;
   const { rows: comments } = await db.execute(sql`
     SELECT c.id, c.parent_id, c.author_id, c.author_name, c.content, c.is_secret, c.depth, c.created_at,
-           u.avatar_url AS author_avatar
+           c.deleted_at IS NOT NULL AS deleted, u.avatar_url AS author_avatar
     FROM board_comments c LEFT JOIN users u ON u.id = c.author_id
     WHERE c.post_id = ${postId}::uuid ORDER BY c.created_at
   `);
@@ -473,6 +473,12 @@ ${listedFiles
     .map((c) => {
       const hidden = !canSeeSecretComment(c, post, ctx.user as never, (id) => commentAuthor.get(id));
       const own = Boolean(ctx.user && ctx.user.id === c.author_id) || isManager || !c.author_id;
+      // 지운 댓글의 자리 — 아래 달린 답글이 무엇에 대한 것인지 흐름만 남긴다(작성자·단추 없음)
+      if (c.deleted) {
+        return `    <li class="brick-comment brick-comment-deleted" style="--d:${Math.min(3, Number(c.depth ?? 0))}" data-id="${escapeHtml(c.id)}">
+      <div class="brick-comment-body"><em class="brick-hidden">${escapeHtml(t("comment.deleted"))}</em></div>
+    </li>`;
+      }
       return `    <li class="brick-comment" style="--d:${Math.min(3, Number(c.depth ?? 0))}" data-id="${escapeHtml(c.id)}">
       <div class="brick-comment-head">
         ${authorChip(c.author_name, c.author_id, c.author_avatar)}
