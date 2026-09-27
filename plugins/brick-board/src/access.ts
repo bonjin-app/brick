@@ -198,6 +198,25 @@ export async function assertCanModify(
 }
 
 /**
+ * 비밀댓글을 읽을 수 있는 사람 — 댓글 작성자, **원글 작성자**(비밀댓글은 대개 글쓴이에게 하는 말이다:
+ * 연락처·주문 문의), 답글이면 **부모 댓글 작성자**(비밀 답글을 받는 사람), 운영진(그 게시판 관리자 포함 —
+ * 호출하는 쪽이 게시판이 보는 사용자를 넘긴다). 전에는 댓글 작성자와 운영진만 읽어, 글쓴이가 자기 글에
+ * 달린 비밀댓글을 읽지 못하고 질문자도 비밀 답글을 읽지 못했다. API 와 화면이 이 함수 하나를 쓴다.
+ */
+export function canSeeSecretComment(
+  comment: Record<string, unknown>, // is_secret · author_id · parent_id
+  post: Record<string, unknown>, // author_id
+  user: SessionUser | null,
+  authorOf: (commentId: string) => unknown,
+): boolean {
+  if (!comment.is_secret) return true;
+  if (hasRole(user, "manager")) return true;
+  if (!user) return false;
+  if (user.id === comment.author_id || user.id === post.author_id) return true;
+  return Boolean(comment.parent_id) && user.id === authorOf(String(comment.parent_id));
+}
+
+/**
  * 비밀글 열람 권한.
  * 작성자·manager 이상만 볼 수 있다. 비회원 비밀글은 비밀번호로 확인한다.
  */

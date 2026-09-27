@@ -711,13 +711,13 @@ check "잠긴 동안은 맞는 비밀번호도 시험할 수 없다 (아니면 �
 
 
 echo "── 게시판 관리자 (이 게시판만 맡긴 회원 — 그누보드 bo_admin)"
-for u in mod writer; do
+for u in mod writer third; do
   printf '{"email":"%s@bd.test","password":"memberpass1","agreements":{"terms":true,"privacy":true},"displayName":"%s"}' "$u" "$u" > "$TMP/reg-$u.json"
   jpost "$API/api/register" "$TMP/reg-$u.json" >/dev/null
   printf '{"email":"%s@bd.test","password":"memberpass1"}' "$u" > "$TMP/l-$u.json"
   curl -s -c "$TMP/$u.txt" -X POST "$API/api/auth/login" -H 'content-type: application/json' --data-binary "@$TMP/l-$u.json" >/dev/null
 done
-MOD="$TMP/mod.txt"; WRITER="$TMP/writer.txt"
+MOD="$TMP/mod.txt"; WRITER="$TMP/writer.txt"; THIRD="$TMP/third.txt"
 club_body() { printf '{"slug":"club","title":"동호회","read_role":"member","write_role":"member","comment_role":"member","download_role":"member","write_interval":0%s}' "$1"; }
 R="$(curl -s -b "$ADMIN" -w ' %{http_code}' -X POST "$BD/admin/boards" -H 'content-type: application/json' -d "$(club_body ',"moderators":"nobody@bd.test"')")"
 [[ "$R" == *" 400" && "$R" == *"nobody@bd.test"* ]] && ok "없는 회원은 무엇이 틀렸는지 말하고 거절" || bad "없는 회원 지정 (${R:0:160})"
@@ -775,6 +775,19 @@ curl -s -o /dev/null -b "$ADMIN" -X POST "$BD/admin/boards" -H 'content-type: ap
 STP="$(wpost "$ADMIN" staffonly "운영진 글")"
 [[ -n "$STP" ]] && ok "운영진 전용 게시판에 글을 쓴다" || bad "운영진 전용 게시판 준비"
 check "읽을 수 없는 게시판의 글은 추천하지 못한다" "$(code -b "$MEMBER" -X POST "$BD/posts/$STP/vote" -H 'content-type: application/json' -d '{"value":1}')" "403"
+# 비밀댓글은 글쓴이에게 하는 말이다 — 원글 작성자와 (비밀 답글이면) 부모 댓글 작성자도 읽는다. 전에는 댓글 작성자와 운영진만 읽었다
+SQ="$(curl -s -b "$MEMBER" -X POST "$BD/posts/$CP1/comments" -H 'content-type: application/json' -d '{"content":"비밀 질문 0101","isSecret":true}' | python3 -c "import sys,json;print(json.load(sys.stdin).get('id',''))")"
+SA_BODY="$(printf '{"content":"비밀 답변 7777","isSecret":true,"parentId":"%s"}' "$SQ")"
+SA="$(curl -s -b "$WRITER" -X POST "$BD/posts/$CP1/comments" -H 'content-type: application/json' -d "$SA_BODY" | python3 -c "import sys,json;print(json.load(sys.stdin).get('id',''))")"
+[[ -n "$SQ" && -n "$SA" ]] && ok "비밀 질문과 비밀 답글을 단다" || bad "비밀댓글 준비 ($SQ/$SA)"
+contains "원글 작성자는 자기 글의 비밀댓글을 읽는다" "$(curl -s -b "$WRITER" "$BD/posts/$CP1")" "비밀 질문 0101"
+contains "화면에서도 읽는다 (API 와 같은 규칙)" "$(curl -s -b "$WRITER" "$API/api/render/page?path=board/club/$CP1")" "비밀 질문 0101"
+contains "질문한 사람은 비밀 답글을 읽는다" "$(curl -s -b "$MEMBER" "$BD/posts/$CP1")" "비밀 답변 7777"
+contains "게시판 관리자도 읽는다" "$(curl -s -b "$MOD" "$BD/posts/$CP1")" "비밀 답변 7777"
+R="$(curl -s -b "$THIRD" "$BD/posts/$CP1")"
+[[ "$R" == *'"id":"'"$SQ"'"'* && "$R" != *"비밀 질문 0101"* && "$R" != *"비밀 답변 7777"* ]] && ok "다른 회원에게는 둘 다 가려진다" || bad "다른 회원의 비밀댓글 (${R:0:160})"
+R="$(curl -s -b "$THIRD" "$API/api/render/page?path=board/club/$CP1")"
+[[ "$R" == *"data-id=\\\"$SQ\\\""* && "$R" != *"비밀 질문 0101"* && "$R" != *"비밀 답변 7777"* ]] && ok "화면에서도 가려진다" || bad "다른 회원의 화면 (${R:0:160})"
 # 삭제 단추의 data-delete-post 는 화면 스크립트에도 들어 있어(선택자) 단추가 있는지 가리지 못한다 — 그 글의 수정 링크로 본다
 contains "화면에도 수정 단추가 보인다 (집행과 같은 규칙)" "$(curl -s -b "$MOD" "$API/api/render/page?path=board/club/$CP1")" "/$CP1/edit\\\""
 absent "다른 회원의 화면에는 없다" "$(curl -s -b "$MEMBER" "$API/api/render/page?path=board/club/$CP1")" "/$CP1/edit\\\""

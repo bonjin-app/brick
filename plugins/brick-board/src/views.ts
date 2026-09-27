@@ -11,7 +11,7 @@ function extraOf(post: Record<string, unknown>): Record<string, unknown> {
   return raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
 }
 import { t } from "./i18n.js";
-import { canModifyPost } from "./access.js";
+import { canModifyPost, canSeeSecretComment } from "./access.js";
 
 /**
  * 게시판 화면 렌더 — 목록 / 상세 / 글쓰기.
@@ -468,9 +468,10 @@ ${listedFiles
     : "";
 
   const canComment = hasRole(ctx.user, board.comment_role);
+  const commentAuthor = new Map(comments.map((c) => [String(c.id), c.author_id]));
   const commentsHtml = comments
     .map((c) => {
-      const hidden = c.is_secret && !isManager && !(ctx.user && ctx.user.id === c.author_id);
+      const hidden = !canSeeSecretComment(c, post, ctx.user as never, (id) => commentAuthor.get(id));
       const own = Boolean(ctx.user && ctx.user.id === c.author_id) || isManager || !c.author_id;
       return `    <li class="brick-comment" style="--d:${Math.min(3, Number(c.depth ?? 0))}" data-id="${escapeHtml(c.id)}">
       <div class="brick-comment-head">

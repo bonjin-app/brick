@@ -9,7 +9,7 @@ import {
 import { t } from "./i18n.js";
 import { hashGuestPassword, verifyGuestPassword } from "./guest.js";
 import { checkGuestSecret, fillTemplate } from "@brick/plugin-sdk";
-import { assertCanModify, boardActor, canModifyPost, canReadSecret, checkWriteInterval, loadBoard, requireCert, requireRole, type IdentityOf } from "./access.js";
+import { assertCanModify, boardActor, canModifyPost, canReadSecret, canSeeSecretComment, checkWriteInterval, loadBoard, requireCert, requireRole, type IdentityOf } from "./access.js";
 import { attachFiles, claimDownload, deleteAttachments, listAttachments } from "./attachments.js";
 import { createPost, isBlankContent, listPosts, normalizeLinks, refreshThumb, type WritePostInput } from "./posts.js";
 import { sanitizeHtml, toPlainText } from "./sanitize.js";
@@ -299,12 +299,13 @@ export default definePlugin(async (ctx) => {
 
     // 비밀번호 해시는 절대 응답에 넣지 않는다
     const { guest_password: _pw, ...safe } = post as Record<string, unknown>;
+    const commentAuthor = new Map(comments.map((c) => [String(c.id), c.author_id]));
     return {
       post: { ...safe, view_count: Number(post.view_count) + 1 },
       attachments,
       comments: comments.map((c) =>
-        // 비밀댓글은 작성자·관리자만 내용을 본다
-        c.is_secret && !hasRole(user, "manager") && !(user && user.id === c.author_id)
+        // 비밀댓글은 읽을 수 있는 사람만 내용을 본다 (화면과 같은 함수)
+        !canSeeSecretComment(c, post, user, (id) => commentAuthor.get(id))
           ? { ...c, content: "비밀 댓글입니다." }
           : c,
       ),
@@ -550,7 +551,8 @@ export default definePlugin(async (ctx) => {
     });
     /**
      * 댓글 알림 — 원글 작성자(회원)에게. 자기 글에 자기가 단 댓글은 알리지 않는다.
-     * 비밀댓글이라도 "댓글이 달렸다"는 사실은 작성자가 볼 수 있으므로 내용을 빼고 알린다.
+     * 비밀댓글은 원글 작성자가 사이트에서 읽을 수 있지만(canSeeSecretComment), 메일은 사이트 밖으로
+     * 나가므로 내용을 빼고 "댓글이 달렸다" 는 사실만 알린다.
      *
      * `ctx.notify` 는 메일과 **사이트 안 알림함** 두 곳으로 간다. 메일만 보내던
      * 시절에는 SMTP 가 없는 사이트에서(기본값이다) 이 알림이 통째로 사라졌다 —
