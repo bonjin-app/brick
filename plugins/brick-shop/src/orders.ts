@@ -3,7 +3,7 @@ import { josa } from "@brick/plugin-sdk";
 import { uuidv7 } from "uuidv7";
 import type { Db, OrderStatus, ShopSettings } from "./types.js";
 import { ShopError, STATUS_LABEL, STATUS_TRANSITIONS, STOCK_RESTORING } from "./types.js";
-import { quote, type Quote } from "./pricing.js";
+import { assertCouponMemberUse, quote, type Quote } from "./pricing.js";
 import { t, localeTag, label, withJosa } from "./i18n.js";
 import { isKnownPaymentMethod } from "./gateway-registry.js";
 
@@ -166,6 +166,21 @@ export async function createOrder(
         RETURNING id
       `);
       if (!rows.length) throw new ShopError(400, "쿠폰을 사용할 수 없습니다. 한도가 소진되었을 수 있습니다.");
+
+      /*
+       * 회원별 조건(1인당 한도·첫 구매)을 **회원별 잠금 뒤에** 다시 본다. 견적은 트랜잭션 밖이라, 같은 회원의
+       * 동시 주문 둘이 모두 "아직 쓴 적 없음" 을 보고 통과했다. 잠금은 트랜잭션이 끝날 때 풀리고, 기다린 쪽의
+       * 다음 문장은 새 스냅샷에서 먼저 간 주문을 본다. 첫 구매는 쿠폰이 달라도 걸리므로 쿠폰 행이 아니라 회원을 잠근다.
+       */
+      if (params.userId) {
+        const { rows: rule } = await tx.execute(sql`
+          SELECT code, per_user_limit, first_purchase_only FROM shop_coupons WHERE id = ${String(rows[0].id)}::uuid
+        `);
+        if (rule[0] && (rule[0].per_user_limit !== null || rule[0].first_purchase_only === true)) {
+          await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`shop-coupon-member:${params.userId}`}))`);
+          await assertCouponMemberUse(tx, rule[0], params.userId);
+        }
+      }
 
       /*
        * 발급형 쿠폰은 쿠폰함의 한 장을 소비한다 — 동시 주문에서도 **한 번만**.

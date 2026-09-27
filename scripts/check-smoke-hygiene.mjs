@@ -31,6 +31,8 @@
  * ── 5. 인자로 넘기는 "$(…)" 안에 쉼표 JSON 을 쓰지 않았는가 (bash 3.2 중괄호 확장 — 아래)
  *
  * ── 6. pipefail 아래에서 `| head` 로 파이프를 먼저 닫지 않았는가 (아래)
+ *
+ * ── 7. 인자 없는 `wait` 를 쓰지 않았는가 (아래)
  */
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -196,6 +198,22 @@ for (const name of readdirSync(join(ROOT, "scripts"))) {
     checked++;
     bad.push([`scripts/${name}:${i + 1}`, "| head",
       "pipefail 아래에서 head 가 파이프를 먼저 닫으면 앞 명령이 SIGPIPE 로 죽고 set -e 가 수트를 조용히 끝냅니다 (sed -n 1p 를 쓰세요)"]);
+  });
+}
+
+/*
+ * 7. 인자 없는 **`wait`** — 수트는 자기 API 서버를 `&` 로 띄워 둔다. 동시 요청 몇 개를 띄우고 `wait` 하면
+ * 그 서버가 끝나기를 **영원히** 기다린다(쿠폰 동시 주문 검사가 그렇게 10분을 넘겨 멈췄다 — 요청은 모두 끝났는데
+ * 결과 줄이 나오지 않는다). 띄운 것의 pid 를 모아 `wait "$pid"` 로 기다린다.
+ */
+for (const name of readdirSync(join(ROOT, "scripts"))) {
+  if (!name.startsWith("smoke-") || !name.endsWith(".sh")) continue;
+  readFileSync(join(ROOT, "scripts", name), "utf8").split("\n").forEach((line, i) => {
+    if (/^\s*#/.test(line)) return;
+    if (!/(^|[;&|]\s*|\s)wait\s*($|;|&&|\|\|)/.test(line)) return;
+    checked++;
+    bad.push([`scripts/${name}:${i + 1}`, "wait",
+      "인자 없는 wait 는 수트가 띄운 API 서버까지 기다려 끝나지 않습니다 (띄운 것의 pid 를 wait 하세요)"]);
   });
 }
 

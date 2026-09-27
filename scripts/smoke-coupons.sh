@@ -147,6 +147,51 @@ contains "결제 이력이 생기면 거절" "$(order_with "$C2" "WELCOME")" "�
 Q1W="$(quote_with "$C1" "WELCOME")"
 check "결제 이력 없는 c1 은 사용 가능" "$(echo "$Q1W" | jq_get "['couponDiscount']")" "2000"
 contains "비회원은 로그인 안내" "$(order_with - "WELCOME")" "로그인 후"
+echo "── 첫 구매 쿠폰은 입금 대기 주문으로 두 번 쓸 수 없다 (결제 이력만 세던 구멍)"
+W1="$(order_with "$C1" "WELCOME" | jq_get "['orderNo']")"
+[[ -n "$W1" ]] && ok "첫 구매 쿠폰으로 주문한다 (아직 입금 전)" || bad "첫 구매 쿠폰 주문"
+contains "입금 전이어도 같은 회원의 두 번째 사용은 거절" "$(order_with "$C1" "WELCOME")" "첫 구매 고객만"
+psql_q "UPDATE shop_orders SET status='cancelled' WHERE order_no='$W1'" >/dev/null
+W2="$(order_with "$C1" "WELCOME" | jq_get "['orderNo']")"
+[[ -n "$W2" ]] && ok "앞의 주문이 취소되면 다시 쓴다" || bad "취소 후 첫 구매 쿠폰"
+psql_q "UPDATE shop_orders SET status='cancelled' WHERE order_no='$W2'" >/dev/null
+
+echo "── 1인당 한도는 동시 주문에도 지켜진다 (견적 단계에서만 세던 구멍)"
+curl -s -b "$CK" -X POST "$SHOP/admin/coupons" -H 'content-type: application/json' \
+  -d '{"code":"RACEONE","name":"동시 시험","discount_type":"fixed","discount_value":1000,"per_user_limit":1}' >/dev/null
+printf '{"items":[{"productId":"%s","quantity":1}],"couponCode":"RACEONE","orderer":{"ordererName":"손님","ordererPhone":"010-1111-2222","postcode":"06236","address1":"서울"}}' "$P" > "$TMP/race.json"
+# 띄운 curl 만 기다린다 — 인자 없는 wait 는 이 수트가 띄운 API 서버까지 기다려 끝나지 않는다
+CPN_PIDS=""
+for i in 1 2 3 4 5 6; do
+  curl -s --max-time 30 -o "$TMP/race-$i.out" -b "$C2" -X POST "$SHOP/orders" -H 'content-type: application/json' --data-binary "@$TMP/race.json" &
+  CPN_PIDS="$CPN_PIDS $!"
+done
+for pid in $CPN_PIDS; do wait "$pid" || true; done
+check "여섯 건을 동시에 넣어도 한 건만 쿠폰을 쓴다" \
+  "$(psql_q "SELECT count(*) FROM shop_orders o JOIN users u ON u.id = o.user_id WHERE u.email='c2@cp.test' AND o.coupon_code='RACEONE' AND o.status <> 'cancelled'")" "1"
+# 응답에는 줄바꿈이 없다 — 이어 붙이면 한 줄이 되므로 줄이 아니라 나온 횟수를 센다
+N_LIMIT="$(cat "$TMP"/race-*.out | { grep -o "1인당 사용 한도" || true; } | wc -l | tr -d ' ')"
+[[ "$N_LIMIT" == "5" ]] && ok "나머지는 한도를 말하고 거절된다" || bad "나머지 다섯 건 ($N_LIMIT건만 한도 거절: $(cat "$TMP"/race-*.out | cut -c1-120 | tr '\n' ' '))"
+# 첫 구매 쿠폰이 둘이면 쿠폰 행 잠금으로는 줄이 서지 않는다 — 회원을 잠가야 한 건만 통과한다.
+# 재고가 없는(무제한) 상품으로 한다: 같은 상품의 재고 차감이 행을 잠가 우연히 줄을 세우면 이 검사는 헛돈다
+PU="$(curl -s -b "$CK" -X POST "$SHOP/admin/products" -H 'content-type: application/json' \
+  -d '{"slug":"cp-unlimited","name":"재고 무제한 상품","price":10000,"status":"selling"}' | jq_get "['id']")"
+[[ -n "$PU" ]] && ok "재고 무제한 상품 등록" || bad "재고 무제한 상품 등록"
+curl -s -b "$CK" -X POST "$SHOP/admin/coupons" -H 'content-type: application/json' \
+  -d '{"code":"WELCOME2","name":"앱 첫 구매","discount_type":"fixed","discount_value":1500,"first_purchase_only":true}' >/dev/null
+FP_PIDS=""
+for i in 1 2 3 4 5 6; do
+  code_i="WELCOME"; [[ $((i % 2)) -eq 0 ]] && code_i="WELCOME2"
+  printf '{"items":[{"productId":"%s","quantity":1}],"couponCode":"%s","orderer":{"ordererName":"손님","ordererPhone":"010-1111-2222","postcode":"06236","address1":"서울"}}' "$PU" "$code_i" > "$TMP/fp-$i.json"
+done
+for i in 1 2 3 4 5 6; do
+  curl -s --max-time 30 -o "$TMP/fp-$i.out" -b "$C1" -X POST "$SHOP/orders" -H 'content-type: application/json' --data-binary "@$TMP/fp-$i.json" &
+  FP_PIDS="$FP_PIDS $!"
+done
+for pid in $FP_PIDS; do wait "$pid" || true; done
+check "서로 다른 첫 구매 쿠폰 둘을 동시에 써도 한 건만 통과한다" \
+  "$(psql_q "SELECT count(*) FROM shop_orders o JOIN users u ON u.id = o.user_id WHERE u.email='c1@cp.test' AND o.coupon_code IN ('WELCOME','WELCOME2') AND o.status <> 'cancelled'")" "1"
+psql_q "UPDATE shop_orders SET status='cancelled' WHERE coupon_code IN ('WELCOME','WELCOME2') AND user_id = (SELECT id FROM users WHERE email='c1@cp.test')" >/dev/null
 
 echo "══ 등급 전용 ══"
 curl -s -b "$CK" -X POST "$SHOP/admin/grades" -H 'content-type: application/json' \

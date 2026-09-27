@@ -294,6 +294,45 @@ function calcShipping(lines: PricedLine[], amountAfterDiscount: number, settings
   return Math.max(0, Math.floor(settings.shippingFee));
 }
 
+/**
+ * 쿠폰의 회원별 조건 — 1인당 한도 · 첫 구매 전용. 견적에서 한 번, **주문 트랜잭션 안에서 회원별 잠금을
+ * 건 뒤** 한 번 더 부른다(orders.ts). 견적에서만 보면 같은 회원이 두 주문을 동시에 넣을 때 둘 다 아직
+ * 이력이 없어 통과한다.
+ *
+ * 첫 구매는 결제된 주문이 없는 것 — 그리고 **첫 구매 쿠폰을 이미 쓴, 취소되지 않은 주문**도 없는 것이다.
+ * 결제된 주문만 셌더니, 입금 대기 주문에 첫 구매 쿠폰을 쓰고 곧바로 다음 주문에도 쓸 수 있었다(동시일 필요도
+ * 없다 — 둘 다 입금하면 둘 다 할인). 쿠폰 없이 넣어 둔 입금 대기 주문은 막지 않는다(그 손님은 아직 첫 구매다).
+ * 앞의 주문이 취소되면 다시 쓸 수 있다.
+ */
+export async function assertCouponMemberUse(
+  db: Pick<Db, "execute">,
+  c: Record<string, unknown>, // code · per_user_limit · first_purchase_only
+  userId: string,
+): Promise<void> {
+  if (c.per_user_limit !== null && c.per_user_limit !== undefined) {
+    // 별도 카운터가 아니라 주문 이력으로 센다 — 카운터는 취소 때 되돌리는 것을
+    // 잊는 순간부터 어긋난다. 취소된 주문은 사용으로 치지 않는다.
+    const { rows: used } = await db.execute(sql`
+      SELECT count(*) AS n FROM shop_orders
+      WHERE user_id = ${userId}::uuid AND upper(coupon_code) = ${String(c.code).toUpperCase()}
+        AND status <> 'cancelled'
+    `);
+    if (Number(used[0]?.n ?? 0) >= Number(c.per_user_limit)) {
+      throw new ShopError(400, "이 쿠폰의 1인당 사용 한도를 모두 사용하셨습니다.");
+    }
+  }
+  if (c.first_purchase_only === true) {
+    const { rows: bought } = await db.execute(sql`
+      SELECT 1 FROM shop_orders o
+      WHERE o.user_id = ${userId}::uuid AND (o.paid_at IS NOT NULL OR (o.status <> 'cancelled' AND EXISTS (
+        SELECT 1 FROM shop_coupons k WHERE upper(k.code) = upper(o.coupon_code) AND k.first_purchase_only = true
+      )))
+      LIMIT 1
+    `);
+    if (bought.length) throw new ShopError(400, "첫 구매 고객만 사용할 수 있는 쿠폰입니다.");
+  }
+}
+
 /** 쿠폰 검증 및 할인액 계산 */
 async function applyCoupon(
   db: Db,
@@ -324,26 +363,7 @@ async function applyCoupon(
     throw new ShopError(401, "로그인 후 사용할 수 있는 쿠폰입니다.");
   }
 
-  if (userId && c.per_user_limit !== null) {
-    // 별도 카운터가 아니라 주문 이력으로 센다 — 카운터는 취소 때 되돌리는 것을
-    // 잊는 순간부터 어긋난다. 취소된 주문은 사용으로 치지 않는다.
-    const { rows: used } = await db.execute(sql`
-      SELECT count(*) AS n FROM shop_orders
-      WHERE user_id = ${userId}::uuid AND upper(coupon_code) = ${trimmed}
-        AND status <> 'cancelled'
-    `);
-    if (Number(used[0]?.n ?? 0) >= Number(c.per_user_limit)) {
-      throw new ShopError(400, "이 쿠폰의 1인당 사용 한도를 모두 사용하셨습니다.");
-    }
-  }
-
-  if (userId && c.first_purchase_only === true) {
-    const { rows: paid } = await db.execute(sql`
-      SELECT 1 FROM shop_orders
-      WHERE user_id = ${userId}::uuid AND paid_at IS NOT NULL LIMIT 1
-    `);
-    if (paid.length) throw new ShopError(400, "첫 구매 고객만 사용할 수 있는 쿠폰입니다.");
-  }
+  if (userId) await assertCouponMemberUse(db, c, userId);
 
   if (userId && c.grade_id !== null) {
     const { rows: g } = await db.execute(sql`
