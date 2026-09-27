@@ -813,6 +813,31 @@ check "마지막 답글을 지우면 위의 빈 자리도 함께 사라진다" "
 T1="$(ccmt "$THIRD" "떠날 사람의 댓글")"; ccmt "$WRITER" "남는 답글" "\"$T1\"" >/dev/null; ccmt "$THIRD" "떠날 사람의 다른 댓글" >/dev/null
 contains "탈퇴 (글도 지운다)" "$(curl -s -b "$THIRD" -X POST "$API/api/me/withdraw" -H 'content-type: application/json' -d '{"password":"memberpass1","deletePosts":true}')" '"ok":true'
 check "남이 단 답글은 남고 댓글 수가 맞다" "$(cstate)" "1|삭제된 댓글입니다.,남는 답글"
+# 비밀글의 답변글 — 비밀글로 문의하고 운영진이 답하면 질문한 사람이 그 답을 읽는다(그누보드 bbs/board.php 와 같다).
+# 전에는 답변글의 작성자·운영진만 읽어 질문자가 답을 못 봤고, 읽지 못하는 비밀글에도 누구나 답할 수 있었다
+pid() { python3 -c "import sys,json;print(json.load(sys.stdin).get('id',''))"; }
+RQ="$(printf '{"title":"비밀 문의의 답","content":"<p>답변 본문 4242</p>","replyTo":"%s","isSecret":false}' "$CP2")"
+check "읽지 못하는 비밀글에는 답변하지 못한다" "$(code -b "$MEMBER" -X POST "$BD/boards/club/posts" -H 'content-type: application/json' -d "$RQ")" "403"
+RA_ID="$(curl -s -b "$MOD" -X POST "$BD/boards/club/posts" -H 'content-type: application/json' -d "$RQ" | pid)"
+[[ -n "$RA_ID" ]] && ok "게시판 관리자는 답한다" || bad "비밀글 답변 준비"
+check "비밀글의 답은 비밀글로 남는다 (체크를 풀어 보내도)" "$(curl -s -b "$MOD" "$BD/posts/$RA_ID" | python3 -c "import sys,json;print(json.load(sys.stdin)['post'].get('is_secret'))")" "True"
+check "질문한 사람(원글 작성자)은 비밀 답변글을 읽는다" "$(code -b "$WRITER" "$BD/posts/$RA_ID")" "200"
+contains "화면에서도 읽는다" "$(curl -s -b "$WRITER" "$API/api/render/page?path=board/club/$RA_ID")" "답변 본문 4242"
+contains "답변글에 댓글도 단다 (같은 관문)" "$(curl -s -b "$WRITER" -X POST "$BD/posts/$RA_ID/comments" -H 'content-type: application/json' -d '{"content":"감사합니다"}')" '"id"'
+check "다른 회원은 못 읽는다" "$(code -b "$MEMBER" "$BD/posts/$RA_ID")" "403"
+absent "다른 회원의 화면에는 본문이 없다" "$(curl -s -b "$MEMBER" "$API/api/render/page?path=board/club/$RA_ID")" "답변 본문 4242"
+# 비회원 비밀글 — 운영진만 답하고, 원글의 비밀번호로 답을 읽는다
+GQ="$(printf '{"title":"비회원 문의의 답","content":"<p>x</p>","replyTo":"%s"}' "$GSP")"
+check "비회원 비밀글에는 운영진만 답한다" "$(code -b "$MEMBER" -X POST "$BD/boards/free/posts" -H 'content-type: application/json' -d "$GQ")" "403"
+GR="$(curl -s -b "$ADMIN" -X POST "$BD/boards/free/posts" -H 'content-type: application/json' -d "$GQ" | pid)"
+[[ -n "$GR" ]] && ok "운영진은 답한다" || bad "비회원 비밀글 답변 준비"
+check "원글의 비밀번호로 답변글을 읽는다" "$(code "$BD/posts/$GR?pw=gs12345")" "200"
+check "비밀번호가 없으면 못 읽는다" "$(code "$BD/posts/$GR")" "403"
+check "틀린 비밀번호로도 못 읽는다" "$(code "$BD/posts/$GR?pw=wrong999")" "403"
+# 답변 양식은 그 게시판의 글만 — 전에는 다른 게시판(운영진 전용 포함) 글의 제목을 "원글" 로 보여 줬다
+FORM() { curl -s -b "$MEMBER" "$API/api/render/page?path=board/free/write&replyTo=$1"; }
+absent "답변 양식은 다른 게시판의 글 제목을 보여 주지 않는다" "$(FORM "$STP")" "운영진 글"
+contains "같은 게시판의 글이면 보여 준다 (대조)" "$(FORM "$FP1")" "자유게시판의 회원 글"
 # 삭제 단추의 data-delete-post 는 화면 스크립트에도 들어 있어(선택자) 단추가 있는지 가리지 못한다 — 그 글의 수정 링크로 본다
 contains "화면에도 수정 단추가 보인다 (집행과 같은 규칙)" "$(curl -s -b "$MOD" "$API/api/render/page?path=board/club/$CP1")" "/$CP1/edit\\\""
 absent "다른 회원의 화면에는 없다" "$(curl -s -b "$MEMBER" "$API/api/render/page?path=board/club/$CP1")" "/$CP1/edit\\\""

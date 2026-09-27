@@ -11,7 +11,7 @@ function extraOf(post: Record<string, unknown>): Record<string, unknown> {
   return raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
 }
 import { t } from "./i18n.js";
-import { canModifyPost, canSeeSecretComment } from "./access.js";
+import { canModifyPost, canReadSecret, canSeeSecretComment } from "./access.js";
 
 /**
  * 게시판 화면 렌더 — 목록 / 상세 / 글쓰기.
@@ -317,7 +317,7 @@ export async function renderDetail(
   const { rows } = await db.execute(sql`
     SELECT p.id, p.title, p.content, p.category, p.author_id, p.author_name, p.created_at, p.updated_at,
            p.view_count, p.up_count, p.down_count, p.comment_count, p.file_count, p.scrap_count,
-           p.is_secret, p.is_notice, p.depth, p.thread_created_at, p.thread_path, p.links, p.extra,
+           p.is_secret, p.is_notice, p.depth, p.thread_id, p.thread_created_at, p.thread_path, p.links, p.extra,
            u.avatar_url AS author_avatar
     FROM board_posts p LEFT JOIN users u ON u.id = p.author_id
     WHERE p.id = ${postId}::uuid AND p.board_id = ${board.id}::uuid LIMIT 1
@@ -328,12 +328,15 @@ export async function renderDetail(
       <a href="${base}">${escapeHtml(t("common.toList"))}</a></p></div>`;
   }
 
-  const isOwner = Boolean(ctx.user && ctx.user.id === post.author_id);
   const isManager = hasRole(ctx.user, "manager");
+  // 비밀 답변글은 스레드 원글의 작성자도 읽는다 — API 와 같은 함수(비밀번호는 화면에서 받지 않는다)
+  const canRead = Boolean(ctx.user && ctx.user.id === post.author_id) ||
+    Boolean(post.is_secret && ctx.user && !isManager &&
+      (await canReadSecret(post as never, ctx.user as never, undefined, async () => false, db)));
 
   // 비밀글은 서버 렌더에 본문을 담지 않는다 — 캐시에 남으면 유출된다.
   // (비로그인 요청만 캐시되므로 로그인 사용자는 안전하지만, 방어를 이중으로 둔다)
-  if (post.is_secret && !isOwner && !isManager) {
+  if (post.is_secret && !canRead && !isManager) {
     return `<div class="brick-board">
   <div class="brick-post-head"><h1>${escapeHtml(post.title)}</h1></div>
   <div class="brick-secret-notice">
@@ -643,7 +646,7 @@ export async function renderWrite(
   const replyTo = (ctx.query.replyTo ?? "").trim();
   let replyTitle = "";
   if (replyTo && UUID_RE.test(replyTo)) {
-    const { rows } = await db.execute(sql`SELECT title FROM board_posts WHERE id = ${replyTo}::uuid LIMIT 1`);
+    const { rows } = await db.execute(sql`SELECT title FROM board_posts WHERE id = ${replyTo}::uuid AND board_id = ${board.id}::uuid LIMIT 1`);
     replyTitle = String(rows[0]?.title ?? "");
   }
 

@@ -219,16 +219,28 @@ export function canSeeSecretComment(
 /**
  * 비밀글 열람 권한.
  * 작성자·manager 이상만 볼 수 있다. 비회원 비밀글은 비밀번호로 확인한다.
+ *
+ * **답변글이면 그 스레드의 원글 작성자도** 읽는다(비회원 원글이면 원글의 비밀번호로). 비밀글로 문의하고
+ * 운영자가 비밀 답변글을 달면, 전에는 질문한 사람이 그 답을 읽지 못했다 — 그누보드가 같은 이유로 고친
+ * 자리다(bbs/board.php "회원이 비밀글을 올리고 관리자가 답변글을 올렸을 경우"). 원글은 `db` 를 넘길 때만 찾는다.
  */
 export async function canReadSecret(
-  post: { author_id: string | null; guest_password: string | null; is_secret: boolean },
+  post: { id?: unknown; thread_id?: unknown; author_id: string | null; guest_password: string | null; is_secret: boolean },
   user: SessionUser | null,
   guestPassword: string | undefined,
   check: GuestCheck,
+  db?: Pick<Db, "execute">,
 ): Promise<boolean> {
   if (!post.is_secret) return true;
   if (hasRole(user, "manager")) return true;
   if (post.author_id && user && user.id === post.author_id) return true;
-  if (!post.author_id && guestPassword) return await check(guestPassword, post.guest_password);
-  return false;
+  if (!post.author_id && guestPassword && (await check(guestPassword, post.guest_password))) return true;
+  if (!db || !post.thread_id || String(post.thread_id) === String(post.id)) return false;
+  const { rows } = await db.execute(sql`
+    SELECT author_id, guest_password FROM board_posts WHERE id = ${String(post.thread_id)}::uuid LIMIT 1
+  `);
+  const root = rows[0];
+  if (!root) return false;
+  if (root.author_id) return Boolean(user && user.id === String(root.author_id));
+  return Boolean(guestPassword) && (await check(String(guestPassword), (root.guest_password as string | null) ?? null));
 }

@@ -5,6 +5,7 @@ import { BoardError, extraFieldsOf, hasRole, pickExtraValues } from "./types.js"
 import { t } from "./i18n.js";
 import { hashGuestPassword } from "./guest.js";
 import { sanitizeHtml } from "./sanitize.js";
+import { canReadSecret } from "./access.js";
 
 export interface WritePostInput {
   /** 관련 링크 (최대 2개, http/https 만) — 그누보드의 wr_link1/2 */
@@ -68,7 +69,7 @@ export async function createPost(
 
   // 공지는 관리자만
   const isNotice = Boolean(input.isNotice) && hasRole(user, "manager");
-  const isSecret = Boolean(input.isSecret) && board.allow_secret;
+  let isSecret = Boolean(input.isSecret) && board.allow_secret;
 
   // 비회원 글은 이름과 비밀번호가 필수 (수정·삭제 확인용)
   let guestName: string | null = null;
@@ -98,11 +99,22 @@ export async function createPost(
     if (input.replyTo) {
       if (!board.allow_reply) throw new BoardError(400, "이 게시판은 답변을 허용하지 않습니다.");
       const { rows } = await tx.execute(sql`
-        SELECT id, thread_id, thread_created_at, thread_path, depth
+        SELECT id, thread_id, thread_created_at, thread_path, depth, is_secret, author_id, guest_password
         FROM board_posts WHERE id = ${input.replyTo}::uuid AND board_id = ${board.id}::uuid LIMIT 1
       `);
       const parent = rows[0];
       if (!parent) throw new BoardError(404, "답변할 원글을 찾을 수 없습니다.");
+      /*
+       * 비밀글에는 그 글을 읽을 수 있는 사람(작성자·운영진·그 게시판 관리자, 답변글이면 원글 작성자)만 답한다 —
+       * 그누보드와 같다(비회원 비밀글은 운영진만). 전에는 누구나 답할 수 있었다. 답은 **비밀글로** 남긴다:
+       * 공개 답변이 질문을 인용하거나 짐작하게 하면 비밀글로 쓴 뜻이 없어진다(그누보드는 기본으로 체크만 한다).
+       */
+      if (parent.is_secret) {
+        if (!(await canReadSecret(parent as never, user, undefined, async () => false, tx))) {
+          throw new BoardError(403, "비밀글에는 작성자와 운영진만 답변할 수 있습니다.");
+        }
+        isSecret = true;
+      }
       if (Number(parent.depth) >= 8) throw new BoardError(400, "더 이상 답변을 달 수 없습니다.");
 
       threadId = String(parent.thread_id ?? parent.id);

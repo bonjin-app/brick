@@ -96,7 +96,7 @@ export default definePlugin(async (ctx) => {
     message: string,
   ): Promise<SessionUser | null> => {
     const actor = boardActor(user, await requireBoardRead(String(post.slug), user));
-    if (!(await canReadSecret(post as never, actor, req.query.pw, guestCheck(req, `post:${String(post.id)}`)))) {
+    if (!(await canReadSecret(post as never, actor, req.query.pw, guestCheck(req, `post:${String(post.id)}`), db))) {
       throw new BoardError(403, message);
     }
     return actor;
@@ -286,7 +286,7 @@ export default definePlugin(async (ctx) => {
     const user = boardActor(userOf(req), await requireBoardRead(String(post.board_slug), userOf(req)));
 
     const guestPw = req.query.pw;
-    if (!(await canReadSecret(post as never, user, guestPw, guestCheck(req, `post:${req.params.id}`)))) {
+    if (!(await canReadSecret(post as never, user, guestPw, guestCheck(req, `post:${req.params.id}`), db))) {
       throw new BoardError(403, "비밀글입니다. 작성자만 열람할 수 있습니다.");
     }
 
@@ -477,7 +477,7 @@ export default definePlugin(async (ctx) => {
   /** 다운로드 — 권한 검사 후 스토리지 URL로 안내 */
   ctx.registerRoute("GET", "/files/:id", async (req) => {
     const { rows } = await db.execute(sql`
-      SELECT a.id, a.post_id, b.download_role, b.slug, p.is_secret, p.author_id, p.guest_password
+      SELECT a.id, a.post_id, b.download_role, b.slug, p.is_secret, p.author_id, p.guest_password, p.thread_id
       FROM board_attachments a
       JOIN board_posts p ON p.id = a.post_id
       JOIN board_boards b ON b.id = p.board_id
@@ -491,7 +491,7 @@ export default definePlugin(async (ctx) => {
      * 비밀글의 첨부 — 글을 읽을 수 없는 사람은 첨부도 받지 못한다(작성자·게시판 관리자·운영진, 비회원 글은 비밀번호).
      * 전에는 이 검사가 없어 첨부 주소를 아는 회원이면 남의 비밀글 첨부를 받을 수 있었다. 글 읽기와 같은 함수를 쓴다.
      */
-    if (!(await canReadSecret(rows[0] as never, user, req.query.pw, guestCheck(req, `post:${String(rows[0].post_id)}`)))) {
+    if (!(await canReadSecret({ ...rows[0], id: rows[0].post_id } as never, user, req.query.pw, guestCheck(req, `post:${String(rows[0].post_id)}`), db))) {
       throw new BoardError(403, "비밀글의 첨부파일입니다. 작성자만 받을 수 있습니다.");
     }
 
@@ -512,7 +512,7 @@ export default definePlugin(async (ctx) => {
       captchaToken?: string; captchaAnswer?: string;
     };
     const { rows } = await db.execute(sql`
-      SELECT p.id, p.title, p.author_id, p.is_secret, p.guest_password,
+      SELECT p.id, p.title, p.author_id, p.is_secret, p.guest_password, p.thread_id,
              b.slug, b.title AS board_title, b.comment_role, b.notify_comment
       FROM board_posts p JOIN board_boards b ON b.id = p.board_id
       WHERE p.id = ${req.params.id}::uuid LIMIT 1
@@ -648,7 +648,7 @@ export default definePlugin(async (ctx) => {
     if (value !== 1 && value !== -1) throw new BoardError(400, "value는 1 또는 -1이어야 합니다.");
 
     const { rows } = await db.execute(sql`
-      SELECT p.id, p.author_id, p.is_secret, p.guest_password, b.slug, b.allow_vote
+      SELECT p.id, p.author_id, p.is_secret, p.guest_password, p.thread_id, b.slug, b.allow_vote
       FROM board_posts p JOIN board_boards b ON b.id = p.board_id
       WHERE p.id = ${req.params.id}::uuid LIMIT 1
     `);
@@ -708,7 +708,7 @@ export default definePlugin(async (ctx) => {
 
     // 읽을 수 있는 글만 스크랩할 수 있다
     const { rows } = await db.execute(sql`
-      SELECT p.id, p.author_id, p.is_secret, p.guest_password, b.slug
+      SELECT p.id, p.author_id, p.is_secret, p.guest_password, p.thread_id, b.slug
       FROM board_posts p JOIN board_boards b ON b.id = p.board_id
       WHERE p.id = ${req.params.id}::uuid LIMIT 1
     `);
