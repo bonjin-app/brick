@@ -918,6 +918,12 @@ import sys, json
 for it in json.load(sys.stdin)['items']:
     if it['slug'] == 'trip-item': print(it.get('image_url') or ''); break")"
 check "관리 목록은 편집 원본을 준다" "$ADMIN_IMG" "$MEDIA_URL"
+# 공유 미리보기(og:image) — 상품 링크를 카카오톡에 붙이면 그 상품 사진이 떠야 한다(전에는 사이트 공통 이미지였다)
+og_img() { curl -s "$API/api/render/page?path=$1" | python3 -c 'import sys,json,re;h=json.load(sys.stdin).get("html","");m=re.search(r"property=\"og:image\" content=\"([^\"]*)\"",h);print(m.group(1) if m else "NONE")'; }
+check "상품을 공유하면 그 상품 사진이 미리보기로 나간다" "$(og_img shop/ext-item)" "https://example.test/a.jpg"
+R="$(og_img shop/trip-item)"
+[[ "$R" == http*"$MEDIA_URL" ]] && ok "올린 사진은 절대 주소로 낸다 (og:image 는 절대 주소여야 한다)" || bad "올린 사진의 og:image ($R)"
+check "상품이 아닌 화면에는 상품 사진이 없다" "$(og_img shop/cart)" "NONE"
 # 그 값을 그대로 되돌려 저장한다 — 화면이 하는 일과 같다
 RTID="$(psql_q "SELECT id FROM shop_products WHERE slug = 'trip-item'")"
 printf '{"slug":"trip-item","name":"왕복 상품","price":9000,"stock":5,"status":"selling","image_url":"%s"}' "$ADMIN_IMG" > "$TMP/rt2.json"

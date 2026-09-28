@@ -983,8 +983,14 @@ export interface BlockRenderContext {
    *     테마는 제목을 그리지 않는다 — 그러면 같은 말이 두 번 크게 적힌다.
    * 잘못 주면 제목이 두 번 나오거나(false 인데 그림) h1 이 없는 문서가
    * 된다(true 인데 안 그림) — 둘 다 화면을 보면 바로 드러난다.
+   *
+   * `image` 는 **이 화면을 공유할 때의 미리보기 이미지**(og:image)다 — 상품 사진, 글의 첫 이미지.
+   * 주지 않으면 사이트 공통 이미지가 나간다. 상품 링크를 카카오톡에 붙였는데 로고가 뜨면 공유가
+   * 헛돈다. `/uploads/…` 같은 상대 경로는 렌더러가 절대 주소로 바꾼다(og:image 는 절대 주소여야 한다).
+   * http(s) 나 `/` 로 시작하지 않는 값은 버린다. 테마는 고칠 필요가 없다 — 이 화면에 한해
+   * `site.ogImage` 를 이 값으로 바꿔 넘긴다.
    */
-  setSeo?: (seo: { title?: string; description?: string; ownHeading?: boolean }) => void;
+  setSeo?: (seo: { title?: string; description?: string; ownHeading?: boolean; image?: string }) => void;
   /**
    * 배치 편집기 미리보기에서 **이 속성을 그 자리에서 고칠 수 있게** 요소에 붙일 속성 문자열.
    *

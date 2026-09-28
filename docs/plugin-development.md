@@ -84,6 +84,7 @@ ctx.registerBlock({
       title: post.title,
       description: excerpt(post.content),  // 공유 미리보기 문구
       ownHeading: true,                    // 이 화면의 h1 은 내가 그린다
+      image: post.thumbUrl,                // 공유 미리보기 이미지 (og:image)
     });
     return `<h1>${escapeHtml(post.title)}</h1>…`;
   },
@@ -98,6 +99,11 @@ ctx.registerBlock({
   사람이 적은 값을 덮으면 안 됩니다.
 - 권한이 없어 내용을 감춘 화면(비밀글)에서는 **부르지 마세요** — 제목과 요약이
   캐시와 검색엔진에 남습니다.
+- **`image` 는 이 화면을 공유할 때의 미리보기 이미지**입니다(상품 사진·글의 첫 이미지). 주지 않으면
+  사이트 공통 이미지(관리자 → 사이트 설정의 공유 이미지)가 나갑니다 — 상품 링크를 카카오톡에 붙였는데
+  로고가 뜨면 공유가 헛돕니다. `/uploads/…` 같은 경로는 렌더러가 절대 주소로 바꿉니다. http(s) 나 `/`
+  로 시작하지 않는 값(`//남의주소`, `javascript:` 포함)은 버립니다. 테마는 고칠 필요가 없습니다 — 이 화면에
+  한해 `site.ogImage` 가 이 값으로 바뀝니다.
 
 ## 헤더 링크 (registerHeaderAction)
 

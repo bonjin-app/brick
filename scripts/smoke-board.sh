@@ -386,6 +386,11 @@ echo "── 이전글 · 다음글"
 D2="$(render_html "board/gal/$GP2")"
 contains "다음글(더 새 글)은 사진 셋" "$D2" 'is-next" href="/board/gal/'"$GP3"'"'
 contains "이전글(더 오래된 글)은 사진 하나" "$D2" 'is-prev" href="/board/gal/'"$GP1"'"'
+# 공유 미리보기(og:image) — 글을 공유하면 그 글의 첫 이미지가 떠야 한다(전에는 모든 글이 사이트 공통 이미지였다)
+og_img() { render_html "$1" | python3 -c 'import sys,re;m=re.search(r"property=\"og:image\" content=\"([^\"]*)\"",sys.stdin.read());print(m.group(1) if m else "NONE")'; }
+check "글을 공유하면 그 글의 첫 이미지가 미리보기로 나간다" "$(og_img "board/gal/$GP1")" "https://example.test/a.jpg"
+check "이미지 없는 글은 글 이미지를 내지 않는다" "$(og_img "board/gal/$GP2")" "NONE"
+check "위험한 주소(javascript:)는 내지 않는다" "$(og_img "board/gal/$GP3")" "NONE"
 D3="$(render_html "board/gal/$GP3")"
 contains "가장 새 글에는 다음글이 없다" "$D3" 'is-next is-empty'
 contains "공유 막대" "$D3" 'data-share-bar'

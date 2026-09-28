@@ -390,7 +390,7 @@ export class PageRenderService {
       const declared = this.loader.matchScreen(path);
       if (declared) {
         const { screen, pathTail: tail } = declared;
-        const fromBlock: { title?: string; description?: string; ownHeading?: boolean } = {};
+        const fromBlock: { title?: string; description?: string; ownHeading?: boolean; image?: string } = {};
         const blocksHtml = await this.renderNodes(
           [{ block: screen.block, props: screen.props ?? {} }],
           {
@@ -399,12 +399,14 @@ export class PageRenderService {
             setSeo: (sx) => {
               if (sx.title?.trim()) fromBlock.title = sx.title.trim();
               if (sx.ownHeading !== undefined) fromBlock.ownHeading = sx.ownHeading;
+              const img = shareImage(sx.image);
+              if (img) fromBlock.image = img;
             },
           },
         );
         const title = fromBlock.title ?? this.loader.trCatalog(screen.plugin, screen.title);
         const html = await this.themes.render("page", {
-          ...themeCommon, site, menu: nav,
+          ...themeCommon, site: withShareImage(site, fromBlock.image), menu: nav,
           title: fromBlock.ownHeading ? "" : title,
           pageTitle: `${title} — ${site.name}`,
           blocksHtml,
@@ -440,7 +442,7 @@ export class PageRenderService {
      * 블록이 정한 화면 제목을 받는다 (ctx.setSeo). 게시판 글 상세처럼 한
      * 페이지가 URL 로 여러 화면을 전환하는 경우, 화면을 아는 쪽은 블록이다.
      */
-    const fromBlock: { title?: string; description?: string; ownHeading?: boolean } = {};
+    const fromBlock: { title?: string; description?: string; ownHeading?: boolean; image?: string } = {};
     const marks: EditMarks | null = editing
       ? {
           emptyContainer: t("editor.emptyContainer"),
@@ -455,6 +457,8 @@ export class PageRenderService {
         if (s.title?.trim()) fromBlock.title = s.title.trim();
         if (s.description?.trim()) fromBlock.description = s.description.trim();
         if (s.ownHeading !== undefined) fromBlock.ownHeading = s.ownHeading;
+        const img = shareImage(s.image);
+        if (img) fromBlock.image = img;
       },
     }, marks);
 
@@ -466,7 +470,8 @@ export class PageRenderService {
     };
     const html = await this.themes.render("page", {
       ...themeCommon,
-      site,
+      // 이 화면의 공유 이미지(상품 사진·글의 첫 이미지) — 테마는 site.ogImage 를 그대로 쓴다
+      site: withShareImage(site, fromBlock.image),
       menu: nav,
       /**
        * 화면 제목 h1 — 블록이 이미 그렸다고 알렸으면(ownHeading) 비운다.
@@ -703,6 +708,22 @@ function topbarOf(
     topbarPlain: !safeUrl,
     topbarKey: Math.abs(hash).toString(36),
   };
+}
+
+/**
+ * 블록이 준 공유 이미지 — http(s) 절대 주소나 `/` 로 시작하는 경로만 받는다(`//` 로 시작하는 남의 주소,
+ * `javascript:` 같은 것은 버린다). 절대 주소로 바꿔 돌려준다.
+ */
+function shareImage(value: unknown): string {
+  const v = String(value ?? "").trim();
+  if (!v || v.length > 1000) return "";
+  if (!/^https?:\/\//i.test(v) && !(v.startsWith("/") && !v.startsWith("//"))) return "";
+  return absoluteUrl(v);
+}
+
+/** 이 화면에 한해 site.ogImage 를 바꾼다 — 테마(외부 테마 포함)를 고치지 않아도 된다 */
+function withShareImage<T extends { ogImage: string }>(site: T, image: string | undefined): T {
+  return image ? { ...site, ogImage: image } : site;
 }
 
 /** og:image 는 절대 URL 이어야 한다 — /uploads/… 는 BRICK_SITE_URL 을 앞에 붙인다 */

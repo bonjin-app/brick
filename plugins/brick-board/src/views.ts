@@ -317,7 +317,7 @@ export async function renderDetail(
   const { rows } = await db.execute(sql`
     SELECT p.id, p.title, p.content, p.category, p.author_id, p.author_name, p.created_at, p.updated_at,
            p.view_count, p.up_count, p.down_count, p.comment_count, p.file_count, p.scrap_count,
-           p.is_secret, p.is_notice, p.depth, p.thread_id, p.thread_created_at, p.thread_path, p.links, p.extra,
+           p.is_secret, p.is_notice, p.depth, p.thread_id, p.thread_created_at, p.thread_path, p.links, p.extra, p.thumb_url,
            u.avatar_url AS author_avatar
     FROM board_posts p LEFT JOIN users u ON u.id = p.author_id
     WHERE p.id = ${postId}::uuid AND p.board_id = ${board.id}::uuid LIMIT 1
@@ -360,6 +360,8 @@ export async function renderDetail(
       .slice(0, 155),
     // 상세 화면은 글 제목을 자기 h1 으로 그린다
     ownHeading: true,
+    // 공유 미리보기 — 본문의 첫 이미지 (비밀글은 위에서 이미 돌려보냈다)
+    image: post.thumb_url ? String(post.thumb_url) : undefined,
   });
 
   // 스크랩 여부 — 로그인 사용자에게만 의미가 있다

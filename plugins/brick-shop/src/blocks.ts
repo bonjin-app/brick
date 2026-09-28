@@ -367,6 +367,8 @@ export function registerStorefrontBlocks(
           .slice(0, 155),
         // 상품명을 자기 h1 으로 그린다
         ownHeading: true,
+        // 공유하면 상품 사진이 떠야 한다 (성인 상품은 위에서 이미 돌려보냈다)
+        image: p.image_url ? String(p.image_url) : undefined,
       });
 
       // 관련 상품 — 실패해도 상품 상세는 떠야 한다.
