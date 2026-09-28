@@ -266,11 +266,14 @@ contains "쿠폰함에 사용됨 표시" "$WALLET2" '"status":"used"'
 
 echo "── 주문 취소 → 쿠폰 반환"
 OV_ID="$(psql_q "SELECT id FROM shop_orders WHERE order_no='$OV'")"
+ucount() { psql_q "SELECT used_count FROM shop_coupons WHERE code='$1'"; }
+U0="$(ucount VIPGIFT)"
 CANCEL_RES="$(curl -s -b "$CK" -X PUT "$SHOP/admin/orders/$OV_ID" -H 'content-type: application/json' \
   -d '{"status":"cancelled","note":"결제 실패"}')"
 check "주문 취소됨" "$(psql_q "SELECT status FROM shop_orders WHERE order_no='$OV'")" "cancelled"
 check "쿠폰이 쿠폰함으로 반환 (결제 실패가 쿠폰을 먹으면 안 된다)" \
   "$(psql_q "SELECT used_at IS NULL FROM shop_user_coupons LIMIT 1")" "true"
+check "쿠폰의 전체 사용 수도 되돌린다" "$(ucount VIPGIFT)" "$((U0 - 1))"
 
 echo "── 환불에는 반환하지 않는다 (쿠폰으로 사고 반품하기 반복 차단)"
 # 다시 쿠폰으로 주문 → 결제 → 환불
@@ -283,6 +286,18 @@ curl -s -b "$CK" -X PUT "$SHOP/admin/orders/$OR_ID" -H 'content-type: applicatio
 check "주문 환불됨" "$(psql_q "SELECT status FROM shop_orders WHERE order_no='$OR'")" "refunded"
 check "쿠폰은 소진된 채 남는다" \
   "$(psql_q "SELECT used_at IS NOT NULL FROM shop_user_coupons WHERE used_order_no='$OR'")" "true"
+check "환불은 사용 수를 되돌리지 않는다 (쓰인 쿠폰이다)" "$(ucount VIPGIFT)" "$U0"
+
+echo "── 선착순 쿠폰 — 취소된 주문이 한도를 먹지 않는다"
+curl -s -b "$CK" -X POST "$SHOP/admin/coupons" -H 'content-type: application/json' \
+  -d '{"code":"FIRSTONE","name":"선착순 1장","discount_type":"fixed","discount_value":1000,"usage_limit":1}' >/dev/null
+F1="$(order_with "$C1" "FIRSTONE" | jq_get "['orderNo']")"
+[[ -n "$F1" ]] && ok "첫 손님이 선착순 쿠폰으로 주문한다" || bad "선착순 쿠폰 주문"
+contains "한 장이 다 쓰이면 다음 손님은 거절" "$(order_with "$C2" "FIRSTONE")" "소진"
+F1_ID="$(psql_q "SELECT id FROM shop_orders WHERE order_no='$F1'")"
+curl -s -o /dev/null -b "$CK" -X PUT "$SHOP/admin/orders/$F1_ID" -H 'content-type: application/json' -d '{"status":"cancelled","note":"입금 기한 초과"}'
+F2="$(order_with "$C2" "FIRSTONE" | jq_get "['orderNo']")"
+[[ -n "$F2" ]] && ok "앞 주문이 취소되면 다음 손님이 쓴다 (전에는 영구히 소진)" || bad "취소 뒤 선착순 쿠폰"
 
 echo "── 등급 전체 지급"
 GISSUE="$(curl -s -b "$CK" -X POST "$SHOP/admin/coupons/$ISSUED_ID/issue" -H 'content-type: application/json' \

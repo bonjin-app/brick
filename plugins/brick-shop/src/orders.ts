@@ -406,14 +406,24 @@ export async function changeOrderStatus(
     // 사라지면 "쿠폰을 먹었다"는 문의가 된다. **환불(refunded)에는 되돌리지
     // 않는다** — 물건을 받아보고 반품하며 쿠폰까지 돌려받으면, 쿠폰으로 산
     // 것을 무한히 반복할 수 있다.
+    //
+    // 쿠폰의 **전체 사용 수**도 되돌린다(취소는 끝 상태라 한 번만 온다). 전에는 쿠폰함만 되돌려, 선착순
+    // 한도(usage_limit)가 있는 쿠폰을 결제 실패·입금 기한 초과로 취소된 주문이 영구히 먹었다 — 100장 쿠폰이
+    // 실제로는 몇 장 쓰이지 않고 "소진" 됐다. 1인당 한도는 이미 취소된 주문을 세지 않는다(같은 기준).
     if (to === "cancelled") {
       const { rows: order } = await tx.execute(sql`
-        SELECT order_no FROM shop_orders WHERE id = ${orderId}::uuid
+        SELECT order_no, coupon_code FROM shop_orders WHERE id = ${orderId}::uuid
       `);
       if (order[0]?.order_no) {
         await tx.execute(sql`
           UPDATE shop_user_coupons SET used_at = NULL, used_order_no = NULL
           WHERE used_order_no = ${String(order[0].order_no)}
+        `);
+      }
+      if (order[0]?.coupon_code) {
+        await tx.execute(sql`
+          UPDATE shop_coupons SET used_count = greatest(0, used_count - 1)
+          WHERE upper(code) = upper(${String(order[0].coupon_code)})
         `);
       }
     }
