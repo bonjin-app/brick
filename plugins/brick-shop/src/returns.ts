@@ -684,17 +684,26 @@ export async function updateReturnStatus(
     // 사용한 포인트 원복 — 전체 취소·반품일 때만.
     // 부분이면 얼마를 되돌릴지 정할 근거가 약하고, 이중 환급 위험이 있다
     // (할인 안분에 point_used 가 이미 반영되어 있다).
-    if (ret.user_id && params.pointsPort && Number(ret.point_used ?? 0) > 0) {
+    // 구매 적립도 같은 기준(주문 전체가 돌아왔을 때)으로 거둔다 — 부분 반품의 안분은 쓴 포인트와 같은 이유로 하지 않는다
+    if (ret.user_id && params.pointsPort) {
       const { rows: remain } = await db.execute(sql`
         SELECT coalesce(sum(quantity - cancelled_qty), 0) AS live
         FROM shop_order_items WHERE order_id = ${String(ret.order_id)}::uuid
       `);
       if (Number(remain[0]?.live ?? 0) === 0) {
-        await params.pointsPort.refund({
+        if (Number(ret.point_used ?? 0) > 0) {
+          await params.pointsPort.refund({
+            userId: String(ret.user_id),
+            refType: "shop.order",
+            refId: String(ret.order_no),
+            reason: `${KIND_LABEL[String(ret.kind) as ReturnKind]}으로 포인트 반환`,
+          });
+        }
+        await params.pointsPort.revoke?.({
           userId: String(ret.user_id),
           refType: "shop.order",
           refId: String(ret.order_no),
-          reason: `${KIND_LABEL[String(ret.kind) as ReturnKind]}으로 포인트 반환`,
+          reason: `${KIND_LABEL[String(ret.kind) as ReturnKind]}으로 구매 적립 회수`,
         });
       }
     }

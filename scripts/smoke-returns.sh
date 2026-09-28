@@ -390,6 +390,27 @@ curl -s -b "$CK" -X PUT "$SHOP/admin/returns/$RID8" -H 'content-type: applicatio
 check "거부된 요청은 완료로 갈 수 없다 (재고 변화 없음)" \
   "$(psql_q "SELECT stock FROM shop_products WHERE id='$PID'")" "$STOCK_NOCHANGE"
 
+echo "── 주문 전체를 반품·취소로 돌려받으면 구매 적립도 거둔다"
+# 전에는 적립(결제금액의 1%)이 남아, 사고 돌려받기를 되풀이하면 적립만 쌓였다
+PT="$API/api/plugins/brick-point"
+bal() { curl -s -b "$B1" "$PT/my" | python3 -c 'import sys,json;print(json.load(sys.stdin)["balance"])'; }
+BB="$(bal)"
+printf '{"items":[{"productId":"%s","quantity":1}],"orderer":{"ordererName":"구매자1","ordererPhone":"010-1111-2222","postcode":"06236","address1":"서울"}}' "$PID" > "$TMP/o9.json"
+NO9="$(curl -s -b "$B1" -X POST "$SHOP/orders" -H 'content-type: application/json' --data-binary "@$TMP/o9.json" | jq_get "['orderNo']")"
+printf '{"orderNo":"%s","provider":"bank_transfer","providerTid":"dep-%s"}' "$NO9" "$NO9" > "$TMP/pay9.json"
+curl -s -o /dev/null -b "$CK" -X POST "$SHOP/payments/confirm" -H 'content-type: application/json' --data-binary "@$TMP/pay9.json"
+sleep 1
+EARN9=$(( $(bal) - BB ))
+[[ "$EARN9" -gt 0 ]] && ok "입금을 확인하면 구매 적립 (+$EARN9)" || bad "구매 적립이 없다 ($EARN9)"
+ITEM9="$(psql_q "SELECT oi.id FROM shop_order_items oi JOIN shop_orders o ON o.id=oi.order_id WHERE o.order_no='$NO9'")"
+printf '{"kind":"cancel","reasonCode":"change_of_mind","items":[{"orderItemId":"%s","quantity":1}]}' "$ITEM9" > "$TMP/req9.json"
+RID9="$(curl -s -b "$B1" -X POST "$SHOP/orders/$NO9/returns" -H 'content-type: application/json' --data-binary "@$TMP/req9.json" | jq_get "['id']")"
+for st in approved completed; do
+  curl -s -o /dev/null -b "$CK" -X PUT "$SHOP/admin/returns/$RID9" -H 'content-type: application/json' -d "{\"status\":\"$st\"}"
+done
+sleep 1
+check "전량을 돌려받으면 그 주문의 구매 적립을 거둔다" "$(bal)" "$BB"
+
 echo "── 내 요청 목록 · 상세"
 MY="$(curl -s -b "$B1" "$SHOP/my/returns")"
 contains "내 요청 목록" "$MY" '"return_no"'

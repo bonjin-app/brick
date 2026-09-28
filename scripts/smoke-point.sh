@@ -197,11 +197,13 @@ echo "── 환불 시 포인트 복원"
 printf '{"orderNo":"%s","reason":"고객 요청"}' "$ONO" > "$TMP/rf.json"
 contains "전액 환불" "$(curl -s -b "$ADMIN" -X POST "$SH/admin/payments/refund" -H 'content-type: application/json' --data-binary "@$TMP/rf.json")" '"remaining":0'
 sleep 1
-check "사용 포인트 복원 (335+1000)" "$(balance)" "1335"
+# 쓴 포인트는 돌려주고(+1000) 그 주문의 구매 적립은 거둔다(−220) — 전에는 적립이 남아 사고 환불하기를 되풀이하면 쌓였다
+check "사용 포인트 복원·구매 적립 회수 (335+1000−220)" "$(balance)" "1115"
+check "회수 기록이 한 번 남는다" "$(psql_one "SELECT count(*) FROM point_ledger WHERE kind='revoke' AND ref_type='shop.order' AND ref_id='$ONO'")" "1"
 contains "복원 내역 표시" "$(curl -s -b "$MEMBER" "$PT/my")" "포인트 반환"
 # 재환불은 결제 내역이 없어 거부되고, 포인트도 중복 복원되지 않아야 한다
 curl -s -b "$ADMIN" -X POST "$SH/admin/payments/refund" -H 'content-type: application/json' --data-binary "@$TMP/rf.json" >/dev/null
-check "재환불에도 잔액 유지" "$(balance)" "1335"
+check "재환불에도 잔액 유지 (다시 거두지 않는다)" "$(balance)" "1115"
 
 echo "── 원자성 (주문 실패 시 차감되지 않는다)"
 printf '{"slug":"scarce","name":"희귀상품","price":50000,"stock":1,"status":"selling"}' > "$TMP/scarce.json"

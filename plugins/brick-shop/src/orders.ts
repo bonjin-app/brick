@@ -21,6 +21,14 @@ export interface PointsPort {
     params: { userId: string; refType: string; refId: string; reason: string },
     tx?: Db,
   ): Promise<number>;
+  /**
+   * 적립 회수 — 주문이 통째로 취소·환불되면 그 주문의 **구매 적립**을 거둔다. 선택이다: 옛 포인트
+   * 플러그인에는 없다(없으면 거두지 않는다). 같은 원인은 한 번만 거둔다.
+   */
+  revoke?(
+    params: { userId: string; refType: string; refId: string; reason: string },
+    tx?: Db,
+  ): Promise<number>;
 }
 
 export interface OrdererInput {
@@ -394,6 +402,21 @@ export async function changeOrderStatus(
             refType: "shop.order",
             refId: String(order[0].order_no),
             reason: `주문 ${to === "cancelled" ? "취소" : "환불"} 포인트 반환 (${order[0].order_no})`,
+          },
+          tx,
+        );
+      }
+      /*
+       * 구매 적립 회수 — 전에는 거두지 않아, 사고 환불하기를 되풀이하면 적립만 남았다(결제금액의 1% 가
+       * 주문마다). 쓴 포인트를 돌려준 **뒤에** 거둔다 — 잔액이 모자라 덜 거두는 일을 줄인다.
+       */
+      if (order[0]?.user_id) {
+        await opts.pointsPort.revoke?.(
+          {
+            userId: String(order[0].user_id),
+            refType: "shop.order",
+            refId: String(order[0].order_no),
+            reason: `주문 ${to === "cancelled" ? "취소" : "환불"}으로 구매 적립 회수 (${order[0].order_no})`,
           },
           tx,
         );
