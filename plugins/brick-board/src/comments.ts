@@ -10,16 +10,21 @@ import { pgArray, type Db } from "./types.js";
  * 되풀이한다(대댓글은 3단에서 멈추지만 그 아래로도 계속 달리므로 사슬 길이에 한계가 없다).
  * 댓글 수는 증감하지 않고 **다시 센다** — 어긋날 틈을 두지 않는다.
  */
-export async function removeComments(db: Pick<Db, "execute">, ids: readonly string[]): Promise<number> {
-  if (!ids.length) return 0;
+export async function removeComments(
+  db: Pick<Db, "execute">,
+  ids: readonly string[],
+): Promise<Array<{ id: string; authorId: string | null }>> {
+  if (!ids.length) return [];
   const idArr = pgArray(ids);
+  // 지우기 전 작성자를 함께 돌려준다 — 부르는 쪽이 "댓글이 지워졌다" 훅(포인트 회수)을 낸다
   const { rows: gone } = await db.execute(sql`
-    UPDATE board_comments SET deleted_at = now(), content = '', is_secret = false,
+    UPDATE board_comments c SET deleted_at = now(), content = '', is_secret = false,
       author_id = NULL, author_name = '', guest_name = NULL, guest_password = NULL
-    WHERE id = ANY(${idArr}::uuid[]) AND deleted_at IS NULL
-    RETURNING post_id
+    FROM (SELECT id, author_id FROM board_comments WHERE id = ANY(${idArr}::uuid[]) AND deleted_at IS NULL) old
+    WHERE c.id = old.id
+    RETURNING c.post_id, old.id, old.author_id
   `);
-  if (!gone.length) return 0;
+  if (!gone.length) return [];
   const postArr = pgArray([...new Set(gone.map((r) => String(r.post_id)))]);
   for (;;) {
     const { rows } = await db.execute(sql`
@@ -35,5 +40,5 @@ export async function removeComments(db: Pick<Db, "execute">, ids: readonly stri
       (SELECT count(*) FROM board_comments c WHERE c.post_id = p.id AND c.deleted_at IS NULL)
     WHERE p.id = ANY(${postArr}::uuid[])
   `);
-  return gone.length;
+  return gone.map((r) => ({ id: String(r.id), authorId: r.author_id ? String(r.author_id) : null }));
 }

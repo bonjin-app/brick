@@ -83,6 +83,32 @@ export default definePlugin(async (ctx) => {
 
   const db = ctx.db as Db;
 
+  /*
+   * 지워진 글·댓글을 알린다 — 포인트가 그 적립을 거둬들인다(그누보드 delete_point 와 같다).
+   * 전에는 알리지 않아, 글을 쓰고(+적립) 지우기를 되풀이하면 포인트가 끝없이 쌓였다.
+   * 비회원 것은 적립이 없으므로 알리지 않는다.
+   */
+  const announceCommentsDeleted = async (list: Array<{ id: string; authorId: string | null }>) => {
+    for (const c of list) {
+      if (c.authorId) await ctx.hooks.doAction("board.comment.deleted", { commentId: c.id, authorId: c.authorId });
+    }
+  };
+  /** 글 지우기 — 작성자·관리자·일괄 삭제가 이것 하나를 쓴다. 첨부 파일을 정리하고, 글과 그 댓글이 지워졌다고 알린다 */
+  const deletePosts = async (ids: readonly string[]): Promise<number> => {
+    if (!ids.length) return 0;
+    const arr = pgArray(ids);
+    const { rows: comments } = await db.execute(sql`
+      SELECT id, author_id FROM board_comments WHERE post_id = ANY(${arr}::uuid[]) AND deleted_at IS NULL AND author_id IS NOT NULL
+    `);
+    for (const id of ids) await deleteAttachments(db, ctx.storage, id);
+    const { rows } = await db.execute(sql`DELETE FROM board_posts WHERE id = ANY(${arr}::uuid[]) RETURNING id, author_id`);
+    for (const p of rows) {
+      if (p.author_id) await ctx.hooks.doAction("board.post.deleted", { postId: String(p.id), authorId: String(p.author_id) });
+    }
+    await announceCommentsDeleted(comments.map((c) => ({ id: String(c.id), authorId: String(c.author_id) })));
+    return rows.length;
+  };
+
   /**
    * 글 하나에 닿는 행동(댓글·추천·스크랩)의 공통 관문 — 글 읽기와 **같은** 규칙이다.
    * 게시판 읽기 권한과 비밀글(작성자·운영진·그 게시판 관리자, 비회원 글은 `?pw`)을 본다.
@@ -394,9 +420,8 @@ export default definePlugin(async (ctx) => {
     await assertCanModify(post as never, remover, body.guestPassword ?? req.query.pw, guestCheck(req, `post:${req.params.id}`));
     await assertAuthorMayChange(db, post, remover, "delete");
 
-    // 스토리지 파일은 CASCADE로 지워지지 않으므로 먼저 정리한다
-    await deleteAttachments(db, ctx.storage, String(post.id));
-    await db.execute(sql`DELETE FROM board_posts WHERE id = ${req.params.id}::uuid`);
+    // 스토리지 파일은 CASCADE로 지워지지 않으므로 먼저 정리한다 (deletePosts 가 한다)
+    await deletePosts([String(post.id)]);
     await ctx.cache.invalidateTag("pages");
     return { ok: true };
   });
@@ -639,7 +664,8 @@ export default definePlugin(async (ctx) => {
     if (!comment) throw new BoardError(404, "댓글을 찾을 수 없습니다.");
     await assertCanModify(comment as never, await actorOnBoard(userOf(req), comment.board_id), body.guestPassword ?? req.query.pw, guestCheck(req, `comment:${req.params.id}`));
 
-    await db.transaction((tx) => removeComments(tx, [req.params.id]));
+    const removed = await db.transaction((tx) => removeComments(tx, [req.params.id]));
+    await announceCommentsDeleted(removed);
     return { ok: true };
   });
 
@@ -1133,9 +1159,7 @@ ${items}
     let affected = 0;
 
     if (action === "delete") {
-      for (const id of ids) await deleteAttachments(db, ctx.storage, id);
-      const { rows } = await db.execute(sql`DELETE FROM board_posts WHERE id = ANY(${pgArray(ids)}::uuid[]) RETURNING id`);
-      affected = rows.length;
+      affected = await deletePosts(ids);
     } else if (action === "move" || action === "copy") {
       const target = String(body.params?.board ?? "");
       if (!/^[0-9a-f-]{36}$/i.test(target)) throw new BoardError(400, "대상 게시판을 선택해주세요.");
@@ -1183,8 +1207,7 @@ ${items}
 
   ctx.registerRoute("DELETE", "/admin/posts/:id", async (req) => {
     requireManager(req);
-    await deleteAttachments(db, ctx.storage, req.params.id);
-    await db.execute(sql`DELETE FROM board_posts WHERE id = ${req.params.id}::uuid`);
+    await deletePosts([req.params.id]);
     await ctx.cache.invalidateTag("pages");
     return { ok: true };
   });
@@ -1227,7 +1250,8 @@ ${items}
         const { rows: mine } = await tx.execute(sql`
           SELECT id FROM board_comments WHERE author_id = ${userId}::uuid AND deleted_at IS NULL
         `);
-        const removed = await removeComments(tx, mine.map((r) => String(r.id)));
+        // 탈퇴는 포인트도 함께 지우므로(포인트의 eraser) 회수 훅을 내지 않는다
+        const removed = (await removeComments(tx, mine.map((r) => String(r.id)))).length;
         if (removed) done.push(`댓글 ${removed}건 삭제`);
       } else {
         const { rows: posts } = await tx.execute(sql`

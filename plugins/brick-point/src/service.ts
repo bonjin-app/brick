@@ -29,6 +29,12 @@ export interface PointsService {
    * 같은 참조로 이미 취소했으면 아무 일도 하지 않는다(멱등).
    */
   refund(params: { userId: string; refType: string; refId: string; reason: string }, tx?: PluginDb): Promise<number>;
+  /**
+   * 적립 회수 — 적립의 원인(글·댓글)이 지워졌을 때. 그 적립분이 남아 있으면 거기서, 이미 썼으면 남은 잔액에서
+   * (만료 임박한 것부터) 적립했던 만큼까지 거둬들인다. 잔액이 모자라면 있는 만큼만 — 음수 잔액은 두지 않는다.
+   * 같은 원인은 한 번만 회수한다(멱등). 돌려준 값은 실제로 거둔 점수.
+   */
+  revoke(params: { userId: string; refType: string; refId: string; reason: string }, tx?: PluginDb): Promise<number>;
   /** 적립 예정액 계산 (주문서에 "구매 시 N점 적립" 표시용) */
   previewEarn(amount: number): Promise<number>;
 }
@@ -140,6 +146,50 @@ export function createPointsService(
         if (isDuplicate(err)) return false;
         throw err;
       }
+    },
+
+    async revoke(params, tx) {
+      return run(tx, async (h) => {
+        // 적립 행을 잠가 같은 원인의 회수가 동시에 두 번 돌지 않게 한다
+        const { rows: earned } = await h.execute(sql`
+          SELECT id, amount FROM point_ledger
+          WHERE user_id = ${params.userId}::uuid AND kind = 'earn'
+            AND ref_type = ${params.refType} AND ref_id = ${params.refId}
+          FOR UPDATE
+        `);
+        if (!earned[0]) return 0;
+        const { rows: done } = await h.execute(sql`
+          SELECT 1 FROM point_ledger
+          WHERE user_id = ${params.userId}::uuid AND kind = 'revoke'
+            AND ref_type = ${params.refType} AND ref_id = ${params.refId}
+        `);
+        if (done.length) return 0;
+
+        const want = Number(earned[0].amount);
+        const earnId = String(earned[0].id);
+        // 그 적립분부터, 모자라면 다른 잔액에서 만료 임박한 것부터
+        const { rows: grants } = await h.execute(sql`
+          SELECT id, remaining FROM point_ledger
+          WHERE user_id = ${params.userId}::uuid AND amount > 0 AND remaining > 0
+            AND (expires_at IS NULL OR expires_at > now())
+          ORDER BY (id = ${earnId}::uuid) DESC, expires_at ASC NULLS LAST, created_at ASC
+          FOR UPDATE
+        `);
+        let left = want;
+        for (const g of grants) {
+          if (left <= 0) break;
+          const take = Math.min(left, Number(g.remaining));
+          await h.execute(sql`UPDATE point_ledger SET remaining = remaining - ${take} WHERE id = ${String(g.id)}::uuid`);
+          left -= take;
+        }
+        const taken = want - left;
+        await h.execute(sql`
+          INSERT INTO point_ledger (id, user_id, amount, remaining, kind, reason, ref_type, ref_id)
+          VALUES (${uuidv7()}, ${params.userId}::uuid, ${-taken}, 0, 'revoke',
+                  ${params.reason.slice(0, 200)}, ${params.refType}, ${params.refId})
+        `);
+        return taken;
+      });
     },
 
     async spend(params, tx) {

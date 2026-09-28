@@ -182,8 +182,16 @@ RVID="$(curl -s -b "$MEMBER" -X POST "$SH/products/$PROD/reviews" -H 'content-ty
 [[ -n "$RVID" ]] && ok "후기 작성" || bad "후기 작성"
 sleep 1
 check "후기 적립 (+100)" "$(balance)" "335"
-check "후기 적립도 1회만" "$(psql_one "SELECT count(*) FROM point_ledger WHERE ref_type='shop.review'")" "1"
+check "후기 적립도 1회만" "$(psql_one "SELECT count(*) FROM point_ledger WHERE ref_type='shop.review.product'")" "1"
 contains "적립 내역에 후기 표시" "$(curl -s -b "$MEMBER" "$PT/my")" "상품 후기 작성"
+# 후기를 쓰고 지우고 다시 쓰기를 되풀이하면 매번 새 후기 id 로 적립됐다 — 적립의 기준은 회원 × 상품이다
+B1="$(balance)"
+curl -s -o /dev/null -b "$MEMBER" -X DELETE "$SH/reviews/$RVID"
+RV2="$(curl -s -b "$MEMBER" -X POST "$SH/products/$PROD/reviews" -H 'content-type: application/json' \
+  -d '{"rating":4,"content":"다시 쓴 후기입니다."}' | python3 -c 'import sys,json;print(json.load(sys.stdin).get("id",""))')"
+sleep 1
+[[ -n "$RV2" ]] && ok "후기를 지우고 다시 쓴다" || bad "후기 다시 쓰기"
+check "같은 상품의 후기를 다시 써도 또 적립되지 않는다" "$(balance)" "$B1"
 
 echo "── 환불 시 포인트 복원"
 printf '{"orderNo":"%s","reason":"고객 요청"}' "$ONO" > "$TMP/rf.json"
@@ -293,6 +301,24 @@ NAV="$(curl -s -b "$ADMIN" "$API/api/admin/nav")"
 contains "포인트 리소스 등록" "$NAV" '"name":"balances"'
 contains "설정 리소스 등록" "$NAV" '"name":"settings"'
 contains "내 포인트 블록" "$(curl -s "$API/api/blocks")" "brick-point/my-points"
+
+echo "── 쓰고 지우기를 되풀이해 포인트를 쌓을 수 없다 (지우면 적립을 거둔다)"
+# 전에는 지워도 적립이 남아, 글을 쓰고 지우기를 되풀이하면 포인트가 끝없이 쌓였다(후기는 쓰고 지우고 다시 쓰기)
+newpost() { printf '{"title":"%s","content":"<p>본문</p>"}' "$1" > "$TMP/np.json"; curl -s -b "$MEMBER" -X POST "$BD/boards/free/posts" -H 'content-type: application/json' --data-binary "@$TMP/np.json" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("id",""))'; }
+newcmt() { curl -s -b "$MEMBER" -X POST "$BD/posts/$1/comments" -H 'content-type: application/json' -d '{"content":"댓글입니다"}' | python3 -c 'import sys,json;print(json.load(sys.stdin).get("id",""))'; }
+B0="$(balance)"
+F1="$(newpost "지울 글")"; sleep 1
+check "글을 쓰면 적립 (+50)" "$(balance)" "$((B0 + 50))"
+curl -s -o /dev/null -b "$MEMBER" -X DELETE "$BD/posts/$F1"; sleep 1
+check "글을 지우면 그 적립을 거둔다" "$(balance)" "$B0"
+F2="$(newpost "남길 글")"; C2="$(newcmt "$F2")"; sleep 1
+check "글과 댓글 적립 (+50 +7)" "$(balance)" "$((B0 + 57))"
+curl -s -o /dev/null -b "$MEMBER" -X DELETE "$BD/comments/$C2"; sleep 1
+check "댓글을 지우면 댓글 적립만 거둔다" "$(balance)" "$((B0 + 50))"
+F3="$(newpost "댓글 달린 글")"; newcmt "$F3" >/dev/null; sleep 1
+curl -s -o /dev/null -b "$MEMBER" -X DELETE "$BD/posts/$F3"; sleep 1
+check "글을 지우면 그 글에 단 내 댓글의 적립도 거둔다 (글 +50·댓글 +7 모두)" "$(balance)" "$((B0 + 50))"
+check "같은 원인은 한 번만 거둔다 (원장)" "$(psql_one "SELECT count(*) FROM point_ledger WHERE kind='revoke' AND ref_id='$F1'")" "1"
 
 echo "── 플러그인 비활성화 시 서비스 해제"
 # 끄기 전에 선언 화면이 열리는 것을 확인해 둔다 (끈 뒤와 대조하기 위해)

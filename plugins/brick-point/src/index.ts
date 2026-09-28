@@ -101,22 +101,39 @@ export default definePlugin(async (ctx) => {
     }
   });
 
+  // 글·댓글이 지워지면 그 적립을 거둬들인다 — 쓰고 지우기를 되풀이해 쌓는 길을 닫는다
+  ctx.hooks.onAction("board.post.deleted", "brick-point", async (payload) => {
+    const { postId, authorId } = (payload ?? {}) as { postId?: string; authorId?: string | null };
+    if (!postId || !authorId) return;
+    await points.revoke({ userId: authorId, refType: "board.post", refId: postId, reason: "게시글 삭제" });
+  });
+  ctx.hooks.onAction("board.comment.deleted", "brick-point", async (payload) => {
+    const { commentId, authorId } = (payload ?? {}) as { commentId?: string; authorId?: string | null };
+    if (!commentId || !authorId) return;
+    await points.revoke({ userId: authorId, refType: "board.comment", refId: commentId, reason: "댓글 삭제" });
+  });
+
   /**
    * 상품 후기 적립.
    * 후기는 구매한 사람만 쓸 수 있으므로(brick-shop이 검증) 어뷰징 여지가 작다.
    * 게시글보다 후하게 주는 것이 쇼핑몰의 관례다.
    */
   ctx.hooks.onAction("shop.review.created", "brick-point", async (payload) => {
-    const { reviewId, authorId } = (payload ?? {}) as { reviewId?: string; authorId?: string | null };
+    const { reviewId, productId, authorId } = (payload ?? {}) as { reviewId?: string; productId?: string; authorId?: string | null };
     if (!reviewId || !authorId) return;
     const s = await settings();
     if (s.reviewPoint > 0) {
+      /*
+       * 적립의 기준은 **회원 × 상품**이다 — 한 상품의 후기 적립은 한 번뿐. 후기 id 로 두었더니 후기를 쓰고
+       * 지우고 다시 쓰기를 되풀이하면 매번 새 id 로 적립돼 끝없이 쌓였다(포인트는 주문에서 돈처럼 쓰인다).
+       * 후기를 지워도 적립은 거두지 않는다 — 구매 확인을 거친 후기를 한 번 쓴 대가다.
+       */
       await points.grant({
         userId: authorId,
         amount: s.reviewPoint,
         reason: "상품 후기 작성",
-        refType: "shop.review",
-        refId: reviewId,
+        refType: "shop.review.product",
+        refId: productId ?? reviewId,
       });
     }
   });
