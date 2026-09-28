@@ -17,6 +17,7 @@ import { AuthGuard } from "./auth.guard.js";
 import { AuthService, SESSION_COOKIE } from "./auth.service.js";
 import { RateLimitService } from "./rate-limit.service.js";
 import { ReauthService } from "./reauth.service.js";
+import { PasswordConfirmService } from "./password-confirm.service.js";
 import { TwoFactorService } from "./two-factor.service.js";
 import { AuditService } from "../audit/audit.service.js";
 import { sql } from "drizzle-orm";
@@ -35,6 +36,7 @@ export class AccountSecurityController {
     private readonly audit: AuditService,
     private readonly reauth: ReauthService,
     @Inject(DB) private readonly db: BrickDb,
+    private readonly passwordConfirm: PasswordConfirmService,
   ) {}
 
   /**
@@ -85,21 +87,10 @@ export class AccountSecurityController {
    * 알아낼 수 있다.
    */
   private async requirePassword(req: FastifyRequest, password: string): Promise<void> {
-    const userId = this.userId(req);
-    const { allowed, retryAfterSeconds } = await this.rateLimit.consume(
-      `reauth:${userId}`,
-      10,
-      15 * 60_000,
-    );
-    if (!allowed) {
-      throw new HttpException(
-        msg("err.tooManyAttemptsSec", { seconds: retryAfterSeconds }),
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
+    // 횟수 제한은 비밀번호 변경·탈퇴와 한 몫을 나눠 쓴다 (PasswordConfirmService)
+    if (!(await this.passwordConfirm.confirm(this.userId(req), password))) {
+      throw new UnauthorizedException("비밀번호가 맞지 않습니다.");
     }
-    const ok = await this.auth.verifyPassword(userId, password);
-    if (!ok) throw new UnauthorizedException("비밀번호가 맞지 않습니다.");
-    await this.rateLimit.reset(`reauth:${userId}`);
   }
 
   @Get()

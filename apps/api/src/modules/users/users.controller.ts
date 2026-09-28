@@ -14,6 +14,7 @@ import { AdminGuard, AuthGuard } from "../auth/auth.guard.js";
 import { AuthService } from "../auth/auth.service.js";
 import { RateLimitService } from "../auth/rate-limit.service.js";
 import { ReauthService } from "../auth/reauth.service.js";
+import { PasswordConfirmService } from "../auth/password-confirm.service.js";
 import type { CaptchaProvider } from "@brick/core";
 import { AuditService } from "../audit/audit.service.js";
 import { CAPTCHA, DB, HOOKS, STORAGE } from "../../runtime.module.js";
@@ -45,6 +46,7 @@ export class UsersController {
     private readonly moderation: ModerationService,
     private readonly images: ImageService,
     private readonly identity: IdentityService,
+    private readonly passwordConfirm: PasswordConfirmService,
   ) {}
 
   /** 닉네임(표시 이름) 변경 주기(일). 설정이 없거나 이상하면 0 = 제한 없음 */
@@ -261,12 +263,13 @@ export class UsersController {
     }
 
     if (body.newPassword) {
-      // 비밀번호 변경에는 현재 비밀번호를 반드시 확인한다 (세션 탈취 시 계정 탈취로 번지지 않도록)
-      const [row] = await this.db.select().from(users).where(eq(users.id, req.user.id)).limit(1);
-      if (!row || !(await argon2.verify(row.passwordHash, body.currentPassword ?? ""))) {
+      // 비밀번호 변경에는 현재 비밀번호를 반드시 확인한다 (세션 탈취 시 계정 탈취로 번지지 않도록).
+      // 횟수를 센다 — 세지 않으면 훔친 세션으로 현재 비밀번호를 대입해 맞히는 순간 계정을 가져간다.
+      // 새 비밀번호의 형식을 먼저 본다: 형식 실수로 시도 몫을 쓰게 하지 않는다
+      if (body.newPassword.length < 8) throw new BadRequestException("새 비밀번호는 8자 이상이어야 합니다.");
+      if (!(await this.passwordConfirm.confirm(req.user.id, body.currentPassword ?? ""))) {
         throw new BadRequestException("현재 비밀번호가 올바르지 않습니다.");
       }
-      if (body.newPassword.length < 8) throw new BadRequestException("새 비밀번호는 8자 이상이어야 합니다.");
       patch.passwordHash = await argon2.hash(body.newPassword);
     }
 

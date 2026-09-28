@@ -497,6 +497,34 @@ check "일반 화면은 영향 없다" "$(code "$API/api/render/page?path=")" "2
 psql_q "DELETE FROM site_settings WHERE key = 'security.admin_ip_allowlist'" >/dev/null
 check "목록을 비우면 제한 없음" "$(code -b "$TMP/plain.txt" "$API/api/admin/nav")" "200"
 
+echo "── 현재 비밀번호 대입은 막힌다 (비밀번호 변경·탈퇴·재인증이 한 몫을 나눠 쓴다)"
+# 전에는 계정 보안 화면만 셌다 — 훔친 세션으로 비밀번호 변경 경로에서 현재 비밀번호를 무제한 대입해,
+# 맞히는 순간 새 비밀번호로 바꿔 계정을 가져갈 수 있었다
+for u in g1 g2; do
+  printf '{"email":"%s@sec.test","password":"password123",%s"displayName":"대입%s"}' "$u" "$CONSENT" "$u" > "$TMP/reg-$u.json"
+  curl -s -o /dev/null -X POST "$API/api/register" -H 'content-type: application/json' --data-binary "@$TMP/reg-$u.json"
+  printf '{"email":"%s@sec.test","password":"password123"}' "$u" > "$TMP/login-$u.json"
+  curl -s -o /dev/null -c "$TMP/$u.txt" -X POST "$API/api/auth/login" -H 'content-type: application/json' --data-binary "@$TMP/login-$u.json"
+done
+PW_WRONG='{"currentPassword":"wrongpass9","newPassword":"newpass1234"}'
+PW_RIGHT='{"currentPassword":"password123","newPassword":"newpass1234"}'
+putme() { code -b "$1" -X PUT "$API/api/me" -H 'content-type: application/json' -d "$2"; }
+CODES=""; for i in 1 2 3 4 5 6 7 8; do CODES="$CODES$(putme "$TMP/g1.txt" "$PW_WRONG") "; done
+check "틀린 현재 비밀번호는 거절된다 (여덟 번)" "$CODES" "400 400 400 400 400 400 400 400 "
+check "탈퇴 경로의 틀린 비밀번호도 같은 몫에서 센다" \
+  "$(code -b "$TMP/g1.txt" -X POST "$API/api/me/withdraw" -H 'content-type: application/json' -d '{"password":"wrongpass9"}')" "400"
+check "재인증 경로도 같은 몫이다" \
+  "$(code -b "$TMP/g1.txt" -X POST "$API/api/me/security/reauth" -H 'content-type: application/json' -d '{"password":"wrongpass9"}')" "401"
+check "몫을 다 쓰면 맞는 현재 비밀번호로도 바꾸지 못한다" "$(putme "$TMP/g1.txt" "$PW_RIGHT")" "429"
+check "비밀번호는 그대로다 (옛 비밀번호로 로그인된다)" \
+  "$(code -X POST "$API/api/auth/login" -H 'content-type: application/json' --data-binary "@$TMP/login-g1.json")" "201"
+# 맞히면 다시 센다 — 가끔 틀리는 사람이 쌓여서 막히지 않게
+for i in 1 2 3 4 5; do putme "$TMP/g2.txt" "$PW_WRONG" >/dev/null; done
+check "맞는 현재 비밀번호로 바꾼다" "$(putme "$TMP/g2.txt" "$PW_RIGHT")" "200"
+curl -s -o /dev/null -c "$TMP/g2.txt" -X POST "$API/api/auth/login" -H 'content-type: application/json' -d '{"email":"g2@sec.test","password":"newpass1234"}'
+CODES=""; for i in 1 2 3 4 5 6 7 8 9; do CODES="$CODES$(putme "$TMP/g2.txt" "$PW_WRONG") "; done
+check "맞힌 뒤에는 처음부터 센다 (아홉 번 틀려도 아직 막히지 않는다)" "$CODES" "400 400 400 400 400 400 400 400 400 "
+
 echo "── 로그아웃 — API 는 JSON, 테마 폼(JS 없는 제출)은 303 리다이렉트"
 check "폼 제출(accept: text/html)은 홈으로 303" \
   "$(code -b "$TMP/plain.txt" -X POST "$API/api/auth/logout" -H 'accept: text/html')" "303"

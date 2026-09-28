@@ -7,6 +7,7 @@ import type { BrickDb } from "@brick/database";
 import { AdminGuard, AuthGuard } from "../auth/auth.guard.js";
 import { AuthService } from "../auth/auth.service.js";
 import { ReauthService } from "../auth/reauth.service.js";
+import { PasswordConfirmService } from "../auth/password-confirm.service.js";
 import { AuditService } from "../audit/audit.service.js";
 import { DB } from "../../runtime.module.js";
 import { AgreementsService, KIND_LABEL, type AgreementKind } from "./agreements.service.js";
@@ -31,6 +32,7 @@ export class MembersController {
     private readonly withdrawal: WithdrawalService,
     private readonly auth: AuthService,
     private readonly audit: AuditService,
+    private readonly passwordConfirm: PasswordConfirmService,
   ) {}
 
   // ══════════════════════════════════════════════════
@@ -208,7 +210,8 @@ export class MembersController {
     const canUsePassword = rows[0]?.password_login_enabled === true;
 
     if (canUsePassword) {
-      const ok = await this.auth.verifyPassword(req.user.id, String(body?.password ?? ""));
+      // 횟수를 센다 — 훔친 세션으로 비밀번호를 대입해 계정을 지우는 길을 닫는다
+      const ok = await this.passwordConfirm.confirm(req.user.id, String(body?.password ?? ""));
       if (!ok) throw new BadRequestException("비밀번호가 올바르지 않습니다.");
     } else if (String(body?.confirm ?? "").trim() !== "탈퇴합니다") {
       // 소셜 전용 계정 — 확인 문구를 정확히 입력해야 한다
