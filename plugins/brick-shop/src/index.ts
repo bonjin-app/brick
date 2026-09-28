@@ -3137,7 +3137,7 @@ export default definePlugin(async (ctx) => {
     },
     async page({ offset, limit }) {
       const { rows } = await db.execute(sql`
-        SELECT slug, updated_at FROM shop_products
+        SELECT slug, updated_at, image_url, images, adult_only FROM shop_products
         WHERE status IN ('selling', 'soldout')
         ORDER BY created_at, id
         LIMIT ${limit} OFFSET ${offset}
@@ -3147,6 +3147,10 @@ export default definePlugin(async (ctx) => {
         lastmod: r.updated_at as Date,
         changefreq: "daily" as const,
         priority: 0.8,
+        // 상품 사진 — 구글 이미지 검색에 오른다. 성인 상품의 사진은 싣지 않는다(상세도 확인 전에는 가린다)
+        images: r.adult_only
+          ? []
+          : [r.image_url, ...(Array.isArray(r.images) ? (r.images as unknown[]) : [])].filter(Boolean).map(String),
       }));
     },
   });

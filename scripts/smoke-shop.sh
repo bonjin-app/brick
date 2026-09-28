@@ -924,6 +924,9 @@ check "상품을 공유하면 그 상품 사진이 미리보기로 나간다" "$
 R="$(og_img shop/trip-item)"
 [[ "$R" == http*"$MEDIA_URL" ]] && ok "올린 사진은 절대 주소로 낸다 (og:image 는 절대 주소여야 한다)" || bad "올린 사진의 og:image ($R)"
 check "상품이 아닌 화면에는 상품 사진이 없다" "$(og_img shop/cart)" "NONE"
+check "사이트맵에 상품 사진이 실린다" "$(sitemap_images_of "/shop/ext-item")" "https://example.test/a.jpg"
+R="$(sitemap_images_of "/shop/trip-item")"
+[[ "$R" == http*"$MEDIA_URL" ]] && ok "올린 사진은 사이트맵에도 절대 주소로" || bad "사이트맵의 올린 사진 ($R)"
 # 그 값을 그대로 되돌려 저장한다 — 화면이 하는 일과 같다
 RTID="$(psql_q "SELECT id FROM shop_products WHERE slug = 'trip-item'")"
 printf '{"slug":"trip-item","name":"왕복 상품","price":9000,"stock":5,"status":"selling","image_url":"%s"}' "$ADMIN_IMG" > "$TMP/rt2.json"

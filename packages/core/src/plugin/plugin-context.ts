@@ -584,6 +584,12 @@ export interface SitemapUrl {
   changefreq?: "always" | "hourly" | "daily" | "weekly" | "monthly" | "yearly" | "never";
   /** 0.0~1.0 */
   priority?: number;
+  /**
+   * 이 주소의 대표 이미지(상품 사진·글의 첫 이미지) — 구글 이미지 검색이 사이트맵의 `<image:image>` 로 찾는다.
+   * http(s) 나 `/` 로 시작하는 것만 싣고(나머지는 버린다) 주소마다 10장까지. **보는 사람을 모르는** 통로이므로
+   * 누구나 볼 수 있는 이미지만 넘긴다(성인 상품의 사진은 넘기지 않는다).
+   */
+  images?: string[];
 }
 
 /**

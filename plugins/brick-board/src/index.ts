@@ -1397,7 +1397,7 @@ ${items}
     },
     async page({ offset, limit }) {
       const { rows } = await db.execute(sql`
-        SELECT b.slug AS board, p.id, p.updated_at
+        SELECT b.slug AS board, p.id, p.updated_at, p.thumb_url
         FROM board_posts p
         JOIN board_boards b ON b.id = p.board_id
         LEFT JOIN board_groups g ON g.id = b.group_id
@@ -1411,6 +1411,8 @@ ${items}
         lastmod: r.updated_at as Date,
         changefreq: "weekly" as const,
         priority: 0.6,
+        // 글의 첫 이미지 — 공개 글만 여기 오므로(PUBLIC_POST) 누구나 볼 수 있는 사진이다
+        images: r.thumb_url ? [String(r.thumb_url)] : [],
       }));
     },
   });

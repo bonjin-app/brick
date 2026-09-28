@@ -495,6 +495,12 @@ contains "사이트맵 조각에 공개 게시판 글이 실린다 (대조군)" 
 absent "사이트맵은 그룹 권한도 본다" "$SM_ALL" "/board/gal/"
 check "그룹 삭제" "$(code -b "$ADMIN" -X DELETE "$BD/admin/groups/$GID")" "200"
 check "그룹을 지워도 게시판은 남고 다시 공개된다" "$(code "$BD/boards/gal/posts")" "200"
+# 사이트맵 이미지 — 구글 이미지 검색이 <image:image> 로 글의 사진을 찾는다
+SMP1="$(curl -s -X POST "$BD/boards/free/posts" -H 'content-type: application/json' -d '{"title":"사이트맵 사진 글","content":"<p>봄</p><img src=\"https://example.test/sm.jpg\" alt=\"\">","guestName":"손님","guestPassword":"pass1234"}' | jf "['id']")"
+SMP2="$(curl -s -X POST "$BD/boards/free/posts" -H 'content-type: application/json' -d '{"title":"사이트맵 글만","content":"<p>글만</p>","guestName":"손님","guestPassword":"pass1234"}' | jf "['id']")"
+check "사이트맵에 글의 첫 이미지가 함께 실린다" "$(sitemap_images_of "/board/free/$SMP1")" "https://example.test/sm.jpg"
+check "이미지 없는 글은 이미지를 싣지 않는다" "$(sitemap_images_of "/board/free/$SMP2")" ""
+contains "이미지 이름공간을 밝힌다" "$(sitemap_all)" 'xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"'
 
 cat > "$TMP/lk.json" <<'JSON'
 {"title":"링크 있는 글","content":"<p>참고</p>","links":["https://example.test/ref","javascript:alert(1)"],"guestName":"손님","guestPassword":"pass1234"}

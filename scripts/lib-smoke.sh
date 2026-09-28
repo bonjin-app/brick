@@ -119,3 +119,27 @@ restart_stub() {
   kill "$pid" 2>/dev/null || true
   return 1
 }
+
+# 사이트맵 전체 — 색인(/sitemap.xml)과 조각을 모두 읽어 이어 붙인다. 주소는 조각에 있다
+# (색인만 보면 어떤 글 주소도 없어서 "없다" 는 검사가 늘 통과한다)
+sitemap_all() {
+  local idx all u
+  idx="$(curl -s "$API/sitemap.xml")"
+  all="$idx"
+  for u in $(printf '%s' "$idx" | grep -o '<loc>[^<]*</loc>' | sed -E 's#</?loc>##g; s#^https?://[^/]+##' || true); do
+    all="$all$(curl -s "$API$u")"
+  done
+  printf '%s' "$all"
+}
+# sitemap_images_of <주소 끝부분> — 그 주소의 <url> 에 실린 이미지(쉼표로 잇는다). 주소가 없으면 NO-URL
+sitemap_images_of() {
+  sitemap_all | K="$1" python3 -c '
+import os, re, sys
+x = sys.stdin.read()
+for block in re.findall(r"<url>(.*?)</url>", x, re.S):
+    if re.search(r"<loc>[^<]*" + re.escape(os.environ["K"]) + r"</loc>", block):
+        print(",".join(re.findall(r"<image:loc>([^<]*)</image:loc>", block)))
+        break
+else:
+    print("NO-URL")'
+}

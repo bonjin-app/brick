@@ -136,13 +136,16 @@ export class SeoService {
         if (typeof u.priority === "number") {
           parts.push(`    <priority>${clampPriority(u.priority)}</priority>`);
         }
+        for (const img of sitemapImages(u.images, this.base)) {
+          parts.push(`    <image:image>\n      <image:loc>${escapeXml(img)}</image:loc>\n    </image:image>`);
+        }
         return `  <url>\n${parts.join("\n")}\n  </url>`;
       })
       .join("\n");
 
     return (
       `<?xml version="1.0" encoding="UTF-8"?>\n` +
-      `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${body}\n</urlset>\n`
+      `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n${body}\n</urlset>\n`
     );
   }
 
@@ -241,4 +244,23 @@ function escapeXml(s: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&apos;");
+}
+
+/**
+ * 사이트맵의 이미지 — http(s) 절대 주소나 `/` 로 시작하는 경로만(`//남의주소`·`javascript:` 는 버린다),
+ * 절대 주소로 바꿔 주소마다 10장까지. 같은 사진이 두 번 오면 한 번만.
+ */
+function sitemapImages(images: unknown, base: string): string[] {
+  if (!Array.isArray(images)) return [];
+  const out: string[] = [];
+  for (const raw of images) {
+    const v = String(raw ?? "").trim();
+    if (!v || v.length > 1000) continue;
+    let abs = "";
+    if (/^https?:\/\//i.test(v)) abs = v;
+    else if (v.startsWith("/") && !v.startsWith("//")) abs = `${base}${v}`;
+    if (abs && !out.includes(abs)) out.push(abs);
+    if (out.length >= 10) break;
+  }
+  return out;
 }
