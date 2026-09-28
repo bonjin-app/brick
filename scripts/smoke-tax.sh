@@ -433,6 +433,17 @@ m=d['missingProof']
 print('있음' if m and m['total'] > 0 else '없음')" <<< "$VAT")"
 check "증빙 누락 매출을 눈에 띄게 준다" "$NOPROOF" "있음"
 
+echo "── 운영자가 환불한 주문은 부가세 매출에서 빠진다 (반품 기록이 없어도)"
+# 전에는 반품 기록만 뺐다 — 주문을 환불로 바꿔 돈을 돌려줘도 과세 매출에 남아 세금을 더 냈다
+OV="$(mkorder "$B1" "$P_TAX" 1)"
+psql_q "UPDATE shop_orders SET payment_status='paid', status='paid', paid_at='2025-10-01 03:00:00+00' WHERE order_no='$OV'" >/dev/null
+vat25() { curl -s -b "$CK" "$SHOP/admin/reports/vat?year=2025&period=2-full" | jq_get "['total']['total']"; }
+V_BEFORE="$(vat25)"
+[[ "$V_BEFORE" -gt 0 ]] && ok "결제한 주문이 2025년 2기 매출에 잡힌다 ($V_BEFORE)" || bad "2025년 2기 매출 ($V_BEFORE)"
+OV_ID="$(psql_q "SELECT id FROM shop_orders WHERE order_no='$OV'")"
+curl -s -o /dev/null -b "$CK" -X PUT "$SHOP/admin/orders/$OV_ID" -H 'content-type: application/json' -d '{"status":"refunded"}'
+check "환불로 바꾸면 그 매출이 빠진다" "$(vat25)" "0"
+
 echo "── 부가세 자료도 CSV 로"
 curl -s -b "$CK" -D "$TMP/vh.txt" "$SHOP/admin/reports/vat?year=2026&period=2-full&format=csv" -o "$TMP/vat.csv"
 contains "CSV content-type" "$(cat "$TMP/vh.txt")" "text/csv"

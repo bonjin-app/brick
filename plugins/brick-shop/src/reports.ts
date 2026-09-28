@@ -133,14 +133,35 @@ function periodWhere(column: string, p: Period) {
  * 서브쿼리로 두는 이유: 주문에 반품이 여러 건 붙을 수 있어서 그냥 조인하면
  * 주문 금액이 반품 건수만큼 곱해진다 — 매출이 부풀어 보이는 대표적인 실수다.
  */
-const refundsByOrder = sql`
-  SELECT order_id,
-         sum(refund_amount) AS refunded,
-         sum(return_shipping_fee) AS return_shipping
-  FROM shop_returns
-  WHERE status = 'completed'
-  GROUP BY order_id
+/*
+ * **돌려준 돈은 반품 기록만이 아니다.** 운영자가 주문을 "환불"·"취소" 로 바꾸거나 결제 화면에서 부분
+ * 환불하면 반품 기록 없이 돈이 나간다 — 전에는 그 주문이 매출·부가세 신고·등급 실적에 그대로 남았다
+ * (100만 원을 전액 환불해도 매출 100만 원). 주문마다:
+ *   - 반품 환불액과 결제 기록의 환불 누적액 중 **큰 쪽** — 카드 반품은 두 곳에 같은 돈이 적혀 더하면 두 번 빠지고,
+ *     무통장 반품은 결제 기록이 없어 반품 쪽에만 있다.
+ *   - 취소·환불 상태인데 어느 기록에도 환불이 없으면(상태만 바꾼 주문 — 옮겨 온 주문 등) **전액**을 돌려준 것으로 본다.
+ *   - 주문 총액을 넘지 않는다.
+ * 매출 리포트·대시보드·부가세·등급이 이 조각 하나를 쓴다(따로 적었더니 넷이 같은 구멍을 가졌다).
+ */
+export const orderRefundsSql = sql`
+  SELECT o.id AS order_id,
+         least(o.total, CASE
+           WHEN o.status IN ('cancelled', 'refunded') AND coalesce(rr.refunded, 0) = 0 AND coalesce(pp.refunded, 0) = 0
+             THEN o.total
+           ELSE greatest(coalesce(rr.refunded, 0), coalesce(pp.refunded, 0))
+         END) AS refunded,
+         coalesce(rr.return_shipping, 0) AS return_shipping
+  FROM shop_orders o
+  LEFT JOIN (
+    SELECT order_id, sum(refund_amount) AS refunded, sum(return_shipping_fee) AS return_shipping
+    FROM shop_returns WHERE status = 'completed' GROUP BY order_id
+  ) rr ON rr.order_id = o.id
+  LEFT JOIN (
+    SELECT order_id, sum(refunded_amount) AS refunded FROM shop_payments GROUP BY order_id
+  ) pp ON pp.order_id = o.id
+  WHERE o.paid_at IS NOT NULL
 `;
+const refundsByOrder = orderRefundsSql;
 
 // ════════════════════════════════════════════════════
 //  기간별
@@ -244,15 +265,16 @@ export async function salesByProduct(
       sum(oi.cancelled_qty)                                  AS cancelled_qty,
       count(DISTINCT o.id)                                   AS orders,
       sum(oi.line_total)                                     AS gross,
-      sum(oi.refunded_amount)                                AS refunded,
+      -- 통째로 취소·환불된 주문: 수량은 상태 전이가 cancelled_qty 로 이미 뺐지만 항목 환불액은 채우지 않는다 — 금액은 여기서 뺀다
+      sum(CASE WHEN o.status IN ('cancelled', 'refunded') THEN oi.line_total ELSE oi.refunded_amount END) AS refunded,
       -- 할인 안분: 주문 할인 × (항목 정가 / 주문 상품합계). subtotal 0 방어.
       sum(CASE WHEN o.subtotal > 0
                THEN floor(((o.discount + coalesce(o.point_used, 0))::numeric * oi.line_total) / o.subtotal)
                ELSE 0 END)                                   AS discount_share,
-      sum(oi.line_total - oi.refunded_amount
+      sum(CASE WHEN o.status IN ('cancelled', 'refunded') THEN 0 ELSE oi.line_total - oi.refunded_amount
           - CASE WHEN o.subtotal > 0
                  THEN floor(((o.discount + coalesce(o.point_used, 0))::numeric * oi.line_total) / o.subtotal)
-                 ELSE 0 END)                                 AS net
+                 ELSE 0 END END)                                 AS net
     FROM shop_order_items oi
     JOIN shop_orders o ON o.id = oi.order_id
     LEFT JOIN shop_products p ON p.id = oi.product_id
@@ -319,11 +341,11 @@ export async function salesByCategory(
       sum(oi.quantity - oi.cancelled_qty) AS qty,
       count(DISTINCT o.id)                AS orders,
       sum(oi.line_total)                  AS gross,
-      sum(oi.refunded_amount)             AS refunded,
-      sum(oi.line_total - oi.refunded_amount
+      sum(CASE WHEN o.status IN ('cancelled', 'refunded') THEN oi.line_total ELSE oi.refunded_amount END) AS refunded,
+      sum(CASE WHEN o.status IN ('cancelled', 'refunded') THEN 0 ELSE oi.line_total - oi.refunded_amount
           - CASE WHEN o.subtotal > 0
                  THEN floor(((o.discount + coalesce(o.point_used, 0))::numeric * oi.line_total) / o.subtotal)
-                 ELSE 0 END)             AS net
+                 ELSE 0 END END)             AS net
     FROM shop_order_items oi
     JOIN shop_orders o ON o.id = oi.order_id
     LEFT JOIN shop_products p ON p.id = oi.product_id

@@ -26,6 +26,7 @@ import { isUniqueViolation } from "@brick/plugin-sdk";
 import type { Db } from "./types.js";
 import { ShopError } from "./types.js";
 import { t } from "./i18n.js";
+import { orderRefundsSql } from "./reports.js";
 
 export const RECEIPT_KINDS = ["income_deduction", "expense_proof"] as const;
 export type ReceiptKind = (typeof RECEIPT_KINDS)[number];
@@ -795,10 +796,7 @@ export async function vatReport(
   const tz = params.timezone;
 
   const { rows } = await db.execute(sql`
-    WITH refunds AS (
-      SELECT order_id, sum(refund_amount) AS refunded
-      FROM shop_returns WHERE status = 'completed' GROUP BY order_id
-    ),
+    WITH refunds AS (${orderRefundsSql}),
     paid AS (
       SELECT o.id, o.payment_method,
              o.total - coalesce(r.refunded, 0) AS net,

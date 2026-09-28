@@ -419,6 +419,29 @@ row = next(p for p in d['products'] if p['productName'] == '모자')
 print(row['qty'])" <<< "$PRD")"
 check "삭제해도 판매수량은 남는다" "$CAP_QTY" "3"
 
+echo "── 반품 없이 돌려준 돈도 매출에서 빠진다 (운영자 환불 · 결제 화면의 부분 환불)"
+# 전에는 반품 기록만 뺐다 — 운영자가 주문을 환불로 바꾸면 매출·부가세·등급에 전액이 그대로 남았다
+D9="2025-09-10"
+paidon() { psql_q "UPDATE shop_orders SET payment_status='paid', status='paid', paid_at=(('$D9'::date)::timestamp + interval '12 hours') AT TIME ZONE 'Asia/Seoul' WHERE order_no='$1'" >/dev/null; }
+ORF="$(mkorder "$P1" 1)"; paidon "$ORF"
+R9="$(curl -s -b "$CK" "$SHOP/admin/reports/sales?from=$D9&to=$D9")"
+contains "결제한 주문 13000" "$R9" '"net":13000'
+ORF_ID="$(psql_q "SELECT id FROM shop_orders WHERE order_no='$ORF'")"
+curl -s -o /dev/null -b "$CK" -X PUT "$SHOP/admin/orders/$ORF_ID" -H 'content-type: application/json' -d '{"status":"refunded"}'
+R9="$(curl -s -b "$CK" "$SHOP/admin/reports/sales?from=$D9&to=$D9")"
+contains "운영자가 환불로 바꾼 주문은 순매출에서 빠진다" "$R9" '"net":0'
+contains "환불액으로 보인다" "$R9" '"refunded":13000'
+ORP="$(mkorder "$P1" 2)"; paidon "$ORP"
+ORP_ID="$(psql_q "SELECT id FROM shop_orders WHERE order_no='$ORP'")"
+psql_q "INSERT INTO shop_payments (id, order_id, provider, provider_tid, status, amount, refunded_amount) VALUES (gen_random_uuid(), '$ORP_ID', 'toss', 'rp-part', 'partial_refunded', 23000, 5000)" >/dev/null
+R9="$(curl -s -b "$CK" "$SHOP/admin/reports/sales?from=$D9&to=$D9")"
+contains "결제 화면의 부분 환불(5000)도 뺀다 (23000 → 18000)" "$R9" '"net":18000'
+S9="$(curl -s -b "$CK" "$SHOP/admin/reports/summary?from=$D9&to=$D9")"
+check "요약도 같은 순매출" "$(echo "$S9" | jq_get "['current']['net']")" "18000"
+P9="$(curl -s -b "$CK" "$SHOP/admin/reports/products?from=$D9&to=$D9")"
+check "환불된 주문의 상품은 판매수량에 들지 않는다 (2개만)" "$(echo "$P9" | jq_get "['products'][0]['qty']")" "2"
+check "환불된 주문의 상품 금액도 상품별 순매출에서 빠진다 (20000 — 환불된 10000 제외)" "$(echo "$P9" | jq_get "['products'][0]['net']")" "20000"
+
 echo "══ 관련 상품 · 함께 구매 ══"
 
 echo "── 폼에서 slug 로 지정한다"

@@ -51,6 +51,7 @@ import {
   requestCashReceipt, requestTaxInvoice, updateTaxInvoice, vatReport,
 } from "./tax.js";
 import {
+  orderRefundsSql,
   SITE_TZ, parseGroupBy, parsePeriod, salesByCategory, salesByPeriod,
   salesByProduct, salesSummary, toCsv,
 } from "./reports.js";
@@ -1417,10 +1418,7 @@ export default definePlugin(async (ctx) => {
   ctx.registerRoute("GET", "/admin/stats", async (req) => {
     requireAdmin(req);
     const { rows } = await db.execute(sql`
-      WITH refunds AS (
-        SELECT order_id, sum(refund_amount) AS refunded
-        FROM shop_returns WHERE status = 'completed' GROUP BY order_id
-      )
+      WITH refunds AS (${orderRefundsSql})
       SELECT
         count(*) FILTER (WHERE o.status = 'pending')                     AS pending_orders,
         count(*) FILTER (WHERE o.status NOT IN ('cancelled','refunded')) AS valid_orders,

@@ -12,6 +12,7 @@ import { uuidv7 } from "uuidv7";
 import { isUniqueViolation } from "@brick/plugin-sdk";
 import type { Db } from "./types.js";
 import { ShopError } from "./types.js";
+import { orderRefundsSql } from "./reports.js";
 
 export const GRADE_RECOMPUTE_JOB = "shop.grades.recompute";
 
@@ -141,18 +142,12 @@ export async function recomputeGrades(db: Db): Promise<{ assigned: number; chang
   const { rows } = await db.execute(sql`
     WITH spend AS (
       SELECT o.user_id,
-             sum(greatest(o.total - greatest(coalesce(r.refunded, 0), coalesce(p.refunded, 0)), 0)) AS amount
+             sum(greatest(o.total - coalesce(r.refunded, 0), 0)) AS amount
       FROM shop_orders o
-      LEFT JOIN (
-        SELECT order_id, sum(refund_amount) AS refunded
-        FROM shop_returns WHERE status = 'completed' GROUP BY order_id
-      ) r ON r.order_id = o.id
-      LEFT JOIN (
-        SELECT order_id, sum(refunded_amount) AS refunded FROM shop_payments GROUP BY order_id
-      ) p ON p.order_id = o.id
+      -- 돌려준 돈 — 매출 리포트·부가세와 같은 조각(reports.ts orderRefundsSql)
+      LEFT JOIN (${orderRefundsSql}) r ON r.order_id = o.id
       WHERE o.user_id IS NOT NULL
         AND o.paid_at IS NOT NULL
-        AND o.status NOT IN ('cancelled', 'refunded')
         AND o.paid_at >= now() - (${GRADE_WINDOW_MONTHS} || ' months')::interval
       GROUP BY o.user_id
     ),
