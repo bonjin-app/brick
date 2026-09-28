@@ -433,6 +433,21 @@ m=d['missingProof']
 print('있음' if m and m['total'] > 0 else '없음')" <<< "$VAT")"
 check "증빙 누락 매출을 눈에 띄게 준다" "$NOPROOF" "있음"
 
+echo "── 운영자가 주문을 환불로 바꿔도 발급된 현금영수증을 취소한다"
+# 전에는 반품 완료만 취소했다 — 주문 화면에서 환불·취소로 바꾼 주문의 영수증은 살아 있어 세금을 더 냈다
+O_AR="$(mkorder "$B1" "$P_TAX" 1)"
+psql_q "UPDATE shop_orders SET payment_status='paid', status='paid', paid_at=now() WHERE order_no='$O_AR'" >/dev/null
+RAR="$(curl -s -b "$B1" -X POST "$SHOP/orders/$O_AR/cash-receipt" -H 'content-type: application/json' \
+  -d '{"kind":"income_deduction","identifier":"01077778888"}' | jq_get "['id']")"
+curl -s -o /dev/null -b "$CK" -X PUT "$SHOP/admin/cash-receipts/$RAR" -H 'content-type: application/json' \
+  -d '{"status":"issued","approval_no":"111122223333"}'
+check "발급 완료" "$(psql_q "SELECT status FROM shop_cash_receipts WHERE id='$RAR'")" "issued"
+O_AR_ID="$(psql_q "SELECT id FROM shop_orders WHERE order_no='$O_AR'")"
+curl -s -o /dev/null -b "$CK" -X PUT "$SHOP/admin/orders/$O_AR_ID" -H 'content-type: application/json' -d '{"status":"refunded"}'
+sleep 1
+check "주문을 환불로 바꾸면 영수증이 취소된다" "$(psql_q "SELECT status FROM shop_cash_receipts WHERE id='$RAR'")" "cancelled"
+contains "취소 사유가 남는다" "$(psql_q "SELECT cancel_reason FROM shop_cash_receipts WHERE id='$RAR'")" "환불"
+
 echo "── 운영자가 환불한 주문은 부가세 매출에서 빠진다 (반품 기록이 없어도)"
 # 전에는 반품 기록만 뺐다 — 주문을 환불로 바꿔 돈을 돌려줘도 과세 매출에 남아 세금을 더 냈다
 OV="$(mkorder "$B1" "$P_TAX" 1)"

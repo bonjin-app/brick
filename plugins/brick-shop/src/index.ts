@@ -182,6 +182,15 @@ export default definePlugin(async (ctx) => {
   onOrderTransition(({ orderId, to }) => {
     void notifyOrder(orderId, to);
     if (to === "paid") void announcePaid(orderId).catch(() => undefined);
+    /*
+     * 주문이 통째로 취소·환불되면 발급된 현금영수증을 취소한다 — 돌려준 돈의 증빙이 살아 있으면 세금을 더 낸다.
+     * 전에는 반품 완료만 취소해, 운영자가 주문 화면에서 환불·취소로 바꾼 주문의 영수증은 그대로 남았다.
+     * 반품으로 전량이 돌아와 여기로 오는 경우는 반품이 먼저 취소했으므로 할 일이 없다(대기·발급 상태만 고른다).
+     * 실패는 영수증 행에 남는다(운영자가 홈택스에서 직접 취소한다) — 취소를 되돌리지 않는다.
+     */
+    if (to === "cancelled" || to === "refunded") {
+      void cancelReceiptsForOrder(db, { orderId, reason: to === "cancelled" ? "주문 취소" : "주문 환불" }).catch(() => undefined);
+    }
   });
 
   /**
