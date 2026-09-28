@@ -217,6 +217,23 @@ recompute >/dev/null
 check "전량 반품하면 실적에서 빠져 강등 (사서 반품하기 우회 차단)" \
   "$(psql_q "SELECT g.name FROM shop_user_grades ug JOIN shop_grades g ON g.id=ug.grade_id JOIN users u ON u.id=ug.user_id WHERE u.email='b2@gr.test'")" "실버"
 
+echo "══ 산정: 반품 없이 돌려준 돈도 실적에서 빠진다 ══"
+# 전에는 반품 기록만 뺐다 — 운영자가 주문을 환불로 바꾸거나 부분 환불하면 실적이 그대로 남아 등급이 유지됐다
+gname() { psql_q "SELECT g.name FROM shop_user_grades ug JOIN shop_grades g ON g.id=ug.grade_id JOIN users u ON u.id=ug.user_id WHERE u.email='$1'"; }
+O3="$(buy "$B3" 11)"   # 110,000 + 배송 → 골드
+recompute >/dev/null
+check "b3 가 골드로 승급" "$(gname b3@gr.test)" "골드"
+O3_ID="$(psql_q "SELECT id FROM shop_orders WHERE order_no='$O3'")"
+O3_TOTAL="$(psql_q "SELECT total FROM shop_orders WHERE order_no='$O3'")"
+psql_q "INSERT INTO shop_payments (id, order_id, provider, provider_tid, status, amount, refunded_amount) VALUES (gen_random_uuid(), '$O3_ID', 'bank_transfer', 'gr-part', 'partial_refunded', $O3_TOTAL, 20000)" >/dev/null
+recompute >/dev/null
+check "결제에서 부분 환불(2만)하면 그만큼 빠져 실버로" "$(gname b3@gr.test)" "실버"
+psql_q "DELETE FROM shop_payments WHERE provider_tid='gr-part'" >/dev/null
+curl -s -o /dev/null -b "$CK" -X PUT "$SHOP/admin/orders/$O3_ID" -H 'content-type: application/json' -d '{"status":"refunded"}'
+check "운영자가 주문을 환불로 바꿨다" "$(psql_q "SELECT status FROM shop_orders WHERE order_no='$O3'")" "refunded"
+recompute >/dev/null
+check "환불된 주문은 실적에서 빠져 기본 등급으로 (사서 환불받기 우회 차단)" "$(gname b3@gr.test)" "일반"
+
 echo "══ 등급 삭제 ══"
 contains "관리자 목록에 인원 수" "$(curl -s -b "$CK" "$SHOP/admin/grades")" '"members":'
 curl -s -b "$CK" -X DELETE "$SHOP/admin/grades/$GOLD_ID" >/dev/null

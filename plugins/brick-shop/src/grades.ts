@@ -129,20 +129,30 @@ export async function recomputeGrades(db: Db): Promise<{ assigned: number; chang
 
   // 한 문장으로 처리한다 — 회원별 루프는 회원 수만큼 쿼리를 낸다.
   //
-  // spend: 기간 내 결제된 주문의 총액 − 그 주문들에 대한 완료된 반품 환불액.
+  // spend: 기간 내 결제된 주문의 총액 − 그 주문에서 돌려준 돈.
   // 반품 시점이 기간 밖이어도 뺀다 — 산 것이 기간 안이면 그 반품도 그 실적의
   // 차감이다 (사서 기간이 지난 뒤 반품하는 우회를 막는다).
+  //
+  // 돌려준 돈은 반품 기록만 보지 않는다 — 운영자가 주문을 "환불"·"취소" 로 바꾸거나 결제 화면에서
+  // 부분 환불하면 반품 기록 없이 돈이 나간다. 그 주문이 실적에 그대로 남아, 100만 원을 사고 전액
+  // 환불받아도 VIP 등급(상시 할인)이 유지됐다. 취소·환불된 주문은 통째로 빼고, 남은 주문은 반품 환불액과
+  // 결제 기록의 환불 누적액 중 **큰 쪽**을 뺀다 — 카드 반품은 두 곳에 같은 돈이 적혀서 더하면 두 번 빠진다
+  // (무통장 반품은 결제 기록이 없어 반품 쪽에만 있다). 주문마다 0 밑으로 내려가지 않는다.
   const { rows } = await db.execute(sql`
     WITH spend AS (
       SELECT o.user_id,
-             sum(o.total) - coalesce(sum(r.refunded), 0) AS amount
+             sum(greatest(o.total - greatest(coalesce(r.refunded, 0), coalesce(p.refunded, 0)), 0)) AS amount
       FROM shop_orders o
       LEFT JOIN (
         SELECT order_id, sum(refund_amount) AS refunded
         FROM shop_returns WHERE status = 'completed' GROUP BY order_id
       ) r ON r.order_id = o.id
+      LEFT JOIN (
+        SELECT order_id, sum(refunded_amount) AS refunded FROM shop_payments GROUP BY order_id
+      ) p ON p.order_id = o.id
       WHERE o.user_id IS NOT NULL
         AND o.paid_at IS NOT NULL
+        AND o.status NOT IN ('cancelled', 'refunded')
         AND o.paid_at >= now() - (${GRADE_WINDOW_MONTHS} || ' months')::interval
       GROUP BY o.user_id
     ),
