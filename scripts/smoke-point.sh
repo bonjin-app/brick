@@ -322,6 +322,19 @@ curl -s -o /dev/null -b "$MEMBER" -X DELETE "$BD/posts/$F3"; sleep 1
 check "글을 지우면 그 글에 단 내 댓글의 적립도 거둔다 (글 +50·댓글 +7 모두)" "$(balance)" "$((B0 + 50))"
 check "같은 원인은 한 번만 거둔다 (원장)" "$(psql_one "SELECT count(*) FROM point_ledger WHERE kind='revoke' AND ref_id='$F1'")" "1"
 
+echo "── 운영자가 주문 화면에서 결제완료로 바꿔도 구매 적립 (무통장 입금 확인)"
+# 전에는 PG 결제 확정만 적립을 알려, 관리 화면에서 상태를 바꾸는 흔한 입금 확인에는 적립이 붙지 않았다
+B2="$(balance)"
+printf '{"items":[{"productId":"%s","quantity":1}],"orderer":{"ordererName":"회원","ordererPhone":"010-0000-0000","postcode":"06236","address1":"서울"}}' "$PROD" > "$TMP/om.json"
+MNO="$(curl -s -b "$MEMBER" -X POST "$SH/orders" -H 'content-type: application/json' --data-binary "@$TMP/om.json" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("orderNo",""))')"
+MID="$(psql_one "SELECT id FROM shop_orders WHERE order_no='$MNO'")"
+MTOTAL="$(psql_one "SELECT total FROM shop_orders WHERE order_no='$MNO'")"
+curl -s -o /dev/null -b "$ADMIN" -X PUT "$SH/admin/orders/$MID" -H 'content-type: application/json' -d '{"status":"paid"}'
+sleep 1
+RATE="$(curl -s -b "$ADMIN" "$PT/admin/settings" | python3 -c 'import sys,json;print(json.load(sys.stdin)["purchaseRate"])')"
+check "상태를 결제완료로 바꾸면 구매 적립 (결제금액 × ${RATE}%)" "$(balance)" "$((B2 + MTOTAL * RATE / 100))"
+check "그 주문의 적립은 한 번만" "$(psql_one "SELECT count(*) FROM point_ledger WHERE kind='earn' AND ref_type='shop.order' AND ref_id='$MNO'")" "1"
+
 echo "── 플러그인 비활성화 시 서비스 해제"
 # 끄기 전에 선언 화면이 열리는 것을 확인해 둔다 (끈 뒤와 대조하기 위해)
 check "끄기 전 내역 화면은 200" \

@@ -178,7 +178,32 @@ export default definePlugin(async (ctx) => {
    * changeOrderStatus 는 여덜 곳에서 불린다. 호출부마다 붙이면 언젠가 한 곳이 빠지고,
    * 그 경로만 조용해진다 — 그래서 전이가 일어나는 지점 하나에서 알린다.
    */
-  onOrderTransition(({ orderId, to }) => { void notifyOrder(orderId, to); });
+  onOrderTransition(({ orderId, to }) => {
+    void notifyOrder(orderId, to);
+    if (to === "paid") void announcePaid(orderId).catch(() => undefined);
+  });
+
+  /**
+   * 결제 완료 — **어느 길로 결제됐든** 여기서 한 번 알린다(구매 적립 등이 `shop.order.paid` 를 구독한다).
+   *
+   * 전에는 PG 결제 확정(`runConfirm`)만 알려, 운영자가 주문 화면에서 상태를 "결제완료" 로 바꾸는 흔한
+   * 무통장 입금 확인에는 구매 적립이 붙지 않았다(정기결제의 회차 결제도). 전이가 일어나는 지점 하나에서
+   * 알리면 길이 늘어도 빠지지 않는다 — 메일 알림과 같은 이유다. 적립은 주문번호로 한 번만 쌓인다.
+   */
+  const announcePaid = async (orderId: string) => {
+    const { rows } = await db.execute(sql`
+      SELECT order_no, user_id, total FROM shop_orders WHERE id = ${orderId}::uuid LIMIT 1
+    `);
+    const o = rows[0];
+    if (!o) return;
+    // 개인결제 청구서였으면 결제완료로 표시한다
+    await markRequestPaid(db, String(o.order_no));
+    await ctx.hooks.doAction("shop.order.paid", {
+      orderNo: String(o.order_no),
+      userId: o.user_id ? String(o.user_id) : null,
+      amount: Number(o.total),
+    });
+  };
 
   /**
    * 포인트 서비스 — brick-point가 설치·활성화된 경우에만 존재한다.
@@ -663,16 +688,7 @@ export default definePlugin(async (ctx) => {
       claimedAmount: p.amount,
       actorId: p.actorId ?? null,
       pointsPort: pointsPort(),
-      // 포인트 적립 등이 이 훅을 구독한다
-      onPaid: async (info) => {
-        // 개인결제 청구서였으면 결제완료로 표시한다.
-        //
-        // 훅(doAction)이 아니라 직접 부른다 — 훅은 플러그인별 예외를 삼키므로
-        // 실패해도 아무도 모르고, 손님은 결제했는데 청구서는 "대기"로 남는다.
-        // 같은 플러그인 안의 일이니 훅을 거칠 이유도 없다.
-        await markRequestPaid(db, info.orderNo);
-        await ctx.hooks.doAction("shop.order.paid", info);
-      },
+      // 결제 완료 알림(청구서 표시 · shop.order.paid)은 상태 전이에서 한 번 한다 — announcePaid
       // 가상계좌가 발급됐다 — 계좌와 기한을 알린다(주문 접수 안내에는 계좌가 없었다)
       onAwaitingDeposit: async ({ orderId }) => { void notifyOrder(orderId, "pending", "virtualAccount"); },
     });
