@@ -27,7 +27,7 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-4781%20passing-2ea043.svg" alt="스모크 테스트 4781개" />
+  <img src="https://img.shields.io/badge/E2E-4795%20passing-2ea043.svg" alt="스모크 테스트 4795개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
   <a href="https://github.com/bonjin-app/brick/pkgs/container/brick">
     <img src="https://img.shields.io/badge/docker-amd64%20%C2%B7%20arm64-2496ed.svg" alt="Docker image (amd64 · arm64)" />
@@ -369,7 +369,7 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 4,781개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 4,795개 항목):
 
 | 수트 | 항목 | 무엇을 못박는가 |
 |---|---:|---|
@@ -413,7 +413,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `smoke-create-plugin.sh` | 45 | 템플릿 생성→빌드→ZIP 설치→계약 전부 실사용 · escapeHtml · 실제 탈퇴로 파기 검증 |
 | `smoke-openapi.sh` | 24 | 실제 라우트에서 생성 · 플러그인 켜고 끄면 문서도 변함 · 자체 완결 문서 페이지 |
 | `smoke-registry.sh` | 23 | 서명 통과해야 설치 · 키·주소 고정(TOFU) · 레지스트리 키 바꿔치기 방어 |
-| `smoke-notifications.sh` | 77 | **메일이 꺼져 있어도 알림이 닿는가** · 댓글·문의 답변이 알림함에 남는가 · 머리의 개수 · 열면 읽음 · **남의 알림은 보이지 않는다** · **보여준 것만 읽음** · **이어 읽기** · **보관 기간** · **주문 안내 문자(옵트인)** · **문자 설정을 저장해도 폼이 비지 않는다** · **내 댓글에 답글이 달리면 댓글 작성자에게 알림 — 자기 답글·글쓴이 댓글은 한 번만, 비밀 답글은 내용을 빼고, 문구 편집 가능** |
+| `smoke-notifications.sh` | 91 | **메일이 꺼져 있어도 알림이 닿는가** · **실시간 개수(SSE) — 새 알림은 바로, 다른 프로세스의 변화는 주기적으로, 읽으면 0, 남의 스트림에는 안 실리고, 탭을 여럿 열면 오래된 연결부터 닫힌다** · 댓글·문의 답변이 알림함에 남는가 · 머리의 개수 · 열면 읽음 · **남의 알림은 보이지 않는다** · **보여준 것만 읽음** · **이어 읽기** · **보관 기간** · **주문 안내 문자(옵트인)** · **문자 설정을 저장해도 폼이 비지 않는다** · **내 댓글에 답글이 달리면 댓글 작성자에게 알림 — 자기 답글·글쓴이 댓글은 한 번만, 비밀 답글은 내용을 빼고, 문구 편집 가능** |
 | `smoke-theme.sh` | 249 | 라이트·다크 두 벌 · 토큰 CSS 주입 차단 · 테마 고치면 캐시 갱신 · 랜딩 블록 · **글 상세의 문서 제목** · **두 번째 테마(editorial) 같은 계약** · **Storefront** · **Boutique** · **미리보기** · **배너 슬라이드** · 퀵메뉴 · **Corporate** · **2단 메뉴** · **띠배너** · **테마가 깨져도 사이트는 나간다** |
 | `smoke-moderation.sh` | 31 | 금지 단어(우회 포함)·사칭 이름·금지 도메인·차단 IP(자기잠금)·분류 필수 |
 | `smoke-i18n.sh` | 109 | **블록 안쪽 문구(중첩 템플릿·따옴표에 담은 라벨)도 영어** · **번역 문장에 값을 글자 그대로 끼운다($·같은 자리 두 번)** · 언어가 실제 렌더를 바꿈 · 즉시 반영 · ko 폴백+로그 · 값은 번역 안 함 · 관리 선언 라벨 · **카드 제목 전수** · **리소스 선언 문자열 전수** · **회원 메뉴·결제수단 이름(손님이 읽는다)** · **금액·날짜 표기와 주문 메일도 언어를 따라간다(손님·관리 화면 모두)** · **코어 경로가 쓰는 플러그인 문구도** · **서버 오류 메시지도 — 플러그인과 코어 양쪽(어느 칸인지는 코드 그대로)** · **페이지 빌더의 블록 서랍(속성 키는 데이터라 그대로)** · **값이 들어가는 문장과 그 안의 낱말까지(코어는 키+값을 실어 경계에서 조립)** · 템플릿 잔해 금지 | · **코어·플러그인 메일 전부(재설정·인증·문의 답변·재입고)** |
@@ -522,7 +522,7 @@ themes/
   boutique/       부티크 — 여백 위주
   corporate/      회사 홈페이지 — 히어로·특징 카드
 docs-site/        GitHub Pages 랜딩페이지
-scripts/          스모크 테스트 45종 + 정적 검사 41종 + OIDC 스텁 + 배포본 생성(build-release.sh)
+scripts/          스모크 테스트 45종 + 정적 검사 42종 + OIDC 스텁 + 배포본 생성(build-release.sh)
 docker/           Dockerfile, entrypoint
 ```
 
@@ -555,6 +555,7 @@ docker/           Dockerfile, entrypoint
 | [소셜 로그인](docs/social-login.md) | 구글·카카오·네이버·GitHub·사내 SSO 설정과 보안 |
 | [방문자·팝업](docs/site-ops.md) | 접속자 집계, 팝업·배너, 개인정보 처리 |
 | [결제](docs/payments.md) | PG 설정, 결제 흐름, 위조·중복 방어, 새 PG 붙이기 |
+| [AI 에이전트 안내](AGENTS.md) | Claude Code·Codex 같은 에이전트가 저장소를 고칠 때 지킬 지도·명령·규칙·검증·함정 |
 | [배치 편집기](docs/layout-editor.md) | 실제 테마로 미리 보며 블록 배치, 다단 레이아웃, 키보드 배치, 컨테이너 블록 만들기 |
 | [본인인증](docs/identity.md) | 포트원 본인인증, 성인 상품, 한 사람 한 계정, 저장하는 것과 안 하는 것 |
 | [알림톡](docs/alimtalk.md) | 카카오 알림톡(알리고) 설정, 템플릿 연결, 주문 알림 변수, 대체 문자 규칙 |

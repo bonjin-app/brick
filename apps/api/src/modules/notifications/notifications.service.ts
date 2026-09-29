@@ -81,6 +81,30 @@ export class NotificationsService {
    */
   private smsGateway: { plugin: string; gateway: SmsProvider } | null = null;
 
+  /*
+   * 알림함이 바뀌었음을 이 프로세스의 열린 스트림(`/api/notifications/stream`)에 곧바로 알린다.
+   * 다른 프로세스(서버 여러 대)에서 생긴 변화는 스트림이 주기적으로 개수를 다시 세어 따라온다 —
+   * 그래서 이 알림은 "빠르게 하려는" 최적화일 뿐 정확성은 그것에 기대지 않는다.
+   */
+  private readonly changeListeners = new Map<string, Set<() => void>>();
+
+  /** 그 회원의 알림함이 바뀔 때 부를 함수를 등록한다. 돌려받은 함수로 해제한다 */
+  onChange(userId: string, listener: () => void): () => void {
+    let set = this.changeListeners.get(userId);
+    if (!set) this.changeListeners.set(userId, (set = new Set()));
+    set.add(listener);
+    return () => {
+      set!.delete(listener);
+      if (set!.size === 0) this.changeListeners.delete(userId);
+    };
+  }
+
+  private changed(userId: string): void {
+    for (const fn of this.changeListeners.get(userId) ?? []) {
+      try { fn(); } catch { /* 한 스트림의 실패가 알림 저장을 막지 않는다 */ }
+    }
+  }
+
   setSmsGateway(plugin: string, gateway: SmsProvider): void {
     this.smsGateway = { plugin, gateway };
   }
@@ -129,6 +153,7 @@ export class NotificationsService {
         .insert(notifications)
         // uuidv7 = 시각이 앞에 오는 id. 목록 정렬과 이어 읽기가 이 한 값으로 끝난다
         .values({ id: uuidv7(), userId: input.userId, kind: input.kind, title, body: inboxBody(body), url })
+        .then(() => this.changed(input.userId!))
         .catch((e: unknown) => {
           // 탈퇴로 회원이 사라진 뒤 도착한 알림 등 — 주 흐름을 막지 않는다
           this.logger.warn(`알림함 기록 실패 (${input.kind}): ${e instanceof Error ? e.message : String(e)}`);
@@ -298,6 +323,7 @@ export class NotificationsService {
       // 남의 알림 id 를 섞어 보내도 userId 조건이 함께 걸려 아무 일도 일어나지 않는다
       .where(ids ? and(mine, inArray(notifications.id, [...ids])) : mine)
       .returning({ id: notifications.id });
+    if (rows.length) this.changed(userId);
     return rows.length;
   }
 

@@ -131,6 +131,9 @@ jobs:
       - name: 플러그인 핵심 함수 — 재현하기 어려운 분기를 가짜 DB 로 시험한다 (결제 직후 취소 경합 · 원글 비밀번호 키 · 커밋 뒤 미루기)
         run: node scripts/check-plugin-units.mjs
 
+      - name: 웹 프록시가 이벤트 스트림(실시간 알림)을 모으지 않고 흘려보낸다
+        run: node scripts/check-sse-proxy.mjs
+
       - name: 관리 화면 라벨이 사이트 언어를 따른다 (운영자는 이 화면을 하루 종일 본다)
         run: node scripts/check-admin-i18n.mjs
 

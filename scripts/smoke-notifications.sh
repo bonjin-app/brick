@@ -353,6 +353,54 @@ R="$(last_reply_of other)"
 [[ "$(replies_of other)" == "2" && "$R" == *"(비밀댓글)"* && "$R" != *"9999"* ]] && ok "비밀 답글은 내용을 빼고 알린다" || bad "비밀 답글 알림 (${R:0:120})"
 contains "운영자가 답글 알림 문구도 고칠 수 있다" "$(curl -s -b "$ADMIN" "$API/api/admin/notification-templates")" '"event":"board.reply"'
 
+echo "── 실시간 알림 개수 (SSE) — 새로 고침 없이 머리의 개수가 바뀐다"
+check "비로그인은 스트림에 닿을 수 없다" "$(code "$API/api/notifications/stream")" "401"
+# 스트림이 보낸 개수를 차례로 모은다
+unreads() { grep '^data:' "$1" 2>/dev/null | sed -E 's/.*"unread":([0-9]+).*/\1/' | tr '\n' ',' || true; }
+last_unread() { local u; u="$(unreads "$1")"; u="${u%,}"; echo "${u##*,}"; }
+# <파일> <기대 개수> <최대 초> — 마지막으로 받은 개수가 기대값이 될 때까지
+await_unread() { local i; for i in $(seq 1 $(( $3 * 5 ))); do [[ "$(last_unread "$1")" == "$2" ]] && return 0; sleep 0.2; done; return 1; }
+CUR="$(curl -s -b "$MEMBER" "$API/api/notifications" | jget "['unread']")"
+curl -sN -b "$MEMBER" -D "$TMP/sse-m.head" --max-time 40 "$API/api/notifications/stream" > "$TMP/sse-m.out" 2>/dev/null &
+SSE_M=$!
+curl -sN -b "$OTHER" --max-time 40 "$API/api/notifications/stream" > "$TMP/sse-o.out" 2>/dev/null &
+SSE_O=$!
+await_unread "$TMP/sse-m.out" "$CUR" 4 && ok "열자마자 현재 개수를 보낸다 ($CUR)" || bad "첫 개수 ($(unreads "$TMP/sse-m.out") / 기대 $CUR)"
+HEAD_TXT="$(tr -d '\r' < "$TMP/sse-m.head" | tr 'A-Z' 'a-z')"
+contains "이벤트 스트림으로 내려온다" "$HEAD_TXT" "content-type: text/event-stream"
+contains "역프록시가 모으지 않게 한다" "$HEAD_TXT" "x-accel-buffering: no"
+contains "저장하지 않는다" "$HEAD_TXT" "no-store"
+# 같은 서버에서 쌓인 알림은 주기(5초)를 기다리지 않고 바로 밀어 준다
+printf '{"content":"실시간 시험 댓글"}' > "$TMP/c-live.json"
+T0=$SECONDS
+curl -s -o /dev/null -b "$ADMIN" -X POST "$BD/posts/$POST_ID/comments" -H 'content-type: application/json' --data-binary "@$TMP/c-live.json"
+await_unread "$TMP/sse-m.out" "$((CUR + 1))" 3 && ok "새 알림이 쌓이면 바로 개수가 바뀐다 ($((SECONDS - T0))초 안)" || bad "즉시 전달 ($(unreads "$TMP/sse-m.out"))"
+# 다른 서버 프로세스에서 쌓인 것은 알 방법이 없어 주기적으로 다시 센다 — DB 에 직접 넣어 그 길을 시험한다
+psql_q "INSERT INTO notifications (id, user_id, kind, title, body, url) SELECT gen_random_uuid(), id, 'system.test', '직접 넣은 알림', '', '' FROM users WHERE email='member@nt.test'" >/dev/null
+await_unread "$TMP/sse-m.out" "$((CUR + 2))" 9 && ok "다른 프로세스에서 쌓인 알림도 주기적으로 따라온다" || bad "주기 확인 ($(unreads "$TMP/sse-m.out"))"
+curl -s -o /dev/null -b "$MEMBER" -X POST "$API/api/notifications/read" -H 'content-type: application/json' -d '{}'
+await_unread "$TMP/sse-m.out" "0" 3 && ok "읽음 처리하면 0 이 된다 (다른 탭의 배지도 함께 꺼진다)" || bad "읽음 반영 ($(unreads "$TMP/sse-m.out"))"
+check "개수가 그대로일 때는 되풀이해 보내지 않는다" \
+  "$(unreads "$TMP/sse-m.out" | tr ',' '\n' | awk 'NF && prev==$0 {d++} {prev=$0} END {print d+0}')" "0"
+check "남의 알림은 다른 회원의 스트림에 실리지 않는다" "$(unreads "$TMP/sse-o.out")" "$(curl -s -b "$OTHER" "$API/api/notifications" | jget "['unread']"),"
+kill "$SSE_M" "$SSE_O" 2>/dev/null || true; wait "$SSE_M" "$SSE_O" 2>/dev/null || true
+# 탭을 여럿 열어도 연결이 쌓이지 않는다 — 회원당 4개, 넘으면 가장 오래된 것을 서버가 닫는다
+TAB_PIDS=""
+for i in 1 2 3 4 5; do
+  curl -sN -b "$MEMBER" --max-time 30 "$API/api/notifications/stream" > "$TMP/tab-$i.out" 2>/dev/null &
+  TAB_PIDS="$TAB_PIDS $!"
+  sleep 0.4
+done
+FIRST_TAB="${TAB_PIDS# }"; FIRST_TAB="${FIRST_TAB%% *}"
+LAST_TAB="${TAB_PIDS##* }"
+sleep 1
+kill -0 "$FIRST_TAB" 2>/dev/null && bad "가장 오래된 연결이 닫히지 않았다" || ok "다섯 번째 탭을 열면 가장 오래된 연결을 서버가 닫는다"
+kill -0 "$LAST_TAB" 2>/dev/null && ok "새로 연 연결은 살아 있다" || bad "새 연결이 죽었다"
+for pid in $TAB_PIDS; do kill "$pid" 2>/dev/null || true; done
+for pid in $TAB_PIDS; do wait "$pid" 2>/dev/null || true; done
+contains "로그인 화면에는 실시간 갱신 스크립트가 붙는다" "$(render -b "$MEMBER" "$API/api/render/page?path=")" "/api/notifications/stream"
+absent "손님 화면(캐시되는 렌더)에는 붙지 않는다" "$(render "$API/api/render/page?path=")" "/api/notifications/stream"
+
 echo
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 [[ -n "${BRICK_SMOKE_LOG:-}" ]] && echo "$(basename "${BASH_SOURCE[0]}") ${PASS} ${FAIL}" >> "$BRICK_SMOKE_LOG"

@@ -11,7 +11,7 @@ const gzipAsync = promisify(gzip);
  * 응답을 압축하지 않는다. 그 결과 서버 렌더 HTML(80KB)·테마 CSS(32KB)가 그대로 나갔다.
  * 이미지·zip·PDF 는 이미 압축된 형식이라 건너뛴다(크기도 커 메모리에 모으지 않는다).
  */
-const COMPRESSIBLE = /^(text\/|application\/(json|javascript|xml|xhtml\+xml|rss\+xml|atom\+xml|manifest\+json)|image\/svg\+xml)/i;
+const COMPRESSIBLE = /^(text\/(?!event-stream)|application\/(json|javascript|xml|xhtml\+xml|rss\+xml|atom\+xml|manifest\+json)|image\/svg\+xml)/i;
 const MIN_COMPRESS_BYTES = 1024;
 
 /**

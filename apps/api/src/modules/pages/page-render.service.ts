@@ -33,6 +33,51 @@ const NO_MARK_TAGS = new Set([
  * (`<div>…</div><div>…</div>` 는 둘이다). 주석·속성 값 안의 태그 모양까지 가려내지는 않는다 — 틀리면
  * 표시가 한 겹 바깥에 붙거나 상자로 감싸질 뿐, 공개 렌더는 이 함수를 쓰지 않는다.
  */
+/**
+ * 머리의 알림 링크(`a[href="/notifications"]`)의 개수를 서버가 밀어 주는 값으로 바꾼다.
+ *
+ * 문구를 여기서 만들지 않는다 — 링크에 이미 그려진 문구("알림 3" · "Alerts 3")에서 끝의 숫자만
+ * 바꾸므로 언어·테마 마크업(아이콘·span)이 무엇이든 따라간다. 테마 계약을 늘리지 않는 것이 이 방식의 이유다.
+ * 창이 가려지면 연결을 닫고 다시 보이면 붙는다 — 열어 둔 탭마다 서버 연결이 쌓이지 않게.
+ * 스크립트가 없거나 실패해도 페이지는 그대로다(점진적 향상). 다른 코드가 듣도록 `brick:notifications` 를 발행한다.
+ */
+export const LIVE_NOTIFICATIONS_SCRIPT = `<script>
+(function(){
+  if (!window.EventSource) return;
+  var a = document.querySelector('a[href="/notifications"]');
+  if (!a) return;
+  var node = null, w = document.createTreeWalker(a, NodeFilter.SHOW_TEXT);
+  while (w.nextNode()) { if (w.currentNode.nodeValue.trim()) { node = w.currentNode; break; } }
+  if (!node) return;
+  var raw = node.nodeValue, lead = raw.slice(0, raw.length - raw.trimStart().length), tail = raw.slice(raw.trimEnd().length);
+  var base = raw.trim();
+  while (base && ' 0123456789'.indexOf(base.charAt(base.length - 1)) >= 0) base = base.slice(0, -1);
+  base = base.trim();
+  var es = null, hideTimer = null;
+  function show(n){
+    node.nodeValue = lead + (n > 0 ? base + ' ' + n : base) + tail;
+    a.setAttribute('data-unread', String(n));
+    try { document.dispatchEvent(new CustomEvent('brick:notifications', { detail: { unread: n } })); } catch (e) {}
+  }
+  function open(){
+    if (es) return;
+    es = new EventSource('/api/notifications/stream');
+    es.addEventListener('unread', function(ev){
+      try { show(Number(JSON.parse(ev.data).unread) || 0); } catch (e) {}
+    });
+  }
+  function close(){ if (es) { es.close(); es = null; } }
+  document.addEventListener('visibilitychange', function(){
+    if (document.hidden) { hideTimer = setTimeout(close, 30000); }
+    else { clearTimeout(hideTimer); open(); }
+  });
+  window.addEventListener('pagehide', close);
+  // 뒤로 가기로 캐시에서 되살아난 페이지는 pagehide 로 닫힌 채다 — 다시 붙는다
+  window.addEventListener('pageshow', function(ev){ if (ev.persisted) open(); });
+  open();
+})();
+</script>`;
+
 export function singleRootTagEnd(html: string): number {
   const lead = html.length - html.trimStart().length;
   const body = html.slice(lead);
@@ -118,7 +163,20 @@ export class PageRenderService {
     private readonly maintenance: MaintenanceModeService,
   ) {}
 
-  async renderPath(
+  /**
+   * 화면을 그린다. 로그인한 회원의 화면에는 알림 개수를 실시간으로 갱신하는 스크립트가 붙는다 —
+   * 로그인 렌더는 캐시되지 않으므로(`cacheable` 정책) 손님 캐시에 섞이지 않는다.
+   */
+  async renderPath(rawPath: string, opts: Parameters<PageRenderService["renderPathInner"]>[1] = {}): Promise<RenderedPage> {
+    const page = await this.renderPathInner(rawPath, opts);
+    if (opts.user && !opts.previewTheme && !opts.includeUnpublished && page.status === 200
+      && page.html.includes('href="/notifications"') && /<\/body>/i.test(page.html)) {
+      return { ...page, html: page.html.replace(/<\/body>/i, () => `${LIVE_NOTIFICATIONS_SCRIPT}</body>`) };
+    }
+    return page;
+  }
+
+  private async renderPathInner(
     rawPath: string,
     opts: {
       query?: Record<string, string>;

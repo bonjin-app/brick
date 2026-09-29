@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Post, Query, Req, UseGuards } from "@nestjs/common";
-import type { FastifyRequest } from "fastify";
+import { Body, Controller, Get, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
+import type { FastifyReply, FastifyRequest } from "fastify";
+import { openNotificationStream } from "./notification-stream.js";
 import { NotificationsService } from "./notifications.service.js";
 import { AuthGuard } from "../auth/auth.guard.js";
 
@@ -8,6 +9,31 @@ import { AuthGuard } from "../auth/auth.guard.js";
 @UseGuards(AuthGuard)
 export class NotificationsController {
   constructor(private readonly notifications: NotificationsService) {}
+
+  /**
+   * 실시간 알림 개수 (SSE). 응답을 우리가 직접 쓰므로 Fastify 에서 떼어 낸다(`hijack`) —
+   * 그러지 않으면 압축·직렬화 훅이 스트림을 모아 버려 한 건도 나가지 않는다.
+   */
+  @Get("stream")
+  stream(@Req() req: FastifyRequest, @Res() reply: FastifyReply): void {
+    const userId = (req as { user?: { id: string } }).user!.id;
+    reply.hijack();
+    const raw = reply.raw;
+    raw.writeHead(200, {
+      "content-type": "text/event-stream; charset=utf-8",
+      "cache-control": "no-store, no-transform",
+      connection: "keep-alive",
+      // nginx 등 역프록시가 응답을 모으지 않게 한다
+      "x-accel-buffering": "no",
+    });
+    const close = openNotificationStream({
+      userId,
+      source: this.notifications,
+      write: (chunk) => { raw.write(chunk); },
+      end: () => { raw.end(); },
+    });
+    req.raw.on("close", close);
+  }
 
   @Get()
   async list(@Req() req: FastifyRequest, @Query("limit") limit?: string, @Query("before") before?: string) {

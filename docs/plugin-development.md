@@ -849,3 +849,14 @@ const thumbUrl = await ctx.images.thumbUrlFor(imageUrl);   // 없으면 null
 ```ts
 { name: "images_text", label: "추가 이미지", type: "images", max: 20 }
 ```
+
+## 실시간 알림 개수 (로그인한 회원의 화면)
+
+로그인한 회원에게 그려지는 화면에는 머리의 알림 링크(`a[href="/notifications"]`) 개수를 서버가 밀어 주는 값으로 바꾸는
+작은 스크립트가 붙습니다 (`GET /api/notifications/stream`, SSE). 테마·플러그인이 할 일은 없습니다.
+
+- 링크에 이미 그려진 문구("알림 3" · "Alerts 3")의 **끝 숫자만** 바꿉니다 — 언어와 마크업(아이콘·`span`)을 따라갑니다.
+- 개수가 바뀔 때마다 문서에 `brick:notifications` 이벤트가 나갑니다. 화면 안의 다른 요소(예: 탭 제목)가 반응하려면 듣기만 하세요:
+  `document.addEventListener("brick:notifications", (e) => console.log(e.detail.unread))`
+- 알림을 만들 때는 지금처럼 `NotificationsService.notify` 만 부르면 됩니다. 같은 프로세스에서는 곧바로, 다른 프로세스에서는 5초 안에 닿습니다.
+- 스크립트가 없거나 실패해도 화면은 그대로입니다(점진적 향상). 연결은 회원당 4개, 15분마다 새로 붙습니다 — 로그아웃·세션 폐기가 열린 연결에 닿지 않기 때문입니다.

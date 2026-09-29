@@ -13,6 +13,8 @@ import { announcePaid, sweepUnannouncedPaid } from "../plugins/brick-shop/dist/o
 import { restoreOrderPoints } from "../plugins/brick-shop/dist/orders.js";
 import { canReadSecret, canReadSecretAsMember, secretPostRef } from "../plugins/brick-board/dist/access.js";
 import { deletePosts } from "../plugins/brick-board/dist/posts.js";
+import { LIVE_NOTIFICATIONS_SCRIPT } from "../apps/api/dist/modules/pages/page-render.service.js";
+import { openNotificationStream, openStreamCount, MAX_PER_USER } from "../apps/api/dist/modules/notifications/notification-stream.js";
 
 let bad = 0;
 const eq = (name, got, want) => {
@@ -86,6 +88,142 @@ console.log("── sweepUnannouncedPaid");
   const q = db.calls[0];
   eq("결제됐고 알림이 끝나지 않은 주문만 고른다", q.includes("paid_announced_at") && q.includes("paid_at IS NOT NULL"), true);
   eq("유예와 기간 창으로 원래 경로·영구 실패를 거른다", q.includes("minutes") && q.includes("days"), true);
+}
+
+// ── 실시간 알림 스트림 ─────────────────────────
+console.log("── openNotificationStream");
+{
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const mkSource = (initial = 0) => {
+    const src = { n: initial, listeners: new Set(), unsub: 0 };
+    src.unreadCount = async () => src.n;
+    src.onChange = (_u, fn) => { src.listeners.add(fn); return () => { src.listeners.delete(fn); src.unsub++; }; };
+    src.fire = () => src.listeners.forEach((f) => f());
+    return src;
+  };
+  const mkSock = () => { const s = { out: [], ended: 0 }; s.write = (c) => { s.out.push(c); }; s.end = () => { s.ended++; }; return s; };
+  const events = (sock) => sock.out.filter((c) => c.startsWith("event: unread")).map((c) => JSON.parse(c.split("data: ")[1]).unread);
+
+  let src = mkSource(3), sock = mkSock();
+  let close = openNotificationStream({ userId: "u1", source: src, ...sock, pollMs: 40, heartbeatMs: 1000, maxAgeMs: 5000 });
+  await sleep(20);
+  eq("열자마자 재접속 간격을 알리고 현재 개수를 보낸다", [sock.out[0], events(sock)], ["retry: 15000\n\n", [3]]);
+  await sleep(100);
+  eq("개수가 그대로면 다시 보내지 않는다", events(sock), [3]);
+  src.n = 5; src.fire(); await sleep(15);
+  eq("같은 프로세스의 변화는 주기를 기다리지 않고 바로 보낸다", events(sock), [3, 5]);
+  src.n = 6; await sleep(80);
+  eq("다른 프로세스의 변화는 주기적으로 다시 세어 따라온다", events(sock), [3, 5, 6]);
+  eq("열린 스트림은 회원별로 센다", [openStreamCount("u1"), openStreamCount("other")], [1, 0]);
+  close();
+  eq("닫으면 소켓을 닫고 구독을 풀고 목록에서 뺀다", [sock.ended, src.unsub, openStreamCount("u1")], [1, 1, 0]);
+  src.n = 9; src.fire(); await sleep(60);
+  eq("닫은 뒤에는 아무것도 보내지 않는다", events(sock), [3, 5, 6]);
+
+  // 상한 — 가장 오래된 것부터 닫는다
+  src = mkSource(0);
+  const socks = [];
+  for (let i = 0; i < MAX_PER_USER + 2; i++) {
+    const k = mkSock(); socks.push(k);
+    openNotificationStream({ userId: "u2", source: src, ...k, pollMs: 1000, heartbeatMs: 1000, maxAgeMs: 5000 });
+  }
+  eq(`회원당 ${MAX_PER_USER}개까지만 열려 있다`, openStreamCount("u2"), MAX_PER_USER);
+  eq("넘친 만큼 가장 오래된 것부터 닫힌다", socks.map((k) => k.ended), [1, 1, 0, 0, 0, 0]);
+  eq("다른 회원의 연결은 건드리지 않는다", openStreamCount("u1"), 0);
+
+  // 수명 — 세션 폐기가 열린 연결에 닿지 않으므로 스스로 닫는다
+  src = mkSource(0); sock = mkSock();
+  openNotificationStream({ userId: "u3", source: src, ...sock, pollMs: 1000, heartbeatMs: 1000, maxAgeMs: 50 });
+  await sleep(90);
+  eq("수명이 다하면 스스로 닫는다 (브라우저가 다시 붙으며 인증을 새로 받는다)", [sock.ended, openStreamCount("u3")], [1, 0]);
+
+  // 쓰기 실패 — 끊긴 소켓이 구독·타이머를 붙들고 있지 않게
+  src = mkSource(1);
+  let ended = 0;
+  openNotificationStream({ userId: "u4", source: src, write() { throw new Error("EPIPE"); }, end() { ended++; }, pollMs: 1000, heartbeatMs: 1000, maxAgeMs: 5000 });
+  await sleep(30);
+  eq("첫 쓰기부터 실패하면 닫고 구독도 만들지 않는다", [ended, openStreamCount("u4"), src.listeners.size], [1, 0, 0]);
+  src = mkSource(1); ended = 0;
+  let writes = 0;
+  openNotificationStream({ userId: "u4b", source: src, write() { if (++writes > 1) throw new Error("EPIPE"); }, end() { ended++; }, pollMs: 1000, heartbeatMs: 1000, maxAgeMs: 5000 });
+  await sleep(30);
+  eq("쓰다가 끊기면 닫고 구독을 푼다", [ended, openStreamCount("u4b"), src.listeners.size, src.unsub], [1, 0, 0, 1]);
+
+  // 개수 조회 실패 — 다음 차례에 다시 센다
+  src = mkSource(2); sock = mkSock();
+  let fails = 1;
+  src.unreadCount = async () => { if (fails-- > 0) throw new Error("db"); return src.n; };
+  close = openNotificationStream({ userId: "u5", source: src, ...sock, pollMs: 30, heartbeatMs: 1000, maxAgeMs: 5000 });
+  await sleep(90);
+  eq("일시적 조회 실패는 스트림을 죽이지 않는다", [events(sock), sock.ended], [[2], 0]);
+  close();
+
+  // 하트비트
+  src = mkSource(0); sock = mkSock();
+  close = openNotificationStream({ userId: "u6", source: src, ...sock, pollMs: 1000, heartbeatMs: 25, maxAgeMs: 5000 });
+  await sleep(70);
+  eq("조용한 동안 주석 줄을 보내 프록시가 끊지 않게 한다", sock.out.filter((c) => c === ": ping\n\n").length >= 2, true);
+  close();
+}
+
+// ── 머리 알림 개수 스크립트 (가짜 DOM) ──────────
+console.log("── LIVE_NOTIFICATIONS_SCRIPT");
+{
+  const vm = await import("node:vm");
+  const body = LIVE_NOTIFICATIONS_SCRIPT.replace(/^<script>/, "").replace(/<\/script>$/, "");
+  // 실제 브라우저 없이 스크립트가 만지는 표면만 흉내 낸다: 링크 안의 글 노드 하나, EventSource, 문서 이벤트
+  const run = (label, { anchor = true } = {}) => {
+    const node = { nodeValue: label, nodeType: 3 };
+    const attrs = {};
+    const a = { setAttribute: (k, v) => { attrs[k] = v; } };
+    const listeners = {}, sources = [], events = [];
+    class ES {
+      constructor(url) { this.url = url; this.handlers = {}; this.closed = false; sources.push(this); }
+      addEventListener(t, fn) { this.handlers[t] = fn; }
+      close() { this.closed = true; }
+      emit(n) { this.handlers.unread?.({ data: JSON.stringify({ unread: n }) }); }
+    }
+    let walked = false;
+    const document = {
+      hidden: false,
+      querySelector: (sel) => (anchor && sel === 'a[href="/notifications"]' ? a : null),
+      createTreeWalker: () => ({ get currentNode() { return node; }, nextNode: () => (walked ? false : (walked = true)) }),
+      addEventListener: (t, fn) => { listeners[t] = fn; },
+      dispatchEvent: (e) => { events.push(e.detail.unread); },
+    };
+    const win = { EventSource: ES, addEventListener: (t, fn) => { listeners["w:" + t] = fn; } };
+    vm.runInNewContext(body, {
+      window: win, document, EventSource: ES, NodeFilter: { SHOW_TEXT: 4 },
+      CustomEvent: class { constructor(n, o) { this.detail = o.detail; } }, setTimeout, clearTimeout,
+    });
+    return { node, attrs, sources, listeners, events, document, es: () => sources[sources.length - 1] };
+  };
+  let r = run("알림");
+  eq("같은 주소의 스트림을 연다", r.es().url, "/api/notifications/stream");
+  r.es().emit(3);
+  eq("개수를 링크 문구 끝에 붙인다", [r.node.nodeValue, r.attrs["data-unread"], r.events], ["알림 3", "3", [3]]);
+  r.es().emit(12);
+  eq("이미 붙은 숫자는 바꾼다 (두 번 붙지 않는다)", r.node.nodeValue, "알림 12");
+  r.es().emit(0);
+  eq("0 이면 숫자를 뗀다", r.node.nodeValue, "알림");
+  r = run("  알림 7 \n");
+  r.es().emit(2);
+  eq("처음부터 숫자가 있어도 기준 문구만 남기고 앞뒤 공백을 지킨다", r.node.nodeValue, "  알림 2 \n");
+  r = run("Alerts 4");
+  r.es().emit(1);
+  eq("다른 언어의 문구도 그대로 따른다", r.node.nodeValue, "Alerts 1");
+  r = run("알림", { anchor: false });
+  eq("링크가 없으면 아무것도 열지 않는다", r.sources.length, 0);
+  r = run("알림");
+  r.document.hidden = true; r.listeners.visibilitychange();
+  eq("창이 가려져도 곧바로 닫지 않는다 (잠깐 탭을 옮길 뿐일 수 있다)", r.es().closed, false);
+  r.document.hidden = false; r.listeners.visibilitychange();
+  eq("다시 보이면 같은 연결을 그대로 쓴다 (겹쳐 열지 않는다)", r.sources.length, 1);
+  r.listeners["w:pagehide"]();
+  eq("페이지를 떠나면 연결을 닫는다", r.es().closed, true);
+  r = run("알림");
+  r.es().handlers.unread({ data: "{깨짐" });
+  eq("깨진 데이터가 와도 문구를 망가뜨리지 않는다", r.node.nodeValue, "알림");
 }
 
 // ── 포인트 돌려주기·거두기 ─────────────────────
