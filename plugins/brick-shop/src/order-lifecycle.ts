@@ -36,13 +36,16 @@ export interface OrderLifecycleDeps {
  * 취소가 먼저면 여기서 상태를 보고 멈추고, 이쪽이 먼저면 취소의 회수가 이 적립을 본다. 잠금 동안 구독자
  * (포인트 적립)는 다른 연결로 원장에만 쓰므로 서로 기다리지 않는다 — 구독자가 이 주문을 고치면 안 된다.
  */
-export async function announcePaid(deps: OrderLifecycleDeps, orderId: string): Promise<void> {
+export async function announcePaid(deps: OrderLifecycleDeps, orderId: string, opts: { onlyIfPending?: boolean } = {}): Promise<void> {
   await deps.db.transaction(async (tx) => {
     const { rows } = await tx.execute(sql`
-      SELECT order_no, user_id, total, status FROM shop_orders WHERE id = ${orderId}::uuid FOR UPDATE
+      SELECT order_no, user_id, total, status, paid_announced_at FROM shop_orders WHERE id = ${orderId}::uuid FOR UPDATE
     `);
     const o = rows[0];
     if (!o) return;
+    // 재처리(sweep)는 잠금을 기다리는 사이 원래 경로가 이미 끝냈을 수 있다 — 두 번 알리지 않는다.
+    // (원래 경로는 전이마다 알린다: 결제 → 취소 → 다시 결제는 새 전이다)
+    if (opts.onlyIfPending && o.paid_announced_at) return;
     if (STOCK_RESTORING.includes(String(o.status) as OrderStatus)) {
       // 그 사이 취소·환불됐다 — 알릴 것이 없으니 끝난 것으로 적어 재처리 대상에서 뺀다
       await tx.execute(sql`UPDATE shop_orders SET paid_announced_at = now() WHERE id = ${orderId}::uuid`);
@@ -83,7 +86,7 @@ export async function sweepUnannouncedPaid(deps: OrderLifecycleDeps): Promise<{ 
   let failed = 0;
   for (const r of rows) {
     try {
-      await announcePaid(deps, String(r.id));
+      await announcePaid(deps, String(r.id), { onlyIfPending: true });
       done++;
     } catch (err) {
       failed++;

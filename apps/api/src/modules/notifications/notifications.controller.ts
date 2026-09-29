@@ -1,14 +1,23 @@
-import { Body, Controller, Get, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, OnModuleDestroy, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { openNotificationStream } from "./notification-stream.js";
+import { NotificationStreamHub } from "./notification-stream.js";
 import { NotificationsService } from "./notifications.service.js";
 import { AuthGuard } from "../auth/auth.guard.js";
 
 /** 내 알림함 — 로그인한 사람만. 남의 알림은 어떤 경로로도 읽을 수 없다 */
 @Controller("api/notifications")
 @UseGuards(AuthGuard)
-export class NotificationsController {
-  constructor(private readonly notifications: NotificationsService) {}
+export class NotificationsController implements OnModuleDestroy {
+  /** 열린 실시간 스트림을 모두 쥐고 있는 허브 — 접속자 전원을 한 번의 질의로 센다 */
+  private readonly hub: NotificationStreamHub;
+
+  constructor(private readonly notifications: NotificationsService) {
+    this.hub = new NotificationStreamHub(notifications);
+  }
+
+  onModuleDestroy(): void {
+    this.hub.closeAll();
+  }
 
   /**
    * 실시간 알림 개수 (SSE). 응답을 우리가 직접 쓰므로 Fastify 에서 떼어 낸다(`hijack`) —
@@ -26,13 +35,17 @@ export class NotificationsController {
       // nginx 등 역프록시가 응답을 모으지 않게 한다
       "x-accel-buffering": "no",
     });
-    const close = openNotificationStream({
-      userId,
-      source: this.notifications,
+    const close = this.hub.open(userId, {
       write: (chunk) => { raw.write(chunk); },
       end: () => { raw.end(); },
     });
-    req.raw.on("close", close);
+    /*
+     * 끝남은 **응답**의 close 로 본다 — 요청의 close 는 요청 본문을 다 읽은 시점(GET 은 곧바로)에 불릴 수 있어
+     * 연결이 살아 있는데 스트림을 닫거나, 반대로 끊긴 연결을 놓칠 수 있다. 끊긴 소켓에 쓰면 'error' 가 나는데
+     * 듣는 곳이 없으면 프로세스가 죽으므로 닫음으로 받아 낸다.
+     */
+    raw.on("close", close);
+    raw.on("error", close);
   }
 
   @Get()

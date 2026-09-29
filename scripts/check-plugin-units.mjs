@@ -14,7 +14,7 @@ import { restoreOrderPoints } from "../plugins/brick-shop/dist/orders.js";
 import { canReadSecret, canReadSecretAsMember, secretPostRef } from "../plugins/brick-board/dist/access.js";
 import { deletePosts } from "../plugins/brick-board/dist/posts.js";
 import { LIVE_NOTIFICATIONS_SCRIPT } from "../apps/api/dist/modules/pages/page-render.service.js";
-import { openNotificationStream, openStreamCount, MAX_PER_USER } from "../apps/api/dist/modules/notifications/notification-stream.js";
+import { NotificationStreamHub, MAX_PER_USER } from "../apps/api/dist/modules/notifications/notification-stream.js";
 
 let bad = 0;
 const eq = (name, got, want) => {
@@ -42,15 +42,15 @@ console.log("▶ 플러그인 핵심 함수 (가짜 DB)");
 // ── 결제 완료 알림 ─────────────────────────────
 console.log("── announcePaid");
 {
-  const run = async (status, hookImpl) => {
-    const db = fakeDb(status ? [{ order_no: "N1", user_id: "u1", total: 1000, status }] : []);
+  const run = async (status, hookImpl, opts = {}, announced = null) => {
+    const db = fakeDb(status ? [{ order_no: "N1", user_id: "u1", total: 1000, status, paid_announced_at: announced }] : []);
     const fired = [];
     const hooks = { doActionOrThrow: hookImpl ?? (async (h, p) => { fired.push([h, p]); }) };
     let thrown = null;
-    try { await announcePaid({ db, hooks, logger: { warn() {} }, notifyOrder: async () => {} }, "o1"); } catch (e) { thrown = e; }
+    try { await announcePaid({ db, hooks, logger: { warn() {} }, notifyOrder: async () => {} }, "o1", opts); } catch (e) { thrown = e; }
     return { fired, db, thrown };
   };
-  const doneMarks = (r) => r.db.calls.filter((c) => c.includes("paid_announced_at")).length;
+  const doneMarks = (r) => r.db.calls.filter((c) => c.includes("SET paid_announced_at")).length;
   const paid = await run("paid");
   eq("결제완료면 shop.order.paid 를 알린다", paid.fired, [["shop.order.paid", { orderNo: "N1", userId: "u1", amount: 1000 }]]);
   eq("주문 행을 잠그고 읽는다 (취소와 줄을 선다)", paid.db.calls[0].includes("FOR UPDATE"), true);
@@ -63,6 +63,12 @@ console.log("── announcePaid");
     eq(`${s} 주문은 완료로 적어 재처리 대상에서 뺀다`, doneMarks(r), 1);
   }
   eq("주문이 없으면 아무것도 하지 않는다", (await run(null)).fired, []);
+  const already = await run("paid", undefined, { onlyIfPending: true }, "2026-09-29T00:00:00Z");
+  eq("재처리는 그 사이 원래 경로가 끝낸 주문을 다시 알리지 않는다", [already.fired.length, doneMarks(already)], [0, 0]);
+  const pending = await run("paid", undefined, { onlyIfPending: true }, null);
+  eq("아직 끝나지 않은 주문은 재처리가 알린다", pending.fired.length, 1);
+  const repay = await run("paid", undefined, {}, "2026-09-29T00:00:00Z");
+  eq("원래 경로는 완료 표시가 있어도 알린다 (취소 뒤 다시 결제는 새 전이다)", repay.fired.length, 1);
   const shipped = await run("shipped");
   eq("이미 발송까지 갔어도 결제 알림은 나간다", shipped.fired.length, 1);
 }
@@ -91,79 +97,98 @@ console.log("── sweepUnannouncedPaid");
 }
 
 // ── 실시간 알림 스트림 ─────────────────────────
-console.log("── openNotificationStream");
+console.log("── NotificationStreamHub");
 {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  const mkSource = (initial = 0) => {
-    const src = { n: initial, listeners: new Set(), unsub: 0 };
-    src.unreadCount = async () => src.n;
-    src.onChange = (_u, fn) => { src.listeners.add(fn); return () => { src.listeners.delete(fn); src.unsub++; }; };
-    src.fire = () => src.listeners.forEach((f) => f());
+  // 회원별 개수를 쥔 가짜 원천 — 질의 횟수와 받은 회원 목록을 센다
+  const mkSource = (counts = {}) => {
+    const src = { counts, queries: [], listeners: new Map(), unsub: 0 };
+    src.unreadCounts = async (ids) => { src.queries.push([...ids]); return new Map(ids.filter((i) => src.counts[i]).map((i) => [i, src.counts[i]])); };
+    src.onChange = (u, fn) => { const set = src.listeners.get(u) ?? new Set(); set.add(fn); src.listeners.set(u, set); return () => { set.delete(fn); src.unsub++; }; };
+    src.fire = (u) => src.listeners.get(u)?.forEach((f) => f());
+    src.listening = () => [...src.listeners.values()].reduce((n, set) => n + set.size, 0);
     return src;
   };
   const mkSock = () => { const s = { out: [], ended: 0 }; s.write = (c) => { s.out.push(c); }; s.end = () => { s.ended++; }; return s; };
   const events = (sock) => sock.out.filter((c) => c.startsWith("event: unread")).map((c) => JSON.parse(c.split("data: ")[1]).unread);
+  const fast = { pollMs: 40, heartbeatMs: 1000, maxAgeMs: 5000 };
 
-  let src = mkSource(3), sock = mkSock();
-  let close = openNotificationStream({ userId: "u1", source: src, ...sock, pollMs: 40, heartbeatMs: 1000, maxAgeMs: 5000 });
+  let src = mkSource({ u1: 3 }), hub = new NotificationStreamHub(src, fast), sock = mkSock();
+  let close = hub.open("u1", sock);
   await sleep(20);
   eq("열자마자 재접속 간격을 알리고 현재 개수를 보낸다", [sock.out[0], events(sock)], ["retry: 15000\n\n", [3]]);
   await sleep(100);
   eq("개수가 그대로면 다시 보내지 않는다", events(sock), [3]);
-  src.n = 5; src.fire(); await sleep(15);
+  src.counts.u1 = 5; src.fire("u1"); await sleep(15);
   eq("같은 프로세스의 변화는 주기를 기다리지 않고 바로 보낸다", events(sock), [3, 5]);
-  src.n = 6; await sleep(80);
+  src.counts.u1 = 6; await sleep(80);
   eq("다른 프로세스의 변화는 주기적으로 다시 세어 따라온다", events(sock), [3, 5, 6]);
-  eq("열린 스트림은 회원별로 센다", [openStreamCount("u1"), openStreamCount("other")], [1, 0]);
+  src.counts.u1 = 0; await sleep(80);
+  eq("알림이 모두 사라지면(읽음) 0 을 보낸다 — 질의 결과에 없는 회원은 0", events(sock), [3, 5, 6, 0]);
+  eq("열린 스트림은 회원별로 센다", [hub.count("u1"), hub.count("other")], [1, 0]);
   close();
-  eq("닫으면 소켓을 닫고 구독을 풀고 목록에서 뺀다", [sock.ended, src.unsub, openStreamCount("u1")], [1, 1, 0]);
-  src.n = 9; src.fire(); await sleep(60);
-  eq("닫은 뒤에는 아무것도 보내지 않는다", events(sock), [3, 5, 6]);
+  eq("닫으면 소켓을 닫고 구독을 풀고 목록에서 뺀다", [sock.ended, src.unsub, hub.count("u1")], [1, 1, 0]);
+  src.counts.u1 = 9; src.fire("u1"); await sleep(60);
+  eq("닫은 뒤에는 아무것도 보내지 않는다", events(sock), [3, 5, 6, 0]);
+  const before = src.queries.length; await sleep(120);
+  eq("스트림이 하나도 없으면 주기 질의도 멈춘다", src.queries.length, before);
+
+  // 접속자가 많아도 주기 질의는 한 번
+  src = mkSource({ a: 1, b: 2, c: 3 }); hub = new NotificationStreamHub(src, { ...fast, pollMs: 60 });
+  const socksMany = ["a", "b", "c", "a"].map((u) => { const k = mkSock(); hub.open(u, k); return k; });
+  await sleep(30);
+  const afterOpen = src.queries.length;
+  await sleep(150);
+  const ticks = src.queries.slice(afterOpen);
+  eq("접속자 전원을 한 번의 질의로 센다 (회원마다, 스트림마다 세지 않는다)", ticks.length > 0 && ticks.every((q) => q.length === 3 && new Set(q).size === 3), true);
+  eq("각자 자기 개수만 받는다", socksMany.map(events), [[1], [2], [3], [1]]);
+  hub.closeAll();
+  eq("서버를 닫으면 모든 스트림이 닫힌다", [hub.count(), socksMany.every((k) => k.ended === 1)], [0, true]);
 
   // 상한 — 가장 오래된 것부터 닫는다
-  src = mkSource(0);
+  src = mkSource(); hub = new NotificationStreamHub(src, { ...fast, pollMs: 1000 });
   const socks = [];
-  for (let i = 0; i < MAX_PER_USER + 2; i++) {
-    const k = mkSock(); socks.push(k);
-    openNotificationStream({ userId: "u2", source: src, ...k, pollMs: 1000, heartbeatMs: 1000, maxAgeMs: 5000 });
-  }
-  eq(`회원당 ${MAX_PER_USER}개까지만 열려 있다`, openStreamCount("u2"), MAX_PER_USER);
+  for (let i = 0; i < MAX_PER_USER + 2; i++) { const k = mkSock(); socks.push(k); hub.open("u2", k); }
+  eq(`회원당 ${MAX_PER_USER}개까지만 열려 있다`, hub.count("u2"), MAX_PER_USER);
   eq("넘친 만큼 가장 오래된 것부터 닫힌다", socks.map((k) => k.ended), [1, 1, 0, 0, 0, 0]);
-  eq("다른 회원의 연결은 건드리지 않는다", openStreamCount("u1"), 0);
+  hub.open("u3", mkSock());
+  eq("다른 회원의 연결은 건드리지 않는다", [hub.count("u2"), hub.count("u3")], [MAX_PER_USER, 1]);
+  hub.closeAll();
 
   // 수명 — 세션 폐기가 열린 연결에 닿지 않으므로 스스로 닫는다
-  src = mkSource(0); sock = mkSock();
-  openNotificationStream({ userId: "u3", source: src, ...sock, pollMs: 1000, heartbeatMs: 1000, maxAgeMs: 50 });
+  src = mkSource(); hub = new NotificationStreamHub(src, { ...fast, pollMs: 1000, maxAgeMs: 50 }); sock = mkSock();
+  hub.open("u3", sock);
   await sleep(90);
-  eq("수명이 다하면 스스로 닫는다 (브라우저가 다시 붙으며 인증을 새로 받는다)", [sock.ended, openStreamCount("u3")], [1, 0]);
+  eq("수명이 다하면 스스로 닫는다 (브라우저가 다시 붙으며 인증을 새로 받는다)", [sock.ended, hub.count("u3")], [1, 0]);
 
   // 쓰기 실패 — 끊긴 소켓이 구독·타이머를 붙들고 있지 않게
-  src = mkSource(1);
+  src = mkSource({ u4: 1 }); hub = new NotificationStreamHub(src, { ...fast, pollMs: 1000 });
   let ended = 0;
-  openNotificationStream({ userId: "u4", source: src, write() { throw new Error("EPIPE"); }, end() { ended++; }, pollMs: 1000, heartbeatMs: 1000, maxAgeMs: 5000 });
+  hub.open("u4", { write() { throw new Error("EPIPE"); }, end() { ended++; } });
   await sleep(30);
-  eq("첫 쓰기부터 실패하면 닫고 구독도 만들지 않는다", [ended, openStreamCount("u4"), src.listeners.size], [1, 0, 0]);
-  src = mkSource(1); ended = 0;
+  eq("첫 쓰기부터 실패하면 닫고 구독도 만들지 않는다", [ended, hub.count("u4"), src.listening()], [1, 0, 0]);
+  ended = 0;
   let writes = 0;
-  openNotificationStream({ userId: "u4b", source: src, write() { if (++writes > 1) throw new Error("EPIPE"); }, end() { ended++; }, pollMs: 1000, heartbeatMs: 1000, maxAgeMs: 5000 });
+  hub.open("u4b", { write() { if (++writes > 1) throw new Error("EPIPE"); }, end() { ended++; } });
   await sleep(30);
-  eq("쓰다가 끊기면 닫고 구독을 푼다", [ended, openStreamCount("u4b"), src.listeners.size, src.unsub], [1, 0, 0, 1]);
+  eq("쓰다가 끊기면 닫고 구독을 푼다", [ended, hub.count("u4b"), src.listening(), src.unsub], [1, 0, 0, 1]);
 
   // 개수 조회 실패 — 다음 차례에 다시 센다
-  src = mkSource(2); sock = mkSock();
-  let fails = 1;
-  src.unreadCount = async () => { if (fails-- > 0) throw new Error("db"); return src.n; };
-  close = openNotificationStream({ userId: "u5", source: src, ...sock, pollMs: 30, heartbeatMs: 1000, maxAgeMs: 5000 });
-  await sleep(90);
-  eq("일시적 조회 실패는 스트림을 죽이지 않는다", [events(sock), sock.ended], [[2], 0]);
-  close();
+  src = mkSource({ u5: 2 }); hub = new NotificationStreamHub(src, { ...fast, pollMs: 30 }); sock = mkSock();
+  let fails = 2;
+  const orig = src.unreadCounts;
+  src.unreadCounts = async (ids) => { if (fails-- > 0) throw new Error("db"); return orig(ids); };
+  hub.open("u5", sock);
+  await sleep(120);
+  eq("일시적 조회 실패는 스트림을 죽이지 않고 다음 주기에 따라잡는다", [events(sock), sock.ended], [[2], 0]);
+  hub.closeAll();
 
   // 하트비트
-  src = mkSource(0); sock = mkSock();
-  close = openNotificationStream({ userId: "u6", source: src, ...sock, pollMs: 1000, heartbeatMs: 25, maxAgeMs: 5000 });
+  src = mkSource(); hub = new NotificationStreamHub(src, { ...fast, pollMs: 1000, heartbeatMs: 25 }); sock = mkSock();
+  hub.open("u6", sock);
   await sleep(70);
   eq("조용한 동안 주석 줄을 보내 프록시가 끊지 않게 한다", sock.out.filter((c) => c === ": ping\n\n").length >= 2, true);
-  close();
+  hub.closeAll();
 }
 
 // ── 머리 알림 개수 스크립트 (가짜 DOM) ──────────

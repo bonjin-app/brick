@@ -302,6 +302,22 @@ export class NotificationsService {
   }
 
   /**
+   * 회원 여럿의 안 읽은 개수를 **한 번의 질의로** — 실시간 스트림이 접속자 전원을 주기적으로 셀 때 쓴다.
+   * 안 읽은 알림이 없는 회원은 결과에 없다(부르는 쪽이 0 으로 읽는다).
+   */
+  async unreadCounts(userIds: readonly string[]): Promise<Map<string, number>> {
+    const out = new Map<string, number>();
+    if (userIds.length === 0) return out;
+    const rows = await this.db
+      .select({ userId: notifications.userId, n: sql<number>`count(*)::int` })
+      .from(notifications)
+      .where(and(inArray(notifications.userId, [...userIds]), isNull(notifications.readAt)))
+      .groupBy(notifications.userId);
+    for (const r of rows) out.set(r.userId, r.n);
+    return out;
+  }
+
+  /**
    * 읽음 표시.
    *
    * `ids` 를 주면 **그것만** — 화면에 보여준 것만 읽음으로 넘기기 위해서다.

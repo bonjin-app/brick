@@ -497,6 +497,9 @@ export async function changeOrderStatus(
       UPDATE shop_orders SET
         status = ${to},
         paid_at = ${paidAt},
+        -- 결제 전이마다 "알림이 끝났나" 를 다시 비운다. 결제 → 취소 → 다시 결제에서 두 번째 알림이 실패해도
+        -- 첫 번째의 완료 표시가 남아 재처리(sweep)가 건너뛰지 않게 (order-lifecycle.ts)
+        paid_announced_at = ${to === "paid" ? sql`NULL` : sql`paid_announced_at`},
         delivered_at = ${deliveredAt},
         payment_status = coalesce(${paymentStatus}, payment_status),
         tracking_no = coalesce(${opts.trackingNo ?? null}, tracking_no),
