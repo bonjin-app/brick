@@ -31,9 +31,14 @@ overrides:
   # Brick 은 images.unoptimized 로 그 경로를 끄지만, 설치형이라 운영자가 next.config 를
   # 바꿀 수 있고 Windows 호스팅 건은 경로가 다르다. 버전으로 막는 것이 맞다.
   next: ">=15.5.24 <16"
-  # nodemailer 9.0.5 — addressparser 의 2차 시간복잡도로 인한 원격 DoS(high)와
-  # 수신 도메인 검증 우회 세 건. 메일은 가입 인증·비밀번호 재설정에 쓰인다.
-  nodemailer: ">=9.1.1 <10"
+  # nodemailer 9.x — 프로세스 전역 DNS 캐시가 TLS servername 을 전송 객체 사이에서 재사용한다
+  # (SMTP 자격증명 유출, 10.0.2 에서 패치). 이전에는 addressparser 2차 시간복잡도 DoS(high)와
+  # 수신 도메인 검증 우회 세 건 때문에 9.1.1 로 고정했다. 메일은 가입 인증·비밀번호 재설정에 쓰인다.
+  nodemailer: ">=10.0.2 <11"
   # js-yaml 4.3.1 — 병합 키가 CPU 를 제한하지 않는다(high). 테마·플러그인 매니페스트를
   # 읽는 도구 체인이 끌고 온다.
   "js-yaml": ">=4.3.2 <5"
+  # fast-uri — authority 에 검증 안 된 포트가 들어가는 주소 주입, 닫히지 않은 대괄호로 인한 호스트 혼동(high).
+  # 3.x 와 4.x 가 함께 설치돼 있어 메이저별로 적는다(ajv 계열이 3.x, 다른 쪽이 4.x 를 끌고 온다).
+  "fast-uri@3": ">=3.1.7 <4"
+  "fast-uri@4": ">=4.1.4 <5"
