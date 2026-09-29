@@ -264,7 +264,7 @@ export async function prepareOrderForRequest(
 /**
  * 결제 완료를 청구서에 반영한다.
  *
- * `shop.order.paid` 훅에서 부른다 — 결제 승인 경로를 하나로 유지하기 위해
+ * 결제 완료 알림(order-lifecycle.ts 의 announcePaid)에서 부른다 — 결제 승인 경로를 하나로 유지하기 위해
  * 개인결제도 같은 `/payments/confirm` 을 쓰고, 그 결과를 여기서 받는다.
  */
 export async function markRequestPaid(db: Db, orderNo: string): Promise<{ updated: boolean }> {

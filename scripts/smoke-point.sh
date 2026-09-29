@@ -335,6 +335,68 @@ RATE="$(curl -s -b "$ADMIN" "$PT/admin/settings" | python3 -c 'import sys,json;p
 check "상태를 결제완료로 바꾸면 구매 적립 (결제금액 × ${RATE}%)" "$(balance)" "$((B2 + MTOTAL * RATE / 100))"
 check "그 주문의 적립은 한 번만" "$(psql_one "SELECT count(*) FROM point_ledger WHERE kind='earn' AND ref_type='shop.order' AND ref_id='$MNO'")" "1"
 
+echo "── 운영자 삭제 · 일괄 삭제도 적립을 거둔다 (작성자 삭제만 시험하던 자리)"
+BA="$(balance)"
+A1="$(newpost "운영자가 지울 글")"; A2="$(newpost "일괄로 지울 글")"; A3="$(newpost "일괄로 지울 글 둘")"; sleep 1
+check "글 셋 적립 (+150)" "$(balance)" "$((BA + 150))"
+curl -s -o /dev/null -b "$ADMIN" -X DELETE "$BD/admin/posts/$A1"; sleep 1
+check "관리자 삭제도 거둔다" "$(balance)" "$((BA + 100))"
+# 합계만 맞으면 어느 행에서 깎았는지는 모른다 — 거둔 몫은 그 적립분에서 나가야 한다 (다른 적립을 먼저 깎으면 그 글의 적립이 남는다)
+check "거둔 몫은 그 적립분에서 먼저 나간다 (다른 적립을 깎지 않는다)" \
+  "$(psql_one "SELECT remaining FROM point_ledger WHERE kind='earn' AND ref_type='board.post' AND ref_id='$A1'")" "0"
+printf '{"action":"delete","ids":["%s","%s"]}' "$A2" "$A3" > "$TMP/bulk.json"
+curl -s -o /dev/null -b "$ADMIN" -X POST "$BD/admin/posts/bulk" -H 'content-type: application/json' --data-binary "@$TMP/bulk.json"; sleep 1
+check "일괄 삭제도 거둔다" "$(balance)" "$BA"
+
+echo "── 적립을 이미 다 썼다면 있는 만큼만 거둔다 (잔액은 음수가 되지 않는다)"
+SF="$(newpost "다 쓰고 지울 글")"; sleep 1
+printf '{"adjust":-%s,"reason":"전부 사용"}' "$(balance)" > "$TMP/spendall.json"
+curl -s -o /dev/null -b "$ADMIN" -X PUT "$PT/admin/balances/$MEMBER_ID" -H 'content-type: application/json' --data-binary "@$TMP/spendall.json"
+check "잔액을 모두 썼다" "$(balance)" "0"
+curl -s -o /dev/null -b "$MEMBER" -X DELETE "$BD/posts/$SF"; sleep 1
+check "쓴 적립은 거둘 수 없다 — 잔액은 0 에 머문다" "$(balance)" "0"
+check "거둔 것이 없으면 내역에는 싣지 않는다" \
+  "$(curl -s -b "$MEMBER" "$PT/my" | python3 -c "import sys,json;print(sum(1 for i in json.load(sys.stdin)['items'] if i['kind']=='revoke' and i['amount']==0))")" "0"
+check "원장에는 표지가 남는다 (같은 원인을 다시 거두지 않게)" \
+  "$(psql_one "SELECT count(*) FROM point_ledger WHERE kind='revoke' AND ref_id='$SF' AND amount=0")" "1"
+printf '{"adjust":1000,"reason":"시험 복구"}' > "$TMP/restore.json"
+curl -s -o /dev/null -b "$ADMIN" -X PUT "$PT/admin/balances/$MEMBER_ID" -H 'content-type: application/json' --data-binary "@$TMP/restore.json"
+
+echo "── 결제완료 직후 취소해도 취소된 주문에 적립이 남지 않는다 (경합)"
+# 결제완료 알림은 커밋 뒤에 따로 돈다 — 곧바로 취소가 들어오면 취소의 회수가 적립보다 먼저 돌아 아무것도 못 거두고,
+# 적립이 뒤늦게 붙어 취소된 주문이 적립을 가져갔다. 끼어드는 시각과 상관없이 끝 잔액이 같아야 한다.
+B3="$(balance)"
+for i in 1 2 3 4 5 6; do
+  RN="$(curl -s -b "$MEMBER" -X POST "$SH/orders" -H 'content-type: application/json' --data-binary "@$TMP/om.json" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("orderNo",""))')"
+  RID="$(psql_one "SELECT id FROM shop_orders WHERE order_no='$RN'")"
+  curl -s -o /dev/null -b "$ADMIN" -X PUT "$SH/admin/orders/$RID" -H 'content-type: application/json' -d '{"status":"paid"}'
+  curl -s -o /dev/null -b "$ADMIN" -X PUT "$SH/admin/orders/$RID" -H 'content-type: application/json' -d '{"status":"cancelled"}'
+done
+sleep 3
+check "여섯 번 반복해도 적립이 남지 않는다" "$(balance)" "$B3"
+check "취소된 주문에 구매 적립이 남아 있지 않다 (원장)" \
+  "$(psql_one "SELECT coalesce(sum(amount),0) FROM point_ledger WHERE ref_type='shop.order' AND kind IN ('earn','revoke') AND user_id='$MEMBER_ID' AND ref_id IN (SELECT order_no FROM shop_orders WHERE status='cancelled')")" "0"
+
+echo "── 탈퇴하며 글을 지우면 그 글에 다른 회원이 단 댓글의 적립도 거둔다 (탈퇴 커밋 뒤)"
+for u in leaver third; do
+  printf '{"email":"%s@pt.test","password":"memberpass1","agreements":{"terms":true,"privacy":true,"third_party":true},"displayName":"%s"}' "$u" "$u" > "$TMP/reg-$u.json"
+  jpost "$API/api/register" "$TMP/reg-$u.json" >/dev/null
+  printf '{"email":"%s@pt.test","password":"memberpass1"}' "$u" > "$TMP/l-$u.json"
+  curl -s -o /dev/null -c "$TMP/$u.txt" -X POST "$API/api/auth/login" -H 'content-type: application/json' --data-binary "@$TMP/l-$u.json"
+done
+tbal() { curl -s -b "$TMP/third.txt" "$PT/my" | python3 -c 'import sys,json;print(json.load(sys.stdin)["balance"])'; }
+sleep 1
+TB0="$(tbal)"
+printf '{"title":"떠날 회원의 글","content":"<p>본문</p>"}' > "$TMP/lp.json"
+LPOST="$(curl -s -b "$TMP/leaver.txt" -X POST "$BD/boards/free/posts" -H 'content-type: application/json' --data-binary "@$TMP/lp.json" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("id",""))')"
+curl -s -o /dev/null -b "$TMP/third.txt" -X POST "$BD/posts/$LPOST/comments" -H 'content-type: application/json' -d '{"content":"남의 글에 단 댓글"}'
+sleep 1
+check "다른 회원이 그 글에 댓글을 달면 적립 (+7)" "$(tbal)" "$((TB0 + 7))"
+contains "떠나는 회원이 글까지 지우며 탈퇴" "$(curl -s -b "$TMP/leaver.txt" -X POST "$API/api/me/withdraw" -H 'content-type: application/json' -d '{"password":"memberpass1","deletePosts":true}')" '"ok":true'
+sleep 2
+check "글이 실제로 지워졌다" "$(code "$BD/posts/$LPOST")" "404"
+check "그 글에 단 다른 회원의 댓글 적립도 거둔다" "$(tbal)" "$TB0"
+
 echo "── 플러그인 비활성화 시 서비스 해제"
 # 끄기 전에 선언 화면이 열리는 것을 확인해 둔다 (끈 뒤와 대조하기 위해)
 check "끄기 전 내역 화면은 200" \

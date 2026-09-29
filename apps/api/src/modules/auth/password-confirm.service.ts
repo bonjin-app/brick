@@ -36,4 +36,12 @@ export class PasswordConfirmService {
     if (ok) await this.rateLimit.reset(key);
     return ok;
   }
+
+  /**
+   * 맞아야 넘어간다 — 틀리면 호출하는 쪽이 정한 오류를 던진다(경로마다 상태 코드와 문구가 다르다: 재인증은 401,
+   * 비밀번호 변경·탈퇴는 400). 횟수 제한(429)은 여기서 던진다.
+   */
+  async assertConfirmed(userId: string, password: string, wrongPassword: () => Error): Promise<void> {
+    if (!(await this.confirm(userId, password))) throw wrongPassword();
+  }
 }

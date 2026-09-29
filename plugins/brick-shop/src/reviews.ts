@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { isUniqueViolation } from "@brick/plugin-sdk";
+import { isUniqueViolation, publicUrls } from "@brick/plugin-sdk";
 import { uuidv7 } from "uuidv7";
 import type { Db } from "./types.js";
 import { ShopError } from "./types.js";
@@ -43,6 +43,11 @@ export async function findPurchase(
   return rows[0] ? String(rows[0].order_no) : null;
 }
 
+/** 후기 사진 — 실어도 되는 주소만 5장까지 (작성·수정이 같은 규칙) */
+function normalizeReviewImages(list: unknown): string[] {
+  return publicUrls(list, { max: 5 });
+}
+
 /** 후기 집계를 다시 계산한다 (증감 누적보다 정확하다) */
 async function recountReviews(db: Db, productId: string): Promise<void> {
   await db.execute(sql`
@@ -78,10 +83,7 @@ export async function createReview(
   if (content.length > 5000) throw new ShopError(400, "후기가 너무 깁니다. (5000자 이내)");
 
   // 이미지는 URL만 받는다 (업로드는 미디어 라이브러리가 담당)
-  const images = (Array.isArray(params.input?.images) ? params.input.images : [])
-    .map((u) => String(u).trim())
-    .filter((u) => /^(\/|https?:\/\/)/.test(u))
-    .slice(0, 5);
+  const images = normalizeReviewImages(params.input?.images);
 
   const { rows: product } = await db.execute(sql`
     SELECT id, status FROM shop_products WHERE id = ${params.productId}::uuid LIMIT 1
@@ -127,10 +129,7 @@ export async function updateReview(
   const content = String(params.input?.content ?? "").trim();
   if (content.length < 5) throw new ShopError(400, "후기를 5자 이상 작성해주세요.");
 
-  const images = (Array.isArray(params.input?.images) ? params.input.images : [])
-    .map((u) => String(u).trim())
-    .filter((u) => /^(\/|https?:\/\/)/.test(u))
-    .slice(0, 5);
+  const images = normalizeReviewImages(params.input?.images);
 
   const { rows } = await db.execute(sql`
     UPDATE shop_reviews SET

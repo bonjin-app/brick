@@ -267,9 +267,7 @@ export class UsersController {
       // 횟수를 센다 — 세지 않으면 훔친 세션으로 현재 비밀번호를 대입해 맞히는 순간 계정을 가져간다.
       // 새 비밀번호의 형식을 먼저 본다: 형식 실수로 시도 몫을 쓰게 하지 않는다
       if (body.newPassword.length < 8) throw new BadRequestException("새 비밀번호는 8자 이상이어야 합니다.");
-      if (!(await this.passwordConfirm.confirm(req.user.id, body.currentPassword ?? ""))) {
-        throw new BadRequestException("현재 비밀번호가 올바르지 않습니다.");
-      }
+      await this.passwordConfirm.assertConfirmed(req.user.id, body.currentPassword ?? "", () => new BadRequestException("현재 비밀번호가 올바르지 않습니다."));
       patch.passwordHash = await argon2.hash(body.newPassword);
     }
 

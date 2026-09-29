@@ -17,7 +17,7 @@ import { uuidv7 } from "uuidv7";
 import type { BrickDb } from "@brick/database";
 import { menus, pages, siteSettings } from "@brick/database";
 import type { CacheProvider, HookBus } from "@brick/core";
-import { AVAILABLE_LOCALES, normalizeLocale } from "@brick/core";
+import { AVAILABLE_LOCALES, normalizeLocale, publicUrl } from "@brick/core";
 import { AdminGuard } from "../auth/auth.guard.js";
 import { ipAllowed, parseAllowlist } from "../auth/ip-allowlist.js";
 import { ModerationService } from "../moderation/moderation.service.js";
@@ -220,11 +220,11 @@ export class SiteController {
       }
 
       // 띠배너 링크도 같은 규칙 — javascript: 로 사이트 전체에 스크립트를 심을 수 있으면 안 된다
-      if (key === "site.topbar_url" && String(value).trim() !== "" && !/^(https?:\/\/|\/)/.test(String(value).trim())) {
+      if (key === "site.topbar_url" && String(value).trim() !== "" && publicUrl(value) === null) {
         throw new BadRequestException("띠배너 링크는 https:// 로 시작하는 주소 또는 / 로 시작하는 경로여야 합니다.");
       }
 
-      if (key === "site.og_image" && String(value).trim() !== "" && !/^(https?:\/\/|\/)/.test(String(value).trim())) {
+      if (key === "site.og_image" && String(value).trim() !== "" && publicUrl(value) === null) {
         throw new BadRequestException("공유 이미지는 https:// 로 시작하는 주소 또는 /uploads/… 경로여야 합니다.");
       }
 

@@ -657,8 +657,40 @@ ctx.registerDataEraser({
    지우면 안 됩니다. 그 판단은 도메인을 아는 여러분이 해야 합니다.
    판단 기준은 [회원 생애주기 문서](members.md)에 정리해두었습니다.
 
+**되돌릴 수 없는 일은 `afterCommit` 으로 미룹니다.** 저장소의 파일 지우기, 다른 플러그인에 알리기(포인트 회수 같은
+훅)는 트랜잭션 안에서 하면 탈퇴가 되돌아갔을 때 이미 일어나 있습니다. `erase` 가 받는 `afterCommit(fn)` 에 맡기면
+탈퇴가 **커밋된 뒤에** 실행됩니다. 거기서 던진 예외는 기록만 하고 탈퇴를 되돌리지 않습니다(이미 끝났습니다).
+
+```ts
+async erase({ tx, userId, afterCommit }) {
+  const { rows } = await tx.execute(sql`DELETE FROM my_files WHERE user_id = ${userId}::uuid RETURNING storage_key`);
+  afterCommit(async () => { for (const r of rows) await ctx.storage.delete(String(r.storage_key)); });
+  return [`파일 ${rows.length}건 삭제`];
+}
+```
+
 동작 확인은 `scripts/smoke-member.sh` 를 참고하세요 — "파기했다"는 응답을 믿지 않고
 DB의 실제 행을 들여다봅니다.
+
+## 사용자가 넣은 주소를 화면에 싣는다면 (`publicUrl`)
+
+후기 사진·문의 첨부·글 썸네일·공유 이미지처럼 **사용자·운영자가 넣은 주소**를 `<img src>` · `<meta content>` · 사이트맵에
+실을 때는 직접 정규식을 쓰지 말고 `@brick/plugin-sdk` 의 함수를 쓰세요.
+
+```ts
+import { publicUrl, publicUrls, toAbsoluteUrl } from "@brick/plugin-sdk";
+
+publicUrl("/uploads/a.png");            // "/uploads/a.png"
+publicUrl("//evil.test/x.png");         // null — 프로토콜 상대 주소: 보는 사람의 브라우저가 남의 서버를 부른다
+publicUrl("javascript:alert(1)");       // null
+publicUrls(input.images, { max: 5 });   // 실어도 되는 것만, 같은 것은 한 번, 5개까지
+toAbsoluteUrl("/uploads/a.png", ctx.site.url);   // og:image·사이트맵은 절대 주소여야 한다
+```
+
+규칙 하나: `http(s)://호스트…`(대소문자 무관) 또는 `/` 로 시작하는 **사이트 안 경로**. `//…`, `\` 가 든 것,
+공백·제어문자가 든 것(사이트맵 XML 을 깨뜨린다), 그 밖의 스킴은 거절합니다. 이 규칙이 여섯 곳에 넷으로 갈라져 적혀 있던
+때는 후기·문의 첨부·반품 사진·글 썸네일이 `//남의도메인/x.png` 를 통과시켰습니다. 거르는 것은 "실어도 되는가" 까지이고
+이스케이프는 싣는 자리(`escapeHtml`)의 몫입니다. 규칙은 `scripts/check-public-url.mjs` 가 못박습니다.
 
 ## 공개 URL을 만든다면
 

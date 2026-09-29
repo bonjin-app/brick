@@ -150,12 +150,24 @@ export function createPointsService(
 
     async revoke(params, tx) {
       return run(tx, async (h) => {
-        // 적립 행을 잠가 같은 원인의 회수가 동시에 두 번 돌지 않게 한다
+        /*
+         * 잠금 순서는 spend 와 **같다** — 이 회원의 남은 적립 행을 (만료 임박 → 오래된 순) 으로 모두 잠근다.
+         * 회수가 자기 적립 행을 먼저 잠그면, 같은 회원의 사용이 그보다 먼저 만료되는 적립을 쥔 채 이 행을 기다리고
+         * 회수는 그 행을 기다려 교착이 난다. 글 삭제는 이미 커밋된 뒤라 그 회수는 조용히 사라진다.
+         * 같은 원인의 회수가 동시에 두 번 돌아도 이 잠금이 줄을 세운다.
+         */
+        const { rows: grants } = await h.execute(sql`
+          SELECT id, remaining FROM point_ledger
+          WHERE user_id = ${params.userId}::uuid AND amount > 0 AND remaining > 0
+            AND (expires_at IS NULL OR expires_at > now())
+          ORDER BY expires_at ASC NULLS LAST, created_at ASC
+          FOR UPDATE
+        `);
+        // 잠근 뒤에 읽는다 — 앞선 회수가 커밋됐다면 여기서 보인다
         const { rows: earned } = await h.execute(sql`
           SELECT id, amount FROM point_ledger
           WHERE user_id = ${params.userId}::uuid AND kind = 'earn'
             AND ref_type = ${params.refType} AND ref_id = ${params.refId}
-          FOR UPDATE
         `);
         if (!earned[0]) return 0;
         const { rows: done } = await h.execute(sql`
@@ -167,28 +179,25 @@ export function createPointsService(
 
         const want = Number(earned[0].amount);
         const earnId = String(earned[0].id);
-        // 그 적립분부터, 모자라면 다른 잔액에서 만료 임박한 것부터
-        const { rows: grants } = await h.execute(sql`
-          SELECT id, remaining FROM point_ledger
-          WHERE user_id = ${params.userId}::uuid AND amount > 0 AND remaining > 0
-            AND (expires_at IS NULL OR expires_at > now())
-          ORDER BY (id = ${earnId}::uuid) DESC, expires_at ASC NULLS LAST, created_at ASC
-          FOR UPDATE
-        `);
+        // 그 적립분부터, 모자라면 다른 잔액에서 만료 임박한 것부터 (잠근 순서는 그대로 두고 가져올 순서만 바꾼다)
+        const order = [...grants.filter((g) => String(g.id) === earnId), ...grants.filter((g) => String(g.id) !== earnId)];
         let left = want;
-        for (const g of grants) {
+        for (const g of order) {
           if (left <= 0) break;
           const take = Math.min(left, Number(g.remaining));
           await h.execute(sql`UPDATE point_ledger SET remaining = remaining - ${take} WHERE id = ${String(g.id)}::uuid`);
           left -= take;
         }
         const taken = want - left;
-        await h.execute(sql`
+        // 충돌은 오류가 아니다 — 트랜잭션 안에서 유니크 위반은 호출자의 트랜잭션까지 망가뜨린다
+        const { rows: inserted } = await h.execute(sql`
           INSERT INTO point_ledger (id, user_id, amount, remaining, kind, reason, ref_type, ref_id)
           VALUES (${uuidv7()}, ${params.userId}::uuid, ${-taken}, 0, 'revoke',
                   ${params.reason.slice(0, 200)}, ${params.refType}, ${params.refId})
+          ON CONFLICT DO NOTHING RETURNING id
         `);
-        return taken;
+        if (!inserted.length && taken > 0) throw new Error("포인트 회수가 동시에 겹쳤습니다."); // 가져온 몫을 되돌린다
+        return inserted.length ? taken : 0;
       });
     },
 

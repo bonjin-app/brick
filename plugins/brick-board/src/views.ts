@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { captchaFieldHtml, type BlockRenderContext } from "@brick/plugin-sdk";
 import {
   asListStyle, escapeHtml, extraFieldsOf, EXTRA_VALUE_MAX, fullDate, hasRole, humanSize,
-  shortDate, type BoardRow, type Db,
+  shortDate, type BoardRow, type Db, type SessionUser,
 } from "./types.js";
 
 /** 글의 여분 필드 값 (jsonb 가 무엇이든 안전하게) */
@@ -11,7 +11,9 @@ function extraOf(post: Record<string, unknown>): Record<string, unknown> {
   return raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
 }
 import { t } from "./i18n.js";
-import { canModifyPost, canReadSecret, canSeeSecretComment } from "./access.js";
+import {
+  authorCanChange, canModifyPost, canReadSecretAsMember, commentAuthorLookup, commentState, secretPostRef,
+} from "./access.js";
 
 /**
  * 게시판 화면 렌더 — 목록 / 상세 / 글쓰기.
@@ -329,14 +331,13 @@ export async function renderDetail(
   }
 
   const isManager = hasRole(ctx.user, "manager");
-  // 비밀 답변글은 스레드 원글의 작성자도 읽는다 — API 와 같은 함수(비밀번호는 화면에서 받지 않는다)
-  const canRead = Boolean(ctx.user && ctx.user.id === post.author_id) ||
-    Boolean(post.is_secret && ctx.user && !isManager &&
-      (await canReadSecret(post as never, ctx.user as never, undefined, async () => false, db)));
+  const viewer = (ctx.user ?? null) as SessionUser | null;
+  // 비밀글을 읽을 수 있는가 — API 와 같은 함수(작성자 · 운영진 · 답변글이면 원글 작성자; 비밀번호는 화면에서 받지 않는다)
+  const mayRead = !post.is_secret || (await canReadSecretAsMember(secretPostRef(post), viewer, db));
 
   // 비밀글은 서버 렌더에 본문을 담지 않는다 — 캐시에 남으면 유출된다.
   // (비로그인 요청만 캐시되므로 로그인 사용자는 안전하지만, 방어를 이중으로 둔다)
-  if (post.is_secret && !canRead && !isManager) {
+  if (!mayRead) {
     return `<div class="brick-board">
   <div class="brick-post-head"><h1>${escapeHtml(post.title)}</h1></div>
   <div class="brick-secret-notice">
@@ -473,13 +474,15 @@ ${listedFiles
     : "";
 
   const canComment = hasRole(ctx.user, board.comment_role);
-  const commentAuthor = new Map(comments.map((c) => [String(c.id), c.author_id]));
+  const authorOf = commentAuthorLookup(comments);
   const commentsHtml = comments
     .map((c) => {
-      const hidden = !canSeeSecretComment(c, post, ctx.user as never, (id) => commentAuthor.get(id));
+      // 지운 자리 · 가림 · 그대로 — API 와 같은 함수가 정한다
+      const state = commentState(c, post, viewer, authorOf);
+      const hidden = state === "hidden";
       const own = Boolean(ctx.user && ctx.user.id === c.author_id) || isManager || !c.author_id;
       // 지운 댓글의 자리 — 아래 달린 답글이 무엇에 대한 것인지 흐름만 남긴다(작성자·단추 없음)
-      if (c.deleted) {
+      if (state === "deleted") {
         return `    <li class="brick-comment brick-comment-deleted" style="--d:${Math.min(3, Number(c.depth ?? 0))}" data-id="${escapeHtml(c.id)}">
       <div class="brick-comment-body"><em class="brick-hidden">${escapeHtml(t("comment.deleted"))}</em></div>
     </li>`;
@@ -501,8 +504,12 @@ ${listedFiles
     })
     .join("\n");
 
-  // 집행과 같은 규칙을 쓴다 — 세 곳에 따로 적으면 그중 하나가 달라진다
+  // 집행과 같은 규칙을 쓴다 — 세 곳에 따로 적으면 그중 하나가 달라진다.
+  // 권한이 있어도 답변글·댓글 한도에 걸려 누르면 거절될 단추는 그리지 않는다 (authorChangeBlock)
   const canModify = canModifyPost(post as never, ctx.user ?? null);
+  const can = canModify
+    ? await authorCanChange(db, { ...post, count_delete: board.count_delete, count_modify: board.count_modify }, viewer)
+    : { edit: false, delete: false };
 
   return `<div class="brick-board brick-post" data-board="${escapeHtml(board.slug)}" data-post="${escapeHtml(post.id)}">
   <div class="brick-post-head">
@@ -567,8 +574,8 @@ ${shareBar}
     <div class="brick-post-actions">
       <a href="${base}">${escapeHtml(t("common.list"))}</a>
       ${board.allow_reply && hasRole(ctx.user, board.write_role) ? `<a href="${base}/write?replyTo=${escapeHtml(post.id)}">${escapeHtml(t("detail.replyBtn"))}</a>` : ""}
-      ${canModify ? `<a href="${base}/${escapeHtml(post.id)}/edit">${escapeHtml(t("common.edit"))}</a>` : ""}
-      ${canModify ? `<button type="button" data-delete-post>${escapeHtml(t("common.delete"))}</button>` : ""}
+      ${can.edit ? `<a href="${base}/${escapeHtml(post.id)}/edit">${escapeHtml(t("common.edit"))}</a>` : ""}
+      ${can.delete ? `<button type="button" data-delete-post>${escapeHtml(t("common.delete"))}</button>` : ""}
     </div>
   </div>
 

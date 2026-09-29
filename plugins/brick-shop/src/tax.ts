@@ -26,7 +26,7 @@ import { isUniqueViolation } from "@brick/plugin-sdk";
 import type { Db } from "./types.js";
 import { ShopError } from "./types.js";
 import { t } from "./i18n.js";
-import { orderRefundsSql } from "./reports.js";
+import { orderRefundsJoin } from "./refunds.js";
 
 export const RECEIPT_KINDS = ["income_deduction", "expense_proof"] as const;
 export type ReceiptKind = (typeof RECEIPT_KINDS)[number];
@@ -796,8 +796,7 @@ export async function vatReport(
   const tz = params.timezone;
 
   const { rows } = await db.execute(sql`
-    WITH refunds AS (${orderRefundsSql}),
-    paid AS (
+    WITH paid AS (
       SELECT o.id, o.payment_method,
              o.total - coalesce(r.refunded, 0) AS net,
              -- 면세 금액은 항목 스냅샷에서 (상품 설정이 바뀌어도 흔들리지 않는다).
@@ -812,7 +811,7 @@ export async function vatReport(
              EXISTS (SELECT 1 FROM shop_tax_invoices ti
                      WHERE ti.order_id = o.id AND ti.status = 'issued') AS has_invoice
       FROM shop_orders o
-      LEFT JOIN refunds r ON r.order_id = o.id
+      ${orderRefundsJoin}
       WHERE o.paid_at IS NOT NULL
         AND o.paid_at >= (${range.from}::date::timestamp AT TIME ZONE ${tz})
         AND o.paid_at <  ((${range.to}::date + 1)::timestamp AT TIME ZONE ${tz})

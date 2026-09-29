@@ -140,22 +140,25 @@ export async function listAttachments(db: Db, postId: string) {
 }
 
 /**
- * 첨부파일 삭제 — 스토리지와 DB를 함께 정리한다.
- * 스토리지 삭제가 실패해도 DB 레코드는 지운다(고아 파일이 남는 것이 낫다).
+ * 글들의 첨부 저장 키 — **글을 지우기 전에** 읽는다(글을 지우면 첨부 행이 CASCADE 로 함께 사라진다).
+ * 글마다 따로 묻지 않고 한 번에 묻는다(일괄 삭제가 500개까지다).
  */
-export async function deleteAttachments(
-  db: Db,
-  storage: StorageProvider,
-  postId: string,
-): Promise<void> {
+export async function attachmentKeysOf(db: Pick<Db, "execute">, postIds: readonly string[]): Promise<string[]> {
+  if (!postIds.length) return [];
   const { rows } = await db.execute(sql`
-    SELECT storage_key, thumb_key FROM board_attachments WHERE post_id = ${postId}::uuid
+    SELECT storage_key, thumb_key FROM board_attachments WHERE post_id = ANY(${pgArray(postIds)}::uuid[])
   `);
-  for (const row of rows) {
-    await storage.delete(String(row.storage_key)).catch(() => undefined);
-    if (row.thumb_key) await storage.delete(String(row.thumb_key)).catch(() => undefined);
+  return rows.flatMap((r) => [String(r.storage_key), ...(r.thumb_key ? [String(r.thumb_key)] : [])]);
+}
+
+/**
+ * 저장소의 파일을 지운다 — 실패해도 멈추지 않는다(고아 파일이 남는 것이 낫다). 열 개씩 병렬로.
+ * DB 를 **먼저** 지우고 이것을 나중에 한다: DB 가 실패하면 파일은 그대로 있다(반대 순서면 행은 남고 파일만 사라진다).
+ */
+export async function deleteStoredFiles(storage: StorageProvider, keys: readonly string[]): Promise<void> {
+  for (let i = 0; i < keys.length; i += 10) {
+    await Promise.all(keys.slice(i, i + 10).map((k) => storage.delete(k).catch(() => undefined)));
   }
-  await db.execute(sql`DELETE FROM board_attachments WHERE post_id = ${postId}::uuid`);
 }
 
 /** 다운로드 — 카운트를 올리고 저장 키를 돌려준다 */

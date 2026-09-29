@@ -80,6 +80,8 @@ export class WithdrawalService {
     }
 
     const effects: string[] = [];
+    // 커밋 뒤에 실행할 일 (PersonalDataEraser.erase 의 afterCommit) — 파일 지우기·다른 플러그인에 알리기
+    const afterCommit: Array<{ label: string; fn: () => Promise<void> }> = [];
     // 재가입을 막지 않기 위해 원래 이메일은 비워야 하고(유니크 제약),
     // 동시에 같은 값이 겹치지 않아야 한다. 무작위 접미사를 쓴다.
     const suffix = randomBytes(8).toString("hex");
@@ -182,6 +184,7 @@ export class WithdrawalService {
           tx: tx as unknown as PluginDb,
           userId: params.userId,
           deletePosts: params.deletePosts === true,
+          afterCommit: (fn) => afterCommit.push({ label: eraser.label, fn }),
         });
         effects.push(...done);
       }
@@ -190,6 +193,11 @@ export class WithdrawalService {
       // ON DELETE SET NULL 이 아니라 그대로 둔다 — user_id 가 익명화된 계정을
       // 계속 가리키므로, "이 계정이 언제 무엇에 동의했다"는 사실이 보존된다.
     });
+
+    // 커밋된 뒤의 일 — 실패해도 탈퇴는 이미 끝났다. 기록만 한다
+    for (const { label, fn } of afterCommit) {
+      await fn().catch((err: unknown) => this.log.warn(`탈퇴 뒤처리 실패 (${label}): ${err instanceof Error ? err.message : String(err)}`));
+    }
 
     // 훅은 트랜잭션 밖에서 — 플러그인 예외가 탈퇴를 되돌리면 안 된다
     await this.hooks.doAction("user.withdrawn", { userId: params.userId });

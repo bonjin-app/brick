@@ -35,10 +35,39 @@ export async function removeComments(
     `);
     if (!rows.length) break;
   }
+  await recountComments(db, [...new Set(gone.map((r) => String(r.post_id)))]);
+  return gone.map((r) => ({ id: String(r.id), authorId: r.author_id ? String(r.author_id) : null }));
+}
+
+/**
+ * 글의 댓글 수를 다시 센다 — 지운 자리(deleted_at)는 세지 않는다. 지우는 쪽은 증감하지 않고 **다시 센다**(어긋날 틈을
+ * 두지 않는다). 등록은 `comment_count + 1` 로 올린다: 댓글이 수천 개인 글에서 등록마다 세면 O(n) 이고, 올리기는
+ * 동시 등록에도 정확하다.
+ */
+export async function recountComments(db: Pick<Db, "execute">, postIds: readonly string[]): Promise<void> {
+  if (!postIds.length) return;
   await db.execute(sql`
     UPDATE board_posts p SET comment_count =
       (SELECT count(*) FROM board_comments c WHERE c.post_id = p.id AND c.deleted_at IS NULL)
-    WHERE p.id = ANY(${postArr}::uuid[])
+    WHERE p.id = ANY(${pgArray(postIds)}::uuid[])
   `);
-  return gone.map((r) => ({ id: String(r.id), authorId: r.author_id ? String(r.author_id) : null }));
+}
+
+/** 훅을 부를 수 있는 것 (ctx.hooks) */
+export interface BoardHooks {
+  doAction<T>(hook: string, payload: T): Promise<void>;
+}
+
+/**
+ * 지워진 댓글을 알린다 — 포인트가 그 적립을 거둬들인다(그누보드 delete_point 와 같다). 전에는 알리지 않아 글을 쓰고
+ * (+적립) 지우기를 되풀이하면 포인트가 끝없이 쌓였다. 비회원 것은 적립이 없으므로 알리지 않는다.
+ * 순서대로 부른다 — 같은 회원의 회수가 동시에 돌면 원장 잠금이 서로 얽힌다.
+ */
+export async function announceCommentsDeleted(
+  hooks: BoardHooks,
+  list: ReadonlyArray<{ id: string; authorId: string | null }>,
+): Promise<void> {
+  for (const c of list) {
+    if (c.authorId) await hooks.doAction("board.comment.deleted", { commentId: c.id, authorId: c.authorId });
+  }
 }

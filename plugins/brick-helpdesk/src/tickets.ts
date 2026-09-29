@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
+import { publicUrls } from "@brick/plugin-sdk";
 import { scrypt as scryptCb, randomBytes, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import type { Db, HelpSettings } from "./types.js";
@@ -346,8 +347,5 @@ export async function updateTicket(
  * 상대 경로나 http(s) 만 허용한다 — javascript: 가 img/a 에 들어가는 것을 막는다.
  */
 function normalizeAttachments(input: unknown): string[] {
-  return (Array.isArray(input) ? input : [])
-    .map((u) => String(u).trim())
-    .filter((u) => /^(\/|https?:\/\/)/.test(u) && u.length <= 1000)
-    .slice(0, 5);
+  return publicUrls(input, { max: 5, maxLen: 1000 });
 }

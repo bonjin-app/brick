@@ -333,6 +333,9 @@ curl -s -X PUT "http://127.0.0.1:${SMS_PORT}/_fail" -H 'content-type: applicatio
 kill "$SMS_PID" 2>/dev/null || true
 
 echo "── 내 댓글에 답글이 달리면 알림이 온다 (원글 작성자만 받던 것)"
+# 알림은 응답 뒤에 따로 돈다 — 고정 sleep 으로는 느린 기계에서 "오지 않아야 한다" 검사가 늦은 알림 앞에서 헛통과한다.
+# 알림 수가 두 번 연속 같을 때까지(최대 15초) 기다린다
+settle() { local last="" cur; for _ in $(seq 1 15); do cur="$(psql_q "SELECT count(*) FROM notifications")"; [[ "$cur" == "$last" ]] && return 0; last="$cur"; sleep 1; done; }
 replies_of() { psql_q "SELECT count(*) FROM notifications n JOIN users u ON u.id = n.user_id WHERE u.email = '$1@nt.test' AND n.kind = 'board.reply'"; }
 last_reply_of() { psql_q "SELECT n.title || ' / ' || n.body AS t FROM notifications n JOIN users u ON u.id = n.user_id WHERE u.email = '$1@nt.test' AND n.kind = 'board.reply' ORDER BY n.id DESC LIMIT 1"; }
 cmt() {  # cmt <쿠키> <글> <내용> [부모] [비밀] → 댓글 id
@@ -342,22 +345,22 @@ cmt() {  # cmt <쿠키> <글> <내용> [부모] [비밀] → 댓글 id
 CQ="$(cmt "$OTHER" "$POST_ID" "배송 문의드립니다")"
 RA="$(cmt "$MEMBER" "$POST_ID" "내일 보내 드립니다" "\"$CQ\"")"
 [[ -n "$CQ" && -n "$RA" ]] && ok "다른 회원이 댓글을 달고 글쓴이가 답한다" || bad "답글 준비 ($CQ/$RA)"
-sleep 1
+settle
 check "댓글 작성자에게 답글 알림이 간다" "$(replies_of other)" "1"
 contains "누가 무엇에 답했는지 적혀 있다" "$(last_reply_of other)" "내일 보내 드립니다"
 contains "어느 글인지도" "$(last_reply_of other)" "알림 시험 글"
 contains "알림함에서 그 글로 간다" "$(curl -s -b "$OTHER" "$API/api/notifications")" "\"url\":\"/board/free/$POST_ID#comments\""
 cmt "$OTHER" "$POST_ID" "감사합니다" "\"$CQ\"" >/dev/null
-sleep 1
+settle
 check "자기 댓글에 단 답글은 자기에게 알리지 않는다" "$(replies_of other)" "1"
 BEFORE="$(psql_q "SELECT count(*) FROM notifications n JOIN users u ON u.id = n.user_id WHERE u.email = 'member@nt.test'")"
 CM="$(cmt "$MEMBER" "$POST_ID" "글쓴이의 덧붙임")"
 cmt "$ADMIN" "$POST_ID" "확인했습니다" "\"$CM\"" >/dev/null
-sleep 1
+settle
 check "글쓴이의 댓글에 단 답글은 \"내 글에 댓글\" 한 번만 간다 (두 번 가지 않는다)" \
   "$(psql_q "SELECT count(*) FROM notifications n JOIN users u ON u.id = n.user_id WHERE u.email = 'member@nt.test'"; replies_of member)" "$(printf '%s\n0' "$((BEFORE + 1))")"
 cmt "$MEMBER" "$POST_ID" "주소는 비밀 9999 입니다" "\"$CQ\"" true >/dev/null
-sleep 1
+settle
 R="$(last_reply_of other)"
 [[ "$(replies_of other)" == "2" && "$R" == *"(비밀댓글)"* && "$R" != *"9999"* ]] && ok "비밀 답글은 내용을 빼고 알린다" || bad "비밀 답글 알림 (${R:0:120})"
 contains "운영자가 답글 알림 문구도 고칠 수 있다" "$(curl -s -b "$ADMIN" "$API/api/admin/notification-templates")" '"event":"board.reply"'

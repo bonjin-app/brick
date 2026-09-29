@@ -524,6 +524,12 @@ check "맞는 현재 비밀번호로 바꾼다" "$(putme "$TMP/g2.txt" "$PW_RIGH
 curl -s -o /dev/null -c "$TMP/g2.txt" -X POST "$API/api/auth/login" -H 'content-type: application/json' -d '{"email":"g2@sec.test","password":"newpass1234"}'
 CODES=""; for i in 1 2 3 4 5 6 7 8 9; do CODES="$CODES$(putme "$TMP/g2.txt" "$PW_WRONG") "; done
 check "맞힌 뒤에는 처음부터 센다 (아홉 번 틀려도 아직 막히지 않는다)" "$CODES" "400 400 400 400 400 400 400 400 400 "
+# 새 비밀번호의 형식 실수는 시도 몫을 쓰지 않는다 — 형식을 먼저 본다 (순서를 바꾸면 이 두 검사가 함께 어긋난다)
+check "새 비밀번호가 너무 짧으면 400 (몫을 쓰지 않는다)" "$(putme "$TMP/g2.txt" '{"currentPassword":"wrongpass9","newPassword":"short"}')" "400"
+check "열 번째 틀림까지는 아직 400 이다" "$(putme "$TMP/g2.txt" "$PW_WRONG")" "400"
+check "열한 번째부터는 429 (변경 경로)" "$(putme "$TMP/g2.txt" "$PW_WRONG")" "429"
+check "탈퇴 경로도 같은 몫이라 429" \
+  "$(code -b "$TMP/g2.txt" -X POST "$API/api/me/withdraw" -H 'content-type: application/json' -d '{"password":"wrongpass9"}')" "429"
 
 echo "── 로그아웃 — API 는 JSON, 테마 폼(JS 없는 제출)은 303 리다이렉트"
 check "폼 제출(accept: text/html)은 홈으로 303" \

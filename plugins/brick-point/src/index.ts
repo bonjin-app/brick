@@ -25,6 +25,7 @@ const KIND_LABEL: Record<string, string> = {
   expire: "만료",
   adjust: "관리자 조정",
   refund: "사용 취소",
+  revoke: "적립 회수",
 };
 
 /**
@@ -101,17 +102,23 @@ export default definePlugin(async (ctx) => {
     }
   });
 
-  // 글·댓글이 지워지면 그 적립을 거둬들인다 — 쓰고 지우기를 되풀이해 쌓는 길을 닫는다
-  ctx.hooks.onAction("board.post.deleted", "brick-point", async (payload) => {
-    const { postId, authorId } = (payload ?? {}) as { postId?: string; authorId?: string | null };
-    if (!postId || !authorId) return;
-    await points.revoke({ userId: authorId, refType: "board.post", refId: postId, reason: "게시글 삭제" });
-  });
-  ctx.hooks.onAction("board.comment.deleted", "brick-point", async (payload) => {
-    const { commentId, authorId } = (payload ?? {}) as { commentId?: string; authorId?: string | null };
-    if (!commentId || !authorId) return;
-    await points.revoke({ userId: authorId, refType: "board.comment", refId: commentId, reason: "댓글 삭제" });
-  });
+  /*
+   * 글·댓글이 지워지면 그 적립을 거둬들인다 — 쓰고 지우기를 되풀이해 쌓는 길을 닫는다. 이벤트 이름 · 적립 표지(refType) ·
+   * 페이로드의 id 열 · 내역에 남는 사유가 한 표에 있다: 적립 훅(위)과 표지가 어긋나면 회수가 아무것도 못 거둔다.
+   */
+  const REVOKE_ON_DELETE = [
+    { event: "board.post.deleted", refType: "board.post", idKey: "postId", reason: "게시글 삭제" },
+    { event: "board.comment.deleted", refType: "board.comment", idKey: "commentId", reason: "댓글 삭제" },
+  ] as const;
+  for (const r of REVOKE_ON_DELETE) {
+    ctx.hooks.onAction(r.event, "brick-point", async (payload) => {
+      const p = (payload ?? {}) as Record<string, string | null | undefined>;
+      const refId = p[r.idKey];
+      const authorId = p.authorId;
+      if (!refId || !authorId) return;
+      await points.revoke({ userId: authorId, refType: r.refType, refId, reason: r.reason });
+    });
+  }
 
   /**
    * 상품 후기 적립.
@@ -197,11 +204,11 @@ export default definePlugin(async (ctx) => {
       points.balance(req.user.id),
       db.execute(sql`
         SELECT amount, kind, reason, created_at, expires_at
-        FROM point_ledger WHERE user_id = ${req.user.id}::uuid
+        FROM point_ledger WHERE user_id = ${req.user.id}::uuid AND NOT (kind = 'revoke' AND amount = 0)
         ORDER BY created_at DESC LIMIT ${size} OFFSET ${(page - 1) * size}
       `).then((r) => r.rows),
       db.execute(sql`
-        SELECT count(*) AS n FROM point_ledger WHERE user_id = ${req.user.id}::uuid
+        SELECT count(*) AS n FROM point_ledger WHERE user_id = ${req.user.id}::uuid AND NOT (kind = 'revoke' AND amount = 0)
       `).then((r) => Number(r.rows[0]?.n ?? 0)),
       // 30일 안에 만료될 포인트 — 사용자에게 알려줘야 한다
       db.execute(sql`
@@ -263,7 +270,7 @@ export default definePlugin(async (ctx) => {
                  AND (l.expires_at IS NULL OR l.expires_at > now())
              ), 0) AS balance,
              coalesce(sum(l.amount) FILTER (WHERE l.amount > 0), 0) AS total_earned,
-             coalesce(-sum(l.amount) FILTER (WHERE l.amount < 0), 0) AS total_used
+             coalesce(-sum(l.amount) FILTER (WHERE l.kind = 'spend'), 0) AS total_used
       FROM users u LEFT JOIN point_ledger l ON l.user_id = u.id
       GROUP BY u.id, u.email, u.display_name
       ORDER BY balance DESC, u.created_at DESC

@@ -98,6 +98,8 @@ export interface RunResult {
 
 /** 한 번에 INSERT 하는 행 수 — 너무 크면 파라미터 한도에 걸린다 */
 const BATCH = 200;
+/** 게시판의 '댓글 달린 글 삭제·수정 제한' 상한 — 게시판 플러그인의 관리 화면 검증(0~1000)과 같다 */
+const MAX_CHANGE_LIMIT = 1000;
 
 @Injectable()
 export class MigrateService {
@@ -630,11 +632,8 @@ export class MigrateService {
      * 그룹 관리자는 그 그룹의 모든 게시판의 관리자가 된다. 옮기지 않은 회원(탈퇴·빠짐)은 알려 준다.
      */
     const canModerate = await this.tableExists("board_moderators");
-    const { rows: limitCols } = await this.db.execute(sql`
-      SELECT count(*)::int AS n FROM information_schema.columns
-      WHERE table_name = 'board_boards' AND column_name IN ('count_delete', 'count_modify')
-    `);
-    const canLimitChanges = Number(limitCols[0]?.n ?? 0) === 2;
+    const canLimitChanges = await this.columnsExist("board_boards", ["count_delete", "count_modify"]);
+    let limitsDropped = false;
     const groupAdmins = new Map<string, string>();
     for (const g of readRows(dump, `${prefix}group`, tables)) {
       const admin = String(g.gr_admin ?? "").trim();
@@ -688,8 +687,9 @@ export class MigrateService {
              true, now())
         `);
         // 댓글 달린 글의 삭제·수정 한도(bo_count_delete · bo_count_modify) — 게시판 플러그인이 그 칸을 가졌을 때만
+        if (!canLimitChanges && (Number(row.bo_count_delete ?? 0) > 0 || Number(row.bo_count_modify ?? 0) > 0)) limitsDropped = true;
         if (canLimitChanges) {
-          const lim = (v: unknown) => Math.min(1000, Math.max(0, Math.floor(Number(v ?? 0)) || 0));
+          const lim = (v: unknown) => Math.min(MAX_CHANGE_LIMIT, Math.max(0, Math.floor(Number(v ?? 0)) || 0));
           await this.db.execute(sql`
             UPDATE board_boards SET count_delete = ${lim(row.bo_count_delete)}, count_modify = ${lim(row.bo_count_modify)}
             WHERE id = ${boardId}::uuid
@@ -717,6 +717,9 @@ export class MigrateService {
         await this.importPosts(dump, tables, writeTable, boardId, memberMap, result, plan,
           gnuExtraFields(row).map((f) => f.key), table, prefix);
       }
+    }
+    if (limitsDropped) {
+      warnings.push("게시판의 '댓글 달린 글 삭제·수정 제한'(bo_count_delete·bo_count_modify)이 있었지만 게시판 플러그인이 낡아 옮기지 못했습니다 — 플러그인을 업데이트한 뒤 게시판 설정에서 직접 지정하세요.");
     }
     if (moderatorsSet) warnings.push(`게시판 관리자 ${moderatorsSet}건을 지정했습니다 (그누보드의 게시판·그룹 관리자).`);
     if (moderatorsMissing.size) {
@@ -816,9 +819,11 @@ export class MigrateService {
 
     // 댓글 수를 다시 센다 — 하나씩 증가시키면 중간에 실패했을 때 어긋난다
     if (postMap.size) {
+      // 지운 자리(deleted_at)는 세지 않는다 — 게시판 플러그인이 낡아 그 열이 없으면 전부 센다
+      const live = (await this.columnsExist("board_comments", ["deleted_at"])) ? sql`AND c.deleted_at IS NULL` : sql``;
       await this.db.execute(sql`
         UPDATE board_posts p SET comment_count = (
-          SELECT count(*) FROM board_comments c WHERE c.post_id = p.id
+          SELECT count(*) FROM board_comments c WHERE c.post_id = p.id ${live}
         ) WHERE p.board_id = ${boardId}::uuid
       `);
     }
@@ -1444,6 +1449,16 @@ export class MigrateService {
       result.wishlist.created += created;
       warnings.push(`위시리스트 ${created}건을 옮겼습니다.`);
     }
+  }
+
+  /** 열이 모두 있는가 — 플러그인이 낡아 새 열이 없을 수 있다 (현재 스키마만 본다) */
+  private async columnsExist(table: string, columns: string[]): Promise<boolean> {
+    const { rows } = await this.db.execute(sql`
+      SELECT count(*)::int AS n FROM information_schema.columns
+      WHERE table_schema = current_schema() AND table_name = ${table}
+        AND column_name IN (${sql.join(columns.map((c) => sql`${c}`), sql`, `)})
+    `);
+    return Number(rows[0]?.n ?? 0) === columns.length;
   }
 
   private async tableExists(table: string): Promise<boolean> {

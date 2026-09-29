@@ -447,6 +447,17 @@ curl -s -o /dev/null -b "$CK" -X PUT "$SHOP/admin/orders/$O_AR_ID" -H 'content-t
 sleep 1
 check "주문을 환불로 바꾸면 영수증이 취소된다" "$(psql_q "SELECT status FROM shop_cash_receipts WHERE id='$RAR'")" "cancelled"
 contains "취소 사유가 남는다" "$(psql_q "SELECT cancel_reason FROM shop_cash_receipts WHERE id='$RAR'")" "환불"
+# 취소(cancelled) 갈래와, 아직 발급되지 않은 대기(requested) 영수증
+O_AC="$(mkorder "$B1" "$P_TAX" 1)"
+psql_q "UPDATE shop_orders SET payment_status='paid', status='paid', paid_at=now() WHERE order_no='$O_AC'" >/dev/null
+RAC="$(curl -s -b "$B1" -X POST "$SHOP/orders/$O_AC/cash-receipt" -H 'content-type: application/json' \
+  -d '{"kind":"income_deduction","identifier":"01099990000"}' | jq_get "['id']")"
+check "발급 신청만 한 대기 상태" "$(psql_q "SELECT status FROM shop_cash_receipts WHERE id='$RAC'")" "requested"
+O_AC_ID="$(psql_q "SELECT id FROM shop_orders WHERE order_no='$O_AC'")"
+curl -s -o /dev/null -b "$CK" -X PUT "$SHOP/admin/orders/$O_AC_ID" -H 'content-type: application/json' -d '{"status":"cancelled"}'
+sleep 1
+check "주문을 취소하면 대기 영수증도 취소된다" "$(psql_q "SELECT status FROM shop_cash_receipts WHERE id='$RAC'")" "cancelled"
+contains "취소 사유는 '주문 취소'" "$(psql_q "SELECT cancel_reason FROM shop_cash_receipts WHERE id='$RAC'")" "주문 취소"
 
 echo "── 운영자가 환불한 주문은 부가세 매출에서 빠진다 (반품 기록이 없어도)"
 # 전에는 반품 기록만 뺐다 — 주문을 환불로 바꿔 돈을 돌려줘도 과세 매출에 남아 세금을 더 냈다

@@ -243,6 +243,18 @@ check "부분 반품이므로 주문 상태는 그대로" "$OSTATUS" "delivered"
 STATS="$(curl -s -b "$CK" "$SHOP/admin/stats")"
 contains "/admin/stats 도 환불을 뺀다" "$STATS" '"revenue":"26000"'
 
+# 카드 반품은 같은 돈이 반품 기록과 결제 기록 두 곳에 적힌다 — 더하면 두 번 빠진다 (큰 쪽을 쓴다)
+PAID2_ID="$(psql_q "SELECT id FROM shop_orders WHERE order_no='$PAID2'")"
+psql_q "INSERT INTO shop_payments (id, order_id, provider, provider_tid, status, amount, refunded_amount) VALUES (gen_random_uuid(), '$PAID2_ID', 'toss', 'dup-1', 'partial_refunded', 23000, 10000)" >/dev/null
+R="$(curl -s -b "$CK" "$SHOP/admin/reports/sales?from=$TODAY&to=$TODAY")"
+contains "같은 환불이 두 곳에 적혀 있어도 한 번만 뺀다 (26000 그대로)" "$R" '"net":26000'
+contains "환불액도 10000 (20000 이 아니다)" "$R" '"refunded":10000'
+# 환불 기록이 주문 총액을 넘어도(결제 금액이 총액보다 컸던 옛 기록 등) 그 주문의 환불은 총액까지만 — 순매출이 0 밑으로 내려가지 않는다
+psql_q "UPDATE shop_payments SET amount = 99999, refunded_amount = 50000 WHERE provider_tid = 'dup-1'" >/dev/null
+R="$(curl -s -b "$CK" "$SHOP/admin/reports/sales?from=$TODAY&to=$TODAY")"
+contains "총액을 넘는 환불 기록은 총액까지만 (36000 − 23000 = 13000)" "$R" '"net":13000'
+psql_q "DELETE FROM shop_payments WHERE provider_tid = 'dup-1'" >/dev/null
+
 echo "── 회귀: 시간대 — KST 오전 8시 결제는 그날이다 (UTC면 전날)"
 # 2026-02-10 08:00 KST = 2026-02-09 23:00 UTC
 EARLY="$(mkorder "$P2" 1)"

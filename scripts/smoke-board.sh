@@ -387,10 +387,11 @@ D2="$(render_html "board/gal/$GP2")"
 contains "다음글(더 새 글)은 사진 셋" "$D2" 'is-next" href="/board/gal/'"$GP3"'"'
 contains "이전글(더 오래된 글)은 사진 하나" "$D2" 'is-prev" href="/board/gal/'"$GP1"'"'
 # 공유 미리보기(og:image) — 글을 공유하면 그 글의 첫 이미지가 떠야 한다(전에는 모든 글이 사이트 공통 이미지였다)
-og_img() { render_html "$1" | python3 -c 'import sys,re;m=re.search(r"property=\"og:image\" content=\"([^\"]*)\"",sys.stdin.read());print(m.group(1) if m else "NONE")'; }
+# 손님용 렌더는 5분 캐시된다 — DB 를 직접 고친 뒤에는 캐시가 무효화되지 않아 처음 렌더한 결과가 그대로 나온다.
+# 렌더마다 다른 쿼리 값을 붙여 항상 새로 그리게 한다 (안 그러면 "없다" 검사가 캐시 덕에 헛통과한다)
+og_img() { curl -s "$API/api/render/page?path=$1&_=$RANDOM$RANDOM" | python3 -c 'import sys,json,re;h=json.load(sys.stdin).get("html","");m=re.search(r"property=\"og:image\" content=\"([^\"]*)\"",h);print(m.group(1) if m else "NONE")'; }
 check "글을 공유하면 그 글의 첫 이미지가 미리보기로 나간다" "$(og_img "board/gal/$GP1")" "https://example.test/a.jpg"
 check "이미지 없는 글은 글 이미지를 내지 않는다" "$(og_img "board/gal/$GP2")" "NONE"
-check "위험한 주소(javascript:)는 내지 않는다" "$(og_img "board/gal/$GP3")" "NONE"
 D3="$(render_html "board/gal/$GP3")"
 contains "가장 새 글에는 다음글이 없다" "$D3" 'is-next is-empty'
 contains "공유 막대" "$D3" 'data-share-bar'
@@ -500,6 +501,16 @@ SMP1="$(curl -s -X POST "$BD/boards/free/posts" -H 'content-type: application/js
 SMP2="$(curl -s -X POST "$BD/boards/free/posts" -H 'content-type: application/json' -d '{"title":"사이트맵 글만","content":"<p>글만</p>","guestName":"손님","guestPassword":"pass1234"}' | jf "['id']")"
 check "사이트맵에 글의 첫 이미지가 함께 실린다" "$(sitemap_images_of "/board/free/$SMP1")" "https://example.test/sm.jpg"
 check "이미지 없는 글은 이미지를 싣지 않는다" "$(sitemap_images_of "/board/free/$SMP2")" ""
+# 저장을 통과했더라도(옛 데이터·다른 경로) 공개 통로에서 걸러져야 한다 — DB 에 직접 심는다.
+# (본문 정화가 javascript: 를 먼저 지워서 위의 글로는 이 통로가 시험되지 않는다)
+for HOSTILE in '//evil.test/x.jpg' 'javascript:alert(1)' "/a'||chr(1)||'b.jpg"; do
+  psql_q "UPDATE board_posts SET thumb_url = '$HOSTILE' WHERE id='$SMP2'" >/dev/null
+  check "저장된 위험 썸네일은 공유 이미지로 내지 않는다 ($HOSTILE)" "$(og_img "board/free/$SMP2")" "NONE"
+  check "사이트맵에도 싣지 않는다 ($HOSTILE)" "$(sitemap_images_of "/board/free/$SMP2")" ""
+done
+psql_q "UPDATE board_posts SET thumb_url = 'HTTPS://cdn.example/Up.jpg' WHERE id='$SMP2'" >/dev/null
+check "HTTPS:// (대문자)도 깨지지 않고 그대로 나간다" "$(og_img "board/free/$SMP2")" "HTTPS://cdn.example/Up.jpg"
+check "사이트맵도 같다" "$(sitemap_images_of "/board/free/$SMP2")" "HTTPS://cdn.example/Up.jpg"
 contains "이미지 이름공간을 밝힌다" "$(sitemap_all)" 'xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"'
 
 cat > "$TMP/lk.json" <<'JSON'
@@ -845,6 +856,10 @@ GR="$(curl -s -b "$ADMIN" -X POST "$BD/boards/free/posts" -H 'content-type: appl
 check "원글의 비밀번호로 답변글을 읽는다" "$(code "$BD/posts/$GR?pw=gs12345")" "200"
 check "비밀번호가 없으면 못 읽는다" "$(code "$BD/posts/$GR")" "403"
 check "틀린 비밀번호로도 못 읽는다" "$(code "$BD/posts/$GR?pw=wrong999")" "403"
+# 원글 비밀번호의 시도 횟수는 원글 몫이다 — 답변글마다 새 몫이 생기면 답변이 많을수록 원글 비밀번호를 더 많이 대입할 수 있다
+LOCK=""; for i in 1 2 3 4 5 6; do LOCK="$(code "$BD/posts/$GSP?pw=wrong-$i")"; done
+check "원글에서 계속 틀리면 잠긴다 (여섯 번째는 429)" "$LOCK" "429"
+check "잠긴 동안은 답변글로 맞는 비밀번호를 대도 열리지 않는다 (원글 몫을 나눠 쓴다)" "$(code "$BD/posts/$GR?pw=gs12345")" "429"
 # 답변 양식은 그 게시판의 글만 — 전에는 다른 게시판(운영진 전용 포함) 글의 제목을 "원글" 로 보여 줬다
 FORM() { curl -s -b "$MEMBER" "$API/api/render/page?path=board/free/write&replyTo=$1"; }
 absent "답변 양식은 다른 게시판의 글 제목을 보여 주지 않는다" "$(FORM "$STP")" "운영진 글"
@@ -859,6 +874,14 @@ R="$(curl -s -b "$WRITER" -w ' %{http_code}' -X DELETE "$BD/posts/$DP1")"
 DR2="$(curl -s -b "$WRITER" -X POST "$BD/boards/club/posts" -H 'content-type: application/json' -d "$(RP "내가 단 답" "$DP1")" | pid)"
 check "형제 답변글이 있어도 아래에 답이 없는 답변글은 지운다" "$(code -b "$WRITER" -X DELETE "$BD/posts/$DR2")" "200"
 check "답변글이 지워지면 원글도 지운다" "$(code -b "$MEMBER" -X DELETE "$BD/posts/$DR1"; echo; code -b "$WRITER" -X DELETE "$BD/posts/$DP1")" "$(printf '200\n200')"
+# 가운데 답글 — 그 글 아래에 답글이 있으면 지우지 못한다 (하위 경로만 본다: 뿌리 글은 모든 답글이 아래라 이 갈래를 시험하지 못한다)
+MT0="$(wpost "$WRITER" club "중간 답글 시험")"
+MT1="$(curl -s -b "$MEMBER" -X POST "$BD/boards/club/posts" -H 'content-type: application/json' -d "$(RP "중간 답글" "$MT0")" | pid)"
+MT2="$(curl -s -b "$WRITER" -X POST "$BD/boards/club/posts" -H 'content-type: application/json' -d "$(RP "그 아래 답글" "$MT1")" | pid)"
+[[ -n "$MT0" && -n "$MT1" && -n "$MT2" ]] && ok "원글 → 답글 → 답글의 답글" || bad "답글 사슬 준비 ($MT0/$MT1/$MT2)"
+check "가운데 답글은 그 아래에 답글이 있으면 작성자가 지우지 못한다" "$(code -b "$MEMBER" -X DELETE "$BD/posts/$MT1")" "409"
+check "맨 아래 답글은 지운다" "$(code -b "$WRITER" -X DELETE "$BD/posts/$MT2")" "200"
+check "그러면 가운데 답글도 지운다" "$(code -b "$MEMBER" -X DELETE "$BD/posts/$MT1")" "200"
 DP2="$(wpost "$WRITER" club "운영진이 지울 글")"
 curl -s -o /dev/null -b "$MEMBER" -X POST "$BD/boards/club/posts" -H 'content-type: application/json' -d "$(RP "답" "$DP2")"
 check "운영진(게시판 관리자)은 답변글이 달린 글도 지운다" "$(code -b "$MOD" -X DELETE "$BD/posts/$DP2")" "200"
@@ -869,7 +892,17 @@ curl -s -o /dev/null -b "$WRITER" -X POST "$BD/posts/$LP/comments" -H 'content-t
 check "자기 댓글만 있으면 고친다" "$(code -b "$WRITER" -X PUT "$BD/posts/$LP" -H 'content-type: application/json' -d "$EDIT")" "200"
 curl -s -o /dev/null -b "$MEMBER" -X POST "$BD/posts/$LP/comments" -H 'content-type: application/json' -d '{"content":"첫 의견"}'
 check "다른 사람의 댓글이 한도에 닿으면 고치지 못한다" "$(code -b "$WRITER" -X PUT "$BD/posts/$LP" -H 'content-type: application/json' -d "$EDIT")" "409"
+# 거절될 단추는 그리지 않는다 — API 가 미리 알리고 화면이 그것을 따른다 (누르면 409 인 단추가 보이던 것)
+flags() { curl -s -b "$WRITER" "$BD/posts/$LP" | python3 -c "import sys,json;p=json.load(sys.stdin);print(p['canModify'],p['canEdit'],p['canDelete'])"; }
+check "수정 한도에 닿으면 API 가 미리 알린다 (권한은 있고 수정만 막힘)" "$(flags)" "True False True"
+# 응답의 html 은 JSON 안에서 따옴표가 이스케이프된다 — 디코드해서 본다 (삭제 단추의 "있다" 가 수정 링크 "없다" 의 대조군이다)
+lpage() { curl -s -b "$WRITER" "$API/api/render/page?path=board/club/$LP" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("html",""))'; }
+LPH="$(lpage)"
+absent "화면도 수정 링크를 그리지 않는다" "$LPH" "/$LP/edit\""
+contains "삭제 단추는 아직 그린다" "$LPH" '<button type="button" data-delete-post>'
 curl -s -o /dev/null -b "$MOD" -X POST "$BD/posts/$LP/comments" -H 'content-type: application/json' -d '{"content":"둘째 의견"}'
+check "삭제 한도에도 닿으면 삭제도 알린다" "$(flags)" "True False False"
+absent "화면도 삭제 단추를 그리지 않는다" "$(lpage)" '<button type="button" data-delete-post>'
 R="$(curl -s -b "$WRITER" -w ' %{http_code}' -X DELETE "$BD/posts/$LP")"
 [[ "$R" == *" 409" && "$R" == *"2개 이상"* ]] && ok "지우기 한도에 닿으면 지우지 못하고 이유를 말한다" || bad "댓글 한도 삭제 (${R:0:160})"
 check "게시판 관리자는 고치고 지운다" "$(code -b "$MOD" -X PUT "$BD/posts/$LP" -H 'content-type: application/json' -d "$EDIT"; echo; code -b "$MOD" -X DELETE "$BD/posts/$LP")" "$(printf '200\n200')"

@@ -143,3 +143,17 @@ for block in re.findall(r"<url>(.*?)</url>", x, re.S):
 else:
     print("NO-URL")'
 }
+
+# psql_q "<SQL>" — 개발 DB 에 질의하고 행마다 한 줄, 열은 |로 이어 찍는다 (psql 바이너리가 없는 머신에서도 돈다)
+# 같은 이름의 열 둘은 하나로 합쳐지니 식 열에는 AS 별칭을 붙인다. 필요: $ROOT · $DATABASE_URL
+psql_q() {
+  node -e '
+    const { Client } = require("'"$ROOT"'/apps/api/node_modules/pg");
+    (async () => {
+      const c = new Client(process.env.DATABASE_URL); await c.connect();
+      const r = await c.query(process.argv[1]);
+      console.log(r.rows.map((x) => Object.values(x).join("|")).join("\n"));
+      await c.end();
+    })().catch((e) => { console.error(e.message); process.exit(1); });
+  ' "$1"
+}

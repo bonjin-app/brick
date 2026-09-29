@@ -197,21 +197,30 @@ export async function assertCanModify(
   }
 }
 
+// ════════════════════════════════════════════════════
+//  작성자의 삭제·수정 제한
+// ════════════════════════════════════════════════════
+
+export type AuthorChangeAction = "delete" | "modify";
+
 /**
- * 작성자가 지금 이 글을 지우거나 고쳐도 되는가 — 권한(assertCanModify)을 통과한 **뒤에** 본다.
+ * 작성자가 지금 이 글을 지우거나 고칠 수 없는 이유 — 막히지 않으면 null. 권한(assertCanModify)을 통과한 **뒤에** 본다.
  * 운영진(그 게시판 관리자 포함)은 해당하지 않는다. 그누보드 bbs/delete.php 와 같은 두 가지:
  *
  *  - 답변글이 달린 글은 지우지 못한다 — 답변글이 원글 없이 남는다("답변글부터 지워 주세요").
  *  - 다른 사람의 댓글이 게시판의 한도(count_delete · count_modify) 이상 달린 글은 지우지·고치지 못한다 —
  *    토론이 달린 글을 작성자가 통째로 없애거나 바꾸면 남은 댓글이 무엇에 대한 것인지 사라진다. 0 은 제한 없음.
+ *
+ * API 의 거절(assertAuthorMayChange)과 화면의 수정·삭제 단추(authorCanChange)가 **이 함수 하나**를 쓴다 —
+ * 따로 적었더니 단추는 보이는데 누르면 409 였다.
  */
-export async function assertAuthorMayChange(
+export async function authorChangeBlock(
   db: Pick<Db, "execute">,
   post: Record<string, unknown>, // id · thread_id · thread_path · author_id · count_delete · count_modify
   user: SessionUser | null,
-  action: "delete" | "modify",
-): Promise<void> {
-  if (hasRole(user, "manager")) return;
+  action: AuthorChangeAction,
+): Promise<string | null> {
+  if (hasRole(user, "manager")) return null;
   if (action === "delete") {
     const path = String(post.thread_path ?? "");
     const { rows } = await db.execute(sql`
@@ -220,19 +229,48 @@ export async function assertAuthorMayChange(
         AND (${path} = '' OR thread_path LIKE ${`${path}.%`})
       LIMIT 1
     `);
-    if (rows.length) throw new BoardError(409, "답변글이 달린 글은 지울 수 없습니다. 답변글부터 지워 주세요.");
+    if (rows.length) return t("err.hasReplies");
   }
   const limit = Number(action === "delete" ? post.count_delete : post.count_modify) || 0;
-  if (limit <= 0) return;
+  if (limit <= 0) return null;
+  const author = post.author_id ? String(post.author_id) : null;
   const { rows } = await db.execute(sql`
     SELECT count(*)::int AS n FROM board_comments
     WHERE post_id = ${String(post.id)}::uuid AND deleted_at IS NULL
-      AND (${post.author_id ? String(post.author_id) : null}::uuid IS NULL OR author_id IS DISTINCT FROM ${post.author_id ? String(post.author_id) : null}::uuid)
+      AND (${author}::uuid IS NULL OR author_id IS DISTINCT FROM ${author}::uuid)
   `);
   if (Number(rows[0]?.n ?? 0) >= limit) {
-    throw new BoardError(409, t(action === "delete" ? "err.countDelete" : "err.countModify", { n: limit }));
+    return t(action === "delete" ? "err.countDelete" : "err.countModify", { n: limit });
   }
+  return null;
 }
+
+export async function assertAuthorMayChange(
+  db: Pick<Db, "execute">,
+  post: Record<string, unknown>,
+  user: SessionUser | null,
+  action: AuthorChangeAction,
+): Promise<void> {
+  const block = await authorChangeBlock(db, post, user, action);
+  if (block) throw new BoardError(409, block);
+}
+
+/** 화면이 수정·삭제 단추를 그릴지 — 누르면 거절될 단추는 그리지 않는다 */
+export async function authorCanChange(
+  db: Pick<Db, "execute">,
+  post: Record<string, unknown>,
+  user: SessionUser | null,
+): Promise<{ edit: boolean; delete: boolean }> {
+  const [edit, del] = await Promise.all([
+    authorChangeBlock(db, post, user, "modify"),
+    authorChangeBlock(db, post, user, "delete"),
+  ]);
+  return { edit: edit === null, delete: del === null };
+}
+
+// ════════════════════════════════════════════════════
+//  비밀댓글 · 지운 댓글의 자리
+// ════════════════════════════════════════════════════
 
 /**
  * 비밀댓글을 읽을 수 있는 사람 — 댓글 작성자, **원글 작성자**(비밀댓글은 대개 글쓴이에게 하는 말이다:
@@ -253,6 +291,56 @@ export function canSeeSecretComment(
   return Boolean(comment.parent_id) && user.id === authorOf(String(comment.parent_id));
 }
 
+/** 댓글 목록에서 id → 작성자 (부모 댓글 작성자를 찾을 때) */
+export function commentAuthorLookup(comments: ReadonlyArray<Record<string, unknown>>): (commentId: string) => unknown {
+  const byId = new Map(comments.map((c) => [String(c.id), c.author_id]));
+  return (id) => byId.get(id);
+}
+
+/**
+ * 댓글을 어떻게 보일지 — 지운 자리("deleted") · 가림("hidden") · 그대로("visible").
+ * 상태만 정한다: 문구는 부르는 쪽이 사이트 언어로 붙인다(API 는 ctx.t, 화면은 t) — 한쪽이 한국어를 박아 두어
+ * 영어 사이트의 API 소비자가 한국어를 받았다.
+ */
+export type CommentState = "deleted" | "hidden" | "visible";
+export function commentState(
+  comment: Record<string, unknown>, // deleted · is_secret · author_id · parent_id
+  post: Record<string, unknown>,
+  user: SessionUser | null,
+  authorOf: (commentId: string) => unknown,
+): CommentState {
+  if (comment.deleted) return "deleted";
+  return canSeeSecretComment(comment, post, user, authorOf) ? "visible" : "hidden";
+}
+
+// ════════════════════════════════════════════════════
+//  비밀글 열람
+// ════════════════════════════════════════════════════
+
+/** 비밀글 판정에 필요한 것만 — DB 행(스네이크)을 `as never` 로 밀어 넣던 자리를 타입으로 막는다 */
+export interface SecretPostRef {
+  id: string;
+  /** 답변글이면 스레드 원글의 id (원글이면 자기 id 또는 null) */
+  threadId: string | null;
+  authorId: string | null;
+  guestPasswordHash: string | null;
+  isSecret: boolean;
+}
+
+/** board_posts 행 → SecretPostRef. 첨부 행처럼 `id` 가 다른 것이면 `idKey` 로 글 id 열을 고른다 */
+export function secretPostRef(row: Record<string, unknown>, idKey = "id"): SecretPostRef {
+  return {
+    id: String(row[idKey]),
+    threadId: row.thread_id ? String(row.thread_id) : null,
+    authorId: row.author_id ? String(row.author_id) : null,
+    guestPasswordHash: row.guest_password ? String(row.guest_password) : null,
+    isSecret: Boolean(row.is_secret),
+  };
+}
+
+/** 글 id → 그 글의 비회원 비밀번호 확인기. 확인 횟수 제한의 대상(키)이 글마다 달라야 한다 */
+export type GuestCheckFor = (postId: string) => GuestCheck;
+
 /**
  * 비밀글 열람 권한.
  * 작성자·manager 이상만 볼 수 있다. 비회원 비밀글은 비밀번호로 확인한다.
@@ -260,24 +348,32 @@ export function canSeeSecretComment(
  * **답변글이면 그 스레드의 원글 작성자도** 읽는다(비회원 원글이면 원글의 비밀번호로). 비밀글로 문의하고
  * 운영자가 비밀 답변글을 달면, 전에는 질문한 사람이 그 답을 읽지 못했다 — 그누보드가 같은 이유로 고친
  * 자리다(bbs/board.php "회원이 비밀글을 올리고 관리자가 답변글을 올렸을 경우"). 원글은 `db` 를 넘길 때만 찾는다.
+ *
+ * `checkFor` 가 글마다 확인기를 준다 — 원글의 비밀번호는 **원글의 횟수 제한**으로 확인해야 한다. 답변글의 것으로
+ * 확인하면 답변마다 새 시도 횟수가 생겨, 스레드에 답변이 많을수록 원글 비밀번호를 더 많이 대입할 수 있다.
  */
 export async function canReadSecret(
-  post: { id?: unknown; thread_id?: unknown; author_id: string | null; guest_password: string | null; is_secret: boolean },
+  post: SecretPostRef,
   user: SessionUser | null,
   guestPassword: string | undefined,
-  check: GuestCheck,
+  checkFor: GuestCheckFor,
   db?: Pick<Db, "execute">,
 ): Promise<boolean> {
-  if (!post.is_secret) return true;
+  if (!post.isSecret) return true;
   if (hasRole(user, "manager")) return true;
-  if (post.author_id && user && user.id === post.author_id) return true;
-  if (!post.author_id && guestPassword && (await check(guestPassword, post.guest_password))) return true;
-  if (!db || !post.thread_id || String(post.thread_id) === String(post.id)) return false;
+  if (post.authorId && user && user.id === post.authorId) return true;
+  if (!post.authorId && guestPassword && (await checkFor(post.id)(guestPassword, post.guestPasswordHash))) return true;
+  if (!db || !post.threadId || post.threadId === post.id) return false;
   const { rows } = await db.execute(sql`
-    SELECT author_id, guest_password FROM board_posts WHERE id = ${String(post.thread_id)}::uuid LIMIT 1
+    SELECT author_id, guest_password FROM board_posts WHERE id = ${post.threadId}::uuid LIMIT 1
   `);
   const root = rows[0];
   if (!root) return false;
   if (root.author_id) return Boolean(user && user.id === String(root.author_id));
-  return Boolean(guestPassword) && (await check(String(guestPassword), (root.guest_password as string | null) ?? null));
+  return Boolean(guestPassword) && (await checkFor(post.threadId)(guestPassword!, (root.guest_password as string | null) ?? null));
+}
+
+/** 비회원 비밀번호를 받지 않는 자리(화면 렌더 · 답변 작성)의 열람 판정 — 회원·운영진·원글 작성자만 통과한다 */
+export function canReadSecretAsMember(post: SecretPostRef, user: SessionUser | null, db: Pick<Db, "execute">): Promise<boolean> {
+  return canReadSecret(post, user, undefined, () => async () => false, db);
 }

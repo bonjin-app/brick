@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS point_ledger (
   amount      integer NOT NULL,
   -- 적립 행에서만 의미가 있다: 아직 쓰지 않은 양. 사용/만료 행은 0
   remaining   integer NOT NULL DEFAULT 0 CHECK (remaining >= 0),
-  -- earn(적립) | spend(사용) | expire(만료) | adjust(관리자 조정) | refund(사용 취소)
+  -- earn(적립) | spend(사용) | expire(만료) | adjust(관리자 조정) | refund(사용 취소) | revoke(적립 회수 — 원인이 사라졌다)
   kind        varchar(16) NOT NULL,
   reason      varchar(200) NOT NULL,
   -- 무엇 때문인지. 예: ("board.post", "<글id>"), ("shop.order", "<주문번호>")

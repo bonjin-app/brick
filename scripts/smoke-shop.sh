@@ -919,12 +919,22 @@ for it in json.load(sys.stdin)['items']:
     if it['slug'] == 'trip-item': print(it.get('image_url') or ''); break")"
 check "관리 목록은 편집 원본을 준다" "$ADMIN_IMG" "$MEDIA_URL"
 # 공유 미리보기(og:image) — 상품 링크를 카카오톡에 붙이면 그 상품 사진이 떠야 한다(전에는 사이트 공통 이미지였다)
-og_img() { curl -s "$API/api/render/page?path=$1" | python3 -c 'import sys,json,re;h=json.load(sys.stdin).get("html","");m=re.search(r"property=\"og:image\" content=\"([^\"]*)\"",h);print(m.group(1) if m else "NONE")'; }
+# 렌더마다 다른 쿼리 값을 붙여 손님용 렌더 캐시(5분)를 우회한다 — DB 를 직접 고친 뒤에도 새로 그리게
+og_img() { curl -s "$API/api/render/page?path=$1&_=$RANDOM$RANDOM" | python3 -c 'import sys,json,re;h=json.load(sys.stdin).get("html","");m=re.search(r"property=\"og:image\" content=\"([^\"]*)\"",h);print(m.group(1) if m else "NONE")'; }
 check "상품을 공유하면 그 상품 사진이 미리보기로 나간다" "$(og_img shop/ext-item)" "https://example.test/a.jpg"
 R="$(og_img shop/trip-item)"
 [[ "$R" == http*"$MEDIA_URL" ]] && ok "올린 사진은 절대 주소로 낸다 (og:image 는 절대 주소여야 한다)" || bad "올린 사진의 og:image ($R)"
 check "상품이 아닌 화면에는 상품 사진이 없다" "$(og_img shop/cart)" "NONE"
 check "사이트맵에 상품 사진이 실린다" "$(sitemap_images_of "/shop/ext-item")" "https://example.test/a.jpg"
+# 상한(10장)·중복·위험한 값 — 12장 중 //남의주소·javascript:·대표 사진과 같은 것을 빼고 10장
+IMGS='["//evil.test/x.jpg","javascript:alert(1)","https://example.test/a.jpg","/i1.jpg","/i2.jpg","/i3.jpg","/i4.jpg","/i5.jpg","/i6.jpg","/i7.jpg","/i8.jpg","/i9.jpg","/i10.jpg","/i11.jpg"]'
+psql_q "UPDATE shop_products SET images = '$IMGS'::jsonb WHERE slug = 'ext-item'" >/dev/null
+SMI="$(sitemap_images_of "/shop/ext-item")"
+check "사이트맵 상품 이미지는 10장까지" "$(echo "$SMI" | tr ',' '\n' | wc -l | tr -d ' ')" "10"
+absent "//남의주소는 싣지 않는다" "$SMI" "evil.test"
+absent "javascript: 는 싣지 않는다" "$SMI" "javascript"
+check "같은 사진은 한 번만" "$(echo "$SMI" | tr ',' '\n' | sort | uniq -d | wc -l | tr -d ' ')" "0"
+psql_q "UPDATE shop_products SET images = '[]'::jsonb WHERE slug = 'ext-item'" >/dev/null
 R="$(sitemap_images_of "/shop/trip-item")"
 [[ "$R" == http*"$MEDIA_URL" ]] && ok "올린 사진은 사이트맵에도 절대 주소로" || bad "사이트맵의 올린 사진 ($R)"
 # 그 값을 그대로 되돌려 저장한다 — 화면이 하는 일과 같다

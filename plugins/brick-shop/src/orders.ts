@@ -31,6 +31,32 @@ export interface PointsPort {
   ): Promise<number>;
 }
 
+/** 포인트 원장에서 주문을 가리키는 표지 — brick-point 의 구매 적립(`shop.order.paid` 구독)이 같은 값을 쓴다 */
+export const ORDER_POINT_REF = "shop.order";
+
+/**
+ * 주문이 통째로 돌아갔을 때 포인트를 정리한다 — 쓴 포인트는 돌려주고(refund), 그 주문의 구매 적립은 거둔다(revoke).
+ * 주문 상태 전이(취소·환불)와 반품 완료(전량 반환)가 **같은 규칙**을 쓰도록 한 곳에 모았다 — 두 곳에 따로 적혀
+ * 있었고 인자·원자성(tx)·조사가 서로 달랐다.
+ *
+ * 순서가 있다: 돌려준 뒤에 거둔다 — 돌려준 포인트가 잔액에 있어야 거둘 수 있는 몫이 늘어난다. 둘 다 멱등하다.
+ * `revoke` 가 없는 포인트 서비스(옛 brick-point)면 적립은 거두지 않는다 — 없다고 취소가 실패하면 안 된다.
+ *
+ * @param p.cause "취소" · "환불" · "반품" 같은 원인 명사 — 내역에 "주문 취소로 구매 적립 회수" 처럼 남는다
+ */
+export async function restoreOrderPoints(
+  port: PointsPort | null | undefined,
+  p: { userId: string | null; orderNo: string; pointUsed: number; cause: string },
+  tx?: Db,
+): Promise<void> {
+  if (!port || !p.userId || !p.orderNo) return;
+  const ref = { userId: p.userId, refType: ORDER_POINT_REF, refId: p.orderNo };
+  if (p.pointUsed > 0) {
+    await port.refund({ ...ref, reason: `주문 ${p.cause} 포인트 반환 (${p.orderNo})` }, tx);
+  }
+  await port.revoke?.({ ...ref, reason: `${withJosa(`주문 ${p.cause}`, "으로/로")} 구매 적립 회수 (${p.orderNo})` }, tx);
+}
+
 export interface OrdererInput {
   ordererName: string;
   ordererPhone: string;
@@ -233,7 +259,7 @@ export async function createOrder(
           userId: params.userId,
           amount: requestedPoint,
           reason: `주문 결제 (${orderNo})`,
-          refType: "shop.order",
+          refType: ORDER_POINT_REF,
           refId: orderNo,
         },
         tx,
@@ -385,69 +411,44 @@ export async function changeOrderStatus(
       );
     }
 
-    // 취소/환불이면 사용 포인트를 되돌린다.
-    // 재고 복원과 같은 트랜잭션에서 처리해야 부분 실패가 남지 않는다.
-    //
-    // 부분 반품에서 이미 원복되었을 수 있다. pointsPort.refund 는
-    // (refType, refId) 기준으로 멱등하므로 두 번 불러도 두 배가 되지 않는다.
-    if (STOCK_RESTORING.includes(to) && opts.pointsPort) {
+    // 취소/환불이면 포인트와 쿠폰을 정리한다 — 재고 복원과 같은 트랜잭션에서 해야 부분 실패가 남지 않는다.
+    // 주문 행은 한 번만 읽는다.
+    if (STOCK_RESTORING.includes(to)) {
       const { rows: order } = await tx.execute(sql`
-        SELECT user_id, order_no, point_used FROM shop_orders WHERE id = ${orderId}::uuid
+        SELECT user_id, order_no, point_used, coupon_code FROM shop_orders WHERE id = ${orderId}::uuid
       `);
-      const used = Number(order[0]?.point_used ?? 0);
-      if (used > 0 && order[0]?.user_id) {
-        await opts.pointsPort.refund(
-          {
-            userId: String(order[0].user_id),
-            refType: "shop.order",
-            refId: String(order[0].order_no),
-            reason: `주문 ${to === "cancelled" ? "취소" : "환불"} 포인트 반환 (${order[0].order_no})`,
-          },
-          tx,
-        );
-      }
-      /*
-       * 구매 적립 회수 — 전에는 거두지 않아, 사고 환불하기를 되풀이하면 적립만 남았다(결제금액의 1% 가
-       * 주문마다). 쓴 포인트를 돌려준 **뒤에** 거둔다 — 잔액이 모자라 덜 거두는 일을 줄인다.
-       */
-      if (order[0]?.user_id) {
-        await opts.pointsPort.revoke?.(
-          {
-            userId: String(order[0].user_id),
-            refType: "shop.order",
-            refId: String(order[0].order_no),
-            reason: `주문 ${to === "cancelled" ? "취소" : "환불"}으로 구매 적립 회수 (${order[0].order_no})`,
-          },
-          tx,
-        );
-      }
-    }
+      const o = order[0];
 
-    // 취소면 발급형 쿠폰을 쿠폰함에 되돌린다.
-    //
-    // 결제 실패로 주문이 취소되는 것은 흔한 일이고, 그때 지급받은 쿠폰이
-    // 사라지면 "쿠폰을 먹었다"는 문의가 된다. **환불(refunded)에는 되돌리지
-    // 않는다** — 물건을 받아보고 반품하며 쿠폰까지 돌려받으면, 쿠폰으로 산
-    // 것을 무한히 반복할 수 있다.
-    //
-    // 쿠폰의 **전체 사용 수**도 되돌린다(취소는 끝 상태라 한 번만 온다). 전에는 쿠폰함만 되돌려, 선착순
-    // 한도(usage_limit)가 있는 쿠폰을 결제 실패·입금 기한 초과로 취소된 주문이 영구히 먹었다 — 100장 쿠폰이
-    // 실제로는 몇 장 쓰이지 않고 "소진" 됐다. 1인당 한도는 이미 취소된 주문을 세지 않는다(같은 기준).
-    if (to === "cancelled") {
-      const { rows: order } = await tx.execute(sql`
-        SELECT order_no, coupon_code FROM shop_orders WHERE id = ${orderId}::uuid
-      `);
-      if (order[0]?.order_no) {
+      // 부분 반품에서 이미 정리되었을 수 있다 — refund·revoke 는 (refType, refId) 기준으로 멱등하다
+      await restoreOrderPoints(opts.pointsPort, {
+        userId: o?.user_id ? String(o.user_id) : null,
+        orderNo: String(o?.order_no ?? ""),
+        pointUsed: Number(o?.point_used ?? 0),
+        // 원장에 남는 사유 — 저장되는 데이터라 번역하지 않는다 (화면 문구가 아니다)
+        cause: to === "cancelled" ? "취소" : "환불",
+      }, tx);
+
+      // 취소면 발급형 쿠폰을 쿠폰함에 되돌린다.
+      //
+      // 결제 실패로 주문이 취소되는 것은 흔한 일이고, 그때 지급받은 쿠폰이
+      // 사라지면 "쿠폰을 먹었다"는 문의가 된다. **환불(refunded)에는 되돌리지
+      // 않는다** — 물건을 받아보고 반품하며 쿠폰까지 돌려받으면, 쿠폰으로 산
+      // 것을 무한히 반복할 수 있다.
+      //
+      // 쿠폰의 **전체 사용 수**도 되돌린다(취소는 끝 상태라 한 번만 온다). 전에는 쿠폰함만 되돌려, 선착순
+      // 한도(usage_limit)가 있는 쿠폰을 결제 실패·입금 기한 초과로 취소된 주문이 영구히 먹었다 — 100장 쿠폰이
+      // 실제로는 몇 장 쓰이지 않고 "소진" 됐다. 1인당 한도는 이미 취소된 주문을 세지 않는다(같은 기준).
+      if (to === "cancelled" && o?.order_no) {
         await tx.execute(sql`
           UPDATE shop_user_coupons SET used_at = NULL, used_order_no = NULL
-          WHERE used_order_no = ${String(order[0].order_no)}
+          WHERE used_order_no = ${String(o.order_no)}
         `);
-      }
-      if (order[0]?.coupon_code) {
-        await tx.execute(sql`
-          UPDATE shop_coupons SET used_count = greatest(0, used_count - 1)
-          WHERE upper(code) = upper(${String(order[0].coupon_code)})
-        `);
+        if (o.coupon_code) {
+          await tx.execute(sql`
+            UPDATE shop_coupons SET used_count = greatest(0, used_count - 1)
+            WHERE upper(code) = upper(${String(o.coupon_code)})
+          `);
+        }
       }
     }
 

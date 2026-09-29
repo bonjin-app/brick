@@ -24,7 +24,6 @@ import { sql } from "drizzle-orm";
 import { Inject } from "@nestjs/common";
 import { DB } from "../../runtime.module.js";
 import type { BrickDb } from "@brick/database";
-import { msg } from "../../common/localized-error.js";
 
 @Controller("api/me/security")
 @UseGuards(AuthGuard)
@@ -88,9 +87,7 @@ export class AccountSecurityController {
    */
   private async requirePassword(req: FastifyRequest, password: string): Promise<void> {
     // 횟수 제한은 비밀번호 변경·탈퇴와 한 몫을 나눠 쓴다 (PasswordConfirmService)
-    if (!(await this.passwordConfirm.confirm(this.userId(req), password))) {
-      throw new UnauthorizedException("비밀번호가 맞지 않습니다.");
-    }
+    await this.passwordConfirm.assertConfirmed(this.userId(req), password, () => new UnauthorizedException("비밀번호가 맞지 않습니다."));
   }
 
   @Get()
@@ -143,7 +140,7 @@ export class AccountSecurityController {
   @Post("2fa/complete")
   async complete(@Req() req: FastifyRequest, @Body() body: { code: string }) {
     const userId = this.userId(req);
-    const { allowed } = await this.rateLimit.consume(`2fa-enroll:${userId}`, 10, 15 * 60_000);
+    const { allowed } = await this.rateLimit.consume(`2fa-enroll:${userId}`, PasswordConfirmService.LIMIT, PasswordConfirmService.WINDOW_MS);
     if (!allowed) {
       throw new HttpException("너무 많이 시도했습니다.", HttpStatus.TOO_MANY_REQUESTS);
     }

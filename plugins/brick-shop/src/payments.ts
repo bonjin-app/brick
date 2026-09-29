@@ -225,8 +225,6 @@ export async function confirmPayment(
     claimedAmount?: number;
     actorId?: string | null;
     pointsPort?: PointsPort | null;
-    /** 결제 완료를 알린다 (포인트 적립 등이 구독한다) */
-    onPaid?: (info: { orderNo: string; userId: string | null; amount: number }) => Promise<void>;
     /** 가상계좌가 발급됐다 — 입금 안내를 보낸다 (처음 발급될 때 한 번) */
     onAwaitingDeposit?: (info: { orderId: string; orderNo: string }) => Promise<void>;
   },
@@ -450,17 +448,7 @@ export async function confirmPayment(
       : "결제하는 사이 주문이 취소되었습니다. 결제 취소가 처리되지 않아 판매자가 확인 후 환불합니다.");
   }
 
-  // 결제 완료 통지 — 포인트 적립 등이 구독한다.
-  // 실패해도 결제는 유효하므로 예외를 삼킨다 (적립은 나중에 보정할 수 있다).
-  if (params.onPaid) {
-    await params
-      .onPaid({
-        orderNo: params.orderNo,
-        userId: order.user_id ? String(order.user_id) : null,
-        amount: approved,
-      })
-      .catch(() => undefined);
-  }
+  // 결제 완료 통지(구매 적립 · 청구서 표시)는 여기서 하지 않는다 — 상태 전이가 커밋된 뒤 order-lifecycle.ts 가 한 번 한다.
 
   return { ok: true, orderNo: params.orderNo, amount: approved };
 }

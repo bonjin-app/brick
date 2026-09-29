@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { sql } from "drizzle-orm";
 import type { BrickDb } from "@brick/database";
-import type { SitemapUrl } from "@brick/core";
+import { publicUrls, toAbsoluteUrl, type SitemapUrl } from "@brick/core";
 import { DB, ENV } from "../../runtime.module.js";
 import type { loadEnv } from "../../config/env.js";
 import { PluginLoaderService } from "../plugins/plugin-loader.service.js";
@@ -239,6 +239,8 @@ function clampPriority(n: number): string {
  */
 function escapeXml(s: string): string {
   return String(s)
+    // XML 1.0 에서 쓸 수 없는 제어문자 — 하나만 있어도 사이트맵 조각 전체가 파싱되지 않는다
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]/g, "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
@@ -247,19 +249,14 @@ function escapeXml(s: string): string {
 }
 
 /**
- * 사이트맵의 이미지 — http(s) 절대 주소나 `/` 로 시작하는 경로만(`//남의주소`·`javascript:` 는 버린다),
- * 절대 주소로 바꿔 주소마다 10장까지. 같은 사진이 두 번 오면 한 번만.
+ * 사이트맵의 이미지 — 실어도 되는 주소(publicUrl: `//남의주소`·`javascript:`·제어문자는 버린다)만, 절대 주소로,
+ * 주소마다 10장까지, 같은 사진은 한 번(경로와 절대 주소로 두 번 온 같은 사진도).
  */
 function sitemapImages(images: unknown, base: string): string[] {
-  if (!Array.isArray(images)) return [];
   const out: string[] = [];
-  for (const raw of images) {
-    const v = String(raw ?? "").trim();
-    if (!v || v.length > 1000) continue;
-    let abs = "";
-    if (/^https?:\/\//i.test(v)) abs = v;
-    else if (v.startsWith("/") && !v.startsWith("//")) abs = `${base}${v}`;
-    if (abs && !out.includes(abs)) out.push(abs);
+  for (const u of publicUrls(images)) {
+    const abs = toAbsoluteUrl(u, base);
+    if (!out.includes(abs)) out.push(abs);
     if (out.length >= 10) break;
   }
   return out;

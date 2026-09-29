@@ -6,7 +6,7 @@ import { DEFAULT_SETTINGS, ORDER_STATUS, PRODUCT_STATUS_LABEL, ShopError, STATUS
          type Db, type OrderStatus, type ShopSettings } from "./types.js";
 import { quote } from "./pricing.js";
 import { addToCart, clearCart, getCartItems, updateCartItem, type CartOwner } from "./cart.js";
-import { changeOrderStatus, createOrder, onOrderTransition, type PointsPort } from "./orders.js";
+import { changeOrderStatus, createOrder, type PointsPort } from "./orders.js";
 import { cancelUnpaidOrders, depositDeadline } from "./unpaid.js";
 import { formatDue } from "./order-mail.js";
 import { bankTransferGateway, confirmPayment, gateways, refundPayment, registerGateway } from "./payments.js";
@@ -30,7 +30,7 @@ import {
 import { RELATED_LIMIT, listRelated, syncRelated } from "./related.js";
 import {
   cancelPaymentRequest, createPaymentRequest, listPaymentRequests,
-  markRequestPaid, prepareOrderForRequest, viewPaymentRequest,
+  prepareOrderForRequest, viewPaymentRequest,
 } from "./direct-payment.js";
 import {
   activeCollections, createCollection, deleteCollection, listCollectionsAdmin,
@@ -45,16 +45,17 @@ import {
   listRestockDemand, requestRestockAlert, sendRestockNotifications, sweepRestock,
 } from "./restock.js";
 import {
-  RECEIPT_KINDS, RECEIPT_KIND_LABEL, VAT_PERIODS, cancelCashReceipt, cancelReceiptsForOrder,
+  RECEIPT_KINDS, RECEIPT_KIND_LABEL, VAT_PERIODS, cancelCashReceipt,
   cashReceiptStatusFor,
   listCashReceiptGateways, listCashReceipts, listTaxInvoices, markCashReceiptIssued,
   requestCashReceipt, requestTaxInvoice, updateTaxInvoice, vatReport,
 } from "./tax.js";
 import {
-  orderRefundsSql,
   SITE_TZ, parseGroupBy, parsePeriod, salesByCategory, salesByPeriod,
   salesByProduct, salesSummary, toCsv,
 } from "./reports.js";
+import { orderRefundsJoin } from "./refunds.js";
+import { registerOrderLifecycle } from "./order-lifecycle.js";
 import {
   addToWishlist, createZone, deleteZone, findZoneFee, isInWishlist, listRecentViews,
   listWishlist, listZones, mergeGuestViews, mergeGuestWishlist, purgeOldViews,
@@ -173,47 +174,8 @@ export default definePlugin(async (ctx) => {
     }
   };
 
-  /*
-   * 상태가 바뀌면 알린다.
-   *
-   * changeOrderStatus 는 여덜 곳에서 불린다. 호출부마다 붙이면 언젠가 한 곳이 빠지고,
-   * 그 경로만 조용해진다 — 그래서 전이가 일어나는 지점 하나에서 알린다.
-   */
-  onOrderTransition(({ orderId, to }) => {
-    void notifyOrder(orderId, to);
-    if (to === "paid") void announcePaid(orderId).catch(() => undefined);
-    /*
-     * 주문이 통째로 취소·환불되면 발급된 현금영수증을 취소한다 — 돌려준 돈의 증빙이 살아 있으면 세금을 더 낸다.
-     * 전에는 반품 완료만 취소해, 운영자가 주문 화면에서 환불·취소로 바꾼 주문의 영수증은 그대로 남았다.
-     * 반품으로 전량이 돌아와 여기로 오는 경우는 반품이 먼저 취소했으므로 할 일이 없다(대기·발급 상태만 고른다).
-     * 실패는 영수증 행에 남는다(운영자가 홈택스에서 직접 취소한다) — 취소를 되돌리지 않는다.
-     */
-    if (to === "cancelled" || to === "refunded") {
-      void cancelReceiptsForOrder(db, { orderId, reason: to === "cancelled" ? "주문 취소" : "주문 환불" }).catch(() => undefined);
-    }
-  });
-
-  /**
-   * 결제 완료 — **어느 길로 결제됐든** 여기서 한 번 알린다(구매 적립 등이 `shop.order.paid` 를 구독한다).
-   *
-   * 전에는 PG 결제 확정(`runConfirm`)만 알려, 운영자가 주문 화면에서 상태를 "결제완료" 로 바꾸는 흔한
-   * 무통장 입금 확인에는 구매 적립이 붙지 않았다(정기결제의 회차 결제도). 전이가 일어나는 지점 하나에서
-   * 알리면 길이 늘어도 빠지지 않는다 — 메일 알림과 같은 이유다. 적립은 주문번호로 한 번만 쌓인다.
-   */
-  const announcePaid = async (orderId: string) => {
-    const { rows } = await db.execute(sql`
-      SELECT order_no, user_id, total FROM shop_orders WHERE id = ${orderId}::uuid LIMIT 1
-    `);
-    const o = rows[0];
-    if (!o) return;
-    // 개인결제 청구서였으면 결제완료로 표시한다
-    await markRequestPaid(db, String(o.order_no));
-    await ctx.hooks.doAction("shop.order.paid", {
-      orderNo: String(o.order_no),
-      userId: o.user_id ? String(o.user_id) : null,
-      amount: Number(o.total),
-    });
-  };
+  // 상태가 바뀔 때 따라 나가는 일(주문 안내 · 결제 완료 알림 · 현금영수증 취소) — order-lifecycle.ts
+  registerOrderLifecycle({ db, hooks: ctx.hooks, logger: ctx.logger, notifyOrder });
 
   /**
    * 포인트 서비스 — brick-point가 설치·활성화된 경우에만 존재한다.
@@ -1427,7 +1389,6 @@ export default definePlugin(async (ctx) => {
   ctx.registerRoute("GET", "/admin/stats", async (req) => {
     requireAdmin(req);
     const { rows } = await db.execute(sql`
-      WITH refunds AS (${orderRefundsSql})
       SELECT
         count(*) FILTER (WHERE o.status = 'pending')                     AS pending_orders,
         count(*) FILTER (WHERE o.status NOT IN ('cancelled','refunded')) AS valid_orders,
@@ -1438,7 +1399,7 @@ export default definePlugin(async (ctx) => {
                    AND o.paid_at >= (date_trunc('month', now() AT TIME ZONE ${SITE_TZ})
                                      AT TIME ZONE ${SITE_TZ})), 0)      AS revenue_this_month
       FROM shop_orders o
-      LEFT JOIN refunds r ON r.order_id = o.id
+      ${orderRefundsJoin}
     `);
     const { rows: low } = await db.execute(sql`
       SELECT name, stock FROM shop_products

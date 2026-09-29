@@ -3,6 +3,7 @@ import { loadEnv } from "../../config/env.js";
 // 이스케이프는 코어의 것을 쓴다 — null 안전하고, 구현이 갈라지면 안 된다
 import {
   CORE_CATALOGS, CORE_MESSAGE_KEYS, catalogToTree, escapeHtml, makeTranslator, normalizeLocale,
+  publicUrl, toAbsoluteUrl,
   type Locale,
 } from "@brick/core";
 import { and, eq } from "drizzle-orm";
@@ -701,7 +702,7 @@ function topbarOf(
   let hash = 0;
   for (let i = 0; i < text.length; i++) hash = (hash * 31 + text.charCodeAt(i)) | 0;
   // 잘못된 스킴은 설정 저장에서 막지만, 옛 데이터가 있을 수 있어 여기서도 링크를 버린다
-  const safeUrl = /^(https?:\/\/|\/)/.test(url) ? url : "";
+  const safeUrl = publicUrl(url) ?? "";
   return {
     topbar: text,
     topbarUrl: safeUrl,
@@ -715,10 +716,8 @@ function topbarOf(
  * `javascript:` 같은 것은 버린다). 절대 주소로 바꿔 돌려준다.
  */
 function shareImage(value: unknown): string {
-  const v = String(value ?? "").trim();
-  if (!v || v.length > 1000) return "";
-  if (!/^https?:\/\//i.test(v) && !(v.startsWith("/") && !v.startsWith("//"))) return "";
-  return absoluteUrl(v);
+  const u = publicUrl(value);
+  return u ? toAbsoluteUrl(u, loadEnv().siteUrl) : "";
 }
 
 /** 이 화면에 한해 site.ogImage 를 바꾼다 — 테마(외부 테마 포함)를 고치지 않아도 된다 */
@@ -726,10 +725,8 @@ function withShareImage<T extends { ogImage: string }>(site: T, image: string | 
   return image ? { ...site, ogImage: image } : site;
 }
 
-/** og:image 는 절대 URL 이어야 한다 — /uploads/… 는 BRICK_SITE_URL 을 앞에 붙인다 */
+/** og:image 는 절대 URL 이어야 한다 — /uploads/… 는 BRICK_SITE_URL 을 앞에 붙인다 (설정에 저장된 값도 같은 규칙) */
 function absoluteUrl(value: string): string {
-  if (!value) return "";
-  if (/^https?:\/\//.test(value)) return value;
-  const base = loadEnv().siteUrl.replace(/\/+$/, "");
-  return `${base}${value.startsWith("/") ? "" : "/"}${value}`;
+  const u = publicUrl(value);
+  return u ? toAbsoluteUrl(u, loadEnv().siteUrl) : "";
 }

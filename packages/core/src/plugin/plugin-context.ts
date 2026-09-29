@@ -634,6 +634,12 @@ export interface PersonalDataEraser {
     userId: string;
     /** 작성한 글까지 지울지 — 회원이 선택한다 */
     deletePosts: boolean;
+    /**
+     * 탈퇴 트랜잭션이 **커밋된 뒤에** 실행할 일을 맡긴다 — 저장소의 파일 지우기, 다른 플러그인에 알리기처럼
+     * 되돌릴 수 없거나 트랜잭션 밖에서 일어나는 일. 트랜잭션 안에서 하면 탈퇴가 되돌아갔을 때 파일은 이미
+     * 사라져 있다. 여기서 던진 예외는 기록만 하고 탈퇴를 되돌리지 않는다(이미 커밋됐다).
+     */
+    afterCommit(fn: () => Promise<void>): void;
   }): Promise<string[]>;
   /**
    * 탈퇴 전 안내. 없으면 안내를 만들지 않는다.

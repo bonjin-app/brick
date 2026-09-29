@@ -1,11 +1,14 @@
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
+import { publicUrl, type StorageProvider } from "@brick/plugin-sdk";
 import type { BoardRow, Db, SessionUser } from "./types.js";
-import { BoardError, extraFieldsOf, hasRole, pickExtraValues } from "./types.js";
+import { BoardError, extraFieldsOf, hasRole, pgArray, pickExtraValues } from "./types.js";
 import { t } from "./i18n.js";
 import { hashGuestPassword } from "./guest.js";
+import { attachmentKeysOf, deleteStoredFiles } from "./attachments.js";
+import { announceCommentsDeleted, type BoardHooks } from "./comments.js";
 import { sanitizeHtml } from "./sanitize.js";
-import { canReadSecret } from "./access.js";
+import { canReadSecretAsMember, secretPostRef } from "./access.js";
 
 export interface WritePostInput {
   /** 관련 링크 (최대 2개, http/https 만) — 그누보드의 wr_link1/2 */
@@ -110,7 +113,7 @@ export async function createPost(
        * 공개 답변이 질문을 인용하거나 짐작하게 하면 비밀글로 쓴 뜻이 없어진다(그누보드는 기본으로 체크만 한다).
        */
       if (parent.is_secret) {
-        if (!(await canReadSecret(parent as never, user, undefined, async () => false, tx))) {
+        if (!(await canReadSecretAsMember(secretPostRef(parent), user, tx))) {
           throw new BoardError(403, "비밀글에는 작성자와 운영진만 답변할 수 있습니다.");
         }
         isSecret = true;
@@ -179,9 +182,8 @@ export function extractThumb(html: string): string | null {
   // 에디터가 넣은 목록용 썸네일(data-thumb)이 있으면 그것을, 없으면 원본 src 를 쓴다
   const m = /\bdata-thumb=["']([^"']+)["']/i.exec(tag) ?? /\bsrc=["']([^"']+)["']/i.exec(tag);
   if (!m) return null;
-  const src = m[1].trim();
-  if (!/^(https?:\/\/|\/)/i.test(src)) return null;
-  return src.slice(0, 2000);
+  // 실어도 되는 주소만 — `//남의주소`·`javascript:`·제어문자(사이트맵 XML 을 깨뜨린다)는 버린다
+  return publicUrl(m[1]);
 }
 
 /**
@@ -306,4 +308,51 @@ export async function listPosts(
     searchIn,
     category,
   };
+}
+
+// ════════════════════════════════════════════════════
+//  글 지우기
+// ════════════════════════════════════════════════════
+
+export interface PostDeleteDeps {
+  storage: StorageProvider;
+  hooks: BoardHooks;
+}
+
+/**
+ * 글 지우기 — 작성자 삭제 · 관리자 삭제 · 일괄 삭제 · 회원 탈퇴가 **이것 하나**를 쓴다.
+ *
+ * 글을 지우면 딸린 것이 함께 정리된다: 첨부 파일(저장소), 그리고 "글과 그 댓글이 지워졌다" 는 알림
+ * (`board.post.deleted` · `board.comment.deleted` — 포인트가 그 적립을 거둔다). 탈퇴 경로는 전에 글 행만 지워
+ * 파일이 고아로 남고, **다른 회원이 그 글에 단 댓글**의 적립도 거두지 못했다(글이 지워지며 댓글이 같이 사라진다).
+ *
+ * 순서: 딸린 것을 **읽고**(지우면 CASCADE 로 사라진다) → 글을 지우고 → 파일·알림. 파일과 알림은 DB 가 확정된 뒤에
+ * 한다 — DB 가 실패하면 파일은 그대로다. 트랜잭션 안에서 부를 때(`db` 가 tx)는 `afterCommit` 으로 커밋 이후로 미룬다.
+ */
+export async function deletePosts(
+  db: Db,
+  deps: PostDeleteDeps,
+  ids: readonly string[],
+  opts: { afterCommit?: (fn: () => Promise<void>) => void } = {},
+): Promise<number> {
+  if (!ids.length) return 0;
+  const arr = pgArray(ids);
+  const { rows: comments } = await db.execute(sql`
+    SELECT id, author_id FROM board_comments
+    WHERE post_id = ANY(${arr}::uuid[]) AND deleted_at IS NULL AND author_id IS NOT NULL
+  `);
+  const keys = await attachmentKeysOf(db, ids);
+  const { rows } = await db.execute(sql`DELETE FROM board_posts WHERE id = ANY(${arr}::uuid[]) RETURNING id, author_id`);
+
+  const settle = async (): Promise<void> => {
+    await deleteStoredFiles(deps.storage, keys);
+    for (const p of rows) {
+      if (p.author_id) await deps.hooks.doAction("board.post.deleted", { postId: String(p.id), authorId: String(p.author_id) });
+    }
+    // 작성자 없는 댓글(비회원)은 SQL 이 이미 거르지만, `String(null)` 이 "null" 이라는 참인 문자열이 되는 함정을 코드에서도 막는다
+    await announceCommentsDeleted(deps.hooks, comments.map((c) => ({ id: String(c.id), authorId: c.author_id ? String(c.author_id) : null })));
+  };
+  if (opts.afterCommit) opts.afterCommit(settle);
+  else await settle();
+  return rows.length;
 }

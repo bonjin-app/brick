@@ -1,10 +1,10 @@
 import { sql } from "drizzle-orm";
-import { josa } from "@brick/plugin-sdk";
+import { josa, publicUrls } from "@brick/plugin-sdk";
 import { uuidv7 } from "uuidv7";
 import type { Db } from "./types.js";
 import { cancelReceiptsForOrder } from "./tax.js";
 import { ShopError } from "./types.js";
-import type { PointsPort } from "./orders.js";
+import { restoreOrderPoints, type PointsPort } from "./orders.js";
 import { t, label, withJosa } from "./i18n.js";
 import { parseRefundAccount } from "./order-mail.js";
 
@@ -691,19 +691,11 @@ export async function updateReturnStatus(
         FROM shop_order_items WHERE order_id = ${String(ret.order_id)}::uuid
       `);
       if (Number(remain[0]?.live ?? 0) === 0) {
-        if (Number(ret.point_used ?? 0) > 0) {
-          await params.pointsPort.refund({
-            userId: String(ret.user_id),
-            refType: "shop.order",
-            refId: String(ret.order_no),
-            reason: `${KIND_LABEL[String(ret.kind) as ReturnKind]}으로 포인트 반환`,
-          });
-        }
-        await params.pointsPort.revoke?.({
+        await restoreOrderPoints(params.pointsPort, {
           userId: String(ret.user_id),
-          refType: "shop.order",
-          refId: String(ret.order_no),
-          reason: `${KIND_LABEL[String(ret.kind) as ReturnKind]}으로 구매 적립 회수`,
+          orderNo: String(ret.order_no),
+          pointUsed: Number(ret.point_used ?? 0),
+          cause: KIND_LABEL[String(ret.kind) as ReturnKind],
         });
       }
     }
@@ -875,8 +867,5 @@ function decorate(row: Record<string, unknown>): Record<string, unknown> {
 }
 
 function normalizeImages(input: unknown): string[] {
-  return (Array.isArray(input) ? input : [])
-    .map((u) => String(u).trim())
-    .filter((u) => /^(\/|https?:\/\/)/.test(u) && u.length <= 1000)
-    .slice(0, 5);
+  return publicUrls(input, { max: 5, maxLen: 1000 });
 }

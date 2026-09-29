@@ -8,11 +8,16 @@ import {
 } from "./types.js";
 import { t } from "./i18n.js";
 import { hashGuestPassword, verifyGuestPassword } from "./guest.js";
-import { checkGuestSecret, fillTemplate } from "@brick/plugin-sdk";
-import { removeComments } from "./comments.js";
-import { assertAuthorMayChange, assertCanModify, boardActor, canModifyPost, canReadSecret, canSeeSecretComment, checkWriteInterval, loadBoard, requireCert, requireRole, type IdentityOf } from "./access.js";
-import { attachFiles, claimDownload, deleteAttachments, listAttachments } from "./attachments.js";
-import { createPost, isBlankContent, listPosts, normalizeLinks, refreshThumb, type WritePostInput } from "./posts.js";
+import { checkGuestSecret } from "@brick/plugin-sdk";
+import { announceCommentsDeleted, removeComments } from "./comments.js";
+import {
+  assertAuthorMayChange, assertCanModify, authorCanChange, boardActor, canModifyPost, canReadSecret, checkWriteInterval,
+  commentAuthorLookup, commentState, loadBoard, requireCert, requireRole, secretPostRef,
+  type GuestCheckFor, type IdentityOf, type SecretPostRef,
+} from "./access.js";
+import { registerCommentNotifications } from "./notify.js";
+import { attachFiles, claimDownload, listAttachments } from "./attachments.js";
+import { createPost, deletePosts, isBlankContent, listPosts, normalizeLinks, refreshThumb, type WritePostInput } from "./posts.js";
 import { sanitizeHtml, toPlainText } from "./sanitize.js";
 import { BOARD_RESOURCE, GROUP_RESOURCE, POST_RESOURCE } from "./admin-resources.js";
 import { registerBoardBlocks } from "./blocks.js";
@@ -30,48 +35,6 @@ const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,50}$/;
  *  추천/비추천 · 비회원 글쓰기 · 검색 · 도배 방지 · RSS
  */
 export default definePlugin(async (ctx) => {
-  /**
-   * 댓글 알림의 기본 문구 — `#{변수}` 로 쓴다. 실제 발송이 이것을 채운 것이라, 운영자가
-   * 알림 문구 화면에서 불러온 문장과 지금 나가는 문장이 같다.
-   */
-  const commentTemplate = () => ({
-    subject: ctx.t("mail.commentSubject", { board: "#{게시판명}", title: "#{글제목}" }),
-    body: ctx.t("mail.commentBody", { author: "#{댓글작성자}", title: "#{글제목}", excerpt: "#{댓글요약}", url: "#{글주소}" }),
-  });
-  ctx.registerNotificationEvent({
-    event: "board.comment",
-    label: "게시판 — 내 글에 댓글",
-    vars: [
-      { name: "게시판명", description: "게시판 이름", sample: "자유게시판" },
-      { name: "글제목", description: "원글 제목", sample: "첫 글입니다" },
-      { name: "댓글작성자", description: "댓글을 쓴 사람", sample: "홍길동" },
-      { name: "댓글요약", description: "댓글 앞부분 (비밀댓글이면 내용 대신 표시)", sample: "좋은 글 감사합니다" },
-      { name: "글주소", description: "원글 주소", sample: "https://example.com/board/free/1#comments" },
-    ],
-    defaults: commentTemplate,
-  });
-  /*
-   * 답글 알림 — 내 댓글에 누가 답하면. 원글 작성자만 알림을 받으면, 질문을 댓글로 남긴 사람은
-   * 글쓴이가 답했는지 알려면 그 글을 계속 다시 열어 봐야 한다(그누보드는 댓글 작성자에게도 메일을
-   * 보내는 설정이 있다 — cf_email_wr_comment_all).
-   */
-  const replyTemplate = () => ({
-    subject: ctx.t("mail.replySubject", { board: "#{게시판명}", title: "#{글제목}" }),
-    body: ctx.t("mail.replyBody", { author: "#{댓글작성자}", title: "#{글제목}", excerpt: "#{댓글요약}", url: "#{글주소}" }),
-  });
-  ctx.registerNotificationEvent({
-    event: "board.reply",
-    label: "게시판 — 내 댓글에 답글",
-    vars: [
-      { name: "게시판명", description: "게시판 이름", sample: "자유게시판" },
-      { name: "글제목", description: "원글 제목", sample: "첫 글입니다" },
-      { name: "댓글작성자", description: "답글을 쓴 사람", sample: "홍길동" },
-      { name: "댓글요약", description: "답글 앞부분 (비밀 답글·비밀글이면 내용 대신 표시)", sample: "네, 가능합니다" },
-      { name: "글주소", description: "원글 주소", sample: "https://example.com/board/free/1#comments" },
-    ],
-    defaults: replyTemplate,
-  });
-
   /*
    * 비회원 비밀번호 확인 — 대입 방어를 씌운다(대상별 다섯 번·IP별 스무 번, 15분).
    * 비회원 글·댓글·비밀글은 비밀번호 하나로 열리고 흔히 숫자 네 자리라, 시도 횟수 제한이
@@ -83,46 +46,28 @@ export default definePlugin(async (ctx) => {
 
   const db = ctx.db as Db;
 
-  /*
-   * 지워진 글·댓글을 알린다 — 포인트가 그 적립을 거둬들인다(그누보드 delete_point 와 같다).
-   * 전에는 알리지 않아, 글을 쓰고(+적립) 지우기를 되풀이하면 포인트가 끝없이 쌓였다.
-   * 비회원 것은 적립이 없으므로 알리지 않는다.
-   */
-  const announceCommentsDeleted = async (list: Array<{ id: string; authorId: string | null }>) => {
-    for (const c of list) {
-      if (c.authorId) await ctx.hooks.doAction("board.comment.deleted", { commentId: c.id, authorId: c.authorId });
-    }
-  };
-  /** 글 지우기 — 작성자·관리자·일괄 삭제가 이것 하나를 쓴다. 첨부 파일을 정리하고, 글과 그 댓글이 지워졌다고 알린다 */
-  const deletePosts = async (ids: readonly string[]): Promise<number> => {
-    if (!ids.length) return 0;
-    const arr = pgArray(ids);
-    const { rows: comments } = await db.execute(sql`
-      SELECT id, author_id FROM board_comments WHERE post_id = ANY(${arr}::uuid[]) AND deleted_at IS NULL AND author_id IS NOT NULL
-    `);
-    for (const id of ids) await deleteAttachments(db, ctx.storage, id);
-    const { rows } = await db.execute(sql`DELETE FROM board_posts WHERE id = ANY(${arr}::uuid[]) RETURNING id, author_id`);
-    for (const p of rows) {
-      if (p.author_id) await ctx.hooks.doAction("board.post.deleted", { postId: String(p.id), authorId: String(p.author_id) });
-    }
-    await announceCommentsDeleted(comments.map((c) => ({ id: String(c.id), authorId: String(c.author_id) })));
-    return rows.length;
-  };
+  // 댓글·답글 알림 등록 + 발송기 (notify.ts)
+  const notifyComment = registerCommentNotifications(ctx, db);
+  // 글 지우기의 딸린 일(파일·포인트 회수 알림)이 쓰는 것 (posts.ts deletePosts)
+  const postDeps = { storage: ctx.storage, hooks: ctx.hooks };
 
   /**
-   * 글 하나에 닿는 행동(댓글·추천·스크랩)의 공통 관문 — 글 읽기와 **같은** 규칙이다.
-   * 게시판 읽기 권한과 비밀글(작성자·운영진·그 게시판 관리자, 비회원 글은 `?pw`)을 본다.
-   * 전에는 댓글·스크랩이 게시판 읽기만 보고 추천은 그것마저 보지 않아, 읽지 못하는 글에
-   * 댓글을 달고(작성자에게 알림까지 갔다) 추천 수를 바꾸고 스크랩 목록에 제목을 담을 수 있었다.
+   * 글 하나에 닿는 행동(읽기 · 첨부 · 댓글 · 추천 · 스크랩)의 공통 관문 — **글 읽기와 같은 규칙**이다.
+   * 게시판 읽기 권한과 비밀글(작성자·운영진·그 게시판 관리자·답변글이면 원글 작성자, 비회원 글은 `?pw`)을 본다.
+   * 다섯 곳이 각자 조립하던 것을 모았다 — 전에는 댓글·스크랩이 게시판 읽기만 보고 추천은 그것마저 보지 않아, 읽지
+   * 못하는 글에 댓글을 달고 추천 수를 바꾸고 스크랩 목록에 제목을 담을 수 있었다.
+   *
+   * 거절 문장은 부르는 쪽이 던진다 — 던지는 자리의 리터럴이어야 번역 검사(check-error-i18n)가 본다.
    */
   const readPostAs = async (
     req: { ip: string; query: Record<string, string | undefined> },
-    post: Record<string, unknown>,
+    boardSlug: string,
+    post: SecretPostRef,
     user: SessionUser | null,
   ): Promise<{ actor: SessionUser | null; readable: boolean }> => {
-    const actor = boardActor(user, await requireBoardRead(String(post.slug), user));
-    // 거절 문장은 부르는 쪽이 던진다 — 던지는 자리의 리터럴이어야 번역 검사(check-error-i18n)가 본다
-    return { actor, readable: await canReadSecret(post as never, actor, req.query.pw, guestCheck(req, `post:${String(post.id)}`), db) };
+    const actor = boardActor(user, await requireBoardRead(boardSlug, user));
+    const checkFor: GuestCheckFor = (postId) => guestCheck(req, `post:${postId}`);
+    return { actor, readable: await canReadSecret(post, actor, req.query.pw, checkFor, db) };
   };
 
   // 본인인증을 쓰는 곳 — 관리자 → 본인인증 화면이 목적별로 모은다
@@ -299,19 +244,15 @@ export default definePlugin(async (ctx) => {
   ctx.registerRoute("GET", "/posts/:id", async (req) => {
     const { rows } = await db.execute(sql`
       SELECT p.*, b.slug AS board_slug, b.title AS board_title, b.read_role, b.download_role,
-             b.allow_vote, b.allow_reply
+             b.allow_vote, b.allow_reply, b.count_delete, b.count_modify
       FROM board_posts p JOIN board_boards b ON b.id = p.board_id
       WHERE p.id = ${req.params.id}::uuid LIMIT 1
     `);
     const post = rows[0];
     if (!post) throw new BoardError(404, "글을 찾을 수 없습니다.");
 
-    const user = boardActor(userOf(req), await requireBoardRead(String(post.board_slug), userOf(req)));
-
-    const guestPw = req.query.pw;
-    if (!(await canReadSecret(post as never, user, guestPw, guestCheck(req, `post:${req.params.id}`), db))) {
-      throw new BoardError(403, "비밀글입니다. 작성자만 열람할 수 있습니다.");
-    }
+    const { actor: user, readable } = await readPostAs(req, String(post.board_slug), secretPostRef(post), userOf(req));
+    if (!readable) throw new BoardError(403, "비밀글입니다. 작성자만 열람할 수 있습니다.");
 
     // 조회수는 읽기 권한을 통과한 뒤에만 올린다
     await db.execute(sql`
@@ -344,21 +285,25 @@ export default definePlugin(async (ctx) => {
 
     // 비밀번호 해시는 절대 응답에 넣지 않는다
     const { guest_password: _pw, ...safe } = post as Record<string, unknown>;
-    const commentAuthor = new Map(comments.map((c) => [String(c.id), c.author_id]));
+    // 지운 자리·가린 비밀댓글의 상태는 화면과 같은 함수가 정하고, 문구는 사이트 언어로 붙인다
+    const authorOf = commentAuthorLookup(comments);
+    const canModify = canModifyPost(post as never, user);
+    const can = canModify ? await authorCanChange(db, post, user) : { edit: false, delete: false };
     return {
       post: { ...safe, view_count: Number(post.view_count) + 1 },
       attachments,
-      comments: comments.map((c) =>
-        c.deleted
-          ? { ...c, content: "삭제된 댓글입니다." }
-          : // 비밀댓글은 읽을 수 있는 사람만 내용을 본다 (화면과 같은 함수)
-            !canSeeSecretComment(c, post, user, (id) => commentAuthor.get(id))
-            ? { ...c, content: "비밀 댓글입니다." }
-            : c,
-      ),
+      comments: comments.map((c) => {
+        const state = commentState(c, post, user, authorOf);
+        return state === "deleted" ? { ...c, content: ctx.t("comment.deleted") }
+          : state === "hidden" ? { ...c, content: ctx.t("comment.secret") }
+          : c;
+      }),
       myVote,
       scrapped,
-      canModify: canModifyPost(post as never, user),
+      // 권한이 있어도 답변글·댓글 한도에 걸리면 누르기 전에 알린다 (누르면 409)
+      canModify,
+      canEdit: canModify && can.edit,
+      canDelete: canModify && can.delete,
     };
   });
 
@@ -421,7 +366,7 @@ export default definePlugin(async (ctx) => {
     await assertAuthorMayChange(db, post, remover, "delete");
 
     // 스토리지 파일은 CASCADE로 지워지지 않으므로 먼저 정리한다 (deletePosts 가 한다)
-    await deletePosts([String(post.id)]);
+    await deletePosts(db, postDeps, [String(post.id)]);
     await ctx.cache.invalidateTag("pages");
     return { ok: true };
   });
@@ -512,15 +457,14 @@ export default definePlugin(async (ctx) => {
     `);
     if (!rows[0]) throw new BoardError(404, "파일을 찾을 수 없습니다.");
     // 내려받기 권한만 보면 읽을 수 없는 게시판(그룹 권한·비공개·본인인증)의 첨부가 열린다
-    const user = boardActor(userOf(req), await requireBoardRead(String(rows[0].slug), userOf(req)));
+    // (첨부 행의 `id` 는 첨부의 id 다 — 글 id 는 post_id 열이다)
+    const { actor: user, readable } = await readPostAs(req, String(rows[0].slug), secretPostRef(rows[0], "post_id"), userOf(req));
     requireRole(user, String(rows[0].download_role), "act.download");
     /*
      * 비밀글의 첨부 — 글을 읽을 수 없는 사람은 첨부도 받지 못한다(작성자·게시판 관리자·운영진, 비회원 글은 비밀번호).
-     * 전에는 이 검사가 없어 첨부 주소를 아는 회원이면 남의 비밀글 첨부를 받을 수 있었다. 글 읽기와 같은 함수를 쓴다.
+     * 전에는 이 검사가 없어 첨부 주소를 아는 회원이면 남의 비밀글 첨부를 받을 수 있었다. 글 읽기와 같은 관문을 쓴다.
      */
-    if (!(await canReadSecret({ ...rows[0], id: rows[0].post_id } as never, user, req.query.pw, guestCheck(req, `post:${String(rows[0].post_id)}`), db))) {
-      throw new BoardError(403, "비밀글의 첨부파일입니다. 작성자만 받을 수 있습니다.");
-    }
+    if (!readable) throw new BoardError(403, "비밀글의 첨부파일입니다. 작성자만 받을 수 있습니다.");
 
     const file = await claimDownload(db, req.params.id);
     if (!file) throw new BoardError(404, "파일을 찾을 수 없습니다.");
@@ -548,7 +492,7 @@ export default definePlugin(async (ctx) => {
     if (!post) throw new BoardError(404, "글을 찾을 수 없습니다.");
 
     const user = userOf(req);
-    const { actor, readable } = await readPostAs(req, post, user);
+    const { actor, readable } = await readPostAs(req, String(post.slug), secretPostRef(post), user);
     if (!readable) throw new BoardError(403, "비밀글입니다. 작성자만 댓글을 달 수 있습니다.");
     requireRole(actor, String(post.comment_role), "act.comment");
     await requireCaptchaForGuest(user, body);
@@ -610,45 +554,20 @@ export default definePlugin(async (ctx) => {
      * 비밀댓글은 받는 사람이 사이트에서 읽을 수 있지만(canSeeSecretComment), 메일은 사이트 밖으로
      * 나가므로 내용을 빼고 "댓글이 달렸다" 는 사실만 알린다. 비밀글의 답글도 같다 — 글이 나중에
      * 비밀글이 되었다면 부모 댓글 작성자는 그 글을 못 읽을 수 있다.
-     *
-     * `ctx.notify` 는 메일과 **사이트 안 알림함** 두 곳으로 간다. 메일만 보내던
-     * 시절에는 SMTP 가 없는 사이트에서(기본값이다) 이 알림이 통째로 사라졌다 —
-     * 작성자는 자기 글에 댓글이 달린 줄 몰랐다. 실패는 댓글 등록을 막지 않는다.
+     * 발송은 notify.ts 가 한다 — 기다리지 않고, 실패는 기록한다. 댓글 등록은 알림 때문에 실패하지 않는다.
      */
     const me = user?.id ?? null;
     const postAuthor = post.author_id ? String(post.author_id) : null;
-    const notifyMember = (to: string, event: string, tpl: { subject: string; body: string }, hide: boolean) => {
-      void (async () => {
-        const { rows: u } = await db.execute(sql`
-          SELECT id FROM users WHERE id = ${to}::uuid AND is_active = true AND withdrawn_at IS NULL LIMIT 1
-        `);
-        if (!u[0]) return; // 탈퇴·정지한 회원에게는 보내지 않는다
-        const title = String(post.title ?? "").slice(0, 200);
-        const path = `/board/${encodeURIComponent(String(post.slug))}/${String(post.id)}#comments`;
-        // 운영자가 알림 문구를 고쳤다면 코어가 그 문구로 바꿔 보낸다 — 여기서는 기본 문구를 채운다
-        const vars = {
-          게시판명: String(post.board_title),
-          글제목: title,
-          댓글작성자: user ? user.displayName : (guestName ?? ""),
-          댓글요약: hide ? ctx.t("mail.secretComment") : content.slice(0, 200),
-          글주소: `${ctx.site.url}${path}`,
-        };
-        await ctx.notify({
-          userId: to,
-          kind: event,
-          event,
-          vars,
-          title: fillTemplate(tpl.subject, vars),
-          body: fillTemplate(tpl.body, vars),
-          url: path,
-        });
-      })().catch(() => undefined);
+    const notice = {
+      post: { id: String(post.id), slug: String(post.slug), title: String(post.title ?? ""), boardTitle: String(post.board_title) },
+      authorName: user ? user.displayName : (guestName ?? ""),
+      content,
     };
     if (post.notify_comment && postAuthor && postAuthor !== me) {
-      notifyMember(postAuthor, "board.comment", commentTemplate(), Boolean(body.isSecret));
+      notifyComment({ ...notice, to: postAuthor, event: "board.comment", hideContent: Boolean(body.isSecret) });
     }
     if (post.notify_comment && parentAuthor && parentAuthor !== me && parentAuthor !== postAuthor) {
-      notifyMember(parentAuthor, "board.reply", replyTemplate(), Boolean(body.isSecret) || Boolean(post.is_secret));
+      notifyComment({ ...notice, to: parentAuthor, event: "board.reply", hideContent: Boolean(body.isSecret) || Boolean(post.is_secret) });
     }
     return { id };
   });
@@ -665,7 +584,7 @@ export default definePlugin(async (ctx) => {
     await assertCanModify(comment as never, await actorOnBoard(userOf(req), comment.board_id), body.guestPassword ?? req.query.pw, guestCheck(req, `comment:${req.params.id}`));
 
     const removed = await db.transaction((tx) => removeComments(tx, [req.params.id]));
-    await announceCommentsDeleted(removed);
+    await announceCommentsDeleted(ctx.hooks, removed);
     return { ok: true };
   });
 
@@ -682,7 +601,7 @@ export default definePlugin(async (ctx) => {
       WHERE p.id = ${req.params.id}::uuid LIMIT 1
     `);
     if (!rows[0]) throw new BoardError(404, "글을 찾을 수 없습니다.");
-    if (!(await readPostAs(req, rows[0], user)).readable) throw new BoardError(403, "비밀글입니다. 작성자만 추천할 수 있습니다.");
+    if (!(await readPostAs(req, String(rows[0].slug), secretPostRef(rows[0]), user)).readable) throw new BoardError(403, "비밀글입니다. 작성자만 추천할 수 있습니다.");
     if (!rows[0].allow_vote) throw new BoardError(400, "이 게시판은 추천을 허용하지 않습니다.");
 
     // 1인 1표: 같은 값을 다시 누르면 취소, 다른 값이면 변경.
@@ -742,7 +661,7 @@ export default definePlugin(async (ctx) => {
       WHERE p.id = ${req.params.id}::uuid LIMIT 1
     `);
     if (!rows[0]) throw new BoardError(404, "글을 찾을 수 없습니다.");
-    if (!(await readPostAs(req, rows[0], user)).readable) throw new BoardError(403, "비밀글입니다. 작성자만 스크랩할 수 있습니다.");
+    if (!(await readPostAs(req, String(rows[0].slug), secretPostRef(rows[0]), user)).readable) throw new BoardError(403, "비밀글입니다. 작성자만 스크랩할 수 있습니다.");
 
     return db.transaction(async (tx) => {
       const { rows: existing } = await tx.execute(sql`
@@ -1159,7 +1078,7 @@ ${items}
     let affected = 0;
 
     if (action === "delete") {
-      affected = await deletePosts(ids);
+      affected = await deletePosts(db, postDeps, ids);
     } else if (action === "move" || action === "copy") {
       const target = String(body.params?.board ?? "");
       if (!/^[0-9a-f-]{36}$/i.test(target)) throw new BoardError(400, "대상 게시판을 선택해주세요.");
@@ -1207,7 +1126,7 @@ ${items}
 
   ctx.registerRoute("DELETE", "/admin/posts/:id", async (req) => {
     requireManager(req);
-    await deletePosts([req.params.id]);
+    await deletePosts(db, postDeps, [req.params.id]);
     await ctx.cache.invalidateTag("pages");
     return { ok: true };
   });
@@ -1232,7 +1151,7 @@ ${items}
   ctx.registerDataEraser({
     label: "게시판",
     order: 20,
-    async erase({ tx, userId, deletePosts }) {
+    async erase({ tx, userId, deletePosts: removePosts, afterCommit }) {
       const done: string[] = [];
 
       // 게시판 관리자 지정 — 계정이 익명화되어 남으므로 CASCADE 가 없다. 떠난 사람이 게시판을 관리하는 권한은 없다
@@ -1241,11 +1160,11 @@ ${items}
       `);
       if (mods.length) done.push(`게시판 관리자 지정 ${mods.length}건 해제`);
 
-      if (deletePosts) {
-        const { rows: posts } = await tx.execute(sql`
-          DELETE FROM board_posts WHERE author_id = ${userId}::uuid RETURNING id
-        `);
-        if (posts.length) done.push(`게시글 ${posts.length}건 삭제`);
+      if (removePosts) {
+        const { rows: mineP } = await tx.execute(sql`SELECT id FROM board_posts WHERE author_id = ${userId}::uuid`);
+        // 첨부 파일 정리와 "지워졌다" 알림(그 글에 다른 회원이 단 댓글의 포인트 회수)은 커밋 이후에 한다
+        const deleted = await deletePosts(tx, postDeps, mineP.map((r) => String(r.id)), { afterCommit });
+        if (deleted) done.push(`게시글 ${deleted}건 삭제`);
         // 남의 글에 단 댓글 — 그 아래 남이 단 답글은 남긴다(자리만 남는다)
         const { rows: mine } = await tx.execute(sql`
           SELECT id FROM board_comments WHERE author_id = ${userId}::uuid AND deleted_at IS NULL
@@ -1455,7 +1374,8 @@ ${items}
           (SELECT count(*) FROM board_posts
             WHERE created_at >= (date_trunc('day', now() AT TIME ZONE ${SITE_TZ}) AT TIME ZONE ${SITE_TZ})) AS posts,
           (SELECT count(*) FROM board_comments
-            WHERE created_at >= (date_trunc('day', now() AT TIME ZONE ${SITE_TZ}) AT TIME ZONE ${SITE_TZ})) AS comments
+            WHERE deleted_at IS NULL
+              AND created_at >= (date_trunc('day', now() AT TIME ZONE ${SITE_TZ}) AT TIME ZONE ${SITE_TZ})) AS comments
       `);
       return {
         value: Number(rows[0]?.posts ?? 0),

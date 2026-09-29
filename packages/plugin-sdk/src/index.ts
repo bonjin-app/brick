@@ -44,6 +44,8 @@ export type { PluginRateLimit } from "@brick/core";
 // 비회원 폼용 캡차 위젯 — 플러그인마다 베끼면 한 곳만 고쳐진다
 export { captchaFieldHtml, CAPTCHA_WIDGET_JS, CAPTCHA_WIDGET_CSS } from "@brick/core";
 export type { CaptchaWidgetLabels } from "@brick/core";
+// 공개 주소 검사 — 후기 사진·문의 첨부·글 썸네일·공유 이미지가 같은 규칙을 쓴다(`//남의도메인` 거절)
+export { publicUrl, publicUrls, toAbsoluteUrl, MAX_PUBLIC_URL_LENGTH } from "@brick/core";
 // 검색 발췌·HTML 제거 — 여러 플러그인이 같은 규칙을 써야 한다
 // "오늘"의 정의는 한 곳 — JS 쪽(siteToday)도 SQL 쪽과 같은 시간대를 쓴다
 export { stripHtml, searchExcerpt, escapeHtml, maskEmail, SITE_TZ, siteToday, siteDateParts, dateScript } from "@brick/core";

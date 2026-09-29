@@ -42,7 +42,35 @@ const HANGUL = /[가-힣]/;
  * 삼항식으로 고른 문장 — `throw new X(409, cond ? "…" : "…")`. 첫 인자만 보던 때 게시판의
  * "댓글 달린 글" 거절이 이 모양으로 값을 박아 넣은 채 빠져나갔다. 두 갈래를 모두 본다.
  */
-const THROW_TERNARY_RE = /throw new \w*(?:Error|Exception)\(\s*(?:\d{3},\s*)?[^"'`;()?\n]*\?\s*(["'`])([^"'`\n]*)\1\s*:\s*(["'`])([^"'`\n]*)\3/g;
+const THROW_TERNARY_RE = /throw new \w*(?:Error|Exception)\(\s*(?:\d{3},\s*)?(?:[^"'`;()?\n]|\?[.?]|"[^"\n]*"|'[^'\n]*'|\([^()\n]*\))*?\?(?![.?])\s*(["'`])([^"'`\n]*)\1\s*:\s*(["'`])([^"'`\n]*)\3/g;
+
+/*
+ * 이 검사기 자신의 시험 — 정규식이 조용히 아무것도 못 잡게 되는 것이 이 검사의 가장 나쁜 고장이다.
+ * 처음에는 조건에 따옴표가 든 형태(`action === "delete" ? "…" : "…"`)를 놓쳐, 그 형태를 잡으려고 만든 검사가
+ * 바로 그 형태를 못 잡았다. 표본을 실제로 돌려 본다.
+ */
+function selfTest() {
+  const found = (code) => [...code.matchAll(THROW_TERNARY_RE)].flatMap((m) => [m[2], m[4]]);
+  const cases = [
+    ['throw new BoardError(409, x ? "가" : "나");', ["가", "나"]],
+    ['throw new BoardError(409, action === "delete" ? "삭제 못함" : "수정 못함");', ["삭제 못함", "수정 못함"]],
+    ["throw new BoardError(409, isFull(a) ? `값 ${n}개` : \"다른\");", ["값 ${n}개", "다른"]],
+    ['throw new BoardError(400, a?.b ? "p" : "q");', ["p", "q"]],
+    // 잡으면 안 되는 것: 던지는 문장과 상관없는 삼항, 삼항이 아닌 던지기
+    ['throw new BoardError(400, "그냥 문장"); const y = z ? "b" : "c";', []],
+    ['throw new BoardError(400, t("err.key"));', []],
+  ];
+  let ok = true;
+  for (const [code, want] of cases) {
+    const got = found(code);
+    if (JSON.stringify(got) !== JSON.stringify(want)) {
+      ok = false;
+      console.log(`  ❌ 검사기 자체 시험 실패: ${code}\n     기대 ${JSON.stringify(want)}, 실제 ${JSON.stringify(got)}`);
+    }
+  }
+  if (!ok) process.exit(1);
+}
+selfTest();
 
 /**
  * 던진 문장이 **그 자체로 완결된 원문**인가.

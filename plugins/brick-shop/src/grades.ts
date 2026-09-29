@@ -12,7 +12,7 @@ import { uuidv7 } from "uuidv7";
 import { isUniqueViolation } from "@brick/plugin-sdk";
 import type { Db } from "./types.js";
 import { ShopError } from "./types.js";
-import { orderRefundsSql } from "./reports.js";
+import { orderRefundsJoin } from "./refunds.js";
 
 export const GRADE_RECOMPUTE_JOB = "shop.grades.recompute";
 
@@ -144,8 +144,8 @@ export async function recomputeGrades(db: Db): Promise<{ assigned: number; chang
       SELECT o.user_id,
              sum(greatest(o.total - coalesce(r.refunded, 0), 0)) AS amount
       FROM shop_orders o
-      -- 돌려준 돈 — 매출 리포트·부가세와 같은 조각(reports.ts orderRefundsSql)
-      LEFT JOIN (${orderRefundsSql}) r ON r.order_id = o.id
+      -- 돌려준 돈 — 매출 리포트·부가세와 같은 정의(refunds.ts)
+      ${orderRefundsJoin}
       WHERE o.user_id IS NOT NULL
         AND o.paid_at IS NOT NULL
         AND o.paid_at >= now() - (${GRADE_WINDOW_MONTHS} || ' months')::interval
