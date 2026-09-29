@@ -68,6 +68,22 @@ export const sessions = pgTable(
 );
 
 /**
+ * 읽기 전용 API 토큰 (도구용). 원문은 만들 때 한 번만 보이고 DB 에는 해시만 둔다.
+ * 읽기(GET)만, 진단용으로 허용한 경로만 열린다 — 인증 서비스가 강제한다 (api-tokens.service.ts).
+ */
+export const apiTokens = pgTable("api_tokens", {
+  id: uuid("id").primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  hint: varchar("hint", { length: 8 }).notNull(),
+  createdBy: uuid("created_by").notNull().references(() => users.id, { onDelete: "cascade" }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
  * 비밀번호 재설정 토큰.
  * 세션과 같은 원칙: 토큰 원문은 메일 링크에만 있고 DB에는 sha256 해시만 둔다.
  * usedAt으로 단회성을 보장한다 (재사용 공격 차단).

@@ -14,6 +14,7 @@ import { restoreOrderPoints } from "../plugins/brick-shop/dist/orders.js";
 import { canReadSecret, canReadSecretAsMember, secretPostRef } from "../plugins/brick-board/dist/access.js";
 import { deletePosts } from "../plugins/brick-board/dist/posts.js";
 import { LIVE_NOTIFICATIONS_SCRIPT } from "../apps/api/dist/modules/pages/page-render.service.js";
+import { ApiTokensService, API_TOKEN_PATHS, pathOf } from "../apps/api/dist/modules/auth/api-tokens.service.js";
 import { NotificationStreamHub, MAX_PER_USER } from "../apps/api/dist/modules/notifications/notification-stream.js";
 
 let bad = 0;
@@ -94,6 +95,46 @@ console.log("── sweepUnannouncedPaid");
   const q = db.calls[0];
   eq("결제됐고 알림이 끝나지 않은 주문만 고른다", q.includes("paid_announced_at") && q.includes("paid_at IS NOT NULL"), true);
   eq("유예와 기간 창으로 원래 경로·영구 실패를 거른다", q.includes("minutes") && q.includes("days"), true);
+}
+
+// ── 읽기 전용 API 토큰 ─────────────────────────
+console.log("── ApiTokensService.resolve");
+{
+  // 스모크는 "허용한 경로에 쓰기 메서드가 붙은 경우" 를 시험할 수 없다 — 허용 경로에는 쓰기 라우트가 없어서 존재하지 않는
+  // 경로의 404 가 인증 거절처럼 보인다. 그래서 요청 검사를 가짜 DB 로 직접 부른다.
+  const row = (over = {}) => ({ t: { id: "t1", lastUsedAt: new Date() }, u: { id: "u1", email: "a@x", displayName: "관리자", role: "admin", isActive: true, avatarUrl: null, ...over } });
+  const svc = (found) => {
+    const calls = { selects: 0, updates: 0 };
+    const chain = { from: () => chain, innerJoin: () => chain, where: () => chain, limit: async () => { calls.selects++; return found ? [found] : []; } };
+    const db = { select: () => chain, update: () => ({ set: () => { calls.updates++; return { where: () => ({ catch: () => undefined }) }; } }) };
+    return { s: new ApiTokensService(db), calls };
+  };
+  const ok = async (method, url, found = row(), token = "brk_abc") => (await svc(found).s.resolve(token, { method, url }))?.role ?? null;
+  eq("허용한 경로의 GET 은 관리자로 열린다", await ok("GET", "/api/admin/dashboard"), "admin");
+  eq("쿼리 문자열은 경로에 끼지 않는다", await ok("GET", "/api/render/page?path=board%2Ffree"), "admin");
+  for (const m of ["POST", "PUT", "PATCH", "DELETE"]) eq(`${m} 는 허용한 경로에서도 거절`, await ok(m, "/api/admin/dashboard"), null);
+  eq("HEAD 는 읽기다", await ok("HEAD", "/api/admin/version"), "admin");
+  eq("소문자 메서드도 같은 규칙", await ok("post", "/api/admin/version"), null);
+  eq("허용목록에 없는 경로는 거절", await ok("GET", "/api/audit"), null);
+  eq("경로를 쿼리에 숨겨도 소용없다", await ok("GET", "/api/audit?next=/api/plugins"), null);
+  eq("접두사만 같은 경로는 거절", await ok("GET", "/api/pluginsx"), null);
+  eq("토큰 관리 경로는 토큰으로 못 연다", await ok("GET", "/api/admin/api-tokens"), null);
+  eq("brk_ 로 시작하지 않으면 토큰이 아니다", await ok("GET", "/api/admin/version", row(), "abc123"), null);
+  eq("행이 없으면(폐기·만료·모르는 토큰) 거절", await ok("GET", "/api/admin/version", null), null);
+  eq("만든 사람이 관리자가 아니면 거절", await ok("GET", "/api/admin/version", row({ role: "manager" })), null);
+  eq("만든 사람이 비활성이면 거절", await ok("GET", "/api/admin/version", row({ isActive: false })), null);
+  eq("경로 정규화: 끝 슬래시와 쿼리", [pathOf("/api/plugins/"), pathOf("/api/plugins?a=1"), pathOf("/")], ["/api/plugins", "/api/plugins", "/"]);
+  eq("허용목록에 개인정보 경로가 없다 (회원·주문·문의·감사·알림·내 정보)", API_TOKEN_PATHS.filter((p) => /member|user|order|audit|inquir|ticket|notification|\/me\b|session|identity/i.test(p)), []);
+  eq("허용목록은 전부 읽는 경로다 (쓰기 동사가 없다)", API_TOKEN_PATHS.filter((p) => /\/(create|update|delete|install|activate|deactivate|upload|recheck)(\/|$)/i.test(p)), []);
+  const recent = svc(row());
+  await recent.s.resolve("brk_x", { method: "GET", url: "/api/admin/version" });
+  eq("사용 시각은 방금 갱신했으면 다시 쓰지 않는다 (읽기마다 쓰기가 나가지 않게)", recent.calls.updates, 0);
+  const stale = svc(row());
+  stale.calls.updates = 0;
+  const staleRow = { ...row(), t: { id: "t1", lastUsedAt: new Date(Date.now() - 5 * 60_000) } };
+  const st = svc(staleRow);
+  await st.s.resolve("brk_x", { method: "GET", url: "/api/admin/version" });
+  eq("오래 안 썼으면 사용 시각을 갱신한다", st.calls.updates, 1);
 }
 
 // ── 실시간 알림 스트림 ─────────────────────────

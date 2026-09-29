@@ -303,6 +303,9 @@ jobs:
       - name: E2E 스모크 테스트 (알림 · 메일이 꺼져 있어도)
         run: bash scripts/smoke-notifications.sh
 
+      - name: E2E 스모크 테스트 (읽기 전용 API 토큰 · MCP 서버)
+        run: bash scripts/smoke-api-tokens.sh
+
       - name: E2E 스모크 테스트 (테마 · 랜딩 · 화면 제목)
         run: bash scripts/smoke-theme.sh
 

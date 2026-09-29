@@ -378,6 +378,10 @@ const CORE_ERROR_EN: MessageCatalog = {
   "본문이 너무 깁니다.": "The body is too long.",
   "비밀번호가 맞지 않습니다.": "The password is incorrect.",
   "비밀번호가 올바르지 않습니다.": "The password is incorrect.",
+  "토큰 이름을 적어 주세요.": "Enter a name for the token.",
+  "유효 기간은 1일에서 365일 사이의 정수여야 합니다.": "The validity period must be a whole number of days from 1 to 365.",
+  "사용 중인 토큰이 너무 많습니다. 쓰지 않는 토큰을 먼저 폐기하세요.": "Too many active tokens. Revoke the ones you no longer use first.",
+  "이미 폐기됐거나 없는 토큰입니다.": "This token was already revoked or does not exist.",
   "빈 파일입니다.": "The file is empty.",
   "사내 SSO는 인증·토큰·사용자 정보 주소가 모두 필요합니다.":
     "Enterprise SSO needs the authorization, token and userinfo URLs.",

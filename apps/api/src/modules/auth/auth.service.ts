@@ -9,6 +9,7 @@ import { users, sessions } from "@brick/database";
 import type { SessionUser } from "@brick/shared";
 import { DB } from "../../runtime.module.js";
 import { isLegacyHash, verifyLegacyPassword } from "./legacy-hash.js";
+import { ApiTokensService, API_TOKEN_PREFIX } from "./api-tokens.service.js";
 
 export const SESSION_COOKIE = "brick_session";
 const SESSION_TTL_DAYS = 30;
@@ -25,7 +26,10 @@ const BAD_CREDENTIALS = "이메일 또는 비밀번호가 올바르지 않습니
 export class AuthService {
   private readonly logger = new Logger("Auth");
 
-  constructor(@Inject(DB) private readonly db: BrickDb) {}
+  constructor(
+    @Inject(DB) private readonly db: BrickDb,
+    private readonly apiTokens: ApiTokensService,
+  ) {}
 
   /**
    * 비밀번호 검증 — 세션은 발급하지 않는다.
@@ -179,7 +183,10 @@ export class AuthService {
     const bearer = req.headers.authorization?.startsWith("Bearer ")
       ? req.headers.authorization.slice(7)
       : undefined;
-    return this.resolve(cookieToken ?? bearer ?? "");
+    if (cookieToken) return this.resolve(cookieToken);
+    // 도구용 읽기 전용 토큰 — 세션과 달리 요청(메서드·경로)까지 보고 좁게 연다 (api-tokens.service.ts)
+    if (bearer?.startsWith(API_TOKEN_PREFIX)) return this.apiTokens.resolve(bearer, { method: req.method, url: req.raw.url ?? req.url });
+    return this.resolve(bearer ?? "");
   }
 
   private hash(token: string): string {

@@ -91,6 +91,8 @@ export class WithdrawalService {
       // ── 1. 세션 즉시 무효화 ──
       // 탈퇴 요청 후에도 로그인 상태가 유지되면 "탈퇴했다"는 말이 거짓이 된다
       await tx.execute(sql`DELETE FROM sessions WHERE user_id = ${params.userId}::uuid`);
+      // 도구용 API 토큰도 — 만든 사람이 탈퇴했는데 그 이름으로 만든 열쇠가 살아 있으면 안 된다
+      await tx.execute(sql`DELETE FROM api_tokens WHERE created_by = ${params.userId}::uuid`);
       effects.push("로그인 세션 삭제");
 
       // ── 2. 소셜 연결 해제 ──

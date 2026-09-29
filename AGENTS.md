@@ -15,7 +15,8 @@ Brick 은 설치형 오픈소스 CMS 입니다 (Next.js + NestJS/Fastify + Postg
 | `packages/database` | Drizzle 스키마와 코어 마이그레이션 |
 | `plugins/brick-*` | 게시판·쇼핑몰·포인트·1:1문의 등. 플러그인 하나가 라우트·블록·화면·훅을 모두 등록한다 |
 | `themes/*` | 서버 렌더 테마. `src/style.css` 를 고치면 `assets/style.css` 도 컴파일해 커밋해야 한다 |
-| `scripts/smoke-*.sh` | 실제 PostgreSQL + 실제 서버로 도는 E2E 스모크 (수트 45개) |
+| `scripts/smoke-*.sh` | 실제 PostgreSQL + 실제 서버로 도는 E2E 스모크 (수트 46개) |
+| `scripts/brick-mcp.mjs` | 돌고 있는 사이트를 읽는 MCP 서버 (읽기 전용 토큰, `docs/mcp.md`) |
 | `scripts/check-*.mjs` | 서버 없이 도는 정적 검사 (CI 가 전부 돌린다) |
 
 새 플러그인은 `npm create brick-plugin my-plugin` 이 동작하는 예제로 시작한다 → `docs/plugin-development.md`.
@@ -63,6 +64,7 @@ node scripts/check-doc-counts.mjs                          # 문서 숫자 검�
 - 손님용 `/api/render/page` 는 5분 캐시된다. DB 를 직접 고친 뒤 "없다" 를 단언하면 헛통과한다 — 쿼리에 `&_=$RANDOM` 을 붙인다.
 - 스모크의 `$VAR` 는 zsh 에서 쪼개지지 않고, bash 3.2 는 인자 속 `{"a","b"}` 를 중괄호 확장한다. `psql_q` 는 이름 없는 식 열 둘을 하나로 합치니 `AS` 별칭을 붙인다.
 - 로그인 폼에 비밀번호를 대신 입력해 화면을 검증하지 않는다. 화면 검증은 세션 쿠키 + `curl` 로 하고, 못 한 것은 못 했다고 적는다.
+- 도구에게 로그인 세션을 주지 않는다. 사이트를 읽게 하려면 읽기 전용 API 토큰(`docs/mcp.md`)을 쓴다 — 토큰 허용목록에 개인정보 경로나 쓰기를 더하지 않는다.
 - `pnpm.overrides` 는 CI 의 pnpm 9.15.4 에서 `package.json` 에서 읽힌다 (`pnpm-workspace.yaml` 과 둘 다 맞춘다).
 
 ## 하지 않는 것

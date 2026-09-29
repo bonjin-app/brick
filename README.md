@@ -27,7 +27,7 @@
   </a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.11-339933.svg" alt="Node 20.11+" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%2B-336791.svg" alt="PostgreSQL 16+" />
-  <img src="https://img.shields.io/badge/E2E-4795%20passing-2ea043.svg" alt="스모크 테스트 4795개" />
+  <img src="https://img.shields.io/badge/E2E-4873%20passing-2ea043.svg" alt="스모크 테스트 4873개" />
   <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha" />
   <a href="https://github.com/bonjin-app/brick/pkgs/container/brick">
     <img src="https://img.shields.io/badge/docker-amd64%20%C2%B7%20arm64-2496ed.svg" alt="Docker image (amd64 · arm64)" />
@@ -369,7 +369,7 @@ pnpm build
 pnpm dev                  # web(:3000) + api(:3001)
 ```
 
-E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 4,795개 항목):
+E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다 (총 4,873개 항목):
 
 | 수트 | 항목 | 무엇을 못박는가 |
 |---|---:|---|
@@ -408,6 +408,7 @@ E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 �
 | `smoke-social.sh` | 81 | state 쿠키 결속 · 코드 1회성 · 계정 탈취 경로 · **연결은 재인증을 요구하고 계정 주소로 알린다(비밀번호로 지워지지 않는 뒷문)** |
 | `smoke-security.sh` | 93 | **로그인 대입 한도는 서버 수·재시작과 무관하고, 자기 계정 로그인으로 IP 한도를 비울 수 없다** · **로그인 뒤 돌아갈 주소는 같은 사이트의 경로만(열린 리다이렉트)** · 캡차 · 레이트리밋 · 결제 위조 · 권한 우회 · **CSP** · **캡차 칸 안내** · **비회원 스팸 방어(재입고·문의 캡차·IP 한도)** · **비회원 주문이 메일 발사대가 되지 않는다** | · **설정 실수를 대시보드가 알린다(메일 링크 localhost · 프록시 뒤 IP)** · **가입 스팸(NAT 뒤 다섯 명은 통과 · 같은 이메일 네 번째는 차단)** |
 | `smoke-upgrade.sh` | 29 | **데이터가 있는 사이트에 새 마이그레이션이 올라가는가** — **업그레이드 전에 갇혀 있던 작업도 되찾는다** · 회원·동의·설정 보존 · 데이터 이관형 마이그레이션 적용 · 올린 뒤 가입·로그인·플러그인 활성화·주문 · 두 번 올려도 안전 · **인스턴스 둘이 동시에 부팅해도 플러그인 마이그레이션은 한 번만** |
+| `smoke-api-tokens.sh` | 78 | **도구에게 주는 열쇠가 좁고 새도 안전한가** — 읽기 전용 API 토큰: 만들 때 비밀번호 재확인 · 원문은 한 번만/DB 는 해시 · 허용한 읽기 경로만 열리고 쓰기·개인정보·토큰 관리는 닫힘 · 쿼리/점 경로/접두사 속임수 · 폐기·만료·만든 사람 강등이 즉시 무효 · 대시보드에 이메일 없음 · 감사 로그 · 개수 상한 · **MCP 서버가 프로토콜을 말하고 거절을 읽을 수 있는 글로 돌려준다** |
 | `smoke-backup.sh` | 37 | **덤프를 뜨고 실제로 되돌린다** — 지운 회원·페이지가 돌아오는가 · 덤프 뒤에 만든 것은 사라지는가 · **앱이 돌고 있는 채로 복원**(문서가 시키는 그대로) · 복원 뒤 로그인·목록이 되는가 · **망가진 덤프를 성공이라 말하지 않는다** |
 | `smoke-release.sh` | 84 | FTP 설치 경로 · 동봉 플러그인 · **동봉 테마 전부** · 고아 프로세스 정리 · **update.mjs 교체·롤백 왕복** · **HOSTNAME 바인딩** · **공개 화면 보안 헤더** · **로그인·가입 칸을 비밀번호 관리자가 알아본다** · **손님마다 다른 화면은 공유 캐시에 담기지 않는다** |
 | `smoke-create-plugin.sh` | 45 | 템플릿 생성→빌드→ZIP 설치→계약 전부 실사용 · escapeHtml · 실제 탈퇴로 파기 검증 |
@@ -522,7 +523,7 @@ themes/
   boutique/       부티크 — 여백 위주
   corporate/      회사 홈페이지 — 히어로·특징 카드
 docs-site/        GitHub Pages 랜딩페이지
-scripts/          스모크 테스트 45종 + 정적 검사 42종 + OIDC 스텁 + 배포본 생성(build-release.sh)
+scripts/          스모크 테스트 46종 + 정적 검사 42종 + OIDC 스텁 + 배포본 생성(build-release.sh)
 docker/           Dockerfile, entrypoint
 ```
 
@@ -556,6 +557,7 @@ docker/           Dockerfile, entrypoint
 | [방문자·팝업](docs/site-ops.md) | 접속자 집계, 팝업·배너, 개인정보 처리 |
 | [결제](docs/payments.md) | PG 설정, 결제 흐름, 위조·중복 방어, 새 PG 붙이기 |
 | [AI 에이전트 안내](AGENTS.md) | Claude Code·Codex 같은 에이전트가 저장소를 고칠 때 지킬 지도·명령·규칙·검증·함정 |
+| [MCP 서버·읽기 전용 토큰](docs/mcp.md) | 에이전트가 돌고 있는 사이트를 읽게 — 좁은 열쇠(GET만·허용 경로만·폐기·만료)와 MCP 서버 |
 | [배치 편집기](docs/layout-editor.md) | 실제 테마로 미리 보며 블록 배치, 다단 레이아웃, 키보드 배치, 컨테이너 블록 만들기 |
 | [본인인증](docs/identity.md) | 포트원 본인인증, 성인 상품, 한 사람 한 계정, 저장하는 것과 안 하는 것 |
 | [알림톡](docs/alimtalk.md) | 카카오 알림톡(알리고) 설정, 템플릿 연결, 주문 알림 변수, 대체 문자 규칙 |

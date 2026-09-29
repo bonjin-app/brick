@@ -31,6 +31,7 @@ const ROOT = new URL("..", import.meta.url).pathname;
 const POLICY = {
   // ── 코어 ──
   sessions: ["erased", "로그인 상태가 남으면 '탈퇴했다'는 말이 거짓이 된다"],
+  api_tokens: ["erased", "만든 사람의 이름으로 발급된 로그인 없는 열쇠 — 탈퇴 뒤에도 살아 있으면 안 된다"],
   user_identities: ["erased", "남기면 같은 소셜 계정이 탈퇴한 계정에 다시 붙는다"],
   user_certifications: ["erased", "본인인증 결과(출생 연도·CI 의 HMAC) — 그 사람이 여기 있었다는 표지다"],
   identity_verifications: ["erased", "본인인증 요청 기록 — 언제 인증을 시도했는지가 남는다"],
