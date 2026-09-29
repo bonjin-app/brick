@@ -40,18 +40,6 @@ jq_get()   { python3 -c "import sys,json;d=json.load(sys.stdin);print(d$1)" 2>/d
 # psql 로 고친 값은 무효화 훅을 거치지 않는다(옛 HTML 을 검사해 엉뚱한 결과가 나왔다).
 bust_cache() { curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{}' -o /dev/null; sleep 0.3; }
 
-psql_q() {
-  node -e '
-    const { Client } = require("'"$ROOT"'/apps/api/node_modules/pg");
-    (async () => {
-      const c = new Client(process.env.DATABASE_URL); await c.connect();
-      const r = await c.query(process.argv[1]);
-      console.log(r.rows.map((x) => Object.values(x).join("|")).join("\n"));
-      await c.end();
-    })().catch((e) => { console.error(e.message); process.exit(1); });
-  ' "$1"
-}
-
 echo "▶ 사업자정보 · 위시리스트 · 지역 배송비 스모크 테스트"
 
 if [[ "${BRICK_SMOKE_KEEP_DB:-}" != "1" ]]; then

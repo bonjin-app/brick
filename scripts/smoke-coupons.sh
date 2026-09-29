@@ -45,18 +45,6 @@ absent()   { [[ "$2" != *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 가 있음)"; }
 code()     { curl -s -o /dev/null -w "%{http_code}" "$@"; }
 jq_get()   { python3 -c "import sys,json;d=json.load(sys.stdin);print(d$1)" 2>/dev/null || echo ""; }
 
-psql_q() {
-  node -e '
-    const { Client } = require("'"$ROOT"'/apps/api/node_modules/pg");
-    (async () => {
-      const c = new Client(process.env.DATABASE_URL); await c.connect();
-      const r = await c.query(process.argv[1]);
-      console.log(r.rows.map((x) => Object.values(x).join("|")).join("\n"));
-      await c.end();
-    })().catch((e) => { console.error(e.message); process.exit(1); });
-  ' "$1"
-}
-
 echo "▶ 쿠폰 고도화 스모크 테스트"
 
 if [[ "${BRICK_SMOKE_KEEP_DB:-}" != "1" ]]; then
@@ -192,6 +180,39 @@ for pid in $FP_PIDS; do wait "$pid" || true; done
 check "서로 다른 첫 구매 쿠폰 둘을 동시에 써도 한 건만 통과한다" \
   "$(psql_q "SELECT count(*) FROM shop_orders o JOIN users u ON u.id = o.user_id WHERE u.email='c1@cp.test' AND o.coupon_code IN ('WELCOME','WELCOME2') AND o.status <> 'cancelled'")" "1"
 psql_q "UPDATE shop_orders SET status='cancelled' WHERE coupon_code IN ('WELCOME','WELCOME2') AND user_id = (SELECT id FROM users WHERE email='c1@cp.test')" >/dev/null
+
+echo "── 회원 조건 검사는 회원 잠금 뒤에 이뤄진다 (결정적 — 시간 맞물림에 기대지 않는다)"
+# 위의 동시 주문 검사는 잠금을 빼도 운 좋게 통과할 수 있다(변이 실험에서 잡히지 않았다). 여기서는 다른 연결이
+# 그 회원의 잠금을 4초 쥐고 있게 한 뒤, 같은 회원의 주문이 잠금이 풀릴 때까지 **기다리는지** 본다 —
+# 잠금이 없으면 주문은 바로 끝난다. 시간은 하한만 본다(느린 기계에서도 거짓 실패가 나지 않는다).
+curl -s -b "$CK" -X POST "$SHOP/admin/coupons" -H 'content-type: application/json' \
+  -d '{"code":"LOCKONE","name":"잠금 시험","discount_type":"fixed","discount_value":1000,"per_user_limit":1}' >/dev/null
+C2ID="$(psql_q "SELECT id FROM users WHERE email='c2@cp.test'")"
+printf '{"items":[{"productId":"%s","quantity":1}],"couponCode":"LOCKONE","orderer":{"ordererName":"손님","ordererPhone":"010-1111-2222","postcode":"06236","address1":"서울"}}' "$PU" > "$TMP/lock.json"
+node -e '
+  const { Client } = require("'"$ROOT"'/apps/api/node_modules/pg");
+  (async () => {
+    const c = new Client(process.env.DATABASE_URL); await c.connect();
+    await c.query("BEGIN");
+    await c.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["shop-coupon-member:" + process.argv[1]]);
+    console.log("HELD");
+    await new Promise((r) => setTimeout(r, 4000));
+    await c.query("COMMIT"); await c.end();
+  })().catch((e) => { console.error(e.message); process.exit(1); });
+' "$C2ID" > "$TMP/holder.out" &
+HOLDER_PID=$!
+for _ in $(seq 1 50); do grep -q HELD "$TMP/holder.out" 2>/dev/null && break; sleep 0.1; done
+T0=$(node -e 'console.log(Date.now())')
+curl -s --max-time 30 -o "$TMP/lock.res" -b "$C2" -X POST "$SHOP/orders" -H 'content-type: application/json' --data-binary "@$TMP/lock.json" &
+LOCK_PID=$!
+sleep 1.5
+check "잠금이 잡혀 있는 동안 주문은 만들어지지 않는다" \
+  "$(psql_q "SELECT count(*) FROM shop_orders WHERE user_id='$C2ID' AND coupon_code='LOCKONE'")" "0"
+wait "$LOCK_PID" || true; wait "$HOLDER_PID" || true
+T1=$(node -e 'console.log(Date.now())')
+[[ $((T1 - T0)) -ge 2500 ]] && ok "잠금이 풀릴 때까지 기다렸다 ($((T1 - T0))ms)" || bad "기다리지 않았다 ($((T1 - T0))ms) — 회원 잠금이 없다"
+check "풀린 뒤에는 주문이 만들어진다" \
+  "$(psql_q "SELECT count(*) FROM shop_orders WHERE user_id='$C2ID' AND coupon_code='LOCKONE' AND status <> 'cancelled'")" "1"
 
 echo "══ 등급 전용 ══"
 curl -s -b "$CK" -X POST "$SHOP/admin/grades" -H 'content-type: application/json' \

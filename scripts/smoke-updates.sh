@@ -49,18 +49,6 @@ absent()   { [[ "$2" != *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 가 있음)"; }
 code()     { curl -s -o /dev/null -w "%{http_code}" "$@"; }
 jq_get()   { python3 -c "import sys,json;d=json.load(sys.stdin);print(d$1)" 2>/dev/null || echo ""; }
 
-psql_q() {
-  node -e '
-    const { Client } = require("'"$ROOT"'/apps/api/node_modules/pg");
-    (async () => {
-      const c = new Client(process.env.DATABASE_URL); await c.connect();
-      const r = await c.query(process.argv[1]);
-      console.log(r.rows.map((x) => Object.values(x).join("|")).join("\n"));
-      await c.end();
-    })().catch((e) => { console.error(e.message); process.exit(1); });
-  ' "$1"
-}
-
 # ── 테스트 플러그인 ZIP 만들기 ──
 # 실제 zip 형식이어야 한다 (설치기가 yauzl 로 푼다)
 make_zip() {  # make_zip <버전> <출력파일> [updates_url] [publisher_key]

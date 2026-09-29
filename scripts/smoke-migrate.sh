@@ -34,18 +34,6 @@ contains() { [[ "$2" == *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 없음: ${2:0:20
 absent()   { [[ "$2" != *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 가 있음)"; }
 code()     { curl -s -o /dev/null -w "%{http_code}" "$@"; }
 
-psql_q() {
-  node -e '
-    const { Client } = require("'"$ROOT"'/apps/api/node_modules/pg");
-    (async () => {
-      const c = new Client(process.env.DATABASE_URL); await c.connect();
-      const r = await c.query(process.argv[1]);
-      console.log(r.rows.map((x) => Object.values(x).join("|")).join("\n"));
-      await c.end();
-    })().catch((e) => { console.error(e.message); process.exit(1); });
-  ' "$1"
-}
-
 # 덤프를 JSON 본문으로 감싼다 — 셸에서 이스케이프하면 반드시 깨진다
 make_body() {  # make_body <출력파일> [추가 JSON 키=값 ...]
   local out="$1"; shift

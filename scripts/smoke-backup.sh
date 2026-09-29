@@ -48,18 +48,6 @@ contains() { [[ "$2" == *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 없음: ${2:0:20
 absent()   { [[ "$2" != *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 가 있음)"; }
 code()     { curl -s -o /dev/null -w "%{http_code}" "$@"; }
 
-psql_q() {
-  node -e '
-    const { Client } = require("'"$ROOT"'/apps/api/node_modules/pg");
-    (async () => {
-      const c = new Client(process.env.DATABASE_URL); await c.connect();
-      const r = await c.query(process.argv[1]);
-      console.log(r.rows.map((x) => Object.values(x).join("|")).join("\n"));
-      await c.end();
-    })().catch((e) => { console.error(e.message); process.exit(1); });
-  ' "$1"
-}
-
 echo "▶ 백업·복원 스모크 테스트 (덤프를 뜨고 실제로 되돌린다)"
 
 # ── 망가진 덤프를 성공이라고 말하지 않는가 ──────────

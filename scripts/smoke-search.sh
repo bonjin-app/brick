@@ -55,18 +55,6 @@ absent()   { [[ "$2" != *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 가 있음)"; }
 code()     { curl -s -o /dev/null -w "%{http_code}" "$@"; }
 jq_get()   { python3 -c "import sys,json;d=json.load(sys.stdin);print(d$1)" 2>/dev/null || echo ""; }
 
-psql_q() {
-  node -e '
-    const { Client } = require("'"$ROOT"'/apps/api/node_modules/pg");
-    (async () => {
-      const c = new Client(process.env.DATABASE_URL); await c.connect();
-      const r = await c.query(process.argv[1]);
-      console.log(r.rows.map((x) => Object.values(x).join("|")).join("\n"));
-      await c.end();
-    })().catch((e) => { console.error(e.message); process.exit(1); });
-  ' "$1"
-}
-
 # 한글 검색어는 반드시 인코딩해서 보낸다 (브라우저는 항상 인코딩한다)
 # 페이지 렌더는 JSON({"html":...})을 돌려준다 — 그대로 찾으면 따옴표가 이스케이프되어 어긋난다
 render_page() { curl -s "$API/api/render/page?$1" | python3 -c "import sys,json;print(json.load(sys.stdin).get('html',''))"; }
