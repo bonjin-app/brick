@@ -18,7 +18,8 @@ import { STOCK_RESTORING, type Db, type OrderStatus } from "./types.js";
  */
 export interface OrderLifecycleDeps {
   db: Db;
-  hooks: { doAction<T>(hook: string, payload: T): Promise<void> };
+  /** 구독자가 하나라도 실패하면 던진다 — 알림이 끝난 것으로 기록되지 않아야 재처리된다 */
+  hooks: { doActionOrThrow<T>(hook: string, payload: T): Promise<void> };
   logger: { warn(message: string): void };
   /** 주문 안내 — 스스로 실패를 삼키고 기록한다 */
   notifyOrder(orderId: string, status: OrderStatus): Promise<void>;
@@ -42,15 +43,54 @@ export async function announcePaid(deps: OrderLifecycleDeps, orderId: string): P
     `);
     const o = rows[0];
     if (!o) return;
-    if (STOCK_RESTORING.includes(String(o.status) as OrderStatus)) return; // 그 사이 취소·환불됐다
+    if (STOCK_RESTORING.includes(String(o.status) as OrderStatus)) {
+      // 그 사이 취소·환불됐다 — 알릴 것이 없으니 끝난 것으로 적어 재처리 대상에서 뺀다
+      await tx.execute(sql`UPDATE shop_orders SET paid_announced_at = now() WHERE id = ${orderId}::uuid`);
+      return;
+    }
     // 개인결제 청구서였으면 결제완료로 표시한다
     await markRequestPaid(tx, String(o.order_no));
-    await deps.hooks.doAction("shop.order.paid", {
+    await deps.hooks.doActionOrThrow("shop.order.paid", {
       orderNo: String(o.order_no),
       userId: o.user_id ? String(o.user_id) : null,
       amount: Number(o.total),
     });
+    // 구독자가 모두 끝낸 뒤에만 적는다 — 여기 오기 전에 죽거나 던지면 비어 있어 sweep 이 다시 알린다
+    await tx.execute(sql`UPDATE shop_orders SET paid_announced_at = now() WHERE id = ${orderId}::uuid`);
   });
+}
+
+export const PAID_SWEEP_QUEUE_JOB = "shop.order.paid-sweep";
+
+/** 결제완료 알림을 재처리하는 대상 — 이 안에 결제된 주문만(영구히 실패하는 구독자가 있어도 끝없이 돌지 않는다) */
+export const PAID_SWEEP_WINDOW_DAYS = 3;
+/** 방금 결제된 주문은 원래 경로가 아직 돌고 있을 수 있다 — 그만큼 기다린 뒤에 본다 */
+export const PAID_SWEEP_GRACE_MINUTES = 5;
+
+/**
+ * 결제완료인데 알림이 끝나지 않은 주문을 다시 알린다. 서버가 멈췄거나 구독자가 실패해 빠진 적립을 메운다.
+ * 주문마다 `announcePaid` 가 행을 잠그고 상태를 다시 보므로, 원래 경로와 겹쳐도 한쪽이 기다렸다 이어받는다.
+ */
+export async function sweepUnannouncedPaid(deps: OrderLifecycleDeps): Promise<{ found: number; done: number; failed: number }> {
+  const { rows } = await deps.db.execute(sql`
+    SELECT id FROM shop_orders
+     WHERE paid_at IS NOT NULL AND paid_announced_at IS NULL
+       AND paid_at < now() - (${PAID_SWEEP_GRACE_MINUTES} || ' minutes')::interval
+       AND paid_at > now() - (${PAID_SWEEP_WINDOW_DAYS} || ' days')::interval
+     ORDER BY paid_at LIMIT 100
+  `);
+  let done = 0;
+  let failed = 0;
+  for (const r of rows) {
+    try {
+      await announcePaid(deps, String(r.id));
+      done++;
+    } catch (err) {
+      failed++;
+      deps.logger.warn(`결제 완료 알림 재처리 실패 (${String(r.id)}): ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  return { found: rows.length, done, failed };
 }
 
 /**

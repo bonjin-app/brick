@@ -387,6 +387,8 @@ export default definePlugin((ctx) => {
   });
 
   // 훅: 코어/다른 플러그인의 이벤트 구독
+  // 구독자는 **멱등** 이어야 한다 — 알린 쪽이 `doActionOrThrow` 로 다시 알릴 수 있다(결제완료 재처리 등).
+  // `doAction` 은 구독자의 실패를 삼키고, `doActionOrThrow` 는 끝까지 돈 뒤 실패가 있으면 던진다.
   ctx.hooks.onAction("board.post.created", "my-plugin", async (payload) => { /* ... */ });
 
   // 관리자 메뉴

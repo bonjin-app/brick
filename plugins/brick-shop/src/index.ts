@@ -55,7 +55,7 @@ import {
   salesByProduct, salesSummary, toCsv,
 } from "./reports.js";
 import { orderRefundsJoin } from "./refunds.js";
-import { registerOrderLifecycle } from "./order-lifecycle.js";
+import { registerOrderLifecycle, sweepUnannouncedPaid, PAID_SWEEP_QUEUE_JOB } from "./order-lifecycle.js";
 import {
   addToWishlist, createZone, deleteZone, findZoneFee, isInWishlist, listRecentViews,
   listWishlist, listZones, mergeGuestViews, mergeGuestWishlist, purgeOldViews,
@@ -175,7 +175,8 @@ export default definePlugin(async (ctx) => {
   };
 
   // 상태가 바뀔 때 따라 나가는 일(주문 안내 · 결제 완료 알림 · 현금영수증 취소) — order-lifecycle.ts
-  registerOrderLifecycle({ db, hooks: ctx.hooks, logger: ctx.logger, notifyOrder });
+  const lifecycleDeps = { db, hooks: ctx.hooks, logger: ctx.logger, notifyOrder };
+  registerOrderLifecycle(lifecycleDeps);
 
   /**
    * 포인트 서비스 — brick-point가 설치·활성화된 경우에만 존재한다.
@@ -2132,6 +2133,22 @@ export default definePlugin(async (ctx) => {
     await ctx.queue.enqueue(SUBSCRIPTION_QUEUE_JOB, {}, { delaySeconds: 600, maxAttempts: 3, dedupeKey: SUBSCRIPTION_QUEUE_JOB });
   });
   await ctx.queue.enqueue(SUBSCRIPTION_QUEUE_JOB, {}, { delaySeconds: 90, maxAttempts: 3, dedupeKey: SUBSCRIPTION_QUEUE_JOB });
+
+  // ── 결제완료 알림 재처리 (order-lifecycle.ts) ────────
+  // 결제완료 전이 뒤 알림(구매 적립 등)은 따로 돌아서 서버가 멈추거나 구독자가 실패하면 빠진다.
+  // 끝나지 않은 주문을 10분마다 다시 알린다 — 구독자는 주문번호로 멱등이라 겹쳐도 한 번만 쌓인다.
+  ctx.registerRoute("POST", "/admin/orders/paid-sweep", async (req) => {
+    requireAdmin(req);
+    const result = await exclusive("paid-sweep", () => sweepUnannouncedPaid(lifecycleDeps));
+    if (!result) throw new ShopError(409, "결제 완료 알림 재처리가 이미 진행 중입니다. 끝난 뒤 다시 시도하세요.");
+    return result;
+  });
+  ctx.queue.process(PAID_SWEEP_QUEUE_JOB, async () => {
+    const result = await exclusive("paid-sweep", () => sweepUnannouncedPaid(lifecycleDeps));
+    if (result && result.found > 0) ctx.logger.log(`결제 완료 알림 재처리: 대상 ${result.found} · 성공 ${result.done} · 실패 ${result.failed}`);
+    await ctx.queue.enqueue(PAID_SWEEP_QUEUE_JOB, {}, { delaySeconds: 600, maxAttempts: 3, dedupeKey: PAID_SWEEP_QUEUE_JOB });
+  });
+  await ctx.queue.enqueue(PAID_SWEEP_QUEUE_JOB, {}, { delaySeconds: 150, maxAttempts: 3, dedupeKey: PAID_SWEEP_QUEUE_JOB });
 
   // ── 생일 쿠폰 자동 지급 (birthday.ts) ────────────────
   // 지급이 멱등하므로(쿠폰당 회원당 1회) 넉넉히 자주 돌아도 안전하다 —

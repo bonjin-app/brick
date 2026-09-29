@@ -335,6 +335,31 @@ RATE="$(curl -s -b "$ADMIN" "$PT/admin/settings" | python3 -c 'import sys,json;p
 check "상태를 결제완료로 바꾸면 구매 적립 (결제금액 × ${RATE}%)" "$(balance)" "$((B2 + MTOTAL * RATE / 100))"
 check "그 주문의 적립은 한 번만" "$(psql_one "SELECT count(*) FROM point_ledger WHERE kind='earn' AND ref_type='shop.order' AND ref_id='$MNO'")" "1"
 
+echo "── 결제완료 알림이 빠진 주문은 재처리가 메운다 (서버가 멈췄거나 구독자가 실패한 경우)"
+# 결제완료 전이는 커밋됐는데 알림이 돌기 전에 죽은 상태를 DB 로 만든다 — 상태는 paid, paid_announced_at 은 비어 있다
+mk_order() { curl -s -b "$MEMBER" -X POST "$SH/orders" -H 'content-type: application/json' --data-binary "@$TMP/om.json" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("orderNo",""))'; }
+LNO="$(mk_order)"; CNO="$(mk_order)"; ONO="$(mk_order)"; FNO="$(mk_order)"
+LTOTAL="$(psql_one "SELECT total FROM shop_orders WHERE order_no='$LNO'")"
+BL="$(balance)"
+psql_q "UPDATE shop_orders SET status='paid', paid_at=now() - interval '10 minutes', paid_announced_at=NULL WHERE order_no='$LNO'" >/dev/null
+psql_q "UPDATE shop_orders SET status='cancelled', paid_at=now() - interval '10 minutes', paid_announced_at=NULL WHERE order_no='$CNO'" >/dev/null
+psql_q "UPDATE shop_orders SET status='paid', paid_at=now() - interval '10 days', paid_announced_at=NULL WHERE order_no='$ONO'" >/dev/null
+psql_q "UPDATE shop_orders SET status='paid', paid_at=now() - interval '1 minute', paid_announced_at=NULL WHERE order_no='$FNO'" >/dev/null
+check "알림이 빠진 주문에는 아직 적립이 없다" "$(balance)" "$BL"
+curl -s -o /dev/null -b "$ADMIN" -X POST "$SH/admin/orders/paid-sweep"
+sleep 1
+check "재처리가 빠진 구매 적립을 메운다 (결제금액 × ${RATE}%)" "$(balance)" "$((BL + LTOTAL * RATE / 100))"
+check "메운 주문은 알림 완료로 기록된다" "$(psql_one "SELECT paid_announced_at IS NOT NULL FROM shop_orders WHERE order_no='$LNO'")" "true"
+check "그 사이 취소된 주문에는 적립하지 않고, 완료로 적어 다시 보지 않는다" \
+  "$(psql_one "SELECT (paid_announced_at IS NOT NULL)::text || '/' || (SELECT count(*) FROM point_ledger WHERE ref_type='shop.order' AND ref_id='$CNO') FROM shop_orders WHERE order_no='$CNO'")" "true/0"
+check "기간(3일)을 넘긴 주문은 건드리지 않는다 (영구 실패가 끝없이 돌지 않게)" \
+  "$(psql_one "SELECT (paid_announced_at IS NULL)::text || '/' || (SELECT count(*) FROM point_ledger WHERE ref_type='shop.order' AND ref_id='$ONO') FROM shop_orders WHERE order_no='$ONO'")" "true/0"
+check "방금 결제된 주문은 원래 경로가 도는 중일 수 있어 기다린다 (유예 5분)" \
+  "$(psql_one "SELECT (paid_announced_at IS NULL)::text || '/' || (SELECT count(*) FROM point_ledger WHERE ref_type='shop.order' AND ref_id='$FNO') FROM shop_orders WHERE order_no='$FNO'")" "true/0"
+curl -s -o /dev/null -b "$ADMIN" -X POST "$SH/admin/orders/paid-sweep"; sleep 1
+check "다시 돌려도 한 번만 쌓인다 (멱등)" "$(psql_one "SELECT count(*) FROM point_ledger WHERE kind='earn' AND ref_type='shop.order' AND ref_id='$LNO'")" "1"
+check "손님은 재처리를 부를 수 없다" "$(code -X POST "$SH/admin/orders/paid-sweep")" "403"
+
 echo "── 운영자 삭제 · 일괄 삭제도 적립을 거둔다 (작성자 삭제만 시험하던 자리)"
 BA="$(balance)"
 A1="$(newpost "운영자가 지울 글")"; A2="$(newpost "일괄로 지울 글")"; A3="$(newpost "일괄로 지울 글 둘")"; sleep 1
