@@ -23,7 +23,7 @@
  * **빈 사이트 선택지를 없애지 않는다.** 직접 만들고 싶은 사람에게 기본
  * 구성은 지울 것부터 생기는 짐이다.
  */
-import { PRODUCT_ART, BANNER_ART, PROMO_ART } from "./sample-art.js";
+import { PRODUCT_ART, BANNER_ART, PROMO_ART, GALLERY_ART, OFFICE_ART } from "./sample-art.js";
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import type { BrickDb } from "@brick/database";
@@ -178,6 +178,33 @@ export async function applyStarter(code: string, ctx: SeedContext): Promise<{ ap
     } catch (err) {
       ctx.log(`스타터: 샘플 상품 생성 실패 — ${String(err)}`);
     }
+  }
+
+  // ── 3-1. 커뮤니티·회사 그림 ──
+  // 쇼핑몰만 첫 화면이 채워져 있었다 — 갤러리 게시판은 빈 상자, 회사 소개의 사진 자리는 글만이었다.
+  try {
+    if (starter.code === "community") {
+      for (const [key, draw] of Object.entries(GALLERY_ART)) {
+        const added = await ctx.addSampleImage?.(`gallery-${key}.jpg`, draw(), { width: 1200, height: 900 });
+        if (added) images[`gallery-${key}`] = added.url;
+      }
+    }
+    if (starter.code === "company") {
+      const added = await ctx.addSampleImage?.("office.jpg", OFFICE_ART(), { width: 1200, height: 800 });
+      if (added) images.office = added.url;
+    }
+  } catch (err) {
+    ctx.log(`스타터: 예시 그림 생성 실패 — ${String(err)}`);
+  }
+
+  // ── 3-2. 예시 글 ──
+  // 홈의 최신글 위젯이 모두 "게시물이 없습니다" 로 끝나면 사이트가 고장 난 것처럼 보인다(설치해 보니 커뮤니티 홈의 위젯
+  // 넷이 전부 비어 있었다). 그누보드·XE 가 예시 글을 넣는 이유다. 제목에 "(예시)" 를 달고 본문에 지우는 곳을 적는다.
+  try {
+    const n = await seedSamplePosts(ctx, starter.code, images);
+    if (n) applied.push(`예시 글 ${n}개`);
+  } catch (err) {
+    ctx.log(`스타터: 예시 글 생성 실패 — ${String(err)}`);
   }
 
   // ── 4. 페이지 ──
@@ -503,8 +530,9 @@ function starterPages(code: string, siteName: string, img: SampleImages = {}): A
             { block: "core/media-text", props: {
               eyebrow: "우리의 방식",
               title: "문제를 먼저 듣고, 그다음 만듭니다",
-              text: "이 자리에 회사 사진을 넣고(관리자 → 미디어) 소개 문단을 적어주세요. 이미지가 없으면 글만 보입니다.",
+              text: "이 자리에 회사 사진을 넣고(관리자 → 미디어) 소개 문단을 적어주세요. 지금 그림은 스타터가 넣은 예시입니다.",
               ctaLabel: "회사 소개", ctaUrl: "/about",
+              ...(img.office ? { image: img.office, alt: "작업 공간" } : {}),
             } },
             { block: "brick-board/latest-posts",
               props: { board: "notice", limit: 5, title: "공지사항" } },
@@ -684,3 +712,78 @@ async function seedShopSamples(ctx: SeedContext, images: SampleImages): Promise<
   }
   return count;
 }
+
+/**
+ * 예시 글 — 유형마다 홈의 최신글 위젯이 비지 않을 만큼만.
+ *
+ * 쓰는 이는 설치한 관리자다(비회원·가짜 회원을 만들지 않는다 — 탈퇴·개인정보 파기 대상이 늘어난다). 제목에 "(예시)" 를
+ * 달고 본문 끝에 지우는 곳을 적어, 실제 운영에 앞서 찾아 지우기 쉽게 한다. 날짜는 며칠에 걸쳐 흩어 목록 순서가 자연스럽게.
+ * 스레드 칸은 게시판이 글을 쓸 때와 같게 채운다(thread_id = 자기 id, thread_path 비움, depth 0).
+ */
+async function seedSamplePosts(ctx: SeedContext, code: string, img: SampleImages): Promise<number> {
+  const { rows: admins } = await ctx.db.execute(sql`
+    SELECT id, display_name FROM users WHERE role = 'admin' ORDER BY created_at LIMIT 1
+  `);
+  const admin = admins[0];
+  if (!admin) return 0;
+  const note = `<p><small>스타터가 넣은 예시 글입니다. 관리자 → 게시판에서 지우거나 고치세요.</small></p>`;
+  const p = (...lines: string[]) => lines.map((l) => `<p>${l}</p>`).join("") + note;
+  const picture = (key: string, alt: string) => (img[key] ? `<p><img src="${img[key]}" alt="${alt}" /></p>` : "");
+
+  type Sample = { board: string; title: string; content: string; notice?: boolean; daysAgo: number; answer?: string };
+  const notice = (title: string, content: string, daysAgo: number): Sample => ({ board: "notice", title, content, notice: true, daysAgo });
+  const posts: Sample[] =
+    code === "community" ? [
+      notice("커뮤니티를 열었습니다 (예시)", p("이웃과 이야기를 나누는 공간을 열었습니다.", "처음 오셨다면 자유게시판에 가입 인사를 남겨 주세요."), 6),
+      { board: "free", title: "가입 인사 드립니다 (예시)", content: p("오늘 가입했습니다. 잘 부탁드립니다!"), daysAgo: 5 },
+      { board: "free", title: "주말 산책 코스 추천해요 (예시)", content: p("강변 따라 걷는 길이 한 시간 정도 걸리는데, 해 질 녘이 가장 좋습니다."), daysAgo: 3 },
+      { board: "free", title: "요즘 읽는 책 이야기 (예시)", content: p("짧은 소설집을 읽고 있는데 출퇴근길에 한 편씩 읽기 좋네요."), daysAgo: 1 },
+      { board: "qna", title: "알림은 어디서 보나요? (예시)", content: p("댓글이 달리면 어디서 확인할 수 있나요?"), daysAgo: 4,
+        answer: "머리의 종 모양(알림)을 누르면 모아 볼 수 있습니다. 메일로도 함께 보내 드립니다." },
+      { board: "qna", title: "프로필 사진을 바꾸고 싶어요 (예시)", content: p("회원 정보에서 사진을 바꿀 수 있나요?"), daysAgo: 2,
+        answer: "회원 정보(내 정보)에서 사진을 올리면 바로 바뀝니다." },
+      { board: "gallery", title: "새벽 산 (예시)", content: picture("gallery-mountain", "새벽 산") + p("해 뜨기 전 능선."), daysAgo: 6 },
+      { board: "gallery", title: "여름 바다 (예시)", content: picture("gallery-sea", "여름 바다") + p("돛단배가 지나가던 오후."), daysAgo: 4 },
+      { board: "gallery", title: "도시의 밤 (예시)", content: picture("gallery-city", "도시의 밤") + p("퇴근길 창밖."), daysAgo: 2 },
+      { board: "gallery", title: "가을 숲 (예시)", content: picture("gallery-forest", "가을 숲") + p("단풍이 한창입니다."), daysAgo: 1 },
+    ]
+    : code === "shop" ? [
+      notice("배송 안내 (예시)", p("오후 2시 이전 주문은 당일 출발합니다. 주말·공휴일 주문은 다음 영업일에 보냅니다."), 3),
+      notice("오픈 기념 이벤트 (예시)", p("오픈을 기념해 첫 주문에 쓸 수 있는 쿠폰을 드립니다. 실제 이벤트로 바꿔 주세요."), 1),
+    ]
+    : code === "company" ? [
+      notice("홈페이지를 새로 열었습니다 (예시)", p("회사 소식과 서비스 안내를 이곳에서 전해 드립니다."), 4),
+      notice("고객센터 운영 시간 안내 (예시)", p("평일 오전 9시부터 오후 6시까지 운영합니다. 1:1 문의는 언제든 남겨 주세요."), 1),
+    ]
+    : [];
+  if (!posts.length) return 0;
+
+  const { rows: boards } = await ctx.db.execute(sql`SELECT id, slug FROM board_boards`);
+  const boardId = new Map(boards.map((b) => [String(b.slug), String(b.id)]));
+  let count = 0;
+  for (const post of posts) {
+    const bid = boardId.get(post.board);
+    if (!bid) continue;
+    const id = uuidv7();
+    const thumb = /<img\b[^>]*\bsrc="([^"]+)"/i.exec(post.content)?.[1] ?? null;
+    const at = sql`now() - make_interval(days => ${post.daysAgo}, hours => ${(count * 7) % 24})`;
+    await ctx.db.execute(sql`
+      INSERT INTO board_posts
+        (id, board_id, author_id, author_name, title, content, is_notice, thread_id, thread_created_at, thread_path, depth,
+         thumb_url, created_at, updated_at)
+      VALUES
+        (${id}, ${bid}::uuid, ${String(admin.id)}::uuid, ${String(admin.display_name)}, ${post.title}, ${post.content},
+         ${Boolean(post.notice)}, ${id}::uuid, ${at}, '', 0, ${thumb}, ${at}, ${at})
+    `);
+    if (post.answer) {
+      await ctx.db.execute(sql`
+        INSERT INTO board_comments (id, post_id, author_id, author_name, content, created_at)
+        VALUES (${uuidv7()}, ${id}::uuid, ${String(admin.id)}::uuid, ${String(admin.display_name)}, ${post.answer}, ${at} + interval '2 hours')
+      `);
+      await ctx.db.execute(sql`UPDATE board_posts SET comment_count = 1 WHERE id = ${id}::uuid`);
+    }
+    count++;
+  }
+  return count;
+}
+

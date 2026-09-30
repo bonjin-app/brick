@@ -643,6 +643,8 @@ ${CAPTCHA_WIDGET_CSS}
 .brick-latest-posts{list-style:none;padding:0;margin:10px 0}
 .brick-latest-posts li{display:flex;align-items:baseline;gap:6px;padding:8px 0;border-bottom:1px solid var(--color-line, #e4e4ea)}
 .brick-latest-posts li:last-child{border-bottom:0;padding-bottom:0}
+/* 빈 목록 — 글 줄의 가로 배치·마지막 줄 여백(아래 0)을 물려받아 글자가 상자 아래 구석에 붙었다. 가운데에 고르게 */
+.brick-latest-posts li.brick-board-empty{display:block;padding:22px 12px;margin:0;text-align:center;font-size:13.5px;border-bottom:0}
 .brick-latest-posts a:hover{color:var(--color-primary-text, #b63a2e)}
 .brick-latest-posts a{padding:6px 0;color:inherit;text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .brick-latest-posts time{color:var(--color-muted, #6c6c7a);font-size:12.5px}

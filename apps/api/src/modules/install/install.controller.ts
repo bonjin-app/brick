@@ -77,7 +77,9 @@ export class InstallController {
       id: uuidv7(),
       email: dto.adminEmail,
       passwordHash: await argon2.hash(dto.adminPassword),
-      displayName: "Administrator",
+      // 설치는 한국어로 시작한다 — 예시 글·공지의 작성자로 "Administrator" 가 찍히면 한국어 사이트에서 튄다.
+      // 운영자는 내 정보에서 바로 바꿀 수 있다
+      displayName: "관리자",
       role: "admin",
     });
 

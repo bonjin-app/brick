@@ -143,7 +143,7 @@ contains "비로그인 헤더에 로그인 링크" "$KO404" ">로그인</a>"
 contains "비로그인 헤더에 회원가입" "$KO404" ">회원가입</a>"
 contains "테마 CSS 캐시버스터 (버전 쿼리)" "$KO404" "style.css?v="
 AUTHED="$(curl -s -b "$CK" "$API/api/render/page?path=no-such-page")"
-contains "로그인 헤더에 이름" "$AUTHED" "Administrator"
+contains "로그인 헤더에 이름" "$AUTHED" "관리자"
 contains "로그인 헤더에 로그아웃 (POST 폼)" "$AUTHED" "/api/auth/logout"
 absent  "로그인 상태에 로그인 링크 없음" "$AUTHED" ">로그인</a>"
 

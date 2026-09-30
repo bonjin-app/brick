@@ -208,3 +208,61 @@ export const PROMO_ART: Record<string, () => string> = {
     `<circle cx="670" cy="190" r="26" fill="none" stroke="#e9d9a8" stroke-width="12"/><circle cx="770" cy="290" r="26" fill="none" stroke="#e9d9a8" stroke-width="12"/>` +
     `</svg>`,
 };
+
+/** 풍경(1200×900) — 커뮤니티 스타터의 갤러리 게시판 예시 글에 들어간다 */
+function scene(sky: [string, string], body: string): string {
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900">` +
+    `<defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${sky[0]}"/><stop offset="1" stop-color="${sky[1]}"/></linearGradient></defs>` +
+    `<rect width="1200" height="900" fill="url(#sky)"/>` + body + `</svg>`
+  );
+}
+
+export const GALLERY_ART: Record<string, () => string> = {
+  /** 새벽 산 */
+  mountain: () =>
+    scene(["#f6d3b8", "#e8a7a1"],
+      `<circle cx="850" cy="300" r="90" fill="#fff4dc" opacity=".9"/>` +
+      `<path d="M0 620L230 360l150 170 170-250 220 300 150-150 280 330V900H0z" fill="#b87f86"/>` +
+      `<path d="M0 700l260-190 190 130 210-170 250 200 140-90 150 110V900H0z" fill="#8c5a6b"/>` +
+      `<path d="M0 800l300-110 260 70 300-100 340 120V900H0z" fill="#5f3a52"/>`),
+  /** 여름 바다 */
+  sea: () =>
+    scene(["#a9dcef", "#e6f6fb"],
+      `<circle cx="300" cy="220" r="70" fill="#fff8d6"/>` +
+      `<rect y="470" width="1200" height="430" fill="#3a8fb7"/>` +
+      `<path d="M0 520q150-30 300 0t300 0 300 0 300 0" fill="none" stroke="#bfe6f5" stroke-width="6" opacity=".7"/>` +
+      `<path d="M0 600q150-30 300 0t300 0 300 0 300 0" fill="none" stroke="#bfe6f5" stroke-width="5" opacity=".5"/>` +
+      `<path d="M0 760c200-40 420-40 620 0s420 40 580 0V900H0z" fill="#f2dfb4"/>` +
+      `<path d="M760 470l40-120 40 120z" fill="#fff"/><path d="M760 470h90l-10 18h-70z" fill="#2e5b73"/>`),
+  /** 도시의 밤 */
+  city: () =>
+    scene(["#1d2340", "#3a3f6b"],
+      `<circle cx="960" cy="180" r="60" fill="#f4efd2"/>` +
+      [[60, 420, 120], [200, 360, 90], [310, 460, 140], [470, 300, 110], [600, 400, 130], [750, 340, 100], [870, 440, 150], [1040, 380, 120]]
+        .map(([x, y, w]) => `<rect x="${x}" y="${y}" width="${w}" height="${900 - y}" fill="#141830"/>` +
+          Array.from({ length: 6 }, (_, i) => `<rect x="${x + 16 + (i % 3) * (w / 3)}" y="${y + 30 + Math.floor(i / 3) * 60}" width="14" height="22" fill="#f6c86b" opacity="${i % 2 ? 0.9 : 0.45}"/>`).join(""))
+        .join("")),
+  /** 가을 숲 */
+  forest: () =>
+    scene(["#f7ecd9", "#efd9b4"],
+      `<rect y="700" width="1200" height="200" fill="#c79a5e"/>` +
+      [[120, "#c9632f"], [300, "#e0913a"], [470, "#b44a2a"], [650, "#d9a441"], [830, "#c9632f"], [1020, "#e0913a"]]
+        .map(([x, c]) => `<rect x="${Number(x) - 10}" y="520" width="20" height="200" fill="#6b4a33"/><circle cx="${x}" cy="470" r="110" fill="${c}"/><circle cx="${Number(x) + 50}" cy="420" r="70" fill="${c}" opacity=".85"/>`).join("")),
+};
+
+/** 회사 소개 사진 자리(1200×800) — 책상·화면·화분이 놓인 작업 공간 */
+export const OFFICE_ART = (): string =>
+  `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800">` +
+  `<rect width="1200" height="800" fill="#eaf0f8"/>` +
+  `<rect x="760" y="90" width="320" height="380" rx="8" fill="#fff"/><path d="M920 90v380M760 280h320" stroke="#d6e0ee" stroke-width="10"/>` +
+  `<rect y="560" width="1200" height="240" fill="#d7e1ee"/>` +
+  `<rect x="200" y="520" width="800" height="36" rx="8" fill="#9aa9bf"/>` +
+  `<rect x="400" y="280" width="400" height="250" rx="16" fill="#1f3a68"/><rect x="420" y="300" width="360" height="205" rx="8" fill="#3d6fb6"/>` +
+  `<rect x="450" y="330" width="170" height="16" rx="8" fill="#cfe0f7"/><rect x="450" y="364" width="260" height="12" rx="6" fill="#9dc0ee"/><rect x="450" y="390" width="220" height="12" rx="6" fill="#9dc0ee"/>` +
+  `<rect x="450" y="430" width="110" height="44" rx="10" fill="#f2b84b"/>` +
+  `<rect x="570" y="530" width="60" height="30" fill="#1f3a68"/>` +
+  `<rect x="230" y="440" width="90" height="80" rx="10" fill="#c96f4a"/>` +
+  `<path d="M275 440c-40-60-80-60-90-120 50 10 80 50 90 120zM275 440c30-70 70-90 100-140-40 60-60 90-100 140zM275 440c0-70 10-120 40-170-10 60-20 110-40 170z" fill="#4f8a5b"/>` +
+  `<rect x="860" y="470" width="120" height="50" rx="8" fill="#fff"/><rect x="880" y="486" width="80" height="8" rx="4" fill="#9aa9bf"/>` +
+  `</svg>`;

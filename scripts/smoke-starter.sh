@@ -163,6 +163,35 @@ contains "최신글 모아보기가 렌더됨" "$HOME_HTML" "공지사항"
 contains "자유게시판 상자" "$HOME_HTML" "자유게시판"
 absent "깨진 블록이 없다" "$HOME_HTML" "unknown block"
 
+echo "── 예시 글 — 홈의 위젯이 \"게시물이 없습니다\" 로 끝나지 않는다"
+# 설치해 보니 커뮤니티 홈의 위젯 넷이 전부 비어 있었다(사이트가 고장 난 것처럼 보였다)
+contains "적용 내역에 예시 글" "$R" "예시 글 10개"
+check "게시판마다 글이 있다 (공지 1 · 자유 3 · 질문 2 · 갤러리 4)" \
+  "$(psql_q "SELECT string_agg(b.slug || ':' || (SELECT count(*) FROM board_posts p WHERE p.board_id = b.id), ',' ORDER BY b.slug) FROM board_boards b")" \
+  "free:3,gallery:4,notice:1,qna:2"
+check "예시임을 제목으로 알 수 있다" "$(psql_q "SELECT count(*) FROM board_posts WHERE title NOT LIKE '%(예시)'")" "0"
+check "지우는 곳을 본문에 적었다" "$(psql_q "SELECT count(*) FROM board_posts WHERE content NOT LIKE '%관리자 → 게시판%'")" "0"
+check "쓴 이는 설치한 관리자 (가짜 회원을 만들지 않는다)" "$(psql_q "SELECT count(DISTINCT author_id) || '/' || (SELECT count(*) FROM users) FROM board_posts")" "1/1"
+check "관리자 이름은 한국어 (한국어로 설치된다)" "$(psql_q "SELECT display_name FROM users")" "관리자"
+check "스레드 칸이 게시판이 쓸 때와 같다" "$(psql_q "SELECT count(*) FROM board_posts WHERE thread_id IS DISTINCT FROM id OR depth <> 0 OR thread_created_at IS DISTINCT FROM created_at")" "0"
+check "공지는 공지로" "$(psql_q "SELECT count(*) FROM board_posts p JOIN board_boards b ON b.id = p.board_id WHERE b.slug = 'notice' AND p.is_notice")" "1"
+check "갤러리 글마다 목록 사진이 있고, 그 사진이 미디어에 있다" \
+  "$(psql_q "SELECT count(*) FROM board_posts p JOIN board_boards b ON b.id = p.board_id JOIN media_files m ON p.thumb_url LIKE '%' || m.storage_key WHERE b.slug = 'gallery'")" "4"
+check "질문에는 답이 달려 있다 (댓글 수도 맞다)" \
+  "$(psql_q "SELECT count(*) FROM board_posts p JOIN board_boards b ON b.id = p.board_id WHERE b.slug = 'qna' AND p.comment_count = 1 AND (SELECT count(*) FROM board_comments c WHERE c.post_id = p.id) = 1")" "2"
+check "날짜가 흩어져 있다 (한날한시가 아니다)" "$(psql_q "SELECT count(DISTINCT created_at::date) >= 5 FROM board_posts")" "true"
+HOME_X="$(curl -s "$API/api/render/page?path=&_=$RANDOM" | python3 -c "import sys,json;print(json.load(sys.stdin).get('html',''))")"
+contains "홈 위젯에 예시 글" "$HOME_X" "가입 인사 드립니다 (예시)"
+contains "갤러리 위젯에 사진" "$HOME_X" "brick-gallery-thumb"
+absent "빈 게시판 안내가 없다" "$HOME_X" "게시물이 없습니다"
+GAL="$(curl -s "$API/api/render/page?path=board/gallery&_=$RANDOM" | python3 -c "import sys,json;print(json.load(sys.stdin).get('html',''))")"
+contains "갤러리 목록도 사진으로" "$GAL" "새벽 산 (예시)"
+# 예시 글을 지우면 위젯은 빈 안내를 그린다 — 그 안내가 글 줄의 가로 배치를 물려받아 상자 아래 구석에 붙었다
+psql_q "DELETE FROM board_posts WHERE board_id = (SELECT id FROM board_boards WHERE slug = 'qna')" >/dev/null
+EMPTY_HOME="$(curl -s "$API/api/render/page?path=&_=$RANDOM" | python3 -c "import sys,json;print(json.load(sys.stdin).get('html',''))")"
+contains "빈 게시판 위젯은 안내를 그린다" "$EMPTY_HOME" 'class="brick-board-empty"'
+contains "그 안내는 글 줄의 배치를 물려받지 않는다" "$EMPTY_HOME" ".brick-latest-posts li.brick-board-empty{display:block"
+
 echo "── 메뉴가 만들어진 것들을 가리킨다"
 MENU="$(curl -s "$API/api/menus/header")"
 contains "공지사항 링크" "$MENU" '"url":"/board/notice"'
@@ -216,6 +245,7 @@ echo "══ 쇼핑몰 스타터 ══"
 R="$(fresh_install shop "달빛상점")"
 contains "설치 성공" "$R" '"ok":true'
 contains "쇼핑몰 플러그인 활성화" "$R" "플러그인 brick-shop"
+contains "쇼핑몰 공지에 예시 글 둘 (홈의 공지 위젯이 비지 않는다)" "$R" "예시 글 2개"
 check "게시판은 공지 하나" "$(psql_q "SELECT count(*) FROM board_boards")" "1"
 check "페이지 5개 (홈·소개·이용안내·게시판·쇼핑몰)" "$(psql_q "SELECT count(*) FROM pages")" "5"
 HOME_HTML="$(curl -s "$API/api/render/page?path=")"
@@ -352,6 +382,11 @@ contains "설치 성공" "$R" '"ok":true'
 check "회사 스타터가 corporate 테마를 켠다" "$(curl -s "$API/api/themes" | python3 -c "import sys,json;print(json.load(sys.stdin).get('active',''))")" "corporate"
 contains "헬프데스크 활성화" "$R" "플러그인 brick-helpdesk"
 check "페이지 5개 (홈·소개·서비스·문의·게시판)" "$(psql_q "SELECT count(*) FROM pages")" "5"
+contains "회사 공지에 예시 글 둘" "$R" "예시 글 2개"
+CO_HOME="$(curl -s "$API/api/render/page?path=&_=$RANDOM" | python3 -c "import sys,json;print(json.load(sys.stdin).get('html',''))")"
+contains "회사 소개 칸에 사진 (예시 그림)" "$CO_HOME" 'alt="작업 공간"'
+check "그 그림도 미디어에 (지우는 법이 다른 사진과 같다)" "$(psql_q "SELECT width || 'x' || height FROM media_files WHERE file_name = 'office.jpg'")" "1200x800"
+contains "홈 공지에 예시 글" "$CO_HOME" "고객센터 운영 시간 안내 (예시)"
 SUPPORT="$(curl -s "$API/api/render/page?path=support")"
 contains "문의 화면이 렌더됨" "$SUPPORT" "문의하기"
 absent "깨진 블록이 없다" "$SUPPORT" "unknown block"
