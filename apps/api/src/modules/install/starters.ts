@@ -23,6 +23,7 @@
  * **빈 사이트 선택지를 없애지 않는다.** 직접 만들고 싶은 사람에게 기본
  * 구성은 지울 것부터 생기는 짐이다.
  */
+import { PRODUCT_ART, BANNER_ART, PROMO_ART } from "./sample-art.js";
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import type { BrickDb } from "@brick/database";
@@ -43,6 +44,12 @@ export interface StarterDefinition {
    * 테마에서 얼마든지 바꿀 수 있다(미리보기로 비교하고).
    */
   theme?: string;
+  /**
+   * 고를 수 있는 디자인(동봉 테마) — 첫 항목이 기본이다. 카페24 가 쇼핑몰을 만들 때 업종별 디자인부터 고르게 하는 것과 같은
+   * 이유다: 식품 가게가 패션 편집숍의 모양으로 시작하면 바꿀 생각보다 "이 도구는 우리와 안 맞는다" 가 먼저 든다.
+   * 색 셋(포인트·바탕·글자)은 설치 화면의 견본이다 — 설치 전이라 테마 파일을 읽지 않는다.
+   */
+  designs?: Array<{ theme: string; label: string; description: string; colors: [string, string, string] }>;
 }
 
 /**
@@ -64,8 +71,15 @@ export const STARTERS: StarterDefinition[] = [
     label: "쇼핑몰",
     description: "상품 목록·장바구니·공지사항을 갖춘 판매 사이트",
     plugins: ["brick-board", "brick-shop"],
-    creates: ["홈 (상품 목록 + 공지)", "소개 페이지", "공지사항 게시판", "쇼핑몰 메뉴"],
+    creates: ["홈 (배너 · 분류 · 신상품 · 기획전 · 베스트 · 후기 · 공지)", "샘플 상품 8개 · 분류 3개", "소개 · 이용 안내 페이지", "공지사항 게시판", "쇼핑몰 메뉴"],
     theme: "storefront",
+    designs: [
+      { theme: "storefront", label: "스토어프런트", description: "종합몰 — 3단 헤더와 넓은 상품 격자", colors: ["#111318", "#ffffff", "#111318"] },
+      { theme: "fresh", label: "프레시 마켓", description: "식품·생활 — 초록 포인트, 둥근 모서리", colors: ["#2e7d4f", "#fffdf8", "#1f2a22"] },
+      { theme: "blossom", label: "블라썸", description: "뷰티·코스메틱 — 가운데 로고, 장밋빛", colors: ["#b8507a", "#fffbfa", "#2b2326"] },
+      { theme: "mono", label: "모노", description: "패션·스트리트 — 흑백, 굵은 대문자, 세로 사진", colors: ["#111111", "#ffffff", "#e0282e"] },
+      { theme: "boutique", label: "부티크", description: "편집숍 — 가운데 로고, 세리프 제목, 큰 여백", colors: ["#1d1a17", "#fdfcfa", "#f0ebe4"] },
+    ],
   },
   {
     code: "company",
@@ -97,6 +111,8 @@ interface Node {
 interface SeedContext {
   db: BrickDb;
   siteName: string;
+  /** 설치 화면에서 고른 디자인 — 스타터의 `designs` 에 있는 것만 받는다(없으면 스타터 기본) */
+  theme?: string;
   /** 플러그인 활성화 — loader.activate 를 주입받는다 (순환 의존을 피한다) */
   activatePlugin: (name: string) => Promise<void>;
   log: (message: string) => void;
@@ -105,7 +121,7 @@ interface SeedContext {
    * 보이고 운영자가 지울 수 있다. 이미지 처리(sharp)를 못 쓰면 null 을 돌려준다.
    */
   /** 샘플 사진을 미디어에 넣고 원본·목록용(썸네일) 주소를 준다. sharp 가 없으면 null */
-  addSampleImage?: (name: string, svg: string) => Promise<{ url: string; thumbUrl: string | null } | null>;
+  addSampleImage?: (name: string, svg: string, size?: { width: number; height: number }) => Promise<{ url: string; thumbUrl: string | null } | null>;
 }
 
 /**
@@ -151,12 +167,13 @@ export async function applyStarter(code: string, ctx: SeedContext): Promise<{ ap
   }
 
   // ── 3. 샘플 상품 ──
-  // 페이지보다 먼저다 — 홈 배너가 샘플 사진의 URL 을 쓴다(SAMPLE_IMG).
+  // 페이지보다 먼저다 — 홈 배너가 샘플 사진의 URL 을 쓴다(images).
   // 쇼핑몰을 골랐는데 진열대가 비어 있으면 "무엇이 잘못됐나" 부터 의심하게 된다.
   // 카페24·그누보드가 샘플 상품을 넣는 이유다 — 이름에 (샘플) 을 달아 지우기 쉽게 한다.
+  const images: SampleImages = {};
   if (starter.code === "shop") {
     try {
-      const seeded = await seedShopSamples(ctx);
+      const seeded = await seedShopSamples(ctx, images);
       if (seeded) applied.push(`샘플 상품 ${seeded}개`);
     } catch (err) {
       ctx.log(`스타터: 샘플 상품 생성 실패 — ${String(err)}`);
@@ -164,7 +181,7 @@ export async function applyStarter(code: string, ctx: SeedContext): Promise<{ ap
   }
 
   // ── 4. 페이지 ──
-  for (const p of starterPages(starter.code, ctx.siteName)) {
+  for (const p of starterPages(starter.code, ctx.siteName, images)) {
     try {
       await ctx.db.execute(sql`
         INSERT INTO pages (id, slug, title, blocks, plain_text, status, seo, published_at)
@@ -181,7 +198,8 @@ export async function applyStarter(code: string, ctx: SeedContext): Promise<{ ap
   // ── 5. 테마 ──
   // 스타터에 맞는 동봉 테마를 켠다. 운영자가 이미 골라 둔 것이 있으면 건드리지 않는다
   // (설치 직후에는 없지만, 이 함수가 두 번 불려도 안전해야 한다).
-  if (starter.theme) {
+  const chosen = ctx.theme && starter.designs?.some((d) => d.theme === ctx.theme) ? ctx.theme : starter.theme;
+  if (chosen) {
     try {
       /*
        * 설치가 이미 theme.active = "default" 를 넣어 둔다(스타터는 그 뒤에 돈다).
@@ -193,13 +211,13 @@ export async function applyStarter(code: string, ctx: SeedContext): Promise<{ ap
       if (!current || current === "default") {
         await ctx.db.execute(sql`
           INSERT INTO site_settings (key, value, updated_at)
-          VALUES ('theme.active', ${JSON.stringify(starter.theme)}::jsonb, now())
-          ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(starter.theme)}::jsonb, updated_at = now()
+          VALUES ('theme.active', ${JSON.stringify(chosen)}::jsonb, now())
+          ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(chosen)}::jsonb, updated_at = now()
         `);
-        applied.push(`테마 ${starter.theme}`);
+        applied.push(`테마 ${chosen}`);
       }
     } catch (err) {
-      ctx.log(`스타터: 테마 ${starter.theme} 적용 실패 — ${String(err)}`);
+      ctx.log(`스타터: 테마 ${chosen} 적용 실패 — ${String(err)}`);
     }
   }
 
@@ -265,14 +283,14 @@ function starterBoards(code: string): Array<{
 }
 
 /**
- * 샘플 상품 사진의 URL — 시딩(seedShopSamples)이 채우고 홈 배너가 읽는다.
+ * 샘플 사진의 URL — 시딩(seedShopSamples)이 채우고 홈 배너가 읽는다(키: 상품 slug · `banner-*` · `promo-*`).
  *
- * 페이지 생성이 시딩보다 먼저라면 비어 있고, 그때 배너 블록은 아무것도 그리지 않는다
- * (빈 배너가 보이는 것보다 낫다). 그래서 applyStarter 에서 상품 시딩을 페이지보다 앞에 둔다.
+ * 전에는 모듈 전역 변수였다 — 설치를 두 번 부르면(시험) 앞 설치의 주소가 남았다. 이제 설치마다 새로 만든다.
+ * 시딩이 실패하면 비어 있고, 그때 배너 블록은 아무것도 그리지 않는다(빈 배너가 보이는 것보다 낫다).
  */
-const SAMPLE_IMG: { mug: string; tote: string; candle: string } = { mug: "", tote: "", candle: "" };
+type SampleImages = Record<string, string>;
 
-function starterPages(code: string, siteName: string): Array<{
+function starterPages(code: string, siteName: string, img: SampleImages = {}): Array<{
   slug: string; title: string; blocks: Node[]; plainText: string;
 }> {
   const p = (text: string): Node => ({ block: "core/paragraph", props: { text } });
@@ -390,19 +408,30 @@ function starterPages(code: string, siteName: string): Array<{
               block: "core/banner-slider",
               props: {
                 items: [
-                  `${SAMPLE_IMG.mug} | ${siteName} | 이 배너를 계절 상품이나 이벤트로 바꿔주세요 | /shop`,
-                  `${SAMPLE_IMG.tote} | 새로 들어온 물건 | 관리자 → 페이지 에서 배너를 고칩니다 | /shop`,
-                ].join("\n"),
-                height: 420,
+                  `${img["banner-living"] ?? ""} | 머무는 계절, 가을 리빙 | 쿠션·화병·패브릭 신상품을 만나보세요 — 이 배너는 관리자 → 페이지에서 바꿉니다 | /shop?category=living`,
+                  `${img["banner-kitchen"] ?? ""} | 매일 쓰는 그릇 | 손에 익는 도자기 식기 컬렉션 | /shop?category=kitchen`,
+                  `${img["banner-scent"] ?? ""} | 향으로 기억되는 집 | 소이 향초·디퓨저 최대 20% | /shop?category=fragrance`,
+                ].filter((line) => !line.startsWith(" |")).join("\n"),
+                height: 520,
                 interval: 5,
                 full: true,
               },
             },
+            // 분류 바로가기 — 첫 화면에서 "무엇을 파는 가게인가" 가 보여야 한다
+            { block: "brick-shop/category-list", props: {} },
             { block: "brick-shop/product-list",
-              props: { limit: 8, columns: 4, sort: "recent", title: "새로 나온 상품" } },
+              props: { limit: 8, columns: 4, sort: "recent", title: "NEW ARRIVALS", subtitle: "이번 주에 새로 들어온 상품", moreUrl: "/shop?sort=recent" } },
+            // 동시에 보여야 하는 기획전은 슬라이드가 아니라 칸으로 나란히 둔다
+            { block: "core/promo-banners", props: {
+              items: [
+                `${img["promo-gift"] ?? ""} | GIFT | 마음을 담은 선물 세트 | /shop | dark`,
+                `${img["promo-sale"] ?? ""} | SALE | 시즌 오프, 최대 20% 할인 | /shop?sort=price_asc | light`,
+              ].filter((line) => !line.startsWith(" |")).join("\n"),
+              ratio: "2/1",
+            } },
             // 신상품과 베스트를 나란히 두는 것이 쇼핑몰 홈의 기본 구성이다
             { block: "brick-shop/product-list",
-              props: { limit: 4, columns: 4, sort: "popular", title: "인기 상품" } },
+              props: { limit: 4, columns: 4, sort: "popular", title: "BEST SELLER", subtitle: "지금 가장 많이 찾는 상품", moreUrl: "/shop?sort=popular" } },
             features("", [
               "빠른 배송 | 오후 2시 이전 주문은 당일 출발합니다. | | truck",
               "안전한 결제 | 카드·계좌이체·간편결제를 지원합니다. | | shield",
@@ -574,26 +603,53 @@ function starterMenu(code: string): MenuEntry[] {
 }
 
 /**
- * 쇼핑몰 샘플 상품.
+ * 쇼핑몰 샘플 — 분류 셋 · 상품 여덟 · 배너 셋 · 기획전 둘.
  *
- * 세 개만 넣는다 — 격자가 어떻게 보이는지, 할인 표시(정가·판매가)와 품절이 어떻게
- * 그려지는지 한 화면에서 보이는 최소한이다. 이름에 "(샘플)" 을 달아 운영자가 지울
- * 것을 찾기 쉽게 하고, 설명에 무엇을 하면 되는지 적는다.
+ * 여덟 개인 이유: 4열 격자가 두 줄 찬다. 셋일 때는 한 줄도 다 차지 않아 테마가 어떻게 보일지 판단할 수 없었다.
+ * 할인(정가·판매가)·품절·NEW 표시가 한 화면에서 모두 보이게 섞는다. 이름에 "(샘플)" 을 달아 지울 것을 찾기 쉽게 한다.
  *
  * 사진은 테마 자산을 가리키지 않는다(테마를 바꾸면 깨진다) — **미디어에 실제로 넣는다.**
- * 그러면 미디어 화면에도 보이고, 지우는 방법이 다른 사진과 같다.
+ * 그러면 미디어 화면에도 보이고, 지우는 방법이 다른 사진과 같다. 그림은 sample-art.ts.
  */
-async function seedShopSamples(ctx: SeedContext): Promise<number> {
+async function seedShopSamples(ctx: SeedContext, images: SampleImages): Promise<number> {
   const { rows: existing } = await ctx.db.execute(sql`SELECT 1 FROM shop_products LIMIT 1`);
   if (existing.length) return 0; // 이미 상품이 있으면 건드리지 않는다
 
+  // 분류 — 홈의 분류 바로가기와 상품 목록의 왼쪽 레일이 이것을 쓴다
+  const categories = [
+    { slug: "kitchen", name: "주방·다이닝" },
+    { slug: "living", name: "리빙·패브릭" },
+    { slug: "fragrance", name: "향·캔들" },
+  ];
+  const categoryId: Record<string, string> = {};
+  for (const [i, c] of categories.entries()) {
+    const id = uuidv7();
+    const { rows } = await ctx.db.execute(sql`
+      INSERT INTO shop_categories (id, slug, name, sort_order)
+      VALUES (${id}, ${c.slug}, ${c.name}, ${i})
+      ON CONFLICT (slug) DO UPDATE SET slug = EXCLUDED.slug
+      RETURNING id
+    `);
+    categoryId[c.slug] = String(rows[0]?.id ?? id);
+  }
+
   const samples = [
-    { slug: "sample-mug", name: "머그컵 (샘플)", price: 12000, listPrice: 15000, stock: 40,
-      summary: "손에 감기는 두께의 무광 머그.", from: "#e8e2d8", to: "#c9bfae" },
-    { slug: "sample-tote", name: "캔버스 토트백 (샘플)", price: 28000, listPrice: null, stock: 12,
-      summary: "무게를 견디는 12온스 캔버스.", from: "#dfe4ea", to: "#b8c1cc" },
-    { slug: "sample-candle", name: "향초 (샘플)", price: 19000, listPrice: 24000, stock: 0,
-      summary: "삼나무와 마른 풀 향. 40시간.", from: "#efe3df", to: "#d3b8ae" },
+    { slug: "sample-mug", art: "mug", category: "kitchen", name: "무광 스톤 머그 (샘플)", price: 12000, listPrice: 15000, stock: 40,
+      summary: "손에 감기는 두께의 무광 머그. 350ml." },
+    { slug: "sample-plate", art: "plate", category: "kitchen", name: "세라믹 식기 3종 세트 (샘플)", price: 32000, listPrice: null, stock: 25,
+      summary: "접시 둘과 볼 하나, 전자레인지 사용 가능." },
+    { slug: "sample-board", art: "board", category: "kitchen", name: "원목 커팅보드 (샘플)", price: 24000, listPrice: 29000, stock: 18,
+      summary: "통원목 월넛, 서빙 플레이트로도." },
+    { slug: "sample-tote", art: "tote", category: "living", name: "캔버스 토트백 (샘플)", price: 28000, listPrice: null, stock: 12,
+      summary: "무게를 견디는 12온스 캔버스." },
+    { slug: "sample-cushion", art: "cushion", category: "living", name: "린넨 쿠션 커버 (샘플)", price: 22000, listPrice: null, stock: 30,
+      summary: "워싱 린넨 100%, 45×45cm." },
+    { slug: "sample-vase", art: "vase", category: "living", name: "세라믹 화병 (샘플)", price: 36000, listPrice: 42000, stock: 8,
+      summary: "손으로 빚은 둥근 화병. 드라이플라워 포함." },
+    { slug: "sample-candle", art: "candle", category: "fragrance", name: "소이 향초 (샘플)", price: 19000, listPrice: 24000, stock: 0,
+      summary: "삼나무와 마른 풀 향. 40시간." },
+    { slug: "sample-diffuser", art: "diffuser", category: "fragrance", name: "리드 디퓨저 (샘플)", price: 27000, listPrice: null, stock: 22,
+      summary: "숲속 이끼 향, 200ml · 약 3개월." },
   ];
 
   // 상품 설명은 HTML 이다 — 마크다운을 쓰면 별표가 그대로 보인다(실제로 그랬다)
@@ -603,31 +659,28 @@ async function seedShopSamples(ctx: SeedContext): Promise<number> {
 
   let count = 0;
   for (const [i, p] of samples.entries()) {
-    // 사진 자리를 비워 두면 격자가 회색 네모로 보인다 — 상품마다 다른 색의 카드를 만들어 둔다
-    const svg =
-      `<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 1000 1000">` +
-      `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">` +
-      `<stop offset="0" stop-color="${p.from}"/><stop offset="1" stop-color="${p.to}"/></linearGradient></defs>` +
-      `<rect width="1000" height="1000" fill="url(#g)"/></svg>`;
-    const added = (await ctx.addSampleImage?.(`${p.slug}.jpg`, svg)) ?? null;
-    const imageUrl = added?.url ?? null;
-    // 홈 배너가 이 사진을 쓴다 (아래 페이지 생성 단계에서 읽는다)
-    if (imageUrl) {
-      if (p.slug === "sample-mug") SAMPLE_IMG.mug = imageUrl;
-      if (p.slug === "sample-tote") SAMPLE_IMG.tote = imageUrl;
-      if (p.slug === "sample-candle") SAMPLE_IMG.candle = imageUrl;
-    }
-
+    const added = (await ctx.addSampleImage?.(`${p.slug}.jpg`, PRODUCT_ART[p.art]!())) ?? null;
+    if (added) images[p.slug] = added.url;
     await ctx.db.execute(sql`
       INSERT INTO shop_products
-        (id, slug, name, summary, description, image_url, thumb_url, price, list_price, stock, status, sort_order)
+        (id, slug, name, summary, description, image_url, thumb_url, price, list_price, stock, status, sort_order, category_id)
       VALUES
-        (${uuidv7()}, ${p.slug}, ${p.name}, ${p.summary}, ${body}, ${imageUrl}, ${added?.thumbUrl ?? null},
+        (${uuidv7()}, ${p.slug}, ${p.name}, ${p.summary}, ${body}, ${added?.url ?? null}, ${added?.thumbUrl ?? null},
          ${p.price}, ${p.listPrice}, ${p.stock},
-         ${p.stock === 0 ? "soldout" : "selling"}, ${i})
+         ${p.stock === 0 ? "soldout" : "selling"}, ${i}, ${categoryId[p.category] ?? null}::uuid)
       ON CONFLICT (slug) DO NOTHING
     `);
     count++;
+  }
+
+  // 배너·기획전 그림 — 상품이 아니라 홈 페이지가 쓴다
+  for (const [key, draw] of Object.entries(BANNER_ART)) {
+    const added = await ctx.addSampleImage?.(`banner-${key}.jpg`, draw(), { width: 1920, height: 720 });
+    if (added) images[`banner-${key}`] = added.url;
+  }
+  for (const [key, draw] of Object.entries(PROMO_ART)) {
+    const added = await ctx.addSampleImage?.(`promo-${key}.jpg`, draw(), { width: 960, height: 480 });
+    if (added) images[`promo-${key}`] = added.url;
   }
   return count;
 }

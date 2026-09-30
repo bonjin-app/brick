@@ -30,6 +30,8 @@ API_PORT="${BRICK_API_PORT:-3001}"
 API="http://127.0.0.1:${API_PORT}"
 TMP="$(mktemp -d)"
 CK="$TMP/admin.txt"
+# 동봉 테마 — 매니페스트가 있는 폴더 전부. 계약 검사는 이 목록을 돈다(새 테마를 더하면 저절로 들어온다)
+BUNDLED_THEMES="$(for d in "$ROOT"/themes/*/; do [[ -f "$d/brick.theme.json" ]] && basename "$d"; done | tr '\n' ' ')"
 PASS=0; FAIL=0
 TEST_THEME=""
 
@@ -223,6 +225,36 @@ ED_TOKENS="$(curl -s "$API/api/themes/tokens.css")"
 contains "웹 화면(로그인·관리)도 종이색 팔레트를 받는다" "$ED_TOKENS" "#fbf8f2"
 check "스타일시트 서빙" "$(code "$API/themes/editorial/assets/style.css")" "200"
 check "기본 테마로 복귀" "$(code -b "$CK" -X POST "$API/api/themes/default/activate")" "201"
+
+echo "── 업종별 쇼핑몰 테마(fresh · blossom · mono) — 스토어프런트 바탕, 다른 인상"
+check "동봉 테마가 여덟 벌" "$(echo "$BUNDLED_THEMES" | wc -w | tr -d ' ')" "8"
+for TH in fresh blossom mono; do
+  contains "테마 목록에 $TH" "$THEMES" "\"name\":\"$TH\""
+  check "$TH 적용" "$(code -b "$CK" -X POST "$API/api/themes/$TH/activate")" "201"
+  H="$(render "")"
+  contains "$TH: 자기 스타일시트" "$H" "/themes/$TH/assets/style.css"
+  contains "$TH: 자기 파비콘" "$H" "/themes/$TH/assets/favicon.svg"
+  contains "$TH: 스토어프런트의 세 켜 머리를 그대로 쓴다" "$H" 'class="brick-catbar"'
+  contains "$TH: 퀵메뉴" "$H" 'class="brick-quick"'
+  contains "$TH: 코어 계약 — 스킵 링크" "$H" 'class="brick-skip"'
+  absent "$TH: 템플릿 조건문이 새지 않는다" "$H" "{{/if}}"
+  CSS="$(curl -s "$API/themes/$TH/assets/style.css")"
+  # 바탕을 가져왔는지(구조) + 자기 규칙이 붙었는지(인상) 둘 다 본다 — 가져오기가 깨지면 앞의 것이, 덮어쓰기가 빠지면 뒤의 것이 빈다
+  contains "$TH: 바탕(스토어프런트)의 규칙을 담았다" "$CSS" ".brick-quick"
+  contains "$TH: 모바일에서 배너 물건을 오른쪽으로 남긴다 (바탕에서 물려받음)" "$CSS" "object-position:78%"
+done
+# 폰에서 배너가 데스크톱 높이(460px)를 쓰고 있었다 — 테마 기본 높이 줄이 모바일 규칙보다 뒤에 있었다
+for TH in storefront fresh blossom mono; do
+  contains "$TH: 폰에서는 배너의 폰 높이를 쓴다" "$(cat "$ROOT/themes/$TH/assets/style.css")" ".brick-slider .brick-slides{height:var(--slider-h-sm"
+done
+curl -s -o /dev/null -b "$CK" -X POST "$API/api/themes/fresh/activate"
+contains "fresh: 초록 포인트" "$(curl -s "$API/api/render/page?path=&_=$RANDOM")" "#2e7d4f"
+curl -s -o /dev/null -b "$CK" -X POST "$API/api/themes/blossom/activate"
+contains "blossom: 가운데 로고(세 칸 격자)" "$(curl -s "$API/themes/blossom/assets/style.css")" "grid-template-columns:minmax(0,1fr) auto minmax(0,1fr)"
+curl -s -o /dev/null -b "$CK" -X POST "$API/api/themes/mono/activate"
+contains "mono: 세로로 긴 상품 사진" "$(curl -s "$API/themes/mono/assets/style.css")" "aspect-ratio:3/4"
+contains "mono: 모서리 없음" "$(curl -s "$API/api/render/page?path=&_=$RANDOM")" "--radius: 0px"
+check "기본 테마로 복귀" "$(code -b "$CK" -X POST "$API/api/themes/default/activate")" "201"
 absent "복귀 후 제호 레이아웃이 남지 않는다 (렌더 캐시 키에 테마 스탬프)" "$(render "")" 'class="brick-masthead'
 
 echo "── 세 번째 동봉 테마(storefront): 쇼핑몰 3단 헤더"
@@ -353,8 +385,8 @@ curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' 
 KEY2="$(render "" | grep -o 'data-key="[^"]*"' | sed -n 1p)"
 [[ -n "$KEY1" && "$KEY1" != "$KEY2" ]] && ok "문구가 바뀌면 키도 바뀐다 ($KEY1 → $KEY2)" || bad "문구가 바뀌면 키도 바뀐다 ($KEY1 → $KEY2)"
 check "javascript: 링크는 거부" "$(code -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"site.topbar_url":"javascript:alert(1)"}')" "400"
-# 다섯 테마 모두 띠배너 스타일을 갖는다 (계약)
-for TH in default editorial storefront boutique corporate; do
+# 동봉 테마 모두 띠배너 스타일을 갖는다 (계약) — 목록을 적어 두면 새 테마가 계약 검사에서 조용히 빠진다
+for TH in $BUNDLED_THEMES; do
   contains "$TH 테마에 띠배너 스타일" "$(cat "$ROOT/themes/$TH/assets/style.css")" ".brick-topline"
 done
 curl -s -b "$CK" -X PUT "$API/api/settings" -H 'content-type: application/json' -d '{"site.topbar":""}' -o /dev/null
@@ -387,8 +419,8 @@ SUB_SEG="$(echo "$NAV_SHOP" | grep -o 'class="brick-sub".*' || true)"
 CUR_IN_SUB="$(echo "${SUB_SEG%%</span></span>*}" | grep -c 'is-current' || true)"
 CUR_IN_SUB="${CUR_IN_SUB:-0}"
 check "상위가 켜져도 하위가 전부 켜지지 않는다 (스코프 상속)" "$CUR_IN_SUB" "0"
-# 다섯 테마 모두 드롭다운 CSS 를 갖는다 (계약)
-for TH in default editorial storefront boutique corporate; do
+# 동봉 테마 모두 드롭다운 CSS 를 갖는다 (계약)
+for TH in $BUNDLED_THEMES; do
   contains "$TH 테마에 드롭다운 스타일" "$(cat "$ROOT/themes/$TH/assets/style.css")" ".brick-sub"
 done
 # 3단은 저장은 되지만(코어 계약) 테마는 2단만 그린다
@@ -438,8 +470,8 @@ absent "한 장이면 화살표도 없다" "$ONE" "brick-slide-prev"
 printf '{"slug":"nobanner","title":"없음","status":"published","blocks":[{"block":"core/banner-slider","props":{"items":""}}]}' > "$TMP/no.json"
 curl -s -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' --data-binary "@$TMP/no.json" -o /dev/null
 absent "항목이 없으면 아무것도 그리지 않는다" "$(render "nobanner")" "brick-slider"
-# 네 테마 모두 슬라이드 CSS 를 갖는다 (계약)
-for TH in default editorial storefront boutique; do
+# 동봉 테마 모두 슬라이드 CSS 를 갖는다 (계약)
+for TH in $BUNDLED_THEMES; do
   contains "$TH 테마에 슬라이드 스타일" "$(cat "$ROOT/themes/$TH/assets/style.css")" ".brick-slider"
 done
 

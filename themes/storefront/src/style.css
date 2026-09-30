@@ -701,6 +701,8 @@ a.brick-card:hover { border-color: var(--color-text); color: inherit; }
 .brick-footer a:hover { color: var(--color-text); text-decoration: underline; }
 /* .brick-footer-cols 격자는 유틸리티(grid-cols-2 → md:4열) */
 .brick-footer-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+/* 고객센터 칸은 전화·메일을 넣기 전에는 비어 있다 — 빈 칸이 첫 자리를 차지해 로고가 가운데로 밀려 보였다 */
+.brick-footer-cs:not(:has(*)) { display: none; }
 .brick-footer-logo { font-size: 22px; color: var(--color-text) !important; }
 .brick-footer-about p { margin: 0; font-size: 13.5px; line-height: 1.7; color: var(--color-muted); max-width: 34em; }
 .brick-footer-nav a, .brick-footer-contact a, .brick-footer-contact span { font-size: 13.5px; line-height: 1.6; }
@@ -917,9 +919,58 @@ a.brick-card:hover { border-color: var(--color-text); color: inherit; }
   .brick-slide-prev, .brick-slide-next { width: 40px; height: 40px; }
 }
 
-/* 쇼핑몰 — 배너는 화면 폭을 꽉 채우는 편이 많다. 모서리 없음, 화살표는 네모 */
+/* 쇼핑몰 — 배너는 화면 폭을 꽉 채우는 편이 많다 */
 .brick-slider { border-radius: var(--radius); }
 .brick-slides { height: var(--slider-h, 460px); }
+.brick-slider.is-full { border-radius: 0; }
+/* 페이지 첫 블록이 화면 폭 배너면 카테고리 띠 바로 아래에 붙인다 — 사이에 흰 틈이 뜨면 배너가 떠 보인다 */
+.brick-page > .brick-slider.is-full:first-child { margin-top: -1.5rem; }
+@media (min-width: 768px) { .brick-page > .brick-slider.is-full:first-child { margin-top: -2rem; } }
+/*
+ * 화면 폭 배너의 글자와 화살표는 **본문 폭에 맞춘다.** 화면 끝에 붙은 글자는 넓은 모니터에서 로고·상품 격자와
+ * 줄이 맞지 않아 떠 보였고, 오른쪽 화살표는 퀵메뉴(오른쪽 고정)에 가려 누를 수 없었다.
+ * 아래쪽만 어둡게 깔던 그림자를 왼쪽으로 옮긴다 — 글자가 왼쪽에 있으니 사진의 나머지는 가리지 않는다.
+ */
+.brick-slider .brick-slide-caption {
+  top: 0; bottom: 0; justify-content: center; gap: 12px;
+  padding-inline: max(var(--brick-pad-x), calc((100% - var(--content-width)) / 2 + var(--brick-pad-x)));
+  background: linear-gradient(to right, rgba(12, 12, 16, .44), rgba(12, 12, 16, .14) 42%, transparent 64%);
+}
+.brick-slider .brick-slide-caption strong { font-size: clamp(24px, 3.6vw, 44px); font-weight: 800; letter-spacing: -1px; max-width: 14em; word-break: keep-all; }
+.brick-slider .brick-slide-caption span { font-size: clamp(14px, 1.3vw, 17px); max-width: 30em; word-break: keep-all; }
+.brick-slider .brick-slide-prev, .brick-slider .brick-slide-next {
+  width: 48px; height: 48px; border-radius: 999px;
+  color: var(--color-text); background: rgba(255, 255, 255, .78);
+  box-shadow: 0 2px 10px rgba(12, 12, 16, .14);
+  backdrop-filter: blur(6px);
+  opacity: 0; transition: opacity var(--brick-t), background var(--brick-t);
+}
+.brick-slider:hover .brick-slide-prev, .brick-slider:hover .brick-slide-next,
+.brick-slider .brick-slide-prev:focus-visible, .brick-slider .brick-slide-next:focus-visible { opacity: 1; }
+.brick-slider .brick-slide-prev:hover, .brick-slider .brick-slide-next:hover { background: #fff; }
+/* 화살표는 본문 오른쪽 아래에 한데 둔다 — 왼쪽 문구를 가리지 않고, 퀵메뉴와도 겹치지 않는다 */
+.brick-slider .brick-slide-prev, .brick-slider .brick-slide-next { top: auto; bottom: 26px; transform: none; }
+.brick-slider .brick-slide-next { right: max(16px, calc((100% - var(--content-width)) / 2 + var(--brick-pad-x))); }
+.brick-slider .brick-slide-prev { left: auto; right: calc(max(16px, calc((100% - var(--content-width)) / 2 + var(--brick-pad-x))) + 56px); }
+/* 터치 화면에는 가리킬 수단(hover)이 없다 — 늘 보인다 */
+@media (hover: none) { .brick-slider .brick-slide-prev, .brick-slider .brick-slide-next { opacity: 1; } }
+@media (max-width: 767.98px) {
+  /*
+   * 좁은 화면에서는 배너의 가운데만 남는다(cover). 배너는 "문구 왼쪽 · 물건 오른쪽" 으로 짜는 것이 관례라
+   * 가운데를 남기면 물건이 잘리고 빈 배경만 보였다 — 오른쪽으로 치우쳐 남긴다.
+   */
+  /* 위의 `.brick-slides { height: 460px }` 가 이 테마의 기본 높이 줄보다 뒤에 있어 폰에서도 데스크톱 높이를 쓰고 있었다 */
+  .brick-slider .brick-slides { height: var(--slider-h-sm, 260px); }
+  .brick-slider .brick-slide img { object-position: 78% 50%; }
+  .brick-slider .brick-slide-caption { justify-content: flex-end; padding-bottom: 64px; background: linear-gradient(to top, rgba(12, 12, 16, .6), rgba(12, 12, 16, .15) 60%, transparent); }
+  /* 분류 바로가기는 한 줄로 두고 옆으로 민다 — 두 줄로 넘치면 첫 화면의 상품이 밀려난다 */
+  .brick-page > .brick-category-list { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-inline: calc(var(--brick-pad-x) * -1); padding-inline: var(--brick-pad-x); }
+  .brick-page > .brick-category-list::-webkit-scrollbar { display: none; }
+  .brick-page > .brick-category-list .brick-cat { flex: none; }
+  .brick-slider .brick-slide-prev, .brick-slider .brick-slide-next { width: 40px; height: 40px; }
+}
+/* 기획전 배너 — 위 격자와 붙지 않게 */
+.brick-promos { margin-top: 28px; }
 
 
 /* ── 퀵메뉴 (오른쪽 고정) ──────────────────────────── */

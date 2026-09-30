@@ -1,0 +1,64 @@
+{
+  "name": "mono",
+  "version": "1.0.0",
+  "displayName": "Mono",
+  "description": "패션·스트리트 테마 — 검은 유틸 띠, 굵은 대문자 로고와 메뉴, 각진 모서리, 세로로 긴(3:4) 상품 사진. 의류·신발·잡화처럼 사진의 인상으로 파는 가게에 맞습니다.",
+  "author": "Brick",
+  "brickVersion": "^0.2.0",
+  "templates": {
+    "layout": "templates/layout.html",
+    "home": "templates/home.html",
+    "page": "templates/page.html"
+  },
+  "assets": "assets",
+  "csp": {
+    "style-src": [
+      "https://cdn.jsdelivr.net"
+    ],
+    "font-src": [
+      "https://cdn.jsdelivr.net"
+    ]
+  },
+  "tokens": {
+    "color-primary": "#111111",
+    "color-primary-hover": "#000000",
+    "color-primary-soft": "#f1f1f1",
+    "color-primary-text": "#111111",
+    "color-on-primary": "#ffffff",
+    "color-bg": "#ffffff",
+    "color-bg-soft": "#f6f6f6",
+    "color-bg-sunken": "#eeeeee",
+    "color-text": "#0e0e0e",
+    "color-text-soft": "#3d3d3d",
+    "color-muted": "#5e5e5e",
+    "color-line": "#e7e7e7",
+    "color-line-strong": "#cfcfcf",
+    "color-danger": "#e0282e",
+    "color-success": "#127a4d",
+    "color-warning": "#a2650a",
+    "shadow-sm": "none",
+    "shadow-md": "0 8px 24px rgba(0, 0, 0, .08)",
+    "font-body": "'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Segoe UI', Roboto, sans-serif",
+    "font-display": "'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif",
+    "font-mono": "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
+    "radius": "0px",
+    "radius-lg": "0px",
+    "content-width": "1280px",
+    "dark-color-primary": "#f5f5f5",
+    "dark-color-primary-hover": "#ffffff",
+    "dark-color-primary-soft": "#1f1f1f",
+    "dark-color-primary-text": "#f5f5f5",
+    "dark-color-on-primary": "#0e0e0e",
+    "dark-color-bg": "#0e0e0e",
+    "dark-color-bg-soft": "#161616",
+    "dark-color-bg-sunken": "#0a0a0a",
+    "dark-color-text": "#f2f2f2",
+    "dark-color-text-soft": "#c2c2c2",
+    "dark-color-muted": "#8f8f8f",
+    "dark-color-line": "#262626",
+    "dark-color-line-strong": "#3a3a3a",
+    "dark-color-danger": "#ff5c62",
+    "dark-color-success": "#3ec98d",
+    "dark-color-warning": "#e0a83c"
+  }
+}

@@ -34,7 +34,10 @@ export default function InstallPage() {
   const [starter, setStarter] = useState("community");
   const [starters, setStarters] = useState<Array<{
     code: string; label: string; description: string; creates: string[];
+    designs?: Array<{ theme: string; label: string; description: string; colors: [string, string, string] }>;
   }>>([]);
+  // 디자인 — 유형이 권하는 동봉 테마 중 하나. 비우면 유형의 기본(첫 항목)
+  const [design, setDesign] = useState("");
   useEffect(() => {
     fetch("/api/install/starters").then((r) => r.json()).then((d) => setStarters(d.items ?? [])).catch(() => {});
   }, []);
@@ -92,7 +95,7 @@ export default function InstallPage() {
     setBusy(true);
     setError("");
     const res = await fetch("/api/install", {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...site, starter }),
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...site, starter, ...(design ? { theme: design } : {}) }),
     });
     if (res.ok) setStage("done");
     else setError((await res.json().catch(() => ({}))).message ?? "설치에 실패했습니다.");
@@ -223,7 +226,7 @@ export default function InstallPage() {
                 borderRadius: 8, background: starter === st.code ? "#f7f8ff" : "#fff",
               }}>
                 <input type="radio" name="starter" value={st.code} checked={starter === st.code}
-                  onChange={() => setStarter(st.code)} style={{ marginRight: 8 }} />
+                  onChange={() => { setStarter(st.code); setDesign(""); }} style={{ marginRight: 8 }} />
                 <strong style={{ fontSize: 14 }}>{st.label}</strong>
                 <div style={{ fontSize: 13, color: "#777", marginLeft: 22 }}>{st.description}</div>
                 {starter === st.code && st.creates.length > 0 && (
@@ -234,6 +237,37 @@ export default function InstallPage() {
               </label>
             ))}
           </div>
+
+          {/* 디자인 — 유형이 권하는 테마가 여럿이면 고른다 (설치 뒤에도 관리자 → 테마에서 미리 보고 바꿀 수 있다) */}
+          {(() => {
+            const designs = starters.find((st) => st.code === starter)?.designs ?? [];
+            if (designs.length < 2) return null;
+            const picked = design || designs[0]!.theme;
+            return (
+              <fieldset style={{ marginTop: 14, border: 0, padding: 0 }}>
+                <legend style={{ fontSize: 14, marginBottom: 6 }}>디자인</legend>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 8 }}>
+                  {designs.map((d) => (
+                    <label key={d.theme} style={{
+                      display: "block", padding: 10, cursor: "pointer", borderRadius: 8,
+                      border: `2px solid ${picked === d.theme ? "#1a1a2e" : "#e5e5ea"}`,
+                      background: picked === d.theme ? "#f7f8ff" : "#fff",
+                    }}>
+                      <span aria-hidden="true" style={{ display: "flex", height: 34, borderRadius: 5, overflow: "hidden", border: "1px solid #e5e5ea", marginBottom: 8 }}>
+                        <span style={{ flex: 3, background: d.colors[1] }} />
+                        <span style={{ flex: 2, background: d.colors[0] }} />
+                        <span style={{ flex: 1, background: d.colors[2] }} />
+                      </span>
+                      <input type="radio" name="design" value={d.theme} checked={picked === d.theme}
+                        onChange={() => setDesign(d.theme)} style={{ marginRight: 6 }} />
+                      <strong style={{ fontSize: 13.5 }}>{d.label}</strong>
+                      <div style={{ fontSize: 12, color: "#777", marginTop: 3, lineHeight: 1.4 }}>{d.description}</div>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            );
+          })()}
           <button disabled={busy} style={{ width: "100%", padding: 13, marginTop: 22, cursor: "pointer", fontWeight: 700 }}>
             {busy ? "설치 중…" : "설치 완료"}
           </button>

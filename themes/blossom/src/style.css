@@ -1,0 +1,80 @@
+/*
+ * Blossom — 뷰티·코스메틱 테마 (Tailwind 소스). 고치고 나서 `pnpm build:themes`.
+ *
+ * 스토어프런트를 바탕으로 쓴다(아래 @import). 여기에는 인상만 적는다:
+ *   - 로고가 가운데에 온다 — 검색은 왼쪽, 장바구니는 오른쪽. 브랜드를 파는 가게의 머리다
+ *   - 장밋빛 포인트 하나, 넓은 여백, 가는 선
+ *   - 진열 제목과 상품 카드의 글자는 가운데 정렬 — 화장품 쇼핑몰(카페24 뷰티 계열)에서 손님이 익힌 모양
+ * 마크업(템플릿)은 스토어프런트와 같다 — 자리 바꿈은 CSS 격자로 한다. 그래서 좁은 화면의 서랍 메뉴도 그대로 돈다.
+ *
+ * 플러그인(쇼핑몰) 카드는 자기 <style> 을 본문 뒤에 싣는다. 카드를 덮는 규칙은 `.brick-main` 을 앞에 붙인다.
+ */
+@import "../../storefront/src/style.css";
+@source "../templates";
+
+/* ── 헤더 ─────────────────────────────────────────── */
+.brick-topbar { background: var(--color-primary-soft); border-bottom: 0; }
+.brick-topbar .brick-util a, .brick-topbar .brick-util .brick-util-cta { color: var(--color-primary-text); }
+.brick-masthead { --brick-header-h: 92px; border-bottom: 0; }
+
+@media (min-width: 768px) {
+  /* 세 칸 격자: 검색 | 로고 | 장바구니 */
+  .brick-masthead-inner { display: grid !important; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+  .brick-masthead-inner .brick-header-search { grid-column: 1; grid-row: 1; max-width: 300px; }
+  .brick-masthead-inner .brick-logo { grid-column: 2; grid-row: 1; }
+  .brick-masthead-inner .brick-actions { grid-column: 3; grid-row: 1; justify-self: end; }
+  .brick-catbar .brick-nav-cat { justify-content: center; }
+  .brick-nav-cat a:first-child { padding-left: 18px; }
+  .brick-nav-cat a:first-child.is-current::after { left: 18px; }
+}
+.brick-logo {
+  font-size: 26px; font-weight: 300; letter-spacing: .32em; text-transform: uppercase;
+  color: var(--color-text);
+}
+.brick-header-search input { height: 40px; background: transparent; border: 0; border-bottom: 1px solid var(--color-line-strong); border-radius: 0; padding-left: 30px; }
+.brick-header-search input:focus-visible { border-color: var(--color-primary); }
+.brick-search-icon { left: 2px; }
+.brick-catbar { border-top: 1px solid var(--color-line); border-bottom: 1px solid var(--color-line); }
+.brick-nav-cat a { font-weight: 500; font-size: 14px; letter-spacing: .06em; padding-inline: 22px; }
+.brick-nav-cat a.is-current::after { height: 1px; bottom: -1px; }
+
+/* ── 배너 — 가운데에서 부드럽게 ──────────────────────── */
+.brick-slider .brick-slide-caption strong { font-weight: 300; letter-spacing: -.5px; }
+.brick-slider .brick-slide-caption { background: linear-gradient(to right, rgba(60, 30, 40, .38), rgba(60, 30, 40, .1) 45%, transparent 66%); }
+
+/* ── 진열 — 제목과 카드 글자를 가운데로 ──────────────── */
+.brick-main .brick-shop-head { flex-direction: column; align-items: center; text-align: center; gap: 10px; margin-top: 40px; }
+.brick-main .brick-shop-heading { font-size: clamp(20px, 2.2vw, 26px); font-weight: 400; letter-spacing: .18em; text-transform: uppercase; }
+.brick-main .brick-shop-sub { font-size: 13.5px; letter-spacing: .02em; }
+.brick-main a.brick-shop-more { font-size: 12.5px; font-weight: 500; letter-spacing: .08em; color: var(--color-muted); border-bottom: 1px solid currentColor; padding-bottom: 1px; }
+.brick-main .brick-product-grid { gap: 36px 22px; margin-top: 28px; }
+.brick-main .brick-product-card { text-align: center; }
+.brick-main .brick-product-thumb { border: 0; border-radius: var(--radius-lg); background: var(--color-bg-soft); }
+.brick-main .brick-product-name { margin-top: 14px; font-size: 14px; font-weight: 400; color: var(--color-text-soft); }
+.brick-main .brick-product-price { justify-content: center; font-size: 15px; font-weight: 600; }
+.brick-main .brick-discount { color: var(--color-primary-text); }
+.brick-main .brick-card-rating { justify-content: center; }
+.brick-main .brick-tags { left: 10px; top: 10px; }
+.brick-main .brick-tag { background: var(--color-bg); color: var(--color-primary-text); border: 1px solid var(--color-primary); font-weight: 600; letter-spacing: .06em; }
+.brick-main .brick-tag-sale { background: var(--color-primary); color: var(--color-on-primary); }
+
+/* 분류 바로가기 — 가운데, 밑줄 탭 */
+.brick-page > .brick-category-list { justify-content: center; gap: 4px; margin-block: 34px 0; }
+.brick-page > .brick-category-list .brick-cat { border: 0; border-radius: 0; padding: 8px 16px; color: var(--color-muted); letter-spacing: .04em; }
+.brick-page > .brick-category-list .brick-cat:hover { color: var(--color-text); }
+.brick-page > .brick-category-list .brick-cat.is-on { background: transparent; color: var(--color-text); box-shadow: inset 0 -1px 0 var(--color-text); }
+
+/* 기획전 · 특징 · 후기 */
+.brick-promos { margin-top: 48px; gap: 20px; }
+.brick-promo-text strong { font-weight: 400 !important; }
+.brick-features > h2, .brick-testimonials > h2 { text-align: center; font-weight: 400; letter-spacing: .12em; }
+.brick-testimonials .brick-card { text-align: center; }
+
+/* ── 버튼 ─────────────────────────────────────────── */
+.brick-btn { border-radius: 999px; letter-spacing: .04em; }
+
+/* ── 푸터 ─────────────────────────────────────────── */
+.brick-footer { background: var(--color-bg-soft); border-top: 0; }
+.brick-footer::before { content: none; }
+.brick-footer-logo { font-weight: 300 !important; letter-spacing: .28em; text-transform: uppercase; }
+@media (max-width: 767.98px) { .brick-page > .brick-category-list { justify-content: flex-start; } }

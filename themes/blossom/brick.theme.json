@@ -1,0 +1,64 @@
+{
+  "name": "blossom",
+  "version": "1.0.0",
+  "displayName": "Blossom",
+  "description": "뷰티·코스메틱 테마 — 가운데 로고, 장밋빛 포인트와 넓은 여백, 가운데 정렬한 진열 제목과 상품 카드. 화장품·향수·향초·꽃처럼 분위기가 중요한 가게에 맞습니다.",
+  "author": "Brick",
+  "brickVersion": "^0.2.0",
+  "templates": {
+    "layout": "templates/layout.html",
+    "home": "templates/home.html",
+    "page": "templates/page.html"
+  },
+  "assets": "assets",
+  "csp": {
+    "style-src": [
+      "https://cdn.jsdelivr.net"
+    ],
+    "font-src": [
+      "https://cdn.jsdelivr.net"
+    ]
+  },
+  "tokens": {
+    "color-primary": "#b8507a",
+    "color-primary-hover": "#9d3f66",
+    "color-primary-soft": "#fbedf2",
+    "color-primary-text": "#a0426a",
+    "color-on-primary": "#ffffff",
+    "color-bg": "#fffbfa",
+    "color-bg-soft": "#fcf4f3",
+    "color-bg-sunken": "#f7eae9",
+    "color-text": "#2b2326",
+    "color-text-soft": "#5a4d52",
+    "color-muted": "#6e5d64",
+    "color-line": "#f1e4e4",
+    "color-line-strong": "#e2cfd1",
+    "color-danger": "#c2364f",
+    "color-success": "#2f7d5b",
+    "color-warning": "#a2650a",
+    "shadow-sm": "0 1px 2px rgba(43, 35, 38, .05)",
+    "shadow-md": "0 10px 30px rgba(120, 60, 80, .10)",
+    "font-body": "'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Segoe UI', Roboto, sans-serif",
+    "font-display": "'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif",
+    "font-mono": "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
+    "radius": "4px",
+    "radius-lg": "8px",
+    "content-width": "1280px",
+    "dark-color-primary": "#e58fb1",
+    "dark-color-primary-hover": "#f0a9c4",
+    "dark-color-primary-soft": "#33222a",
+    "dark-color-primary-text": "#f0a9c4",
+    "dark-color-on-primary": "#1c1417",
+    "dark-color-bg": "#1a1518",
+    "dark-color-bg-soft": "#211a1e",
+    "dark-color-bg-sunken": "#151114",
+    "dark-color-text": "#f3eaee",
+    "dark-color-text-soft": "#cdbcc4",
+    "dark-color-muted": "#a3929a",
+    "dark-color-line": "#33282e",
+    "dark-color-line-strong": "#46383f",
+    "dark-color-danger": "#ff7a92",
+    "dark-color-success": "#5cc19a",
+    "dark-color-warning": "#e0a83c"
+  }
+}

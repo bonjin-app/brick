@@ -101,13 +101,16 @@ stop_server() {
   sleep 1
 }
 # 스타터마다 깨끗한 DB 에서 설치한다 — 설치는 한 번뿐이므로
-fresh_install() {  # fresh_install <starter> <siteName>
+fresh_install() {  # fresh_install <starter> <siteName> [theme]
   stop_server
   node "$ROOT/scripts/reset-test-db.mjs" >/dev/null
   start_server
+  local theme=""
+  [[ -n "${3:-}" ]] && theme=",\"theme\":\"$3\""
   curl -s -X POST "$API/api/install" -H 'content-type: application/json' \
-    -d "{\"siteName\":\"$2\",\"adminEmail\":\"admin@st.test\",\"adminPassword\":\"adminpass123\",\"starter\":\"$1\"}"
+    -d "{\"siteName\":\"$2\",\"adminEmail\":\"admin@st.test\",\"adminPassword\":\"adminpass123\",\"starter\":\"$1\"$theme}"
 }
+active_theme() { curl -s "$API/api/themes" | python3 -c "import sys,json;print(json.load(sys.stdin).get('active',''))"; }
 
 echo "▶ 사이트 스타터 스모크 테스트"
 
@@ -231,6 +234,32 @@ contains "샘플임을 알 수 있다" "$SHOP_PAGE" "(샘플)"
 contains "할인 표시(정가)도 함께 보인다" "$SHOP_PAGE" "15,000"
 absent "빈 진열대 안내는 없다" "$SHOP_PAGE" "등록된 상품이 없습니다"
 
+echo "── 쇼핑몰 샘플: 설치 직후 완성된 가게처럼 (카페24 데모처럼)"
+# 셋일 때는 4열 격자가 한 줄도 차지 않아 테마가 어떻게 보일지 판단할 수 없었다
+check "샘플 상품 여덟 (4열 두 줄)" "$(psql_q "SELECT count(*) FROM shop_products")" "8"
+check "분류 셋" "$(psql_q "SELECT count(*) FROM shop_categories")" "3"
+check "상품마다 분류가 있다" "$(psql_q "SELECT count(*) FROM shop_products WHERE category_id IS NULL")" "0"
+check "상품마다 사진이 미디어에 들어갔다" "$(psql_q "SELECT count(*) FROM shop_products p WHERE image_url IS NULL OR NOT EXISTS (SELECT 1 FROM media_files m WHERE p.image_url LIKE '%' || m.storage_key)")" "0"
+check "배너 셋·기획전 둘도 미디어에 (지우는 법이 다른 사진과 같다)" "$(psql_q "SELECT count(*) FROM media_files WHERE file_name LIKE 'banner-%' OR file_name LIKE 'promo-%'")" "5"
+check "배너는 가로로 긴 사진이다 (1920×720)" "$(psql_q "SELECT width || 'x' || height FROM media_files WHERE file_name = 'banner-living.jpg'")" "1920x720"
+check "할인·품절이 섞여 있다" "$(psql_q "SELECT (count(*) FILTER (WHERE list_price > price))::text || '/' || (count(*) FILTER (WHERE stock = 0 AND status = 'soldout'))::text FROM shop_products")" "4/1"
+# 응답은 JSON 이라 HTML 의 따옴표가 이스케이프돼 있다 — html 을 꺼내 본다
+html_of() { curl -s "$1" | python3 -c "import sys,json;print(json.load(sys.stdin).get('html',''))"; }
+HOME2="$(html_of "$API/api/render/page?path=&_=$RANDOM")"
+contains "홈 배너가 세 장" "$HOME2" 'aria-label="3 / 3"'
+contains "배너 문구가 예시가 아니라 가게의 말이다" "$HOME2" "머무는 계절, 가을 리빙"
+contains "배너가 분류로 이어진다" "$HOME2" 'href="/shop?category=living"'
+contains "분류 바로가기" "$HOME2" 'class="brick-category-list"'
+contains "기획전 배너 두 칸" "$HOME2" 'class="brick-promos is-dark" style="--promo-cols:2'
+contains "기획전 칸마다 글자 색 (어두운 사진엔 밝은 글자)" "$HOME2" 'class="brick-promo is-light"'
+contains "진열 섹션의 \"전체보기\"" "$HOME2" 'class="brick-shop-more" href="/shop?sort=popular"'
+contains "진열 섹션의 한 줄 설명" "$HOME2" 'class="brick-shop-sub"'
+absent "빈 사진 주소로 그린 배너가 없다 (시딩 실패 시 줄을 버린다)" "$HOME2" '<img src=""'
+CAT="$(html_of "$API/api/render/page?path=shop&category=kitchen&_=$RANDOM")"
+contains "분류로 좁히면 그 분류의 상품" "$CAT" "무광 스톤 머그"
+absent "다른 분류의 상품은 빠진다" "$CAT" "리드 디퓨저"
+
+
 # 취소·반품 신청 폼의 칸에 이름이 있는가.
 #
 # 청약철회는 전자상거래법이 보장하는 권리다. 그런데 그 신청 폼의 사유·상세 사유·
@@ -274,6 +303,7 @@ contains "/shop 목록에도 나온다" "$(curl -s "$API/api/render/page?path=sh
 contains "/shop/first 상세도 그려진다 (storefront 라우팅)" \
   "$(curl -s "$API/api/render/page?path=shop/first")" "brick-buy-form"
 
+
 echo "══ 확장 파일이 사라졌다 돌아오면 ══"
 #
 # 켜 두었다는 사실은 **운영자의 뜻**이다. 예전에는 부팅 때 파일을 못 찾으면 그
@@ -299,6 +329,22 @@ start_server
 # 운영자가 아무것도 하지 않아도 돌아와야 한다 — 고친 것은 환경뿐이다
 check "경로를 고치면 저절로 돌아온다" "$(code "$API/api/plugins/brick-shop/products")" "200"
 absent "대시보드 경고도 사라진다" "$(curl -s -b "$CK" "$API/api/admin/dashboard")" "pluginNotRunning"
+
+echo "── 설치할 때 디자인을 고른다 (카페24 의 업종별 디자인)"
+DESIGNS="$(curl -s "$API/api/install/starters")"
+check "쇼핑몰 유형이 디자인 다섯을 권한다" "$(echo "$DESIGNS" | python3 -c "import sys,json;print(','.join(d['theme'] for s in json.load(sys.stdin)['items'] if s['code']=='shop' for d in s['designs']))")" "storefront,fresh,blossom,mono,boutique"
+check "권하는 디자인은 모두 동봉 테마다 (없는 테마를 권하지 않는다)" \
+  "$(echo "$DESIGNS" | python3 -c "
+import sys,json,os
+bad=[d['theme'] for s in json.load(sys.stdin)['items'] for d in s['designs'] if not os.path.isfile(os.path.join('$ROOT','themes',d['theme'],'brick.theme.json'))]
+print(','.join(bad) or 'ok')")" "ok"
+R="$(fresh_install shop "마켓" fresh)"
+contains "고른 디자인으로 설치된다" "$R" "테마 fresh"
+check "켜진 테마" "$(active_theme)" "fresh"
+R="$(fresh_install shop "마켓" corporate)"
+check "그 유형이 권하지 않는 테마는 받지 않는다 — 기본으로" "$(active_theme)" "storefront"
+R="$(fresh_install shop "마켓" "../../etc")"
+check "경로 같은 값도 기본으로" "$(active_theme)" "storefront"
 
 echo "══ 회사 홈페이지 스타터 ══"
 R="$(fresh_install company "본진테크")"

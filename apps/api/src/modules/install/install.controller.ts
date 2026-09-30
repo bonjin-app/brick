@@ -17,6 +17,8 @@ interface InstallDto {
   adminPassword: string;
   /** 사이트 유형 (starters.ts). 없거나 "blank" 면 빈 사이트 */
   starter?: string;
+  /** 스타터가 권하는 디자인 중 하나 (starters.ts 의 designs). 없으면 스타터 기본 */
+  theme?: string;
 }
 
 /**
@@ -53,6 +55,7 @@ export class InstallController {
         label: s.label,
         description: s.description,
         creates: s.creates,
+        designs: s.designs ?? [],
       })),
     };
   }
@@ -92,11 +95,12 @@ export class InstallController {
     // 실패해도 설치 자체는 성공해야 한다. 반쯤 만들어진 기본 구성은 고칠 수
     // 있지만, 설치가 실패하면 처음부터다.
     const { applied } = await applyStarter(starterCode, {
+      theme: typeof dto.theme === "string" ? dto.theme : undefined,
       db: this.db,
       siteName: dto.siteName,
       activatePlugin: (name) => this.loader.activate(name),
       log: (m) => this.logger.warn(m),
-      addSampleImage: (name, svg) => this.addSampleImage(name, svg),
+      addSampleImage: (name, svg, size) => this.addSampleImage(name, svg, size),
     });
 
     return { ok: true, starter: starterCode, applied };
@@ -107,7 +111,7 @@ export class InstallController {
    * SVG 를 받아 PNG 로 굽는다: SVG 는 업로드 금지 형식이고(스크립트를 담을 수 있다),
    * 굽고 나면 썸네일까지 같은 파이프라인을 탄다. sharp 가 없으면 null — 사진 없는 상품이 된다.
    */
-  private async addSampleImage(fileName: string, svg: string): Promise<{ url: string; thumbUrl: string | null } | null> {
+  private async addSampleImage(fileName: string, svg: string, size = { width: 1000, height: 1000 }): Promise<{ url: string; thumbUrl: string | null } | null> {
     try {
       if (!(await this.images.isAvailable())) return null;
       const source = Buffer.from(svg, "utf8");
@@ -116,7 +120,7 @@ export class InstallController {
        * 원본보다 크면 원본을 쓴다"는 정책이라 400바이트 SVG 를 그대로 돌려준다(맞는 정책이다,
        * 용도가 다르다). 굽는 일은 thumbnail(format: "jpeg") 이 한다 — 작은 원본도 키운다.
        */
-      const baked = await this.images.thumbnail(source, "image/png", { width: 1000, height: 1000, format: "jpeg", quality: 88 });
+      const baked = await this.images.thumbnail(source, "image/png", { width: size.width, height: size.height, format: "jpeg", quality: 88 });
       if (!baked) return null;
       const id = uuidv7();
       const now = new Date();

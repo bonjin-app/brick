@@ -405,6 +405,49 @@ ${eyebrow ? `    <span class="brick-eyebrow"${ed(ctx, "eyebrow")}>${esc(eyebrow)
      * 마우스를 올리거나 키보드로 조작하면 멈추고, `prefers-reduced-motion` 을 존중한다 —
      * 멈출 수 없는 자동 회전은 접근성 위반이고, 읽는 중에 화면이 바뀌면 화가 난다.
      */
+    /*
+     * 기획전 배너 — 홈 가운데에 두세 칸으로 나란히 놓는 사진 배너(카페24·메이크샵 템플릿의 "이벤트 배너").
+     *
+     * 슬라이드는 한 번에 하나만 보이고 저절로 넘어간다. 기획전은 **동시에** 보여야 하는 것들(선물·세일·신상)이라
+     * 칸을 나눈다. 글자는 사진 위에 HTML 로 얹는다 — 사진에 글자를 구워 넣으면 운영자가 고칠 때마다 디자이너가 필요하다.
+     * 모양은 여기서 작은 기본 스타일을 준다(테마 토큰만 쓴다). 테마는 `.brick-promos` 를 덮어쓰면 된다.
+     */
+    b.set("core/promo-banners", {
+      name: "core/promo-banners",
+      displayName: "기획전 배너",
+      propsSchema: {
+        type: "object",
+        properties: {
+          items: {
+            type: "string",
+            title: "한 줄에 하나: 이미지 URL | 작은 라벨(선택) | 제목 | 링크(선택) | 글자 색 light·dark(선택)",
+            format: "multiline",
+          },
+          ratio: { type: "string", title: "사진 비율 (예: 2/1, 4/3, 1/1)", default: "2/1" },
+          tone: { type: "string", title: "글자 색 (light | dark)", default: "dark" },
+        },
+      },
+      render: async (props) => {
+        const items = rows(props.items, 5)
+          .map(([url, eyebrow, title, link, itemTone]) => ({ url: safeUrl(url), eyebrow, title, link: safeUrl(link), itemTone }))
+          .filter((it) => it.url)
+          .slice(0, 4);
+        if (!items.length) return "";
+        const ratio = /^\d{1,2}\/\d{1,2}$/.test(String(props.ratio ?? "")) ? String(props.ratio) : "2/1";
+        const tone = props.tone === "light" ? "light" : "dark";
+        const cards = items.map((it) => {
+          const text = it.title || it.eyebrow
+            ? `<span class="brick-promo-text">${it.eyebrow ? `<em>${esc(it.eyebrow)}</em>` : ""}${it.title ? `<strong>${esc(it.title)}</strong>` : ""}</span>`
+            : "";
+          const inner = `<img src="${esc(it.url)}" alt="${esc(it.title)}" loading="lazy" decoding="async" />${text}`;
+          // 사진마다 밝기가 다르다 — 칸마다 글자 색을 고를 수 있게(비우면 섹션 기본)
+          const own = it.itemTone === "light" || it.itemTone === "dark" ? ` is-${it.itemTone}` : "";
+          return it.link ? `<a class="brick-promo${own}" href="${esc(it.link)}">${inner}</a>` : `<div class="brick-promo${own}">${inner}</div>`;
+        }).join("");
+        return `<section class="brick-promos is-${tone}" style="--promo-cols:${items.length};--promo-ratio:${ratio}">${cards}</section>${PROMO_CSS}`;
+      },
+    });
+
     b.set("core/banner-slider", {
       name: "core/banner-slider",
       displayName: "배너 슬라이드",
@@ -895,6 +938,23 @@ ${scripts}
  * 접근성: 자동 회전은 마우스·포커스·터치에서 멈추고, prefers-reduced-motion 이면 시작하지
  * 않는다. 좌우 화살표 키로 넘길 수 있고, 보이지 않는 슬라이드는 aria-hidden 이다.
  */
+/** 기획전 배너의 기본 모양 — 테마 토큰만 쓰고 특이도를 낮춰(:where) 테마가 쉽게 덮는다 */
+const PROMO_CSS = `<style>
+:where(.brick-promos){display:grid;grid-template-columns:repeat(var(--promo-cols,2),minmax(0,1fr));gap:16px;margin:0 0 var(--brick-gap,40px)}
+:where(.brick-promo){position:relative;display:block;overflow:hidden;border-radius:var(--radius-lg,12px);aspect-ratio:var(--promo-ratio,2/1);background:var(--color-bg-sunken,#eee);text-decoration:none}
+:where(.brick-promo) img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .6s cubic-bezier(.2,.7,.2,1)}
+:where(a.brick-promo):hover img{transform:scale(1.04)}
+:where(.brick-promo-text){position:absolute;left:0;bottom:0;padding:clamp(16px,3vw,32px);display:flex;flex-direction:column;gap:6px;max-width:70%}
+:where(.brick-promo-text) em{font-style:normal;font-size:12.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;opacity:.8}
+:where(.brick-promo-text) strong{font-size:clamp(18px,2.2vw,26px);line-height:1.3;letter-spacing:-.4px;word-break:keep-all}
+:where(.brick-promos.is-dark) .brick-promo-text{color:#1b1a18}
+:where(.brick-promos.is-light) .brick-promo-text{color:#fff;text-shadow:0 1px 12px rgba(0,0,0,.25)}
+.brick-promo.is-dark .brick-promo-text{color:#1b1a18;text-shadow:none}
+.brick-promo.is-light .brick-promo-text{color:#fff;text-shadow:0 1px 12px rgba(0,0,0,.25)}
+@media (max-width:720px){:where(.brick-promos){grid-template-columns:1fr}}
+@media (prefers-reduced-motion: reduce){:where(.brick-promo) img{transition:none}}
+</style>`;
+
 const SLIDER_SCRIPT = `<script>
 (function () {
   if (window.__brickSlider) { window.__brickSlider(); return; }

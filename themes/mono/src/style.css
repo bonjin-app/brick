@@ -1,0 +1,67 @@
+/*
+ * Mono — 패션·스트리트 테마 (Tailwind 소스). 고치고 나서 `pnpm build:themes`.
+ *
+ * 스토어프런트를 바탕으로 쓴다(아래 @import). 여기에는 인상만 적는다:
+ *   - 흑백 두 색. 검은 유틸 띠, 굵은 대문자 로고와 메뉴, 모서리 없음
+ *   - 상품 사진은 세로로 긴 3:4 — 옷은 사람 키 방향으로 찍힌다(정사각형이면 잘린다)
+ *   - 가격은 색 대신 굵기로. 할인율만 빨간색
+ * 부티크(세리프·여백)와 같은 "패션" 이지만 인상이 반대다 — 편집샵과 스트리트 브랜드의 차이.
+ *
+ * 플러그인(쇼핑몰) 카드는 자기 <style> 을 본문 뒤에 싣는다. 카드를 덮는 규칙은 `.brick-main` 을 앞에 붙인다.
+ */
+@import "../../storefront/src/style.css";
+@source "../templates";
+
+/* ── 헤더 ─────────────────────────────────────────── */
+.brick-topbar { background: var(--color-text); border-bottom: 0; }
+.brick-topbar a, .brick-topbar .brick-util a, .brick-topbar .brick-util .brick-util-cta, .brick-topbar .brick-theme-btn, .brick-topbar button { color: var(--color-bg); }
+.brick-topbar a:hover, .brick-topbar .brick-theme-btn:hover { color: var(--color-bg); opacity: .75; }
+.brick-logo { font-size: 28px; font-weight: 900; letter-spacing: -1.5px; text-transform: uppercase; }
+.brick-header-search input { border-radius: 0; border: 0; border-bottom: 2px solid var(--color-text); background: transparent; padding-left: 30px; }
+.brick-search-icon { left: 2px; color: var(--color-text); }
+.brick-catbar { border-bottom: 1px solid var(--color-text); }
+.brick-nav-cat a { font-size: 13px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.brick-nav-cat a.is-current::after { height: 3px; bottom: -1px; }
+
+/* ── 배너 — 크고 굵게 ──────────────────────────────── */
+.brick-slider .brick-slide-caption strong { font-size: clamp(30px, 5vw, 64px); font-weight: 900; letter-spacing: -2px; text-transform: uppercase; line-height: 1.02; }
+.brick-slider .brick-slide-prev, .brick-slider .brick-slide-next { border-radius: 0; background: var(--color-bg); box-shadow: none; }
+.brick-slider .brick-slide-dots button::before { border-radius: 0; box-shadow: none; }
+.brick-slider .brick-slide-dots button.is-on::before { border-radius: 0; width: 28px; height: 3px; }
+
+/* ── 진열 ─────────────────────────────────────────── */
+.brick-main .brick-shop-head { border-bottom: 2px solid var(--color-text); padding-bottom: 10px; margin-top: 40px; }
+.brick-main .brick-shop-heading { font-size: clamp(24px, 3vw, 34px); font-weight: 900; letter-spacing: -1px; text-transform: uppercase; }
+.brick-main .brick-shop-sub { font-size: 13px; text-transform: none; }
+.brick-main a.brick-shop-more { font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--color-text); }
+.brick-main .brick-product-grid { gap: 34px 12px; }
+.brick-main .brick-product-thumb { aspect-ratio: 3 / 4; border: 0; border-radius: 0; background: var(--color-bg-soft); }
+.brick-main .brick-product-name { font-size: 13.5px; font-weight: 500; margin-top: 10px; }
+.brick-main .brick-product-card:hover .brick-product-name { color: var(--color-text); text-decoration: underline; text-underline-offset: 3px; }
+.brick-main .brick-product-price { font-size: 14.5px; font-weight: 800; }
+.brick-main .brick-discount { color: var(--color-danger); }
+.brick-main .brick-tag { border-radius: 0; background: var(--color-text); color: var(--color-bg); font-weight: 800; letter-spacing: .08em; }
+.brick-main .brick-tag-sale { background: var(--color-danger); color: #fff; }
+.brick-main .brick-badge-soldout { border-radius: 0; background: var(--color-text); color: var(--color-bg); letter-spacing: .08em; }
+
+/* 분류 바로가기 — 네모 칸 */
+.brick-page > .brick-category-list { gap: 0; margin-block: 28px 0; }
+.brick-page > .brick-category-list .brick-cat { border-radius: 0; margin-right: -1px; padding: 10px 18px; font-size: 13px; font-weight: 700; letter-spacing: .06em; border-color: var(--color-text); }
+.brick-page > .brick-category-list .brick-cat.is-on { background: var(--color-text); color: var(--color-bg); }
+
+/* 기획전 · 특징 · 후기 */
+.brick-promos { margin-top: 40px; gap: 12px; }
+.brick-promo { border-radius: 0; }
+.brick-promo-text strong { font-weight: 900 !important; text-transform: uppercase; letter-spacing: -.5px; }
+.brick-features > h2, .brick-testimonials > h2 { text-transform: uppercase; font-weight: 900; letter-spacing: -.5px; }
+
+/* ── 버튼 ─────────────────────────────────────────── */
+.brick-btn { border-radius: 0; text-transform: uppercase; letter-spacing: .08em; font-weight: 800; }
+
+/* ── 푸터 ─────────────────────────────────────────── */
+.brick-footer { background: var(--color-text); color: color-mix(in srgb, var(--color-bg) 62%, transparent); border-top: 0; }
+.brick-footer::before { content: none; }
+.brick-footer a:hover { color: var(--color-bg); }
+.brick-footer-logo { color: var(--color-bg) !important; font-weight: 900 !important; text-transform: uppercase; letter-spacing: -1px; }
+.brick-footer .brick-footer-cols { border-color: color-mix(in srgb, var(--color-bg) 18%, transparent); }
+.brick-footer .brick-footer-about p { color: inherit; }

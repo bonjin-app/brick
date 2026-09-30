@@ -483,5 +483,6 @@
   "ret.refundBank": "은행 선택",
   "ret.refundAccountNo": "계좌번호",
   "ret.refundHolder": "예금주",
-  "identity.adultPurpose": "판매 중 {selling}개 · 전체 {total}개 — 본인인증으로 확인한 성인만 상세를 보고 주문합니다"
+  "identity.adultPurpose": "판매 중 {selling}개 · 전체 {total}개 — 본인인증으로 확인한 성인만 상세를 보고 주문합니다",
+  "list.more": "전체보기"
 }

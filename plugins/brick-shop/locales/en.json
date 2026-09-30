@@ -1075,5 +1075,8 @@
   "카드 등록 정보가 올바르지 않습니다. 카드 등록을 처음부터 다시 해 주세요.": "The card registration details are invalid. Please start the card registration again.",
   "이미 다른 계정에 등록된 카드입니다.": "This card is already registered to another account.",
   "identity.adultPurpose": "{selling} on sale · {total} in total — only adults verified by identity verification can view and order them",
-  "결제 완료 알림 재처리가 이미 진행 중입니다. 끝난 뒤 다시 시도하세요.": "Re-announcing paid orders is already in progress. Try again when it finishes."
+  "결제 완료 알림 재처리가 이미 진행 중입니다. 끝난 뒤 다시 시도하세요.": "Re-announcing paid orders is already in progress. Try again when it finishes.",
+  "list.more": "View all",
+  "제목 아래 한 줄 (선택)": "Line under the title (optional)",
+  "전체보기 링크 (선택, 예: /shop?sort=popular)": "View-all link (optional, e.g. /shop?sort=popular)"
 }

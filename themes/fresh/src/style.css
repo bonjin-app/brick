@@ -1,0 +1,65 @@
+/*
+ * Fresh Market — 식품·생활 마켓 테마 (Tailwind 소스). 고치고 나서 `pnpm build:themes`.
+ *
+ * 스토어프런트를 바탕으로 쓴다(아래 @import) — 헤더 세 켜·퀵메뉴·푸터·배너 슬라이드의 구조와 접근성 처리는
+ * 그쪽에서 한 번만 고치면 된다. 여기에는 **인상**만 적는다: 초록 유틸 띠, 둥근 모서리, 알약 모양 칩, 크림색 바탕.
+ * 자주 사는 물건을 파는 가게(장보기)는 격식보다 친근함이 먼저다 — 카페24의 푸드·마켓 계열 템플릿이 그렇다.
+ *
+ * 플러그인(쇼핑몰) 카드는 자기 <style> 을 본문 뒤에 싣는다. 같은 특이도면 그쪽이 이기므로
+ * 카드를 덮는 규칙은 `.brick-main` 을 앞에 붙인다.
+ */
+@import "../../storefront/src/style.css";
+@source "../templates";
+
+/* ── 헤더 ─────────────────────────────────────────── */
+.brick-topbar { background: var(--color-primary); border-bottom: 0; }
+.brick-topbar a, .brick-topbar .brick-util a, .brick-topbar .brick-util .brick-util-cta, .brick-topbar .brick-theme-btn, .brick-topbar button { color: var(--color-on-primary); }
+.brick-topbar a:hover, .brick-topbar .brick-theme-btn:hover { color: var(--color-on-primary); opacity: .85; }
+.brick-logo { color: var(--color-primary-text); font-weight: 900; letter-spacing: -1px; }
+.brick-header-search input { border: 2px solid var(--color-primary); background: var(--color-bg); height: 46px; }
+.brick-header-search input:focus-visible { border-color: var(--color-primary-hover); box-shadow: 0 0 0 4px var(--color-primary-soft); }
+.brick-search-icon { color: var(--color-primary); }
+.brick-catbar { border-bottom: 1px solid var(--color-line); }
+.brick-nav-cat a { font-weight: 700; }
+.brick-nav-cat a.is-current::after { height: 3px; border-radius: 3px; bottom: 0; }
+
+/* ── 배너 ─────────────────────────────────────────── */
+.brick-slider .brick-slide-dots button.is-on::before { background: var(--color-bg); }
+
+/* ── 진열 ─────────────────────────────────────────── */
+.brick-main .brick-shop-heading { font-size: clamp(22px, 2.4vw, 28px); font-weight: 800; letter-spacing: -.6px; }
+.brick-main .brick-shop-sub { color: var(--color-primary-text); font-weight: 600; }
+.brick-main a.brick-shop-more { padding: 7px 14px; border: 1px solid var(--color-line-strong); border-radius: 999px; background: var(--color-bg); }
+.brick-main a.brick-shop-more:hover { border-color: var(--color-primary); color: var(--color-primary-text); }
+.brick-main .brick-product-grid { gap: 26px 18px; }
+.brick-main .brick-product-thumb { border: 0; border-radius: var(--radius-lg); background: var(--color-bg-soft); }
+.brick-main .brick-product-card:hover .brick-product-thumb { box-shadow: var(--shadow-md); }
+.brick-main .brick-product-name { margin-top: 12px; font-size: 15px; font-weight: 600; }
+.brick-main .brick-product-price { font-size: 17px; font-weight: 800; }
+.brick-main .brick-discount { color: var(--color-danger); }
+.brick-main .brick-tag { height: 22px; padding: 0 9px; border-radius: 999px; }
+.brick-main .brick-tag-new { background: var(--color-primary); }
+.brick-main .brick-tag-sale { background: var(--color-danger); }
+.brick-main .brick-badge-soldout { background: rgba(31, 42, 34, .78); }
+
+/* 분류 바로가기 — 둥근 알약, 지금 보는 분류는 초록 */
+.brick-page > .brick-category-list { gap: 8px; margin-block: 28px 8px; }
+.brick-page > .brick-category-list .brick-cat { padding: 10px 18px; border-radius: 999px; background: var(--color-bg); font-weight: 600; }
+.brick-page > .brick-category-list .brick-cat:hover { border-color: var(--color-primary); color: var(--color-primary-text); }
+.brick-page > .brick-category-list .brick-cat.is-on { background: var(--color-primary); border-color: var(--color-primary); color: var(--color-on-primary); }
+
+/* 기획전 · 특징 · 후기 */
+.brick-promos { gap: 18px; }
+.brick-promo { border-radius: var(--radius-lg); }
+.brick-features .brick-card { border-right: 0; margin-right: 0; padding: 26px 24px; background: var(--color-primary-soft); border-radius: var(--radius-lg); }
+.brick-features .brick-grid { gap: 14px; border: 0; }
+.brick-testimonials .brick-grid { gap: 14px; border-top: 0; }
+.brick-testimonials .brick-card { border: 1px solid var(--color-line); border-radius: var(--radius-lg); background: var(--color-bg); }
+
+/* ── 버튼 ─────────────────────────────────────────── */
+.brick-btn { border-radius: 999px; }
+
+/* ── 푸터 ─────────────────────────────────────────── */
+.brick-footer { background: var(--color-bg-soft); border-top: 0; }
+.brick-footer::before { content: none; }
+.brick-footer-logo { color: var(--color-primary-text) !important; }

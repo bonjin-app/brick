@@ -569,6 +569,10 @@ const CORE_LABEL_EN: MessageCatalog = {
   "이미지 갤러리": "Image gallery",
   "한 줄에 하나: 이미지 URL | 캡션 | 링크(선택)": "One per line: image URL | caption | link (optional)",
   "열 수 (2~5)": "Columns (2–5)",
+  "기획전 배너": "Promo banners",
+  "한 줄에 하나: 이미지 URL | 작은 라벨(선택) | 제목 | 링크(선택) | 글자 색 light·dark(선택)": "One per line: image URL | small label (optional) | title | link (optional) | text color light·dark (optional)",
+  "사진 비율 (예: 2/1, 4/3, 1/1)": "Image ratio (e.g. 2/1, 4/3, 1/1)",
+  "글자 색 (light | dark)": "Text color (light | dark)",
   "배너 슬라이드": "Banner slides",
   "한 줄에 하나: 이미지 URL | 제목(선택) | 설명(선택) | 링크(선택)":
     "One per line: image URL | title (optional) | description (optional) | link (optional)",

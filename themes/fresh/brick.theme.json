@@ -1,0 +1,64 @@
+{
+  "name": "fresh",
+  "version": "1.0.0",
+  "displayName": "Fresh Market",
+  "description": "식품·생활 마켓 테마 — 초록 유틸 띠, 둥근 모서리와 알약 모양 칩, 크림색 바탕. 농산물·간편식·반찬·생활용품처럼 자주 사는 물건을 파는 가게에 맞습니다.",
+  "author": "Brick",
+  "brickVersion": "^0.2.0",
+  "templates": {
+    "layout": "templates/layout.html",
+    "home": "templates/home.html",
+    "page": "templates/page.html"
+  },
+  "assets": "assets",
+  "csp": {
+    "style-src": [
+      "https://cdn.jsdelivr.net"
+    ],
+    "font-src": [
+      "https://cdn.jsdelivr.net"
+    ]
+  },
+  "tokens": {
+    "color-primary": "#2e7d4f",
+    "color-primary-hover": "#25673f",
+    "color-primary-soft": "#e7f3ea",
+    "color-primary-text": "#22683f",
+    "color-on-primary": "#ffffff",
+    "color-bg": "#fffdf8",
+    "color-bg-soft": "#f7f3ea",
+    "color-bg-sunken": "#f0eadc",
+    "color-text": "#1f2a22",
+    "color-text-soft": "#3f4b42",
+    "color-muted": "#566053",
+    "color-line": "#ece6d9",
+    "color-line-strong": "#d8d0bd",
+    "color-danger": "#d9480f",
+    "color-success": "#2e7d4f",
+    "color-warning": "#a2650a",
+    "shadow-sm": "0 1px 2px rgba(31, 42, 34, .06)",
+    "shadow-md": "0 8px 24px rgba(31, 42, 34, .09)",
+    "font-body": "'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Segoe UI', Roboto, sans-serif",
+    "font-display": "'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif",
+    "font-mono": "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
+    "radius": "10px",
+    "radius-lg": "18px",
+    "content-width": "1280px",
+    "dark-color-primary": "#5cc187",
+    "dark-color-primary-hover": "#7ad3a0",
+    "dark-color-primary-soft": "#1c2d22",
+    "dark-color-primary-text": "#7ad3a0",
+    "dark-color-on-primary": "#0f1a13",
+    "dark-color-bg": "#131915",
+    "dark-color-bg-soft": "#19211b",
+    "dark-color-bg-sunken": "#0f1411",
+    "dark-color-text": "#eaf0ea",
+    "dark-color-text-soft": "#bac6bc",
+    "dark-color-muted": "#8f9c91",
+    "dark-color-line": "#26302a",
+    "dark-color-line-strong": "#37433b",
+    "dark-color-danger": "#ff8a5b",
+    "dark-color-success": "#5cc187",
+    "dark-color-warning": "#e0a83c"
+  }
+}

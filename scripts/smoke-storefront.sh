@@ -433,6 +433,34 @@ contains "카드 등록을 마치면 원래 하려던 곳으로 돌아간다" "$
 contains "돌아갈 곳은 같은 사이트의 경로만 받는다 (열린 리다이렉트 금지 — 해석기로 출처 비교)" "$CARDSPAGE" "u.origin === location.origin"
 
 echo
+echo "── 진열 섹션의 \"전체보기\" 와 기획전 배너 — 운영자가 적는 주소는 사이트 안이거나 안전해야 한다"
+cat > "$TMP/showcase.json" <<'JSON'
+{"slug":"showcase","title":"진열 시험","status":"published","blocks":[
+  {"block":"brick-shop/product-list","props":{"limit":2,"title":"좋은 링크","subtitle":"한 줄","moreUrl":"/shop?sort=popular"}},
+  {"block":"brick-shop/product-list","props":{"limit":2,"title":"남의 사이트","moreUrl":"//evil.test/x"}},
+  {"block":"brick-shop/product-list","props":{"limit":2,"title":"스크립트","moreUrl":"javascript:alert(1)"}},
+  {"block":"brick-shop/product-list","props":{"limit":2,"title":"역슬래시","moreUrl":"/\\evil.test"}},
+  {"block":"brick-shop/product-list","props":{"limit":2,"title":"제목만"}},
+  {"block":"core/promo-banners","props":{"items":"/uploads/a.jpg | GIFT | 선물 | /shop | light\n/uploads/b.jpg | | 둘째 | javascript:alert(1)\njavascript:alert(2) | | 나쁜 사진 | /shop","ratio":"4/3"}},
+  {"block":"core/promo-banners","props":{"items":"/uploads/a.jpg | | 비율 속임 | /shop","ratio":"1/1;background:url(x)"}}
+]}
+JSON
+check "진열 시험 페이지" "$(code -b "$CK" -X POST "$API/api/pages" -H 'content-type: application/json' --data-binary "@$TMP/showcase.json")" "201"
+SC="$(sf_render "showcase")"
+check "사이트 안 경로에만 \"전체보기\" 가 붙는다 (다섯 섹션 중 하나)" "$(echo "$SC" | grep -o 'class="brick-shop-more"' | wc -l | tr -d ' ')" "1"
+contains "그 링크" "$SC" 'class="brick-shop-more" href="/shop?sort=popular"'
+absent "남의 사이트로 가는 링크는 없다" "$SC" "evil.test"
+absent "스크립트 링크는 없다" "$SC" "javascript:"
+contains "한 줄 설명" "$SC" '<p class="brick-shop-sub">한 줄</p>'
+contains "제목만 있는 섹션도 제목은 그린다" "$SC" '<h2 class="brick-shop-heading">제목만</h2>'
+contains "기획전 — 칸 수가 변수로 (나쁜 사진 줄은 버리고 둘)" "$SC" 'style="--promo-cols:2;--promo-ratio:4/3"'
+contains "기획전 — 칸마다 글자 색" "$SC" 'class="brick-promo is-light" href="/shop"'
+contains "기획전 — 위험한 링크 칸은 링크 없이 그린다" "$SC" '<div class="brick-promo">'
+contains "기획전 — 라벨과 제목" "$SC" '<em>GIFT</em><strong>선물</strong>'
+contains "기획전 — 비율에 CSS 를 끼워 넣을 수 없다 (기본 비율로)" "$SC" '--promo-ratio:2/1"'
+absent "기획전 — 끼워 넣은 CSS 가 새지 않는다" "$SC" "background:url(x)"
+
+echo
 echo "── 상품 목록 페이지 나누기 (limit 를 넘는 상품에 닿을 수 있는가)"
 # 상품을 limit 보다 많이 만든다 — 전에는 25번째 상품부터 사이트에 있어도 볼 방법이 없었다
 node -e "
@@ -539,7 +567,10 @@ contains "목록 화면에 가격 막대" "$FILTER_PAGE" 'class="brick-filter"'
 contains "기본은 전체" "$FILTER_PAGE" 'class="is-on" aria-current="true">전체'
 contains "눈금이 사람이 읽는 값이다 (미만)" "$FILTER_PAGE" '>10,000원 미만 ('
 contains "가운데 구간" "$FILTER_PAGE" '>10,000원 ~ 20,000원 ('
-contains "마지막은 열린 구간 (이상)" "$FILTER_PAGE" '>20,000원 이상 ('
+# 눈금은 상품 값에서 만든다 — 샘플 상품 가격이 바뀌면 마지막 눈금도 바뀐다(3만 원대 샘플이 생겨 한 칸 늘었다).
+# 값이 아니라 "마지막 칸은 위가 열린 구간" 이라는 뜻을 본다
+LAST_BAND="$(echo "$FILTER_PAGE" | grep -o '[0-9,]*원 [^<(]*(' | tail -1)"
+[[ "$LAST_BAND" == *"원 이상 ("* ]] && ok "마지막은 열린 구간 (이상) — $LAST_BAND" || bad "마지막은 열린 구간 ($LAST_BAND)"
 absent "홈의 진열 섹션에는 가격 막대가 없다" "$(sf_render "")" 'class="brick-filter"'
 
 # 좁히면 그 가격대만 남는다 — 상한은 **미만**이다(막대 문구와 결과가 같은 뜻이어야 한다)

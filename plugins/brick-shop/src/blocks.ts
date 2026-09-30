@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { CAPTCHA_WIDGET_CSS, CAPTCHA_WIDGET_JS, STACK_TABLE_CSS, captchaFieldHtml,
-         type BlockRenderContext, type PluginContext } from "@brick/plugin-sdk";
+         type BlockRenderContext, type PluginContext, publicUrl } from "@brick/plugin-sdk";
 import { escapeHtml, won, type Db, type ShopSettings } from "./types.js";
 import { bindI18n, t, moneyFnScript } from "./i18n.js";
 import { reviewSection } from "./reviews-view.js";
@@ -59,6 +59,8 @@ export function registerStorefrontBlocks(
         columns: { type: "number", title: "열 수", default: 4 },
         sort: { type: "string", title: "정렬 (recent | popular | price_asc | price_desc)", default: "recent" },
         title: { type: "string", title: "제목 (비우면 표시 안 함)" },
+        subtitle: { type: "string", title: "제목 아래 한 줄 (선택)" },
+        moreUrl: { type: "string", title: "전체보기 링크 (선택, 예: /shop?sort=popular)" },
         sortable: { type: "boolean", title: "손님이 정렬을 바꿀 수 있게 (상품 목록 화면용)", default: false },
         paged: { type: "boolean", title: "페이지 나누기 (상품 목록 화면용)", default: false },
         priceFilter: { type: "boolean", title: "가격대로 좁히기 (상품 목록 화면용)", default: false },
@@ -303,7 +305,19 @@ export function registerStorefrontBlocks(
   </a>`;
       }).join("");
 
-      const heading = props.title ? `<h2 class="brick-shop-heading">${escapeHtml(props.title)}</h2>` : "";
+      /*
+       * 홈 진열 섹션의 머리 — 제목 · 한 줄 설명 · "전체보기". 카페24 계열 쇼핑몰에서 손님이 익힌 모양이다:
+       * 여덟 개만 보여 주고 끝나면 "더 있나?" 를 물을 곳이 없다. 링크는 사이트 안 경로만 받는다.
+       */
+      // 공용 주소 규칙(publicUrl — `//`·역슬래시·공백·다른 스킴 거절)을 지난 것 중 **사이트 안 경로**만
+      const safeMore = publicUrl(props.moreUrl);
+      const moreUrl = safeMore && safeMore.startsWith("/") ? safeMore : "";
+      const subtitle = String(props.subtitle ?? "").trim();
+      const heading = props.title
+        ? `<div class="brick-shop-head"><div><h2 class="brick-shop-heading">${escapeHtml(props.title)}</h2>${subtitle ? `<p class="brick-shop-sub">${escapeHtml(subtitle)}</p>` : ""}</div>${
+            moreUrl ? `<a class="brick-shop-more" href="${escapeHtml(moreUrl)}">${escapeHtml(t("list.more"))}<span aria-hidden="true"> →</span></a>` : ""
+          }</div>`
+        : "";
 
 
       // 페이저는 게시판과 같은 프리미티브(.brick-pager)를 쓴다 — 테마가 이미 모양을 갖고 있다
@@ -766,11 +780,12 @@ ${buyScript(`${shopBaseOf(blockCtx)}/cart`)}${GALLERY_SCRIPT}${restockScript()}$
        * 알 수 없으면 손님은 "왜 상품이 몇 개뿐이지" 라고 생각한다.
        */
       const current = String(props.current ?? "");
-      const all = `<a href="/shop"${current ? "" : ' class="is-on" aria-current="page"'}>${escapeHtml(t("filter.all"))}</a>`;
+      // 링크마다 클래스를 준다 — 테마가 요소(a)가 아니라 클래스로 겨냥해 다시 그릴 수 있게(check-theme-defaults)
+      const all = `<a href="/shop" class="brick-cat${current ? "" : ' is-on" aria-current="page'}">${escapeHtml(t("filter.all"))}</a>`;
       const items = rows
         .map((c) => {
           const on = current && current === String(c.slug);
-          return `<a href="/shop?category=${encodeURIComponent(String(c.slug))}"${on ? ' class="is-on" aria-current="page"' : ""}>${escapeHtml(c.name)} <span>${Number(c.n)}</span></a>`;
+          return `<a href="/shop?category=${encodeURIComponent(String(c.slug))}" class="brick-cat${on ? ' is-on" aria-current="page' : ""}">${escapeHtml(c.name)} <span>${Number(c.n)}</span></a>`;
         })
         .join("");
       return `<nav class="brick-category-list">${all}${items}</nav>${STOREFRONT_CSS}`;
@@ -1038,7 +1053,14 @@ p.brick-restock-msg.is-error{color:var(--color-danger,#c9342f)}
 .brick-product-card:hover .brick-product-name{color:var(--color-primary-text, #b63a2e)}
 .brick-product-thumb{position:relative;aspect-ratio:1;background:var(--color-bg-soft, #f6f6f9);border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius-lg, 14px);overflow:hidden;display:flex;align-items:center;justify-content:center;transition:border-color .16s ease}
 .brick-product-card:hover .brick-product-thumb{border-color:var(--color-line-strong, #d0d0d9)}
-.brick-product-thumb img{width:100%;height:100%;object-fit:cover}
+.brick-product-thumb img{width:100%;height:100%;object-fit:cover;transition:transform .5s cubic-bezier(.2,.7,.2,1)}
+.brick-product-card:hover .brick-product-thumb img{transform:scale(1.045)}
+@media (prefers-reduced-motion: reduce){.brick-product-thumb img{transition:none}.brick-product-card:hover .brick-product-thumb img{transform:none}}
+.brick-shop-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin:8px 0 0}
+.brick-shop-head .brick-shop-heading{margin:0}
+.brick-shop-sub{margin:4px 0 0;font-size:14px;color:var(--color-muted, #6c6c7a)}
+a.brick-shop-more{flex:none;font-size:13.5px;font-weight:600;color:var(--color-text-soft, #45454f);text-decoration:none;white-space:nowrap}
+a.brick-shop-more:hover{color:var(--color-primary-text, #b63a2e)}
 .brick-noimg{display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--color-muted, #6c6c7a);font-size:12.5px}
 .brick-noimg::before{
   content:"";opacity:.55;width:34px;height:28px;border:2px solid currentColor;border-radius:var(--radius, 4px);
