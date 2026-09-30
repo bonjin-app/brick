@@ -42,3 +42,7 @@ overrides:
   # 3.x 와 4.x 가 함께 설치돼 있어 메이저별로 적는다(ajv 계열이 3.x, 다른 쪽이 4.x 를 끌고 온다).
   "fast-uri@3": ">=3.1.7 <4"
   "fast-uri@4": ">=4.1.4 <5"
+  # brace-expansion — 중괄호 패턴의 처리 시간 폭주(ReDoS 계열, high). minimatch 가 끌고 오는 개발·빌드 도구 체인.
+  # 1.x 와 5.x 가 함께 설치돼 있어 메이저별로 적는다
+  "brace-expansion@1": ">=1.1.21 <2"
+  "brace-expansion@5": ">=5.0.12 <6"
