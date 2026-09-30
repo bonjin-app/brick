@@ -46,7 +46,7 @@
 .brick-main .brick-shop-head { flex-direction: column; align-items: center; text-align: center; gap: 10px; margin-top: 40px; }
 .brick-main .brick-shop-heading { font-size: clamp(20px, 2.2vw, 26px); font-weight: 400; letter-spacing: .18em; text-transform: uppercase; }
 .brick-main .brick-shop-sub { font-size: 13.5px; letter-spacing: .02em; }
-.brick-main a.brick-shop-more { font-size: 12.5px; font-weight: 500; letter-spacing: .08em; color: var(--color-muted); border-bottom: 1px solid currentColor; padding-bottom: 1px; }
+.brick-main a.brick-shop-more { font-size: 12.5px; font-weight: 500; letter-spacing: .08em; color: var(--color-muted); text-decoration: underline; text-underline-offset: 4px; }
 .brick-main .brick-product-grid { gap: 36px 22px; margin-top: 28px; }
 .brick-main .brick-product-card { text-align: center; }
 .brick-main .brick-product-thumb { border: 0; border-radius: var(--radius-lg); background: var(--color-bg-soft); }

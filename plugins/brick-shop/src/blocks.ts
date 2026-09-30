@@ -1046,9 +1046,13 @@ p.brick-restock-msg.is-error{color:var(--color-danger,#c9342f)}
 .brick-restock-note{margin:0;font-size:12px;color:var(--color-muted, #6c6c7a)}
 .brick-related{margin:48px 0 0}
 .brick-related h2{font-size:19px;margin:0 0 4px;padding-top:24px;border-top:1px solid var(--color-line,#e4e4ea)}
-.brick-product-grid{display:grid;grid-template-columns:repeat(var(--brick-cols,4),1fr);gap:16px 14px;margin:20px 0}
-@media(max-width:1024px){.brick-product-grid{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}}
-@media(max-width:640px){.brick-product-grid{grid-template-columns:repeat(2,1fr);gap:14px 10px}}
+/*
+ * 칸은 minmax(0,1fr) — 그냥 1fr 은 "내용의 최소 폭" 아래로 줄지 않는다. 할인율·판매가·정가가 붙은 가격 줄(약 173px)이
+ * 폰의 두 칸(각 165px 남짓)을 밀어내 문서가 옆으로 넘쳤다(테마가 칸 간격을 넓히면 바로 드러났다).
+ */
+.brick-product-grid{display:grid;grid-template-columns:repeat(var(--brick-cols,4),minmax(0,1fr));gap:16px 14px;margin:20px 0}
+@media(max-width:1024px){.brick-product-grid{grid-template-columns:repeat(auto-fill,minmax(min(200px,100%),1fr))}}
+@media(max-width:640px){.brick-product-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 10px}}
 .brick-product-card{display:block;text-decoration:none;color:inherit}
 .brick-product-card:hover .brick-product-name{color:var(--color-primary-text, #b63a2e)}
 .brick-product-thumb{position:relative;aspect-ratio:1;background:var(--color-bg-soft, #f6f6f9);border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius-lg, 14px);overflow:hidden;display:flex;align-items:center;justify-content:center;transition:border-color .16s ease}
@@ -1059,7 +1063,7 @@ p.brick-restock-msg.is-error{color:var(--color-danger,#c9342f)}
 .brick-shop-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin:8px 0 0}
 .brick-shop-head .brick-shop-heading{margin:0}
 .brick-shop-sub{margin:4px 0 0;font-size:14px;color:var(--color-muted, #6c6c7a)}
-a.brick-shop-more{flex:none;font-size:13.5px;font-weight:600;color:var(--color-text-soft, #45454f);text-decoration:none;white-space:nowrap}
+a.brick-shop-more{flex:none;display:inline-flex;align-items:center;min-height:44px;font-size:13.5px;font-weight:600;color:var(--color-text-soft, #45454f);text-decoration:none;white-space:nowrap}
 a.brick-shop-more:hover{color:var(--color-primary-text, #b63a2e)}
 .brick-noimg{display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--color-muted, #6c6c7a);font-size:12.5px}
 .brick-noimg::before{
@@ -1091,7 +1095,7 @@ a.brick-shop-more:hover{color:var(--color-primary-text, #b63a2e)}
 .brick-product-card.is-soldout .brick-product-thumb img{opacity:.55}
 .brick-product-card.is-soldout .brick-product-name{color:var(--color-muted, #6c6c7a)}
 .brick-product-name{margin-top:9px;font-size:14px;line-height:1.45}
-.brick-product-price{margin-top:4px;display:flex;align-items:baseline;gap:6px;font-size:15px;font-weight:700}
+.brick-product-price{margin-top:4px;display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 6px;font-size:15px;font-weight:700}
 .brick-product-price del{color:var(--color-muted, #6c6c7a);font-size:13px;font-weight:400}
 .brick-discount{color:var(--color-primary,#d0402c);font-weight:700}
 .brick-shop-heading{margin:8px 0 0;font-size:22px}

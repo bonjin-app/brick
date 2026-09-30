@@ -459,6 +459,12 @@ contains "기획전 — 위험한 링크 칸은 링크 없이 그린다" "$SC" '
 contains "기획전 — 라벨과 제목" "$SC" '<em>GIFT</em><strong>선물</strong>'
 contains "기획전 — 비율에 CSS 를 끼워 넣을 수 없다 (기본 비율로)" "$SC" '--promo-ratio:2/1"'
 absent "기획전 — 끼워 넣은 CSS 가 새지 않는다" "$SC" "background:url(x)"
+# 폰에서 목록이 옆으로 넘쳤다 — 그냥 1fr 은 가격 줄(할인율·판매가·정가, 약 173px)의 최소 폭 아래로 줄지 않아
+# 두 칸(각 165px 남짓)을 밀어냈다. 브라우저 점검(ui-audit)으로 찾았고, 여기서는 원인이 된 규칙을 못박는다
+contains "상품 격자의 칸은 내용 최소 폭에 밀리지 않는다 (minmax(0,1fr))" "$SC" "grid-template-columns:repeat(var(--brick-cols,4),minmax(0,1fr))"
+contains "폰의 두 칸도 마찬가지" "$SC" "grid-template-columns:repeat(2,minmax(0,1fr))"
+contains "가격 줄은 줄바꿈될 수 있다" "$SC" ".brick-product-price{margin-top:4px;display:flex;flex-wrap:wrap"
+contains "\"전체보기\" 는 폰에서 누를 수 있는 높이 (44px)" "$SC" "a.brick-shop-more{flex:none;display:inline-flex;align-items:center;min-height:44px"
 
 echo
 echo "── 상품 목록 페이지 나누기 (limit 를 넘는 상품에 닿을 수 있는가)"
