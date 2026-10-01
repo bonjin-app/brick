@@ -484,5 +484,18 @@
   "ret.refundAccountNo": "계좌번호",
   "ret.refundHolder": "예금주",
   "identity.adultPurpose": "판매 중 {selling}개 · 전체 {total}개 — 본인인증으로 확인한 성인만 상세를 보고 주문합니다",
-  "list.more": "전체보기"
+  "list.more": "전체보기",
+  "dash.flow": "주문 흐름",
+  "dash.deliveredWeek": "배송완료 (7일)",
+  "dash.claims": "취소·반품·교환 신청",
+  "dash.claimOf": "{kind} 신청",
+  "dash.replies": "답변 대기",
+  "dash.ordersN": "{n}건",
+  "dash.salesToday": "오늘 순매출",
+  "dash.salesDays": "최근 {n}일 순매출",
+  "dash.paidOrders": "결제 주문",
+  "dash.avgOrder": "평균 주문금액",
+  "dash.noOrders": "아직 들어온 주문이 없습니다",
+  "dash.itemAndMore": "{item} 외 {n}건",
+  "report.basis": "결제일 기준 · 사이트 시간대로 셉니다. 순매출 = 받은 돈 − 완료된 반품의 환불액. 증감은 직전 같은 길이의 기간과 견줍니다."
 }

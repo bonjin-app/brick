@@ -296,6 +296,7 @@ export class PluginsController {
           title: r.title,
           itemLabel: r.itemLabel,
           order: r.order,
+          section: r.section,
         })),
     };
   }
@@ -310,9 +311,10 @@ export class PluginsController {
   @Get("admin/dashboard")
   @UseGuards(AdminGuard)
   async adminDashboard() {
-    const [core, cards, businessMissing, themeProblem, maintenanceOn, jobFailures] = await Promise.all([
+    const [core, cards, panels, businessMissing, themeProblem, maintenanceOn, jobFailures] = await Promise.all([
       this.coreStats(),
       this.loader.collectDashboardCards(),
+      this.loader.collectDashboardPanels(),
       this.businessInfoMissing(),
       this.themes.problem(),
       this.maintenance.isOn(),
@@ -381,7 +383,7 @@ export class PluginsController {
         docs: "https://github.com/bonjin-app/brick/blob/main/docs/business-info.md",
       });
     }
-    return { core, cards, setup };
+    return { core, cards, panels, setup };
   }
 
   /*

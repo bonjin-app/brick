@@ -10,7 +10,7 @@ import type { BrickDb } from "@brick/database";
 import { installedPlugins, siteSettings } from "@brick/database";
 import type { PluginManifest } from "@brick/shared";
 import type { PluginContext, PluginInstance, BlockDefinition, PluginRouteHandler, PluginDb, AdminResource, HookBus, CacheProvider, QueueProvider, LockProvider, StorageProvider, MailProvider, CaptchaProvider, PersonalDataEraser, SitemapSource, NotificationEvent, IdentityPurpose,
-  SearchSource, LinkTargetSource, DashboardCard, HeaderAction, PluginScreen, Locale, MessageCatalog } from "@brick/core";
+  SearchSource, LinkTargetSource, DashboardCard, DashboardPanel, DashboardPanelData, HeaderAction, PluginScreen, Locale, MessageCatalog } from "@brick/core";
 import { AVAILABLE_LOCALES, DEFAULT_LOCALE, makeTranslator, normalizeLocale } from "@brick/core";
 import { RateLimitService } from "../auth/rate-limit.service.js";
 import { DB, HOOKS, CACHE, QUEUE, LOCK, STORAGE, MAIL, CAPTCHA, ENV } from "../../runtime.module.js";
@@ -104,7 +104,7 @@ export class PluginLoaderService implements OnModuleInit {
   }
   /** 페이지 빌더 블록 레지스트리 */
   readonly blocks = new Map<string, BlockDefinition>();
-  readonly adminMenus: Array<{ plugin: string; label: string; path: string; icon?: string }> = [];
+  readonly adminMenus: Array<{ plugin: string; label: string; path: string; icon?: string; section?: string }> = [];
   /** 플러그인이 선언한 관리자 리소스 — 코어 관리자가 이걸로 CRUD 화면을 생성한다 */
   readonly adminResources: Array<AdminResource & { plugin: string }> = [];
   /**
@@ -120,6 +120,8 @@ export class PluginLoaderService implements OnModuleInit {
   readonly linkTargets: Array<LinkTargetSource & { plugin: string }> = [];
   /** 대시보드 카드 — 관리자 첫 화면의 "오늘의 사이트" 숫자는 플러그인이 안다 */
   readonly dashboardCards: Array<DashboardCard & { plugin: string }> = [];
+  /** 대시보드 판 — 주문 흐름·매출 막대·최근 목록 (모양은 코어가 그린다) */
+  readonly dashboardPanels: Array<DashboardPanel & { plugin: string }> = [];
   /** 헤더 유틸 영역의 링크 — 테마가 그린다 (쇼핑몰 장바구니, 쪽지함 등) */
   readonly headerActions: Array<HeaderAction & { plugin: string }> = [];
   /** 플러그인이 선언한 알림 종류 — 알림 통로(알림톡 등)의 관리 화면이 읽는다 */
@@ -353,6 +355,9 @@ export class PluginLoaderService implements OnModuleInit {
     for (let i = this.dashboardCards.length - 1; i >= 0; i--) {
       if (this.dashboardCards[i].plugin === name) this.dashboardCards.splice(i, 1);
     }
+    for (let i = this.dashboardPanels.length - 1; i >= 0; i--) {
+      if (this.dashboardPanels[i].plugin === name) this.dashboardPanels.splice(i, 1);
+    }
     for (let i = this.headerActions.length - 1; i >= 0; i--) {
       if (this.headerActions[i].plugin === name) this.headerActions.splice(i, 1);
     }
@@ -472,6 +477,7 @@ export class PluginLoaderService implements OnModuleInit {
         confirm: tr(a.confirm),
         input: a.input ? { ...a.input, label: tr(a.input.label), help: tr(a.input.help) } : undefined,
       })),
+      reportViews: resource.reportViews?.map((v) => ({ ...v, label: tr(v.label) })),
       filters: resource.filters?.map((f) => ({
         ...f,
         label: tr(f.label),
@@ -579,6 +585,43 @@ export class PluginLoaderService implements OnModuleInit {
           // 실패한 카드는 오류로 표시한다 — 0 으로 보이는 것이 최악이다
           this.logger.error(`dashboard card "${card.plugin}/${card.title}" 실패: ${String(err)}`);
           return { ...base, value: null, sub: null, error: true };
+        }
+      }),
+    );
+  }
+
+  /**
+   * 대시보드 판을 모은다 — 카드와 같은 원칙: 판 하나가 실패하거나 늦어도 나머지는 나간다.
+   * 모양이 틀린 응답(kind 가 모르는 값)도 실패로 친다 — 화면이 빈 판을 그리게 두지 않는다.
+   */
+  async collectDashboardPanels(timeoutMs = 3000): Promise<
+    Array<{ plugin: string; title: string; link: string | null; size: "full" | "half"; data: DashboardPanelData | null; error: boolean }>
+  > {
+    await this.refreshLocale();
+    const sorted = this.dashboardPanels.slice().sort((a, b) => (a.order ?? 100) - (b.order ?? 100));
+    return Promise.all(
+      sorted.map(async (panel) => {
+        const base = {
+          plugin: panel.plugin,
+          title: this.trCatalog(panel.plugin, panel.title),
+          link: panel.link ?? null,
+          size: panel.size === "half" ? ("half" as const) : ("full" as const),
+        };
+        try {
+          const data = await Promise.race([
+            panel.load(),
+            new Promise<never>((_, reject) => {
+              const t = setTimeout(() => reject(new Error(`판 시간 초과 (${timeoutMs}ms)`)), timeoutMs);
+              t.unref?.();
+            }),
+          ]);
+          if (!data || !["steps", "chart", "list"].includes((data as { kind?: string }).kind ?? "")) {
+            throw new Error(`알 수 없는 판 모양: ${String((data as { kind?: string } | null)?.kind)}`);
+          }
+          return { ...base, data, error: false };
+        } catch (err) {
+          this.logger.error(`dashboard panel "${panel.plugin}/${panel.title}" 실패: ${String(err)}`);
+          return { ...base, data: null, error: true };
         }
       }),
     );
@@ -736,6 +779,10 @@ export class PluginLoaderService implements OnModuleInit {
       registerDashboardCard: (card) => {
         this.dashboardCards.push({ ...card, plugin: pluginName });
         this.logger.log(`plugin "${pluginName}" registers dashboard card "${card.title}"`);
+      },
+      registerDashboardPanel: (panel) => {
+        this.dashboardPanels.push({ ...panel, plugin: pluginName });
+        this.logger.log(`plugin "${pluginName}" registers dashboard panel "${panel.title}"`);
       },
       registerHeaderAction: (action) => {
         this.headerActions.push({ ...action, plugin: pluginName });

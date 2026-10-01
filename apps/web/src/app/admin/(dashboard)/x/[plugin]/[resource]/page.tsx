@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { useAdminT } from "../../../../../../lib/i18n-admin";
 import { useLocaleTag } from "../../../../../../lib/i18n";
 import { useModalFocus } from "../../../../../../lib/use-modal";
+import { ReportView } from "../../../_parts/report-view";
 
 /* ── 타입 ──────────────────────────────────────────────
  * 코어의 계약을 **그대로 쓴다**. 예전에는 같은 인터페이스를 여기에 손으로
@@ -41,6 +42,8 @@ export default function PluginResourcePage() {
   const [res, setRes] = useState<AdminResource | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const [total, setTotal] = useState(0);
+  // 탭 필터의 건수 — 목록 응답의 facets (없으면 건수 없이 탭만)
+  const [facets, setFacets] = useState<Record<string, Record<string, number>>>({});
   const [page, setPage] = useState(1);
   const [editing, setEditing] = useState<Row | null>(null);
   /*
@@ -147,7 +150,7 @@ export default function PluginResourcePage() {
   }, [params.plugin, params.resource]);
 
   const reload = useCallback(async () => {
-    if (!api || res?.kind === "settings") return;
+    if (!api || res?.kind === "settings" || res?.kind === "report") return;
     const qs = new URLSearchParams({ page: String(page) });
     for (const [k, v] of Object.entries(filterValues)) if (v) qs.set(k, v);
     if (search) qs.set("q", search);
@@ -157,6 +160,7 @@ export default function PluginResourcePage() {
     // 플러그인은 { items, total } 또는 배열을 반환할 수 있다
     setRows(Array.isArray(d) ? d : (d.items ?? []));
     setTotal(Array.isArray(d) ? d.length : (d.total ?? 0));
+    setFacets(!Array.isArray(d) && d.facets && typeof d.facets === "object" ? d.facets : {});
   }, [api, page, filterValues, search, res?.kind]);
   useEffect(() => { void reload(); }, [reload]);
 
@@ -279,8 +283,16 @@ export default function PluginResourcePage() {
 
   // 설정 화면은 행이 하나다 — 목록·페이지·선택을 그리지 않는다
   if (res.kind === "settings") return <ResourceSettings resource={res} />;
+  if (res.kind === "report") return <ReportView resource={res} />;
 
-  const listFields = res.fields.filter((f) => f.inList);
+  /*
+   * 목록 열. 이미지 칸은 맨 앞에 축소판으로 선다 — 상품 목록이 글자뿐이면 운영자는 이름을
+   * 읽어야 상품을 알아본다(카페24·스마트스토어 목록은 사진이 첫 열이다). 폼의 칸 순서는 그대로다.
+   */
+  const listFields = [
+    ...res.fields.filter((f) => f.inList && f.type === "image"),
+    ...res.fields.filter((f) => f.inList && f.type !== "image"),
+  ];
   const can = { create: true, update: true, delete: true, ...res.can };
   const hasBulk = Boolean(res.bulkActions?.length);
   const allChecked = rows.length > 0 && rows.every((r) => selected.has(String(r[idField])));
@@ -347,9 +359,30 @@ export default function PluginResourcePage() {
               )}
             </form>
           )}
-          {(res.filters?.length ?? 0) > 0 && (
+          {/* 탭으로 그리는 필터 — 주문 상태처럼 매번 고르는 것. 건수는 목록 응답의 facets */}
+          {res.filters?.filter((f) => f.display === "tabs").map((f) => {
+            const opts = [...(f.options ?? []), ...(filterOptions[f.name] ?? [])];
+            const counts = facets[f.name];
+            const cur = filterValues[f.name] ?? "";
+            const all = counts ? Object.values(counts).reduce((a, b) => a + b, 0) : null;
+            const pick = (v: string) => { setPage(1); setFilterValues((prev) => ({ ...prev, [f.name]: v })); };
+            return (
+              <div key={f.name} className="brick-x-tabs" role="tablist" aria-label={f.label}>
+                {[{ value: "", label: t("x.filterAll") }, ...opts].map((o) => {
+                  const n = o.value === "" ? all : (counts ? (counts[o.value] ?? 0) : null);
+                  return (
+                    <button key={o.value} type="button" role="tab" aria-selected={cur === o.value}
+                      className={"brick-x-tab" + (cur === o.value ? " is-on" : "")} onClick={() => pick(o.value)}>
+                      {o.label}{n !== null ? <span className="brick-x-tab-n">{n.toLocaleString(localeTag)}</span> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })}
+          {(res.filters?.filter((f) => f.display !== "tabs").length ?? 0) > 0 && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", margin: "0 0 10px" }}>
-              {res.filters!.map((f) => {
+              {res.filters!.filter((f) => f.display !== "tabs").map((f) => {
                 const opts = [...(f.options ?? []), ...(filterOptions[f.name] ?? [])];
                 return (
                   <label key={f.name} style={{ fontSize: 13.5, display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -367,8 +400,12 @@ export default function PluginResourcePage() {
                   </label>
                 );
               })}
-              {Object.values(filterValues).some(Boolean) && (
-                <button onClick={() => { setPage(1); setFilterValues({}); }} style={btnSm}>{t("x.filterClear")}</button>
+              {res.filters!.some((f) => f.display !== "tabs" && filterValues[f.name]) && (
+                <button onClick={() => {
+                  setPage(1);
+                  // 탭의 선택은 남긴다 — "초기화" 는 드롭다운 필터를 지우는 단추다
+                  setFilterValues((prev) => Object.fromEntries(Object.entries(prev).filter(([k]) => res.filters!.some((f) => f.name === k && f.display === "tabs"))));
+                }} style={btnSm}>{t("x.filterClear")}</button>
               )}
             </div>
           )}
@@ -421,7 +458,11 @@ export default function PluginResourcePage() {
                         aria-label={t("x.selectAll")} />
                     </th>
                   )}
-                  {listFields.map((f) => <th key={f.name} style={{ padding: 12 }}>{f.label}</th>)}
+                  {listFields.map((f) => (
+                    <th key={f.name} style={{ padding: 12, ...(f.type === "image" ? { width: 64 } : null) }}>
+                      {f.type === "image" ? <span className="sr-only">{f.label}</span> : f.label}
+                    </th>
+                  ))}
                   <th style={{ padding: 12, width: 130 }}></th>
                 </tr>
               </thead>
@@ -435,7 +476,11 @@ export default function PluginResourcePage() {
                       </td>
                     )}
                     {/* data-label 은 좁은 화면에서 열 제목을 대신한다 — thead 가 접히므로 */}
-                    {listFields.map((f) => (
+                    {listFields.map((f) => f.type === "image" ? (
+                      <td key={f.name} className="brick-x-thumb" data-label="" style={{ padding: "8px 12px" }}>
+                        <Thumb src={row[f.name]} />
+                      </td>
+                    ) : (
                       <td key={f.name} data-label={f.label} style={{ padding: 12 }}>{formatCell(row[f.name], f, localeTag, t("x.wonSuffix"))}</td>
                     ))}
                     <td className="brick-x-actions" data-label="" style={{ padding: 12, whiteSpace: "nowrap" }}>
@@ -999,6 +1044,15 @@ function MediaPicker({ onPick, onPickMany, onClose, multiple }: {
  * 운영자도 "12,000원" 과 한국식 날짜를 봤다 (손님 화면은 이미 고쳤다 — 관리
  * 화면만 남아 있었다).
  */
+/** 목록의 축소판 — 사이트 안 주소나 http(s) 만 그린다. 없으면 빈 자리(열 폭이 흔들리지 않게) */
+function Thumb({ src }: { src: unknown }) {
+  const url = typeof src === "string" ? src.trim() : "";
+  const ok = url.startsWith("/") ? !url.startsWith("//") : /^https?:\/\//i.test(url);
+  return ok
+    ? <img src={url} alt="" loading="lazy" width={44} height={44} className="brick-x-thumb-img" />
+    : <span className="brick-x-thumb-img is-empty" aria-hidden="true" />;
+}
+
 function formatCell(v: unknown, f: AdminField, tag: string, won: string): string {
   if (v === null || v === undefined || v === "") return "-";
   if (f.type === "money") return `${Number(v).toLocaleString(tag)}${won}`;

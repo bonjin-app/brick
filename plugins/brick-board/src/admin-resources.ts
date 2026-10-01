@@ -13,6 +13,7 @@ const ROLE_OPTIONS = [
  */
 export const GROUP_RESOURCE: AdminResource = {
   name: "groups",
+  section: "board",
   title: "게시판 그룹",
   itemLabel: "그룹",
   basePath: "/admin/groups",
@@ -35,6 +36,7 @@ export const GROUP_RESOURCE: AdminResource = {
  */
 export const BOARD_RESOURCE: AdminResource = {
   name: "boards",
+  section: "board",
   title: "게시판",
   itemLabel: "게시판",
   basePath: "/admin/boards",
@@ -111,6 +113,7 @@ export const BOARD_RESOURCE: AdminResource = {
  */
 export const POST_RESOURCE: AdminResource = {
   name: "posts",
+  section: "board",
   title: "게시글 관리",
   itemLabel: "게시글",
   basePath: "/admin/posts",

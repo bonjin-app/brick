@@ -1,6 +1,6 @@
 import type { AdminResource } from "@brick/plugin-sdk";
 import { ORDER_STATUS, STATUS_LABEL, PRODUCT_STATUS_LABEL } from "./types.js";
-import { REASON_CODES, RETURN_STATUS, RETURN_STATUS_LABEL } from "./returns.js";
+import { KIND_LABEL, REASON_CODES, RETURN_KINDS, RETURN_STATUS, RETURN_STATUS_LABEL } from "./returns.js";
 import { BANK_OPTIONS } from "./order-mail.js";
 
 /**
@@ -12,6 +12,7 @@ import { BANK_OPTIONS } from "./order-mail.js";
  */
 export const PRODUCT_RESOURCE: AdminResource = {
   name: "products",
+  section: "product",
   title: "상품",
   itemLabel: "상품",
   basePath: "/admin/products",
@@ -50,7 +51,7 @@ export const PRODUCT_RESOURCE: AdminResource = {
       help: "비워두면 무한 재고로 취급합니다 (디지털 상품 등)." },
     { name: "status", label: "판매 상태", type: "select", inList: true,
       options: Object.entries(PRODUCT_STATUS_LABEL).map(([value, label]) => ({ value, label })) },
-    { name: "image_url", label: "대표 이미지", type: "image" },
+    { name: "image_url", label: "대표 이미지", type: "image", inList: true },
     // 값은 여전히 "한 줄에 주소 하나"다 — 서버 파싱(parseImages)은 그대로 쓴다
     { name: "images_text", label: "추가 이미지", type: "images", max: 20,
       help: "상세 화면에서 갤러리로 보여집니다. 대표 이미지를 비우면 첫 장이 대표가 됩니다." },
@@ -95,6 +96,7 @@ export const PRODUCT_RESOURCE: AdminResource = {
  */
 export const RESTOCK_DEMAND_RESOURCE: AdminResource = {
   name: "restock-demand",
+  section: "product",
   title: "재입고 대기",
   itemLabel: "대기",
   basePath: "/admin/restock-demand",
@@ -114,6 +116,7 @@ export const RESTOCK_DEMAND_RESOURCE: AdminResource = {
 
 export const REVIEW_RESOURCE: AdminResource = {
   name: "reviews",
+  section: "product",
   title: "상품 후기",
   itemLabel: "후기",
   basePath: "/admin/reviews",
@@ -149,6 +152,7 @@ export const REVIEW_RESOURCE: AdminResource = {
 
 export const INQUIRY_RESOURCE: AdminResource = {
   name: "inquiries",
+  section: "product",
   title: "상품 문의",
   itemLabel: "문의",
   basePath: "/admin/inquiries",
@@ -177,6 +181,7 @@ export const INQUIRY_RESOURCE: AdminResource = {
 
 export const CATEGORY_RESOURCE: AdminResource = {
   name: "categories",
+  section: "product",
   title: "상품 분류",
   itemLabel: "분류",
   basePath: "/admin/categories",
@@ -196,6 +201,7 @@ export const CATEGORY_RESOURCE: AdminResource = {
 
 export const ORDER_RESOURCE: AdminResource = {
   name: "orders",
+  section: "order",
   title: "주문",
   itemLabel: "주문",
   basePath: "/admin/orders",
@@ -245,7 +251,7 @@ export const ORDER_RESOURCE: AdminResource = {
    * 필터가 없으면 취소·배송완료까지 섞인 전체가 나오고 운영자는 눈으로 찾는다.
    */
   filters: [
-    { name: "status", label: "주문 상태",
+    { name: "status", label: "주문 상태", display: "tabs",
       options: ORDER_STATUS.map((s) => ({ value: s, label: STATUS_LABEL[s] })) },
   ],
   bulkActions: [
@@ -268,6 +274,7 @@ export const ORDER_RESOURCE: AdminResource = {
 
 export const COUPON_RESOURCE: AdminResource = {
   name: "coupons",
+  section: "promotion",
   title: "쿠폰",
   itemLabel: "쿠폰",
   basePath: "/admin/coupons",
@@ -305,6 +312,7 @@ export const COUPON_RESOURCE: AdminResource = {
 
 export const RETURN_RESOURCE: AdminResource = {
   name: "returns",
+  section: "order",
   title: "취소·반품·교환",
   itemLabel: "요청",
   basePath: "/admin/returns",
@@ -314,6 +322,14 @@ export const RETURN_RESOURCE: AdminResource = {
     "반품·교환은 물건을 받은 뒤(입고완료) 완료로 바꾸세요 — 그 전에 완료하면 돈만 나갑니다. " +
     "거부할 때는 사유를 반드시 입력해야 합니다.",
   can: { create: false, delete: false },
+  /*
+   * 대시보드의 "반품 신청 2건" 을 눌러 왔을 때 그 두 건만 보여야 한다. 목록 라우트는 처음부터
+   * status·kind 를 받았는데 화면이 그것을 선언하지 않아, 누르면 처리완료까지 섞인 전체가 나왔다.
+   */
+  filters: [
+    { name: "status", label: "상태", options: RETURN_STATUS.map((s) => ({ value: s, label: RETURN_STATUS_LABEL[s] })) },
+    { name: "kind", label: "종류", options: RETURN_KINDS.map((k) => ({ value: k, label: KIND_LABEL[k] })) },
+  ],
   fields: [
     { name: "return_no", label: "요청번호", type: "text", readOnly: true, inList: true },
     { name: "created_at", label: "신청일", type: "date", readOnly: true, inList: true },
@@ -340,6 +356,7 @@ export const RETURN_RESOURCE: AdminResource = {
 
 export const SHIPPING_ZONE_RESOURCE: AdminResource = {
   name: "shipping-zones",
+  section: "settings",
   title: "지역별 배송비",
   itemLabel: "지역",
   basePath: "/admin/shipping-zones",
@@ -369,6 +386,7 @@ export const SHIPPING_ZONE_RESOURCE: AdminResource = {
  */
 export const CASH_RECEIPT_RESOURCE: AdminResource = {
   name: "cash-receipts",
+  section: "order",
   title: "현금영수증",
   itemLabel: "발급",
   basePath: "/admin/cash-receipts",
@@ -416,6 +434,7 @@ export const CASH_RECEIPT_RESOURCE: AdminResource = {
  */
 export const TAX_INVOICE_RESOURCE: AdminResource = {
   name: "tax-invoices",
+  section: "order",
   title: "세금계산서 요청",
   itemLabel: "요청",
   basePath: "/admin/tax-invoices",
@@ -462,6 +481,7 @@ export const TAX_INVOICE_RESOURCE: AdminResource = {
  */
 export const PAYMENT_REQUEST_RESOURCE: AdminResource = {
   name: "payment-requests",
+  section: "order",
   title: "개인결제 청구",
   itemLabel: "청구",
   basePath: "/admin/payment-requests",
@@ -500,6 +520,7 @@ export const PAYMENT_REQUEST_RESOURCE: AdminResource = {
  */
 export const GRADE_RESOURCE: AdminResource = {
   name: "grades",
+  section: "customer",
   title: "회원 등급",
   itemLabel: "등급",
   basePath: "/admin/grades",
@@ -528,6 +549,7 @@ export const GRADE_RESOURCE: AdminResource = {
  */
 export const COLLECTION_RESOURCE: AdminResource = {
   name: "collections",
+  section: "product",
   title: "기획전",
   itemLabel: "기획전",
   basePath: "/admin/collections",
@@ -553,6 +575,7 @@ export const COLLECTION_RESOURCE: AdminResource = {
 
 export const SUBSCRIPTION_RESOURCE: AdminResource = {
   name: "subscriptions",
+  section: "order",
   title: "정기배송",
   itemLabel: "구독",
   basePath: "/admin/subscriptions",
@@ -585,6 +608,7 @@ export const SUBSCRIPTION_RESOURCE: AdminResource = {
  */
 export const SHOP_SETTINGS_RESOURCE: AdminResource = {
   name: "settings",
+  section: "settings",
   kind: "settings",
   title: "쇼핑몰 설정",
   itemLabel: "설정",
@@ -613,4 +637,25 @@ export const SHOP_SETTINGS_RESOURCE: AdminResource = {
     { name: "addressSearch", label: "주문서에서 주소를 검색할 수 있게 한다", type: "boolean",
       help: "다음(카카오) 우편번호 창을 씁니다. 스크립트는 손님이 \"주소 검색\"을 누른 뒤에야 내려오고, 열리지 않아도 우편번호를 직접 입력해 주문할 수 있습니다." },
   ],
+};
+
+/**
+ * 매출 통계 — 판매 리포트(기간별·상품별·분류별)를 그리는 화면. 카페24 관리자의 "통계" 자리.
+ * API 는 처음부터 있었는데 화면이 없어서 운영자는 이번 달 매출을 볼 수 없었다.
+ */
+export const REPORT_RESOURCE: AdminResource = {
+  name: "reports",
+  section: "stats",
+  kind: "report",
+  title: "매출 통계",
+  itemLabel: "통계",
+  basePath: "/admin/reports/view",
+  order: 10,
+  description: "결제일 기준으로 셉니다. 완료된 반품의 환불액을 뺀 것이 순매출입니다.",
+  reportViews: [
+    { code: "sales", label: "기간별", groupBy: true },
+    { code: "products", label: "상품별" },
+    { code: "categories", label: "분류별" },
+  ],
+  fields: [],
 };

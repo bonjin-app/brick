@@ -311,6 +311,7 @@ export default definePlugin((ctx) => {
 
   ctx.registerAdminResource({
     name: "config",
+    section: "settings",
     kind: "settings",
     title: "문자 발송",
     itemLabel: "설정",
@@ -425,6 +426,7 @@ export default definePlugin((ctx) => {
 
   ctx.registerAdminResource({
     name: "alimtalk",
+    section: "settings",
     kind: "list",
     title: "알림톡 템플릿",
     itemLabel: "연결",

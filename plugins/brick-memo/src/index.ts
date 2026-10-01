@@ -472,6 +472,7 @@ export default definePlugin(async (ctx) => {
 
   ctx.registerAdminResource({
     name: "messages",
+    section: "customer",
     title: "쪽지",
     itemLabel: "쪽지",
     basePath: "/admin/messages",
@@ -491,6 +492,7 @@ export default definePlugin(async (ctx) => {
 
   ctx.registerAdminResource({
     name: "settings",
+    section: "settings",
     kind: "settings",
     title: "쪽지 설정",
     itemLabel: "설정",

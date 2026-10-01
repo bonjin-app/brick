@@ -235,6 +235,7 @@ export default definePlugin(async (ctx) => {
 
 const POLL_RESOURCE: AdminResource = {
   name: "polls",
+  section: "board",
   title: "설문조사",
   itemLabel: "설문",
   basePath: "/admin/polls",

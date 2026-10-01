@@ -404,6 +404,7 @@ export default definePlugin(async (ctx) => {
 
   ctx.registerAdminResource({
     name: "config",
+    section: "settings",
     kind: "settings",
     title: "토스페이먼츠",
     itemLabel: "설정",

@@ -225,6 +225,21 @@ filters: [
 `link` 를 돌려주면 **그때 가장 급한 곳**으로 바꿀 수 있습니다 — 입금 확인이 0 인데
 입금 대기 목록으로 보내면 빈 화면이 나옵니다.
 
+### 탭으로 그리는 필터 (`display: "tabs"`)
+
+주문 상태처럼 운영자가 **매번** 고르는 필터는 드롭다운이면 두 번 눌러야 하고, 지금 어느
+상태에 일이 있는지 보이지 않습니다. `display: "tabs"` 를 주면 목록 위에 "전체 · 입금대기 ·
+결제완료 …" 탭 줄로 그립니다. 목록 응답에 `facets` 를 실으면 탭이 건수를 함께 씁니다.
+
+```ts
+filters: [{ name: "status", label: "주문 상태", display: "tabs", options: [...] }]
+// 목록 라우트의 응답
+return { items, total, facets: { status: { pending: 3, paid: 5 } } };
+```
+
+건수는 **그 필터를 뺀 나머지 조건**(검색어)으로 세세요. 배송중 탭을 보는 중에도 입금대기 탭의
+숫자가 그대로여야 하고, 탭을 눌렀을 때 그 숫자만큼 나와야 합니다.
+
 ## 목록 검색 (AdminResource.searchable)
 
 필터만으로는 부족합니다. 주문이 오천 건인 가게에서 손님이 전화로 "제 주문 어디쯤
@@ -327,6 +342,47 @@ ctx.registerDashboardCard({
 ```sql
 created_at >= (date_trunc('day', now() AT TIME ZONE ${SITE_TZ}) AT TIME ZONE ${SITE_TZ})
 ```
+
+## 사이드바 묶음 (AdminResource.section)
+
+관리 화면을 사이드바의 어느 묶음에 넣을지 정합니다. 운영자가 하는 **일**로 나눕니다 —
+플러그인 경계는 운영자가 모릅니다(쇼핑몰의 "회원 등급" 은 고객 일이고, 쿠폰은 프로모션 일입니다).
+
+| section | 묶음 | 예 |
+|---|---|---|
+| `order` | 주문 | 주문 · 취소/반품 · 영수증 · 정기배송 |
+| `product` | 상품 | 상품 · 분류 · 기획전 · 후기 · 상품 문의 |
+| `customer` | 고객 | 회원 등급 · 포인트 · 1:1 문의 · 쪽지 |
+| `board` | 게시판 | 게시판 · 게시글 · FAQ · 설문 |
+| `promotion` | 프로모션 | 쿠폰 · 팝업 |
+| `design` | 디자인 | (코어: 테마 · 페이지 · 메뉴 · 미디어) |
+| `settings` | 설정 | 각 기능의 설정 화면 · 결제 · 배송 |
+
+없거나 모르는 값이면 "플러그인" 묶음으로 갑니다(오타가 새 묶음을 만들지 않게). 묶음 안의 순서는 `order` 입니다.
+
+## 대시보드 판 (registerDashboardPanel)
+
+카드는 숫자 하나입니다. **흐름**(입금전 → 결제완료 → 배송중), **추이**(최근 14일 매출),
+**최근 목록**은 판으로 그립니다. 모양은 셋이고 코어가 그립니다 — 빌드 없이 배포되는 플러그인도 씁니다.
+
+```ts
+ctx.registerDashboardPanel({
+  title: "주문 현황", order: 10, link: "/admin/x/my-plugin/orders",
+  load: async () => ({
+    kind: "steps",
+    groups: [{ label: ctx.t("dash.flow"), flow: true, steps: [
+      { label: ctx.t("입금대기"), value: 3, link: "/admin/x/my-plugin/orders?status=pending", tone: "attention" },
+    ] }],
+  }),
+});
+// kind: "chart" — { unit: "won", points: [{ label: "9/30", value: 120000, sub: "3건" }], summary: [...] }
+// kind: "list"  — { rows: [{ title, meta, value, badge, link }], empty: "아직 없습니다" }
+```
+
+`size: "half"` 인 판은 넓은 화면에서 둘이 나란히 섭니다. 카드와 같이 3초를 넘기거나 던지면 그 판만
+오류로 보입니다. 칸의 `link` 는 **그 건들만** 보이는 목록이어야 합니다 — 목록 화면이 그 쿼리를
+필터로 선언해야 주소에서 읽습니다(선언하지 않은 쿼리는 버립니다).
+돈을 세는 판은 리포트와 **같은 함수**를 쓰세요. 두 화면의 매출이 다르면 아무도 믿지 않습니다.
 
 ## 구조
 
@@ -467,6 +523,7 @@ ctx.registerRoute("POST", "/admin/posts/bulk", async (req) => {
 `boolean` · `select` · `date` · `image`(미디어 URL + 미리보기)
 
 `inList: true` 인 필드만 목록에 표시되고, `readOnly: true` 는 폼에서 제외됩니다.
+목록의 `image` 칸은 맨 앞 열에 축소판으로 섭니다(폼의 칸 순서는 그대로).
 
 레퍼런스: [plugins/brick-shop/src/admin-resources.ts](../plugins/brick-shop/src/admin-resources.ts) —
 쇼핑몰이 이 방식으로 관리 화면 4개(주문·상품·분류·쿠폰)를 만듭니다.

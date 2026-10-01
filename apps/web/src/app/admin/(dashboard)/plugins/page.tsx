@@ -138,7 +138,8 @@ export default function AdminPluginsPage() {
               <td data-label={t("common.name")} style={{ padding: 12 }}><strong>{p.displayName}</strong><br /><span style={{ color: "var(--color-muted)", fontSize: 12 }}>{p.name}</span></td>
               <td data-label={t("common.version")}>{p.version}</td>
               <td data-label={t("common.description")} style={{ color: "var(--color-text-soft)" }}>{p.description}</td>
-              <td data-label={t("common.status")}>{p.isActive ? t("plugins.active") : t("plugins.inactive")}</td>
+              {/* "● 활성" 이 설명 열에 밀려 "활/성" 으로 꺾였다 — 상태 낱말은 한 줄로 */}
+              <td data-label={t("common.status")} style={{ whiteSpace: "nowrap" }}>{p.isActive ? t("plugins.active") : t("plugins.inactive")}</td>
               <td data-label="" className="brick-x-actions"><button onClick={() => toggle(p)} style={{ cursor: "pointer" }}>{p.isActive ? t("plugins.deactivate") : t("plugins.activate")}</button></td>
             </tr>
           ))}

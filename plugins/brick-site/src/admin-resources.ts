@@ -8,6 +8,7 @@ import type { AdminResource } from "@brick/plugin-sdk";
  */
 export const POPUP_RESOURCE: AdminResource = {
   name: "popups",
+  section: "promotion",
   title: "팝업 · 배너",
   itemLabel: "팝업",
   basePath: "/admin/popups",
@@ -59,6 +60,7 @@ export const POPUP_RESOURCE: AdminResource = {
  */
 export const SITE_SETTINGS_RESOURCE: AdminResource = {
   name: "settings",
+  section: "settings",
   kind: "settings",
   title: "방문자 집계 설정",
   itemLabel: "설정",

@@ -279,6 +279,25 @@ contains "사업자 부담 표기" "$DREQ" '"shippingPayer":"seller"'
 FEE2="$(psql_q "SELECT return_shipping_fee FROM shop_returns WHERE id='$RID5'")"
 check "불량은 반품 배송비 0" "$FEE2" "0"
 
+echo "── 접수된 반품이 대시보드와 목록에 (\"반품 신청 2\" 를 누르면 그 둘만)"
+# 지금 접수 상태인 반품이 둘이다(단순변심 하나 · 불량 하나) — 0 = 0 으로 통과하지 않는 자리
+REQ_RET="$(psql_q "SELECT count(*) FROM shop_returns WHERE status = 'requested' AND kind = 'return'")"
+[[ "$REQ_RET" -ge 2 ]] && ok "접수된 반품이 둘 이상 (헛통과가 아니다)" || bad "접수된 반품 수가 $REQ_RET"
+check "대시보드의 반품 신청 칸 = 접수된 반품 수" "$(curl -s -b "$CK" "$API/api/admin/dashboard" | /usr/bin/python3 -c "
+import sys, json
+p = next(p for p in json.load(sys.stdin)['panels'] if p['title'] == '주문 현황')
+print(next(s['value'] for s in p['data']['groups'][1]['steps'] if s['link'].endswith('kind=return')))")" "$REQ_RET"
+RET_LIST="$(curl -s -b "$CK" "$SHOP/admin/returns?status=requested&kind=return")"
+check "상태·종류로 좁힌 목록 = 그 건수" "$(echo "$RET_LIST" | /usr/bin/python3 -c "import sys,json;print(len(json.load(sys.stdin)['items']))")" "$REQ_RET"
+check "좁힌 목록에는 그 종류·상태만" "$(echo "$RET_LIST" | /usr/bin/python3 -c "
+import sys, json
+print(all(r['kind'] == 'return' and r['status'] == 'requested' for r in json.load(sys.stdin)['items']))")" "True"
+# 칸의 링크는 화면이 **선언한** 필터 이름만 주소에서 읽는다 — 선언이 없으면 링크를 눌러도 전체가 나온다
+RES_RET="$(curl -s -b "$CK" "$API/api/admin/resources/brick-shop/returns")"
+check "반품 화면이 상태·종류 필터를 선언한다" "$(echo "$RES_RET" | /usr/bin/python3 -c "
+import sys, json
+print(sorted(f['name'] for f in json.load(sys.stdin).get('filters') or []))")" "['kind', 'status']"
+
 echo "── 반품 진행: 수거 → 입고 → 완료"
 contains "승인" "$(curl -s -b "$CK" -X PUT "$SHOP/admin/returns/$RID5" -H 'content-type: application/json' \
   -d '{"status":"approved","pickup_tracking_no":"123456789"}')" '"status":"approved"'

@@ -2,6 +2,8 @@ import { definePlugin, isUniqueViolation, isValidBusinessNo, maskEmail, rawRespo
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import { t } from "./i18n.js";
+import { registerShopDashboard, waitingReplies } from "./dashboard.js";
+import { buildReport } from "./report-view.js";
 import { DEFAULT_SETTINGS, ORDER_STATUS, PRODUCT_STATUS_LABEL, ShopError, STATUS_LABEL, STATUS_TRANSITIONS, escapeHtml, pgArray, won,
          type Db, type OrderStatus, type ShopSettings } from "./types.js";
 import { quote } from "./pricing.js";
@@ -13,7 +15,7 @@ import { bankTransferGateway, confirmPayment, gateways, refundPayment, registerG
 import { CASH_RECEIPT_RESOURCE, CATEGORY_RESOURCE, COLLECTION_RESOURCE, GRADE_RESOURCE, COUPON_RESOURCE, INQUIRY_RESOURCE,
          ORDER_RESOURCE, PRODUCT_RESOURCE, RESTOCK_DEMAND_RESOURCE, RETURN_RESOURCE, REVIEW_RESOURCE,
          PAYMENT_REQUEST_RESOURCE, SHIPPING_ZONE_RESOURCE, SHOP_SETTINGS_RESOURCE, SUBSCRIPTION_RESOURCE,
-         TAX_INVOICE_RESOURCE } from "./admin-resources.js";
+         TAX_INVOICE_RESOURCE, REPORT_RESOURCE } from "./admin-resources.js";
 import { registerStorefrontBlocks } from "./blocks.js";
 import { importProducts } from "./import.js";
 import { ORDER_EVENTS, parseRefundAccount, sendOrderMail, virtualAccountText } from "./order-mail.js";
@@ -1049,9 +1051,9 @@ export default definePlugin(async (ctx) => {
     const digitLike = looksNumeric && (digits.length === 4 || (digits.length >= 9 && digits.length <= 11))
       ? `%${digits}%`
       : "";
-    // count 와 목록이 **같은 조건**을 써야 한다 — 다르면 "37건"이라 표시하고 20건만 보여준다
-    const where = sql`WHERE (${status} = '' OR o.status = ${status})
-                        AND (${q} = ''
+    // count 와 목록이 **같은 조건**을 써야 한다 — 다르면 "37건"이라 표시하고 20건만 보여준다.
+    // 검색 조건만 따로 둔다 — 상태 탭의 건수는 "이 검색어로 각 상태에 몇 건" 이어야 한다
+    const searchCond = sql`(${q} = ''
                              OR (${byOrderNo} AND o.order_no ILIKE ${orderNoPrefix})
                              OR (NOT ${byOrderNo} AND (
                                   o.order_no ILIKE ${like}
@@ -1061,6 +1063,7 @@ export default definePlugin(async (ctx) => {
                                   OR o.receiver_phone ILIKE ${like}
                                   OR (${digitLike} <> '' AND regexp_replace(o.orderer_phone, '\\D', '', 'g') ILIKE ${digitLike})
                                   OR (${digitLike} <> '' AND regexp_replace(o.receiver_phone, '\\D', '', 'g') ILIKE ${digitLike}))))`;
+    const where = sql`WHERE (${status} = '' OR o.status = ${status}) AND ${searchCond}`;
     const { rows } = await db.execute(sql`
       SELECT o.id, o.order_no, o.status, o.total, o.created_at, o.orderer_name, o.tracking_no,
              o.receiver_name, o.receiver_phone, o.delivery_memo, o.payment_method,
@@ -1070,7 +1073,15 @@ export default definePlugin(async (ctx) => {
       FROM shop_orders o ${where} ORDER BY o.created_at DESC LIMIT 30 OFFSET ${(page - 1) * 30}
     `);
     const { rows: cnt } = await db.execute(sql`SELECT count(*) AS n FROM shop_orders o ${where}`);
-    return { items: rows, total: Number(cnt[0]?.n ?? 0), page, pageSize: 30 };
+    /*
+     * 상태 탭의 건수 — 카페24 주문 목록의 "입금전 3 · 배송준비중 5 · 배송중 2".
+     * 탭이 숫자를 말하지 않으면 운영자는 탭을 하나씩 눌러 봐야 일이 어디 있는지 안다.
+     */
+    const { rows: byStatus } = await db.execute(sql`
+      SELECT o.status, count(*) AS n FROM shop_orders o WHERE ${searchCond} GROUP BY o.status
+    `);
+    const statusCounts = Object.fromEntries(byStatus.map((r) => [String(r.status), Number(r.n)]));
+    return { items: rows, total: Number(cnt[0]?.n ?? 0), page, pageSize: 30, facets: { status: statusCounts } };
   });
 
   /**
@@ -1520,6 +1531,15 @@ export default definePlugin(async (ctx) => {
       );
     }
     return result;
+  });
+
+  /*
+   * 관리자 → 통계 → 매출 통계 화면 (kind: "report"). 위의 리포트들을 화면 모양으로 옮겨 담는다 —
+   * 새로 세지 않는다(report-view.ts).
+   */
+  ctx.registerRoute("GET", "/admin/reports/view", async (req) => {
+    requireAdmin(req);
+    return await buildReport(db, req.query, ctx.t);
   });
 
   ctx.registerRoute("GET", "/admin/reports/summary", async (req) => {
@@ -3014,6 +3034,7 @@ export default definePlugin(async (ctx) => {
   ctx.registerAdminResource(COLLECTION_RESOURCE);
   ctx.registerAdminResource(SUBSCRIPTION_RESOURCE);
   ctx.registerAdminResource(SHOP_SETTINGS_RESOURCE);
+  ctx.registerAdminResource(REPORT_RESOURCE);
 
   /**
    * 사이트맵: 판매 중인 상품 주소.
@@ -3167,6 +3188,9 @@ export default definePlugin(async (ctx) => {
    */
   ctx.registerHeaderAction({ label: "장바구니", path: "/shop/cart", order: 10, icon: "cart" });
 
+  // 대시보드 판 — 주문 흐름 · 매출 추이 · 최근 주문 (dashboard.ts)
+  registerShopDashboard(ctx, db);
+
   // 대시보드 — 운영자가 매일 아침 보는 숫자. "오늘"은 리포트와 같은 사이트 시간대다
   ctx.registerDashboardCard({
     title: "오늘 주문",
@@ -3228,15 +3252,13 @@ export default definePlugin(async (ctx) => {
           (SELECT count(*) FROM shop_orders WHERE status = 'pending') AS awaiting_payment,
           -- 보내야 하는 것: 결제되었거나 준비중인데 아직 배송으로 넘기지 않은 주문.
           -- 송장이 없는 것만 세지 않는다 — 송장 없이 발송하는 가게도 있다(직접 배달·방문 수령).
-          (SELECT count(*) FROM shop_orders WHERE status IN ('paid', 'preparing')) AS to_ship,
-          (SELECT count(*) FROM shop_reviews WHERE admin_reply IS NULL AND is_visible = true) AS reviews,
-          (SELECT count(*) FROM shop_inquiries WHERE admin_reply IS NULL) AS inquiries
+          (SELECT count(*) FROM shop_orders WHERE status IN ('paid', 'preparing')) AS to_ship
       `);
       const r = rows[0] ?? {};
       const pay = Number(r.awaiting_payment ?? 0);
       const ship = Number(r.to_ship ?? 0);
-      const rev = Number(r.reviews ?? 0);
-      const inq = Number(r.inquiries ?? 0);
+      // 답변 대기는 "주문 현황" 판과 같은 함수로 센다 — 두 곳의 숫자가 갈라지지 않게
+      const { reviews: rev, inquiries: inq } = await waitingReplies(db);
       const total = pay + ship + rev + inq;
       // 0 이면 "무엇이 0인지"를 늘어놓지 않는다 — 밀린 일이 없다는 사실이 답이다
       if (total === 0) return { value: 0, sub: ctx.t("dash.queueClear"), link: "/admin/x/brick-shop/orders" };

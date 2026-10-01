@@ -115,6 +115,9 @@ export interface QuoteOptions {
  *
  * 모든 금액은 원 단위 integer. 퍼센트 할인은 Math.floor로 절사한다.
  */
+/** uuid 모양 (버전은 가리지 않는다 — 옮겨 온 상품은 v4 다) */
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function quote(
   db: Db,
   items: Array<{ productId: string; optionId?: string | null; quantity: number; ref?: string }>,
@@ -142,14 +145,25 @@ export async function quote(
     if (!Number.isFinite(qty) || qty < 1 || qty > 999) {
       throw new ShopError(400, "수량은 1~999 사이여야 합니다.");
     }
+    /*
+     * 상품·옵션 id 는 uuid 모양이어야 한다. 아니면 **없는 상품**이다 — 그대로 ::uuid 로 캐스팅하면
+     * PG 가 "invalid input syntax for type uuid" 를 던져 500 이 났다(빈 productId 하나로 재현된다).
+     * 손님이 고칠 수 있는 입력 오류를 서버 고장으로 보고하면 안 된다.
+     */
+    const productId = String(item.productId ?? "");
+    const optionId = item.optionId == null || item.optionId === "" ? null : String(item.optionId);
+    if (!UUID_SHAPE.test(productId) || (optionId !== null && !UUID_SHAPE.test(optionId))) {
+      if (strict) throw new ShopError(404, "상품을 찾을 수 없습니다.");
+      continue;
+    }
 
     const { rows } = await db.execute(sql`
       SELECT p.id, p.slug, p.name, p.price, p.stock, p.status, p.free_shipping, p.tax_free, p.adult_only, coalesce(p.thumb_url, p.image_url) AS image_url,
              o.id AS option_id, o.name AS option_name, o.extra_price, o.stock AS option_stock, o.is_active
       FROM shop_products p
       LEFT JOIN shop_product_options o
-        ON o.id = ${item.optionId ?? null}::uuid AND o.product_id = p.id
-      WHERE p.id = ${item.productId}::uuid
+        ON o.id = ${optionId}::uuid AND o.product_id = p.id
+      WHERE p.id = ${productId}::uuid
       LIMIT 1
     `);
     const row = rows[0];

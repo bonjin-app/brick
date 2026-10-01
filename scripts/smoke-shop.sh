@@ -158,7 +158,8 @@ contains "오늘 주문 3건" "$DASH" '"value":3'
 # 오늘 숫자는 어제와 나란히 놓을 때만 뜻이 생긴다. 입금대기는 "처리 대기" 카드가 말한다 —
 # 두 카드가 같은 숫자를 말하면 하나는 자리만 차지한다
 contains "어제와 견주는 부가문구 (ctx.t)" "$DASH" "어제 0건"
-absent "입금대기를 두 카드가 말하지 않는다" "$DASH" "입금대기"
+# 카드만 본다 — 대시보드 판(주문 흐름)에는 "입금대기" 칸이 있다. 판은 흐름을, 카드는 숫자를 말한다
+absent "입금대기를 두 카드가 말하지 않는다" "$(echo "$DASH" | /usr/bin/python3 -c "import sys,json;print(json.dumps(json.load(sys.stdin)['cards'], ensure_ascii=False))")" "입금대기"
 contains "코어 회원 통계" "$DASH" '"members":'
 contains "카드는 관리 화면으로 연결" "$DASH" '"link":"/admin/x/brick-shop/orders"'
 check "비로그인은 대시보드 불가" "$(code "$API/api/admin/dashboard")" "401"
@@ -1253,6 +1254,97 @@ check "상품 검색도 없는 말은 0건" "$(curl -s -b "$CK" "$SHOP/admin/pro
 contains "관리 선언에 검색칸이 있다 (화면이 그것을 보고 그린다)" \
   "$(curl -s -b "$CK" "$API/api/admin/resources/brick-shop/orders")" '"searchable"'
 
+
+echo
+echo "── 관리자 첫 화면과 사이드바 — 일로 나눈다 (카페24 관리자의 주문·상품·고객)"
+#
+# 사이드바: 플러그인 열 개의 화면 서른 개가 한 줄에 섰다. 화면마다 묶음(section)을 선언한다.
+NAV="$(curl -s -b "$CK" "$API/api/admin/nav")"
+nav_section() { echo "$NAV" | /usr/bin/python3 -c "
+import sys, json
+for r in json.load(sys.stdin)['resources']:
+    if r['plugin'] == 'brick-shop' and r['name'] == sys.argv[1]: print(r.get('section') or '-')" "$1"; }
+check "주문은 주문 묶음" "$(nav_section orders)" "order"
+check "취소·반품도 주문 묶음" "$(nav_section returns)" "order"
+check "상품은 상품 묶음" "$(nav_section products)" "product"
+check "쿠폰은 프로모션 묶음" "$(nav_section coupons)" "promotion"
+check "쇼핑몰 설정은 설정 묶음" "$(nav_section settings)" "settings"
+
+# 상태가 섞여 있어야 단언이 뜻을 갖는다 — 앞 절이 열린 주문을 전부 배송완료로 바꿔 두었다(0 = 0 은 아무것도 시험하지 않는다)
+FLOW_NOS=($(psql_q "SELECT order_no FROM shop_orders ORDER BY created_at DESC LIMIT 3"))
+psql_q "UPDATE shop_orders SET status = 'pending' WHERE order_no = '${FLOW_NOS[0]}'" >/dev/null
+psql_q "UPDATE shop_orders SET status = 'shipped' WHERE order_no IN ('${FLOW_NOS[1]}', '${FLOW_NOS[2]}')" >/dev/null
+DASHP="$(curl -s -b "$CK" "$API/api/admin/dashboard")"
+# 판 하나를 꺼내 파이썬 식 하나를 돌린다 — 판이 없거나 실패면 'none'
+panel_eval() { echo "$DASHP" | /usr/bin/python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+p = next((p for p in d.get('panels', []) if p['title'] == sys.argv[1]), None)
+if not p or p['error']: print('none')
+else:
+    data = p['data']
+    print(eval(sys.argv[2]))" "$1" "$2"; }
+check "주문 현황 판은 단계 모양" "$(panel_eval '주문 현황' "data['kind']")" "steps"
+step_value() { panel_eval '주문 현황' "next(s['value'] for s in data['groups'][0]['steps'] if s['link'].endswith('status=$1'))"; }
+check "입금대기 칸 = 입금대기 주문 수" "$(step_value pending)" "$(psql_q "SELECT count(*) FROM shop_orders WHERE status = 'pending'")"
+check "배송중 칸 = 배송중 주문 수 (둘 이상)" "$(step_value shipped)" "$(psql_q "SELECT count(*) FROM shop_orders WHERE status = 'shipped'")"
+[[ "$(step_value shipped)" -ge 2 ]] && ok "배송중 칸이 0 이 아니다 (헛통과가 아니다)" || bad "배송중 칸이 0 이다"
+# 칸의 링크는 그 건들만 보이는 목록이다 — 눌러서 전체가 나오면 운영자는 눈으로 찾는다
+contains "입금대기 칸은 입금대기 목록으로" "$(panel_eval '주문 현황' "data['groups'][0]['steps'][0]['link']")" "orders?status=pending"
+
+# 매출 막대는 판매 리포트와 **같은 정의**여야 한다 — 두 화면의 매출이 다르면 아무도 믿지 않는다
+check "매출 추이는 막대 14개" "$(panel_eval '매출 추이' "len(data['points'])")" "14"
+FROM14="$(psql_q "SELECT to_char((now() AT TIME ZONE 'Asia/Seoul')::date - 13, 'YYYY-MM-DD') AS d")"
+TO14="$(psql_q "SELECT to_char((now() AT TIME ZONE 'Asia/Seoul')::date, 'YYYY-MM-DD') AS d")"
+REPORT_NET="$(curl -s -b "$CK" "$SHOP/admin/reports/sales?from=$FROM14&to=$TO14&groupBy=day" | jq_get "['total']['net']")"
+check "막대의 합 = 같은 기간 판매 리포트의 순매출" "$(panel_eval '매출 추이' "sum(x['value'] for x in data['points'])")" "$REPORT_NET"
+[[ "${REPORT_NET:-0}" -gt 0 ]] && ok "그 기간에 매출이 있다 (0 = 0 이 아니다)" || bad "기간 매출이 0 이다 ($REPORT_NET)"
+check "최근 주문 판의 첫 줄은 가장 최근 주문" \
+  "$(panel_eval '최근 주문' "data['rows'][0]['link'].split('q=')[1]")" "$(psql_q "SELECT order_no FROM shop_orders ORDER BY created_at DESC LIMIT 1")"
+check "최근 주문은 다섯 건까지" "$(panel_eval '최근 주문' "len(data['rows']) <= 5")" "True"
+# 판이 실패하면 오류로 보인다 — 0 으로 보이는 것이 최악이다(카드와 같은 원칙)
+check "판마다 실패 표시가 있다" "$(echo "$DASHP" | /usr/bin/python3 -c "import sys,json;print(all('error' in p for p in json.load(sys.stdin)['panels']))")" "True"
+
+echo "── 주문 목록의 상태 탭 (입금대기 3 · 배송중 2 — 탭이 숫자를 말한다)"
+facet() { curl -s -b "$CK" "$SHOP/admin/orders$1" | /usr/bin/python3 -c "
+import sys, json
+f = json.load(sys.stdin).get('facets', {}).get('status', {})
+print(eval(sys.argv[1]))" "$2"; }
+check "탭의 입금대기 수 = DB" "$(facet '' "f.get('pending', 0)")" "$(psql_q "SELECT count(*) FROM shop_orders WHERE status = 'pending'")"
+# 건수는 상태 필터를 빼고 센다 — 배송중 탭을 보는 중에도 입금대기 탭의 숫자는 그대로여야 한다
+check "다른 탭을 보는 중에도 건수는 같다" "$(facet '?status=shipped' "f.get('pending', 0)")" "$(facet '' "f.get('pending', 0)")"
+# 검색어는 건수에도 걸린다 — 주문번호로 찾았으면 탭의 합은 1
+check "검색하면 탭 건수도 그 검색 결과만" "$(facet "?q=${FLOW_NOS[0]}" "sum(f.values())")" "1"
+contains "주문 상태 필터는 탭으로 그린다" "$(curl -s -b "$CK" "$API/api/admin/resources/brick-shop/orders")" '"display":"tabs"'
+
+echo "── 상품 목록에 사진 (글자만 있는 목록은 이름을 읽어야 상품을 알아본다)"
+check "대표 이미지가 목록 열이다" "$(curl -s -b "$CK" "$API/api/admin/resources/brick-shop/products" | /usr/bin/python3 -c "
+import sys, json
+print(next((f.get('inList') is True and f['type'] == 'image') for f in json.load(sys.stdin)['fields'] if f['name'] == 'image_url'))")" "True"
+
+echo "── 잘못된 상품 id 는 500 이 아니라 '없는 상품' 이다"
+# 빈 productId 하나로 PG 가 uuid 캐스팅에 실패해 500 이 났다 — 손님이 고칠 수 있는 입력 오류다
+BAD_PID_BODY='{"items":[{"productId":"","quantity":1}],"orderer":{"ordererName":"손님","ordererPhone":"010-1111-2222","postcode":"06236","address1":"서울시"}}'
+check "빈 상품 id 로 주문하면 404" "$(code -X POST "$SHOP/orders" -H 'content-type: application/json' -d "$BAD_PID_BODY")" "404"
+BAD_OPT_BODY="{\"items\":[{\"productId\":\"$PID\",\"optionId\":\"not-a-uuid\",\"quantity\":1}],\"orderer\":{\"ordererName\":\"손님\",\"ordererPhone\":\"010-1111-2222\",\"postcode\":\"06236\",\"address1\":\"서울시\"}}"
+check "uuid 가 아닌 옵션 id 도 404" "$(code -X POST "$SHOP/orders" -H 'content-type: application/json' -d "$BAD_OPT_BODY")" "404"
+echo "── 매출 통계 화면 (리포트 API 는 있었는데 화면이 없었다 — 카페24의 \"통계\")"
+RES_REP="$(curl -s -b "$CK" "$API/api/admin/resources/brick-shop/reports")"
+check "통계 화면은 report 종류" "$(echo "$RES_REP" | jq_get "['kind']")" "report"
+check "보기 셋 (기간별·상품별·분류별)" "$(echo "$RES_REP" | /usr/bin/python3 -c "import sys,json;print([v['code'] for v in json.load(sys.stdin)['reportViews']])")" "['sales', 'products', 'categories']"
+check "통계는 통계 묶음" "$(nav_section reports)" "stats"
+REP="$(curl -s -b "$CK" "$SHOP/admin/reports/view?view=sales&from=$FROM14&to=$TO14&groupBy=day")"
+# 화면의 숫자는 리포트와 **같은 함수**에서 온다 — 다시 세면 두 화면이 갈라진다
+check "기간별 표의 순매출 합 = 판매 리포트 순매출" "$(echo "$REP" | /usr/bin/python3 -c "import sys,json;print(sum(r['net'] for r in json.load(sys.stdin)['rows']))")" "$REPORT_NET"
+check "일별 막대는 날마다 한 칸 (주문 없는 날도)" "$(echo "$REP" | /usr/bin/python3 -c "import sys,json;print(len(json.load(sys.stdin)['chart']['points']))")" "14"
+check "요약의 첫 숫자는 순매출" "$(echo "$REP" | /usr/bin/python3 -c "import sys,json;print(json.load(sys.stdin)['summary'][0]['label'])")" "순매출"
+contains "CSV 는 같은 기간의 리포트 경로" "$(echo "$REP" | jq_get "['csv']")" "/admin/reports/sales?from=$FROM14&to=$TO14"
+check "CSV 경로가 실제로 CSV 를 준다" "$(curl -s -b "$CK" -o /dev/null -w '%{content_type}' "$SHOP$(echo "$REP" | jq_get "['csv']")")" "text/csv; charset=utf-8"
+REP_P="$(curl -s -b "$CK" "$SHOP/admin/reports/view?view=products&from=$FROM14&to=$TO14")"
+check "상품별 표의 순매출 합 = 상품 리포트 순매출 합" "$(echo "$REP_P" | /usr/bin/python3 -c "import sys,json;print(sum(r['net'] for r in json.load(sys.stdin)['rows']))")" \
+  "$(curl -s -b "$CK" "$SHOP/admin/reports/products?from=$FROM14&to=$TO14&limit=50" | /usr/bin/python3 -c "import sys,json;print(sum(p['net'] for p in json.load(sys.stdin)['products']))")"
+check "잘못된 날짜는 400 (500 이 아니다)" "$(code -b "$CK" "$SHOP/admin/reports/view?from=2026-02-30&to=2026-03-01")" "400"
+check "비로그인은 통계를 못 본다 (쇼핑몰 관리 라우트의 관례대로 403)" "$(code "$SHOP/admin/reports/view")" "403"
 
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 # 실측을 남긴다(설정됐을 때만) — README 의 표가 실제와 같은지 CI 가 대조한다.

@@ -415,6 +415,7 @@ export default definePlugin(async (ctx) => {
 
   ctx.registerAdminResource({
     name: "balances",
+    section: "customer",
     title: "포인트",
     itemLabel: "회원 포인트",
     basePath: "/admin/balances",
@@ -446,6 +447,7 @@ export default definePlugin(async (ctx) => {
 
   ctx.registerAdminResource({
     name: "settings",
+    section: "settings",
     kind: "settings",
     title: "포인트 설정",
     itemLabel: "설정",

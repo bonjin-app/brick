@@ -263,8 +263,8 @@ export interface PluginContext {
   ): void;
   /** 페이지 빌더에서 쓸 수 있는 Block 등록 */
   registerBlock(block: BlockDefinition): void;
-  /** 관리자 메뉴 항목 등록 */
-  registerAdminMenu(item: { label: string; path: string; icon?: string }): void;
+  /** 관리자 메뉴 항목 등록 (`section` 은 {@link AdminResource.section} 과 같다) */
+  registerAdminMenu(item: { label: string; path: string; icon?: string; section?: AdminSection }): void;
   /**
    * 선언적 관리자 리소스 등록.
    *
@@ -354,6 +354,17 @@ export interface PluginContext {
    * `load` 는 요청 시점에 실행되므로 동적 문구(sub)는 ctx.t 로 만들면 된다.
    */
   registerDashboardCard(card: DashboardCard): void;
+
+  /**
+   * 대시보드 판 — 숫자 하나로는 말할 수 없는 것을 그린다 ({@link DashboardPanel}).
+   *
+   * 카드는 "오늘 주문 3" 처럼 숫자 하나다. 그런데 운영자가 아침에 보는 것은 **흐름**이다 —
+   * 입금전 몇, 보낼 것 몇, 배송중 몇, 반품 신청 몇. 카드 여섯 장으로 늘리면 숫자밭이 되고
+   * 순서(입금 → 준비 → 배송)가 사라진다. 판은 선언형이라 코어가 그리고(빌드 없이 ZIP 으로
+   * 설치되는 플러그인도 쓴다), 모양은 단계(steps)·막대(chart)·목록(list) 셋이다.
+   * `title` 은 카드와 같이 원문이 번역 키, load 안의 문구는 ctx.t 로.
+   */
+  registerDashboardPanel(panel: DashboardPanel): void;
 
   /**
    * 헤더 유틸 영역(로그인·회원가입 옆)에 링크를 놓는다.
@@ -489,6 +500,51 @@ export interface DashboardCard {
    * 입금 대기 목록으로 보내면 빈 화면이 나온다.
    */
   load(): Promise<{ value: string | number; sub?: string; link?: string }>;
+}
+
+/** 대시보드 판의 한 칸 — 단계(steps) 판에서 쓴다 */
+export interface DashboardStep {
+  label: string;
+  value: number;
+  /** 누르면 그 건들만 보이는 목록으로 (빈 목록으로 보내지 않는다) */
+  link?: string;
+  /** attention — 0 보다 크면 눈에 띄게 (손님이 기다리는 일) */
+  tone?: "default" | "attention";
+}
+
+/** 대시보드 판에 그릴 것 — 코어 화면이 모양별로 그린다 */
+export type DashboardPanelData =
+  | {
+      kind: "steps";
+      /** 묶음마다 한 줄 — 예: 주문 흐름(입금전 → … → 배송완료) · 취소/반품 · 답변 대기 */
+      groups: Array<{ label?: string; flow?: boolean; steps: DashboardStep[] }>;
+    }
+  | {
+      kind: "chart";
+      /** 값의 단위 — won 이면 화면이 원 단위로 쓴다 */
+      unit: "won" | "count";
+      /** 막대 하나 = 한 칸 (예: 하루). sub 는 막대 위에 띄울 보조 숫자(주문 3건) */
+      points: Array<{ label: string; value: number; sub?: string }>;
+      /** 판 위에 크게 쓸 합계 (예: "최근 14일 순매출") */
+      summary?: Array<{ label: string; value: string }>;
+    }
+  | {
+      kind: "list";
+      rows: Array<{ title: string; meta?: string; value?: string; badge?: string; link?: string }>;
+      /** 행이 없을 때의 안내 */
+      empty?: string;
+    };
+
+export interface DashboardPanel {
+  /** 판 제목. 원문이 번역 키다 */
+  title: string;
+  /** 표시 순서. 작을수록 먼저 (기본 100) */
+  order?: number;
+  /** 제목 옆 "전체 보기" 링크 */
+  link?: string;
+  /** full — 한 줄을 다 쓴다(기본). half — 넓은 화면에서 둘이 나란히 */
+  size?: "full" | "half";
+  load(): Promise<DashboardPanelData>;
 }
 
 /** 연결할 수 있는 주소 하나 */
@@ -729,6 +785,22 @@ export interface AdminField {
  * 핸들러가 읽는 이름도 같아야 한다(개인결제 청구가 customerName 만 읽어서 받는 분·
  * 연락처가 저장되지 않았다). smoke-admin-resources.sh 가 이것을 전수로 본다.
  */
+/**
+ * 관리자 사이드바의 묶음 — 운영자가 하는 일로 나눈다(플러그인으로 나누지 않는다).
+ *
+ *  - `order` 주문 — 주문·취소/반품·영수증·개인결제·정기배송
+ *  - `product` 상품 — 상품·분류·기획전·후기·상품 문의·재입고
+ *  - `customer` 고객 — 회원·등급·포인트·1:1 문의·쪽지
+ *  - `board` 게시판 — 게시판·게시글·FAQ·설문
+ *  - `promotion` 프로모션 — 쿠폰·팝업·단체메일
+ *  - `stats` 통계 — 매출 통계·방문자
+ *  - `design` 디자인 — 테마·페이지·메뉴·미디어
+ *  - `settings` 설정 — 쇼핑몰·결제·배송·각 기능의 설정 화면
+ *
+ * 화면이 이 순서로 그린다. 알 수 없는 값은 "플러그인" 묶음으로 간다(오타가 새 묶음을 만들지 않게).
+ */
+export type AdminSection = "order" | "product" | "customer" | "board" | "promotion" | "stats" | "design" | "settings";
+
 export interface AdminResource {
   /** URL 슬러그. 관리자에서 /admin/x/<plugin>/<name> 으로 접근 */
   name: string;
@@ -751,7 +823,19 @@ export interface AdminResource {
    * 우회로(`/admin/config-list`)로 화면을 얻고 있었다. 우회로가 셋이면 그것은
    * 계약이 빠진 것이다.
    */
-  kind?: "list" | "settings";
+  kind?: "list" | "settings" | "report";
+  /**
+   * `report` 화면의 보기(탭) — 예: 기간별 · 상품별 · 분류별.
+   *
+   * 화면이 기간(from·to, 사이트 날짜 YYYY-MM-DD)을 고르는 칸과 이 탭을 그리고,
+   * `basePath?view=<code>&from=…&to=…[&groupBy=day|week|month]` 를 불러 {@link AdminReport}
+   * 를 받는다. `groupBy: true` 인 보기에만 일·주·월 단추가 나온다.
+   *
+   * 왜 화면 종류인가: 쇼핑몰에는 판매 리포트 API(기간·상품·분류, CSV)가 처음부터 있었는데
+   * **그것을 부르는 화면이 없었다.** 운영자는 "이번 달 얼마 팔았나" 를 curl 없이는 볼 수 없었다
+   * (카페24 관리자의 "통계" 메뉴 자리). 설정 화면이 없던 때와 같은 빠진 계약이다.
+   */
+  reportViews?: Array<{ code: string; label: string; groupBy?: boolean }>;
   /** 목록 화면 제목 */
   title: string;
   /** 단일 항목을 부르는 이름. 예: "상품" */
@@ -776,8 +860,17 @@ export interface AdminResource {
   adminOnly?: boolean;
   /** 목록 상단에 표시할 설명 */
   description?: string;
-  /** 관리자 메뉴에 표시할 순서 (작을수록 위) */
+  /** 관리자 메뉴에 표시할 순서 (작을수록 위 — 같은 묶음 안에서) */
   order?: number;
+  /**
+   * 사이드바의 어느 묶음에 넣을까 ({@link AdminSection}).
+   *
+   * 없으면 "플러그인" 묶음에 들어간다. 묶음이 없던 때는 플러그인 열 개의 화면 서른 개가
+   * order 순으로 한 줄에 섰다 — 게시판 그룹 · 주문 · 1:1 문의 · 취소·반품 · … · 게시판 · 상품.
+   * 운영자는 "주문 일" 을 하러 와서 게시판 사이를 뒤졌다. 카페24 관리자가 주문·상품·고객·
+   * 게시판으로 나누는 것은 운영자가 하는 **일**로 나눈 것이고, 플러그인 경계는 운영자가 모른다.
+   */
+  section?: AdminSection;
   /**
    * 목록에서 여러 행을 골라 한 번에 하는 작업 (선택 삭제 · 이동 · 상태 변경).
    *
@@ -847,6 +940,32 @@ export interface AdminFilter {
   options?: Array<{ value: string; label: string }>;
   /** 선택지를 플러그인 라우트에서 받는다 (`[{ value, label }]`) */
   optionsFrom?: string;
+  /**
+   * 어떻게 그릴까 — `select`(기본, 드롭다운) 또는 `tabs`(목록 위의 탭 줄, "전체" 가 맨 앞).
+   *
+   * 주문 상태처럼 운영자가 **매번** 고르는 필터는 드롭다운이면 두 번 눌러야 하고, 지금 어떤
+   * 상태에 일이 있는지 보이지 않는다. 탭은 목록 응답이 `facets: { <name>: { <value>: 건수 } }`
+   * 를 주면 건수를 함께 쓴다(카페24 주문 목록의 "입금전 3 · 배송준비중 5"). 건수는 그 필터를
+   * 뺀 나머지 조건(검색어)으로 센 값이어야 한다 — 탭을 눌러 갈 때 그 숫자만큼 나와야 하므로.
+   */
+  display?: "select" | "tabs";
+}
+
+/** `report` 화면의 응답 — 요약 숫자 · 막대 · 표 */
+export interface AdminReport {
+  /**
+   * 위에 크게 쓸 숫자들. delta 는 직전 같은 기간 대비 증감률(%).
+   * null 은 "직전 기간이 0 이라 비율이 없다", 빼면 "견주지 않는 숫자" (화면이 증감 줄을 그리지 않는다).
+   */
+  summary?: Array<{ label: string; value: string; delta?: number | null }>;
+  /** 막대 (DashboardPanelData 의 chart 와 같은 모양) */
+  chart?: { unit: "won" | "count"; points: Array<{ label: string; value: number; sub?: string }> };
+  columns: Array<{ name: string; label: string; type?: "text" | "money" | "number" }>;
+  rows: Array<Record<string, string | number | null>>;
+  /** 같은 표를 CSV 로 받는 플러그인 경로 (예: "/admin/reports/sales?from=…&format=csv") — 엑셀로 가져간다 */
+  csv?: string;
+  /** 표 아래 작은 글씨 — 무엇을 매출로 세는가 */
+  note?: string;
 }
 
 /** 일괄 작업 하나 */

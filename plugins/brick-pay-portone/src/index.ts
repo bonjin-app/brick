@@ -662,6 +662,7 @@ export default definePlugin(async (ctx) => {
 
   ctx.registerAdminResource({
     name: "config",
+    section: "settings",
     kind: "settings",
     title: "포트원",
     itemLabel: "설정",

@@ -7,6 +7,7 @@ import { STATUS_LABEL, TICKET_STATUS } from "./types.js";
  */
 export const TICKET_RESOURCE: AdminResource = {
   name: "tickets",
+  section: "customer",
   title: "1:1 문의",
   itemLabel: "문의",
   basePath: "/admin/tickets",
@@ -36,6 +37,7 @@ export const TICKET_RESOURCE: AdminResource = {
 
 export const FAQ_RESOURCE: AdminResource = {
   name: "faqs",
+  section: "board",
   title: "FAQ",
   itemLabel: "FAQ",
   basePath: "/admin/faqs",
@@ -60,6 +62,7 @@ export const FAQ_RESOURCE: AdminResource = {
 
 export const FAQ_CATEGORY_RESOURCE: AdminResource = {
   name: "faq-categories",
+  section: "board",
   title: "FAQ 분류",
   itemLabel: "분류",
   basePath: "/admin/faq-categories",
@@ -83,6 +86,7 @@ export const FAQ_CATEGORY_RESOURCE: AdminResource = {
  */
 export const HELP_SETTINGS_RESOURCE: AdminResource = {
   name: "settings",
+  section: "settings",
   kind: "settings",
   title: "1:1 문의 설정",
   itemLabel: "설정",

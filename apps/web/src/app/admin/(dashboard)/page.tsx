@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAdminT } from "../../../lib/i18n-admin";
 import { useLocaleTag } from "../../../lib/i18n";
+import { BarChart } from "./_parts/bar-chart";
 
 interface DashCard {
   plugin: string;
@@ -13,10 +14,20 @@ interface DashCard {
   error: boolean;
 }
 
+interface PanelStep { label: string; value: number; link?: string; tone?: "default" | "attention" }
+/** 플러그인의 대시보드 판 — 모양은 셋(코어 계약 DashboardPanelData 와 같다) */
+type PanelData =
+  | { kind: "steps"; groups: Array<{ label?: string; flow?: boolean; steps: PanelStep[] }> }
+  | { kind: "chart"; unit: "won" | "count"; points: Array<{ label: string; value: number; sub?: string }>; summary?: Array<{ label: string; value: string }> }
+  | { kind: "list"; rows: Array<{ title: string; meta?: string; value?: string; badge?: string; link?: string }>; empty?: string };
+interface DashPanel { plugin: string; title: string; link: string | null; size: "full" | "half"; data: PanelData | null; error: boolean }
+
 interface Dashboard {
   // 코어 통계는 서버에서 격리되어 실패하면 null 로 온다
   core: { members: number; membersToday: number; pages: number } | null;
   cards: DashCard[];
+  /** 대시보드 판 — 옛 서버는 보내지 않는다 */
+  panels?: DashPanel[];
   /** 메일을 보낼 수 있는 상태인가 — SMTP 가 없으면 모든 메일이 콘솔로만 나간다 */
   /*
    * 운영자가 모르는 채로 잘못 설정한 것들 (판정은 API 가 한다 — 환경변수·SMTP·
@@ -116,14 +127,6 @@ export default function AdminDashboard() {
     );
   };
 
-  const quick: Array<[string, string]> = [
-    ["/", t("dash.viewSite")],
-    ["/admin/pages", t("nav.pages")],
-    ["/admin/media", t("nav.media")],
-    ["/admin/users", t("nav.users")],
-    ["/admin/settings", t("nav.settings")],
-  ];
-
   if (role && role !== "admin") {
     return (
       <div>
@@ -137,15 +140,13 @@ export default function AdminDashboard() {
 
   return (
     <div>
-      <h1>{t("nav.dashboard")}</h1>
-
-      {/* 빠른 작업 — 운영자가 매일 여는 곳. 사이트 보기는 새 탭(관리 화면을 잃지 않게) */}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 20 }}>
-        {quick.map(([href, text]) => (
-          <a key={href} href={href} className="btn-link" target={href === "/" ? "_blank" : undefined} rel={href === "/" ? "noopener" : undefined}>
-            {text}{href === "/" ? " ↗" : ""}
-          </a>
-        ))}
+      {/*
+        빠른 작업 막대(사이트 보기 · 페이지 · 미디어 · 회원 · 설정)는 없앴다 — 사이트 보기는 위 막대에,
+        나머지는 왼쪽 묶음에 있다. 같은 길이 세 군데 있으면 첫 화면의 자리만 차지한다.
+      */}
+      <div className="brick-dash-head">
+        <h1>{t("nav.dashboard")}</h1>
+        <span>{new Date().toLocaleDateString(localeTag, { month: "long", day: "numeric", weekday: "long" })}</span>
       </div>
 
       {/* 새 버전 알림 — 교체는 운영자가 프로세스 밖에서 한다(update.mjs · docker pull). 여기서는 알리기만 */}
@@ -169,13 +170,31 @@ export default function AdminDashboard() {
         * 설정 경고 — 틀려도 조용한 것들만 모아 여기서 한 번 말한다.
         * 무엇을 경고할지는 API 가 정한다(환경변수·SMTP·프록시는 서버만 안다).
         */}
-      {(dash?.setup ?? []).map((w) => (
-        <div key={w.id} className="brick-card" role="alert" style={{ marginTop: 0, marginBottom: 16, borderColor: "var(--color-warning)", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12 }}>
-          <strong>{t(`dash.${w.id}`, w.params)}</strong>
-          <span style={{ color: "var(--color-muted)", fontSize: 13.5 }}>{t(`dash.${w.id}Detail`, w.params)}</span>
-          <a className="btn-link" href={w.docs} target="_blank" rel="noopener" style={{ marginLeft: "auto" }}>{t("dash.setupHow")} ↗</a>
+      {/*
+        * 경고가 셋이면 카드 셋이 첫 화면을 다 덮었다 — 운영자가 매일 보러 오는 주문 현황이
+        * 스크롤 아래로 밀렸다. 한 카드 안의 줄로 접는다. 설명은 한 줄로 자르고 전체는 title 로.
+        */}
+      {(dash?.setup?.length ?? 0) > 0 && (
+        <section className="brick-card brick-dash-setup" role="alert" aria-labelledby="dash-setup">
+          <h2 id="dash-setup">{t("dash.setupTitle", { n: dash!.setup!.length })}</h2>
+          <ul>
+            {dash!.setup!.map((w) => (
+              <li key={w.id}>
+                <strong>{t(`dash.${w.id}`, w.params)}</strong>
+                <span title={t(`dash.${w.id}Detail`, w.params)}>{t(`dash.${w.id}Detail`, w.params)}</span>
+                <a href={w.docs} target="_blank" rel="noopener">{t("dash.setupHow")} ↗</a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* 플러그인의 판 — 주문 흐름 · 매출 추이 · 최근 주문. 반쪽 판은 넓은 화면에서 둘이 나란히 */}
+      {(dash?.panels?.length ?? 0) > 0 && (
+        <div className="brick-dash-panels">
+          {dash!.panels!.map((p, i) => <Panel key={`${p.plugin}-${i}`} p={p} />)}
         </div>
-      ))}
+      )}
 
       {/* 오늘의 사이트 — 코어(회원·페이지) + 플러그인 카드(오늘 방문자·주문·글·문의) */}
       <div className="brick-stat-grid">
@@ -226,6 +245,74 @@ export default function AdminDashboard() {
         )}
       </section>
     </div>
+  );
+}
+
+/** 대시보드 판 하나 — 모양(steps · chart · list)마다 그린다 */
+function Panel({ p }: { p: DashPanel }) {
+  const t = useAdminT();
+  const localeTag = useLocaleTag();
+  const d = p.data;
+  return (
+    <section className={"brick-card brick-panel" + (p.size === "half" ? " is-half" : "")} aria-label={p.title}>
+      <div className="brick-panel-head">
+        <h2 className="brick-card-title">{p.title}</h2>
+        {p.link ? <a href={p.link}>{t("dash.viewAll")} →</a> : null}
+      </div>
+      {p.error || !d ? (
+        <p className="brick-panel-empty">⚠ {t("dash.cardError")}</p>
+      ) : d.kind === "steps" ? (
+        <div className="brick-steps">
+          {d.groups.map((g, gi) => (
+            <div key={gi} className={"brick-steps-group" + (g.flow ? " is-flow" : "")}>
+              {g.label ? <div className="brick-steps-label">{g.label}</div> : null}
+              <div className="brick-steps-row">
+                {g.steps.map((s, si) => {
+                  const hot = s.tone === "attention" && s.value > 0;
+                  const body = (<><span>{s.label}</span><strong>{s.value.toLocaleString(localeTag)}</strong></>);
+                  return s.link ? (
+                    <a key={si} href={s.link} className={"brick-step" + (hot ? " is-hot" : "")}>{body}</a>
+                  ) : (
+                    <div key={si} className={"brick-step" + (hot ? " is-hot" : "")}>{body}</div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : d.kind === "chart" ? (
+        <Chart d={d} />
+      ) : d.rows.length === 0 ? (
+        <p className="brick-panel-empty">{d.empty ?? "—"}</p>
+      ) : (
+        <ul className="brick-panel-list">
+          {d.rows.map((r, i) => {
+            const body = (
+              <>
+                <span className="brick-pl-main"><strong>{r.title}</strong>{r.meta ? <small>{r.meta}</small> : null}</span>
+                {r.badge ? <span className="brick-pl-badge">{r.badge}</span> : null}
+                {r.value ? <span className="brick-pl-value">{r.value}</span> : null}
+              </>
+            );
+            return <li key={i}>{r.link ? <a href={r.link}>{body}</a> : <div>{body}</div>}</li>;
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/** 막대 판 — 합계 숫자 + 막대 (막대는 매출 통계 화면과 같은 부품) */
+function Chart({ d }: { d: Extract<PanelData, { kind: "chart" }> }) {
+  return (
+    <>
+      {d.summary?.length ? (
+        <dl className="brick-chart-summary">
+          {d.summary.map((s, i) => (<div key={i}><dt>{s.label}</dt><dd>{s.value}</dd></div>))}
+        </dl>
+      ) : null}
+      <BarChart unit={d.unit} points={d.points} />
+    </>
   );
 }
 
