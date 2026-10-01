@@ -328,6 +328,8 @@ const KO = {
   "themes.previewFull": "전체 폭",
   "themes.paletteLight": "라이트 팔레트",
   "themes.paletteDark": "다크 팔레트",
+  "themes.thumbOf": "{name} 테마로 그린 내 사이트 홈",
+  "themes.thumbLoading": "화면을 그리는 중…",
 
   "media.title": "미디어",
   "media.countN": "{n}개",
@@ -892,6 +894,8 @@ const EN: Record<keyof typeof KO, string> = {
   "themes.previewFull": "Full width",
   "themes.paletteLight": "Light palette",
   "themes.paletteDark": "Dark palette",
+  "themes.thumbOf": "Your home page drawn with {name}",
+  "themes.thumbLoading": "Rendering…",
 
   "media.title": "Media",
   "media.countN": "{n} files",

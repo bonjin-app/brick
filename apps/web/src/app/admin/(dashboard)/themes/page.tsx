@@ -36,6 +36,77 @@ function Swatches({ tokens, prefix, label }: { tokens: Record<string, string>; p
   );
 }
 
+/**
+ * 카드 속 축소 화면 — 그 테마로 그린 **내 사이트의 홈**.
+ *
+ * 색 견본과 설명만으로는 테마를 고를 수 없었다(카페24 디자인 센터가 데모 화면부터 보여 주는 이유다). 미리보기 단추는 한 번에
+ * 하나만 열어 볼 수 있어 여덟 벌을 비교하려면 여덟 번 열고 닫아야 했다. 1280px 로 그린 화면을 카드 폭에 맞춰 줄인다.
+ *
+ * 화면에 들어올 때만 받는다(테마가 많아도 처음에 한꺼번에 그리지 않는다). iframe 은 스크립트를 막고(sandbox) 누를 수 없게 둔다 —
+ * 축소판은 보는 것이지 쓰는 것이 아니고, 키보드 사용자가 그 안으로 들어가 길을 잃으면 안 된다.
+ */
+const THUMB_W = 1280;
+const THUMB_H = 820;
+/** 미리보기 주소 — 그 테마의 CSP 가 붙은 완성된 HTML (pages.controller 의 admin/render/preview-page) */
+const previewUrl = (name: string) => `/api/admin/render/preview-page?path=&theme=${encodeURIComponent(name)}`;
+
+function ThemeThumb({ name, label, loadingLabel, active }: {
+  name: string; label: string; loadingLabel: string; active: boolean;
+}) {
+  const box = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(0.25);
+  const [visible, setVisible] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setScale((e?.contentRect.width ?? THUMB_W / 4) / THUMB_W));
+    ro.observe(el);
+    const io = new IntersectionObserver(([e]) => {
+      if (e?.isIntersecting) { setVisible(true); io.disconnect(); }
+    }, { rootMargin: "200px" });
+    io.observe(el);
+    return () => { ro.disconnect(); io.disconnect(); };
+  }, []);
+
+  return (
+    <div
+      ref={box}
+      role="img"
+      aria-label={label}
+      style={{
+        position: "relative", aspectRatio: `${THUMB_W} / ${THUMB_H}`, overflow: "hidden", borderRadius: 6, marginBottom: 12,
+        border: `${active ? 2 : 1}px solid ${active ? "var(--color-primary)" : "var(--color-line)"}`, background: "var(--color-bg-soft)",
+      }}
+    >
+      {/*
+        sandbox="allow-same-origin" — 스크립트는 막고(축소판은 보는 것이다) 같은 출처로 열어 관리자 세션으로 그린다.
+        srcdoc 이 아니라 주소로 여는 이유는 previewUrl 의 주석.
+      */}
+      {visible ? (
+        <iframe
+          title={label}
+          src={`${previewUrl(name)}&bare=1`}
+          sandbox="allow-same-origin"
+          tabIndex={-1}
+          aria-hidden="true"
+          onLoad={() => setLoaded(true)}
+          style={{
+            width: THUMB_W, height: THUMB_H, border: 0, pointerEvents: "none",
+            transform: `scale(${scale})`, transformOrigin: "0 0", background: "#fff",
+          }}
+        />
+      ) : null}
+      {!loaded ? (
+        <span style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", fontSize: 12.5, color: "var(--color-muted)" }}>
+          {loadingLabel}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 export default function AdminThemesPage() {
   const t = useAdminT();
   const [data, setData] = useState<{ themes: ThemeRow[]; active: string; problem?: ThemeProblem | null }>({
@@ -47,8 +118,7 @@ export default function AdminThemesPage() {
   const [failed, setFailed] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   /** 미리보기 — 팔레트 견본만으로는 레이아웃을 알 수 없다. 내 사이트 내용으로 그려 본다 */
-  const [preview, setPreview] = useState<{ name: string; html: string; width: number } | null>(null);
-  const [previewBusy, setPreviewBusy] = useState("");
+  const [preview, setPreview] = useState<{ name: string; width: number } | null>(null);
 
   const reload = useCallback(() => {
     fetch("/api/themes").then((r) => r.json()).then(setData);
@@ -62,16 +132,8 @@ export default function AdminThemesPage() {
     reload();
   }
 
-  async function openPreview(name: string, width = 0) {
-    setPreviewBusy(name);
-    try {
-      const res = await fetch(`/api/admin/render/preview?path=&theme=${encodeURIComponent(name)}`);
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) { setFailed(true); setMessage(`${t("common.failPrefix")}${body.message ?? res.status}`); return; }
-      setPreview({ name, html: String(body.html ?? ""), width: width || 0 });
-    } finally {
-      setPreviewBusy("");
-    }
+  function openPreview(name: string) {
+    setPreview({ name, width: 0 });
   }
 
   // Esc 로 닫고, 포커스를 모달 안에 가두고, 닫으면 열었던 자리로 돌려준다
@@ -117,9 +179,15 @@ export default function AdminThemesPage() {
         <p role={failed ? "alert" : "status"}
           style={{ color: failed ? "var(--color-danger)" : "var(--color-success)" }}>{message}</p>
       )}
-      <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 300px), 1fr))", gap: 16 }}>
         {data.themes.map((th) => (
-          <div key={th.name} className="brick-card w-full sm:w-[280px]" style={{ marginTop: 0 }}>
+          <div key={th.name} className="brick-card" style={{ marginTop: 0, minWidth: 0 }}>
+            <ThemeThumb
+              name={th.name}
+              active={data.active === th.name}
+              label={t("themes.thumbOf", { name: th.displayName })}
+              loadingLabel={t("themes.thumbLoading")}
+            />
             {th.tokens ? (
               <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
                 <Swatches tokens={th.tokens} prefix="" label={t("themes.paletteLight")} />
@@ -135,8 +203,8 @@ export default function AdminThemesPage() {
               ) : (
                 <button onClick={() => activate(th.name)} style={{ cursor: "pointer" }}>{t("common.apply")}</button>
               )}
-              <button onClick={() => openPreview(th.name)} disabled={previewBusy === th.name} style={{ cursor: "pointer" }}>
-                {previewBusy === th.name ? t("themes.previewLoading") : t("themes.preview")}
+              <button onClick={() => openPreview(th.name)} style={{ cursor: "pointer" }}>
+                {t("themes.preview")}
               </button>
             </div>
           </div>
@@ -178,12 +246,12 @@ export default function AdminThemesPage() {
             </span>
           </div>
           {/*
-            srcDoc 으로 넣는다 — 미리보기 HTML 은 관리자 세션으로 받은 우리 렌더 결과이고,
-            iframe 이라 그 안의 CSS 가 관리 화면에 새지 않는다(테마 CSS 는 전역 선택자를 쓴다).
+            주소로 연다 — 그 테마의 CSP 가 붙은 완성된 HTML 이라 웹폰트까지 실제와 같게 그려진다(srcdoc 은 관리 화면의 CSP 를
+            물려받아 테마 글꼴이 막혔다). iframe 이라 테마 CSS 가 관리 화면에 새지 않는다.
           */}
           <iframe
             title={t("themes.previewOf", { name: preview.name })}
-            srcDoc={preview.html}
+            src={previewUrl(preview.name)}
             style={{
               flex: 1, width: preview.width ? preview.width : "100%", margin: "0 auto",
               maxWidth: "100%", border: 0, borderRadius: 6, background: "#fff",

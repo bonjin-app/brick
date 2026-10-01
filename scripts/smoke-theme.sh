@@ -342,6 +342,25 @@ check "없는 테마 미리보기는 400" "$(code -b "$CK" "$API/api/admin/rende
 contains "이유를 화면에 쓸 수 있게 준다" \
   "$(curl -s -b "$CK" "$API/api/admin/render/preview?path=&theme=nope")" "nope"
 
+echo "── 테마 미리보기를 완성된 HTML 로 — 그 테마의 CSP 를 단다 (관리자 → 테마의 축소판·미리보기 창)"
+# srcdoc 으로 넣던 미리보기는 관리 화면의 CSP 를 물려받아 테마 웹폰트가 막혔다(부티크가 명조 없이 그려졌다)
+PVH="$TMP/pvh.head"; PVB="$(curl -s -b "$CK" -D "$PVH" "$API/api/admin/render/preview-page?path=&theme=boutique")"
+check "200 으로 HTML 을 준다" "$(head -1 "$PVH" | tr -d '\r' | awk '{print $2}')" "200"
+contains "HTML 이다" "$(tr -d '\r' < "$PVH" | tr 'A-Z' 'a-z')" "content-type: text/html"
+contains "그 테마로 그린다" "$PVB" "Noto Serif KR"
+contains "그 테마가 선언한 웹폰트 출처가 CSP 에 있다" "$(tr -d '\r' < "$PVH" | grep -i '^content-security-policy:')" "https://fonts.gstatic.com"
+absent "사이트 정책(활성 테마 기준)에는 그 출처가 없다 — 미리보기만 넓힌다" \
+  "$(curl -s -D - -o /dev/null "$API/api/render/page?path=&_=$RANDOM" | tr -d '\r' | grep -i '^content-security-policy:')" "https://fonts.gstatic.com"
+contains "검색에 오르지 않는다" "$(tr -d '\r' < "$PVH" | tr 'A-Z' 'a-z')" "x-robots-tag: noindex"
+contains "담지 않는다" "$(tr -d '\r' < "$PVH" | tr 'A-Z' 'a-z')" "cache-control: no-store"
+contains "미리보기 창용은 스크립트를 그대로 둔다" "$PVB" "<script"
+absent "축소판용(bare=1)은 스크립트를 뺀다" "$(curl -s -b "$CK" "$API/api/admin/render/preview-page?path=&theme=boutique&bare=1")" "<script"
+check "비로그인은 볼 수 없다" "$(code "$API/api/admin/render/preview-page?path=&theme=boutique")" "401"
+check "테마 이름에 경로를 넣을 수 없다" "$(code -b "$CK" "$API/api/admin/render/preview-page?path=&theme=../../etc")" "400"
+NOPE="$(curl -s -b "$CK" "$API/api/admin/render/preview-page?path=&theme=nope")"
+contains "없는 테마는 이유를 그 자리에 보여 준다" "$NOPE" "nope"
+absent "이유 글에 태그를 끼워 넣을 수 없다" "$(curl -s -b "$CK" "$API/api/admin/render/preview-page?path=&theme=%3Cb%3Ex")" "<b>"
+
 echo "── 네 번째 동봉 테마(boutique): 같은 쇼핑몰, 반대편 인상"
 contains "테마 목록에 boutique" "$THEMES" '"name":"boutique"'
 check "boutique 적용" "$(code -b "$CK" -X POST "$API/api/themes/boutique/activate")" "201"

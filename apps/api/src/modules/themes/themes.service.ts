@@ -64,6 +64,11 @@ export class ThemesService {
     return (await this.resolveActive()).manifest;
   }
 
+  /** 이름으로 매니페스트 — 미리보기가 그 테마의 CSP 선언을 읽는다. 없거나 못 읽으면 null */
+  async manifestOf(name: string): Promise<ThemeManifest | null> {
+    return this.readManifest(name).catch(() => null);
+  }
+
   /**
    * 지금 **실제로 그리는** 테마와 매니페스트.
    * render() 가 물러나는 것과 같은 순서를 따라야 색·에셋·CSP 가 화면과 어긋나지 않는다.

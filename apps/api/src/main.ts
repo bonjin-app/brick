@@ -154,6 +154,8 @@ async function bootstrap() {
    */
   const csp = app.get(CspService, { strict: false });
   app.getHttpAdapter().getInstance().addHook("onSend", async (_req, reply, payload) => {
+    // 응답이 자기 정책을 이미 정했으면 덮지 않는다(테마 미리보기는 그 테마의 선언으로 만든 정책을 단다)
+    if (reply.getHeader("content-security-policy") || reply.getHeader("content-security-policy-report-only")) return payload;
     const header = await csp?.header().catch(() => null);
     if (header) reply.header(header.name, header.value);
     return payload;

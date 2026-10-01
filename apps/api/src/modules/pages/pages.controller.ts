@@ -9,6 +9,7 @@ import { AuditService } from "../audit/audit.service.js";
 import { AuthService } from "../auth/auth.service.js";
 import { PageRenderService, type BlockNode, type PageDraft } from "./page-render.service.js";
 import { EDIT_RUNTIME } from "./edit-runtime.js";
+import { CspService } from "../security/csp.service.js";
 import { PublishSchedulerService } from "./publish-scheduler.service.js";
 import { RevisionsService } from "./revisions.service.js";
 import { HookBus, type CacheProvider } from "@brick/core";
@@ -93,6 +94,7 @@ export class PagesController {
     private readonly auth: AuthService,
     @Inject(HOOKS) private readonly hooks: HookBus,
     @Inject(CACHE) private readonly cache: CacheProvider,
+    private readonly csp: CspService,
   ) {}
 
   /**
@@ -128,6 +130,37 @@ export class PagesController {
     } catch (err) {
       throw new BadRequestException(err instanceof Error ? err.message : String(err));
     }
+  }
+
+  /**
+   * 테마 미리보기를 **완성된 HTML** 로 — 관리자 → 테마의 축소판과 미리보기 창이 iframe 의 주소로 연다.
+   *
+   * 전에는 JSON 으로 받은 HTML 을 srcdoc 으로 넣었다. srcdoc 문서는 **부모(관리 화면)의 CSP 를 물려받아**, 관리 화면이
+   * 허용하지 않는 테마 웹폰트(Pretendard·Noto Serif 등)가 막혀 미리보기가 기본 글꼴로 그려졌다 — 실제 사이트와 다른 화면이다.
+   * 여기서는 **그 테마의 선언으로 만든 CSP** 를 단다(전역 훅은 응답이 정한 정책을 덮지 않는다). 색인하지 않고 담지 않는다.
+   */
+  @Get("admin/render/preview-page")
+  @UseGuards(AdminGuard)
+  async renderPreviewPage(@Query() query: Record<string, string>, @Req() req: FastifyRequest, @Res() reply: FastifyReply) {
+    const { theme, bare, ...rest } = query ?? {};
+    const send = (status: number, html: string) => reply
+      .status(status)
+      .type("text/html; charset=utf-8")
+      .header("cache-control", "no-store")
+      .header("x-robots-tag", "noindex")
+      .send(html);
+    let page;
+    try {
+      page = await this.renderPreview({ ...rest, theme }, req);
+    } catch (err) {
+      const text = err instanceof Error ? err.message : String(err);
+      return send(400, `<!doctype html><meta charset="utf-8"><title>Preview</title><p style="font:14px system-ui;padding:24px">${text.replace(/[<>&]/g, "")}</p>`);
+    }
+    const header = await this.csp.headerFor(String(theme)).catch(() => null);
+    if (header) reply.header(header.name, header.value);
+    // 축소판(bare=1)은 보는 것이다 — 스크립트를 빼고 준다(막힌 스크립트마다 콘솔 오류가 쌓이지 않게, 그리는 비용도 줄게)
+    const html = bare === "1" ? page.html.replace(/<script\b[\s\S]*?<\/script>/gi, "") : page.html;
+    return send(page.status ?? 200, html);
   }
 
   @Get("render/page")

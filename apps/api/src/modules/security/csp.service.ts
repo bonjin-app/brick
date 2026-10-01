@@ -99,7 +99,23 @@ export class CspService {
     return v === "off" || v === "report-only" ? v : "on";
   }
 
-  private async build(): Promise<string> {
+  /**
+   * 특정 테마로 그린 화면에 붙일 헤더 — 관리자의 테마 미리보기가 쓴다.
+   *
+   * 사이트 정책은 **활성 테마**의 선언으로 만든다. 그래서 다른 테마를 미리 보면 그 테마의 웹폰트(부티크의 Noto Serif 등)가
+   * 막혀 기본 글꼴로 그려졌다 — 미리보기가 실제와 다른 화면을 보여 준 것이다. 캐시하지 않는다(관리자만 가끔 부른다).
+   */
+  async headerFor(themeName: string): Promise<{ name: string; value: string } | null> {
+    const mode = await this.mode();
+    if (mode === "off") return null;
+    const manifest = await this.themes.manifestOf(themeName);
+    return {
+      name: mode === "report-only" ? "content-security-policy-report-only" : "content-security-policy",
+      value: await this.build(manifest?.csp),
+    };
+  }
+
+  private async build(themeCsp?: Partial<Record<CspDirective, string[]>>): Promise<string> {
     const extra = new Map<CspDirective, Set<string>>(DIRECTIVES.map((d) => [d, new Set<string>()]));
     const add = (sources: Partial<Record<CspDirective, string[]>> | undefined) => {
       for (const d of DIRECTIVES) {
@@ -113,8 +129,8 @@ export class CspService {
       }
     };
 
-    const active = await this.themes.activeManifest().catch(() => null);
-    add(active?.csp);
+    if (themeCsp !== undefined) add(themeCsp);
+    else add((await this.themes.activeManifest().catch(() => null))?.csp);
     for (const sources of this.fromPlugins.values()) add(sources);
 
     const join = (d: CspDirective, base: string[]) => [...base, ...extra.get(d)!].join(" ");
