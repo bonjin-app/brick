@@ -10,6 +10,7 @@
  *   - 28px 미만 터치 영역 (모바일만; 본문 문단·표 안·푸터는 제외)
  *   - "undefined" · "NaN" · "[object Object]" 가 화면에 찍힌 곳
  *   - 가로 스크롤 상자에 숨은 조작 요소 (모바일만 — 보이지 않는 버튼은 없는 버튼이다)
+ *   - 꺾인 단추 (짧은 단추 글자가 두 줄 이상으로 선 것 — "검/색")
  *
  * 사용법:
  *   1. 사이트를 브라우저로 연다 (관리 화면을 보려면 로그인한 상태로)
@@ -99,6 +100,26 @@
         }
       }
     }
+    /*
+     * 꺾인 단추 — 짧은 단추 글자(열 글자 이하)가 두 줄 이상으로 선 것.
+     *
+     * 넘침 검사로는 잡히지 않는다: 문서는 화면 안에 있고 단추도 화면 안에 있다. 그런데 폰의 관리 목록에서 검색 칸 옆
+     * "검색" 단추가 칸에 밀려 "검/색" 으로 세로로 섰다 — 낱말 하나가 쌓이면 단추로 읽히지 않는다. 사진을 보고서야 알았다.
+     */
+    doc.querySelectorAll("button, a.brick-btn, .brick-btn").forEach((b) => {
+      const text = (b.textContent || "").trim();
+      if (!text || text.length > 10 || b.getBoundingClientRect().width === 0) return;
+      // 글자 노드만 본다 — 아이콘(svg) 상자는 글자와 높이가 달라 "두 줄" 로 잘못 읽힌다
+      const tops = new Set();
+      const walker = doc.createTreeWalker(b, 4 /* SHOW_TEXT */);
+      while (walker.nextNode()) {
+        if (!walker.currentNode.nodeValue.trim()) continue;
+        const range = doc.createRange();
+        range.selectNodeContents(walker.currentNode);
+        for (const r of range.getClientRects()) if (r.width > 0) tops.add(Math.round(r.top / 4));
+      }
+      if (tops.size > 1) issues.push(`꺾인 단추 "${text}" (${tops.size}줄)`);
+    });
     if (/undefined|NaN|\[object Object\]/.test(doc.body.innerText || "")) issues.push("undefined/NaN 문자열 노출");
     return [...new Set(issues)].slice(0, 12);
   };

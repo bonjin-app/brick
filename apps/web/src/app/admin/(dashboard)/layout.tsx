@@ -276,6 +276,16 @@ const ADMIN_CSS = `
   .brick-admin .brick-x-table td.brick-x-pick { justify-content: flex-start; }
   /* 비어 있을 때의 안내는 카드 테두리 없이 */
   .brick-admin .brick-x-table tr.brick-x-empty { border: 0; }
+  /*
+   * 대시보드 최근 활동 — 폰에서는 두 줄로: 위는 시각·사람·행위, 아래는 내용.
+   * 한 줄에 넷을 다 세우면 "plugin.activate" 같은 행위 이름이 화면 밖으로 7px 밀려
+   * 문서 전체가 옆으로 흔들렸다. 사람 칸은 0 에서 출발해 남는 폭만 쓴다 — 줄바꿈은
+   * 줄어들기 전 크기로 정해지므로, 제 크기로 두면 행위가 셋째 줄로 떨어진다.
+   */
+  .brick-admin .brick-activity li { flex-wrap: wrap; row-gap: 2px; }
+  .brick-admin .brick-activity-actor { flex: 1 1 0; min-width: 0; max-width: none; }
+  .brick-admin .brick-activity-action { margin-left: auto; }
+  .brick-admin .brick-activity-text { order: 9; flex-basis: 100%; }
 }
 `;
 

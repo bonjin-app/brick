@@ -45,6 +45,11 @@
   .brick-admin th, .brick-admin td { white-space: nowrap; }
   .brick-admin td textarea, .brick-admin td input { min-width: 160px; }
   .brick-admin h1 { font-size: 22px; }
+  /*
+   * 단추 글자는 꺾지 않는다 — 검색 칸과 한 줄에 놓인 "검색" 단추가 폰에서 칸에 밀려 "검/색" 두 줄로 섰다.
+   * 낱말 하나짜리 단추가 세로로 쌓이면 단추로 보이지 않는다. 줄이 모자라면 줄 자체가 줄바꿈된다(flex-wrap).
+   */
+  .brick-admin :where(button) { white-space: nowrap; flex-shrink: 0; }
 }
 
 /* 문제가 있는 칸은 눈으로도 보여야 한다 — aria-invalid 만으로는 스크린리더에만 전해진다 */
