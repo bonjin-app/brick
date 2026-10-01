@@ -1044,10 +1044,14 @@ function MediaPicker({ onPick, onPickMany, onClose, multiple }: {
  * 운영자도 "12,000원" 과 한국식 날짜를 봤다 (손님 화면은 이미 고쳤다 — 관리
  * 화면만 남아 있었다).
  */
-/** 목록의 축소판 — 사이트 안 주소나 http(s) 만 그린다. 없으면 빈 자리(열 폭이 흔들리지 않게) */
+/**
+ * 목록의 축소판 — http(s) 로 풀리는 주소만 그린다(브라우저의 해석으로 — 문자열 규칙은 "/\\evil" 를 잘못 읽는다).
+ * 없으면 빈 자리(열 폭이 흔들리지 않게).
+ */
 function Thumb({ src }: { src: unknown }) {
   const url = typeof src === "string" ? src.trim() : "";
-  const ok = url.startsWith("/") ? !url.startsWith("//") : /^https?:\/\//i.test(url);
+  let ok = false;
+  try { ok = url !== "" && /^https?:$/.test(new URL(url, window.location.href).protocol); } catch { ok = false; }
   return ok
     ? <img src={url} alt="" loading="lazy" width={44} height={44} className="brick-x-thumb-img" />
     : <span className="brick-x-thumb-img is-empty" aria-hidden="true" />;

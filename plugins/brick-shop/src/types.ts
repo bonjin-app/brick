@@ -73,6 +73,13 @@ export const PRODUCT_STATUS_LABEL: Record<string, string> = {
 
 /** 쇼핑몰 설정 (관리자 → 설정에서 변경, ctx.settings에 저장) */
 export interface ShopSettings {
+  /**
+   * 상품 상세 "구매 안내" 에 덧붙일 운영자 문구 — 배송(출고 시각·택배사·도서산간)과 교환·반품(접수처·주소).
+   * 비어도 안내는 나간다: 배송비·무료배송 기준·청약철회 7일·반품 배송비·반품이 안 되는 경우는
+   * 설정값과 법에서 만든다. 운영자는 자기 가게만의 사정만 적으면 된다.
+   */
+  deliveryGuide?: string;
+  returnGuide?: string;
   /** 기본 배송비 (원) */
   shippingFee: number;
   /** 이 금액 이상이면 무료배송. 0이면 무료배송 없음 */
@@ -140,6 +147,8 @@ export const DEFAULT_SETTINGS: ShopSettings = {
   addressSearch: true,
   unpaidCancelMinutes: 60,
   depositDays: 3,
+  deliveryGuide: "",
+  returnGuide: "",
 };
 
 export function escapeHtml(s: unknown): string {

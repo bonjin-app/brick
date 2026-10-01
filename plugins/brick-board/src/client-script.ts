@@ -481,7 +481,8 @@ export const BOARD_CSS = `
 .brick-clip,.brick-lock{font-size:12px;margin-left:3px}
 .brick-board-search{display:flex;gap:6px;margin-top:22px;align-items:center;flex-wrap:wrap;justify-content:center}
 .brick-board-search select,.brick-board-search input{padding:8px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 6px)}
-.brick-board-search button{padding:8px 16px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 6px);background:var(--color-bg, #ffffff);cursor:pointer}
+.brick-board-search button{padding:8px 16px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 6px);background:var(--color-bg, #ffffff);color:var(--color-text, #17171c);cursor:pointer}
+.brick-board-search button:hover{background:var(--color-bg-soft, #f6f6f9);color:var(--color-text, #17171c)}
 .brick-write-btn{margin-left:auto;padding:9px 20px;background:var(--color-primary,#d0402c);color:var(--color-on-primary, #ffffff);border-radius:var(--radius, 6px);text-decoration:none;font-weight:600;font-size:14px}
 .brick-board-empty{padding:36px;text-align:center;color:var(--color-muted, #6c6c7a)}
 .brick-pager{display:flex;gap:4px;justify-content:center;margin:20px 0;font-size:14px;align-items:center}
@@ -508,7 +509,8 @@ export const BOARD_CSS = `
 .brick-secret-notice{padding:40px;text-align:center;color:var(--color-text-soft, #45454f);background:var(--color-bg-soft, #f6f6f9);border-radius:var(--radius-lg, 10px)}
 .brick-post-foot{display:flex;align-items:center;gap:14px;margin-top:28px;padding-top:16px;border-top:1px solid var(--color-line, #e4e4ea);flex-wrap:wrap}
 .brick-vote{display:flex;gap:8px}
-.brick-vote button{display:inline-flex;align-items:center;gap:6px;min-height:38px;padding:8px 16px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius-lg, 20px);background:var(--color-bg, #ffffff);cursor:pointer;font-size:14px}
+.brick-vote button{display:inline-flex;align-items:center;gap:6px;min-height:38px;padding:8px 16px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius-lg, 20px);background:var(--color-bg, #ffffff);color:var(--color-text, #17171c);cursor:pointer;font-size:14px}
+.brick-vote button:hover{background:var(--color-bg-soft, #f6f6f9);color:var(--color-text, #17171c)}
 .brick-main button[data-reply]{min-height:32px;padding:4px 10px}
 .brick-main .brick-author .brick-author-name{min-height:28px;display:inline-flex;align-items:center}
 .brick-scrap{padding:8px 16px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius-lg, 20px);background:var(--color-bg, #ffffff);cursor:pointer;font-size:14px}

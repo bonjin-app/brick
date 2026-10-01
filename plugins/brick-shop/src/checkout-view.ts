@@ -59,7 +59,13 @@ export function registerCheckoutView(
      */ ""}
     <div class="brick-co-addrs" id="brick-co-addrs" hidden></div>
     <div class="brick-co-addr">
-      ${field(t("checkout.postcode"), '<input type="text" name="postcode" autocomplete="postal-code" inputmode="numeric" required maxlength="10" />')}
+      ${/*
+         우편번호의 이름표는 한 줄 위에 따로 — 칸과 [주소 검색] 단추가 같은 줄에 서야 단추가 칸의 높이를
+         그대로 따른다(테마마다 입력칸 높이가 다르다). 이름표 안에 칸을 넣으면 이름표의 바깥 여백까지
+         줄 높이에 들어가 단추가 칸보다 18px 아래로 내려앉았다.
+       */ ""}
+      <label class="brick-co-postcode-label" for="brick-co-postcode">${escapeHtml(t("checkout.postcode"))}</label>
+      <input id="brick-co-postcode" class="brick-co-postcode" type="text" name="postcode" autocomplete="postal-code" inputmode="numeric" required maxlength="10" />
       ${addrSearch ? addressSearchField() : ""}
       ${field(t("checkout.address1"), '<input type="text" name="address1" autocomplete="street-address" required maxlength="200" />')}
     </div>
@@ -94,6 +100,25 @@ export function registerCheckoutView(
       <p class="brick-co-pay-loading">${escapeHtml(t("checkout.loading"))}</p>
     </fieldset>
 
+    ${/*
+       결제 전 확인 — 전자상거래법 제8조(전자적 대금지급의 확인 절차)와 개인정보보호법 제15조.
+       회원은 가입할 때 개인정보 수집에 동의했지만, **비회원 주문은 여기서 처음 이름·연락처·주소를 받는다** —
+       무엇을 왜 언제까지 갖는지 알리고 동의를 받아야 한다(보유 기간은 전자상거래법 제6조의 5년).
+       required 라 동의하지 않으면 브라우저가 제출을 막는다.
+     */ ""}
+    <div class="brick-co-agree">
+      ${blockCtx?.user ? "" : `<details class="brick-co-privacy">
+        <summary>${escapeHtml(t("checkout.privacyTitle"))}</summary>
+        <dl>
+          <dt>${escapeHtml(t("checkout.privacyItemsLabel"))}</dt><dd>${escapeHtml(t("checkout.privacyItems"))}</dd>
+          <dt>${escapeHtml(t("checkout.privacyPurposeLabel"))}</dt><dd>${escapeHtml(t("checkout.privacyPurpose"))}</dd>
+          <dt>${escapeHtml(t("checkout.privacyKeepLabel"))}</dt><dd>${escapeHtml(t("checkout.privacyKeep"))}</dd>
+        </dl>
+        <p>${escapeHtml(t("checkout.privacyRefuse"))}</p>
+      </details>
+      <label class="brick-co-check"><input type="checkbox" name="agreePrivacy" required /> ${escapeHtml(t("checkout.agreePrivacy"))}</label>`}
+      <label class="brick-co-check"><input type="checkbox" name="agreeOrder" required /> ${escapeHtml(t("checkout.agreeOrder"))}</label>
+    </div>
     <button type="submit" class="brick-primary brick-co-submit">${escapeHtml(t("checkout.submit"))}</button>
     ${/*
        진행 안내와 오류가 같은 자리를 쓴다. 오류는 즉시 읽혀야 하므로 alert 다 —
@@ -118,7 +143,30 @@ export function registerCheckoutView(
 </div>
 ${await gatewayScripts()}${checkoutScript(t)}${addrSearch ? addressSearchScript() + ADDRESS_SEARCH_CSS : ""}
 <style>
-.brick-checkout { max-width: 640px; }
+${/*
+   넓은 화면에서는 두 칸 — 왼쪽은 적는 칸, 오른쪽은 주문 상품과 합계(내리는 동안 붙어 있다).
+   한 칸 640px 에 두었더니 화면 오른쪽 절반이 비었고, 주소를 적는 동안 얼마를 내는지 보이지 않았다.
+ */ ""}
+.brick-checkout { max-width: 1080px; }
+@media (min-width: 960px) {
+  .brick-checkout { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 48px; align-items: start; }
+  .brick-co-form { grid-column: 1; grid-row: 1; }
+  .brick-co-summary { grid-column: 2; grid-row: 1; position: sticky; top: 16px; padding: 22px 22px 18px; border: 1px solid var(--color-line, #e7e7ec); border-radius: var(--radius-lg, 12px); background: var(--color-bg, #fff); }
+  .brick-co-summary h2 { margin-top: 0; }
+  .brick-co-done { grid-column: 1 / -1; }
+}
+.brick-co-item { display: flex; align-items: center; gap: 12px; }
+.brick-co-item img, .brick-co-noimg { flex: none; width: 52px; height: 52px; border-radius: var(--radius, 8px); object-fit: cover; background: var(--color-bg-soft, #f7f7f9); border: 1px solid var(--color-line, #e7e7ec); }
+.brick-co-item small { display: block; color: var(--color-muted, #71717d); font-size: 12.5px; margin-top: 2px; }
+.brick-co-agree { margin-top: 22px; padding: 14px 16px; border: 1px solid var(--color-line, #e7e7ec); border-radius: var(--radius-lg, 10px); background: var(--color-bg-soft, #f7f7f9); }
+.brick-co-check { display: flex; align-items: flex-start; gap: 9px; min-height: 40px; padding: 6px 0; font-size: 14px; cursor: pointer; }
+.brick-co-check input { margin-top: 3px; flex: none; }
+.brick-co-privacy { font-size: 13px; color: var(--color-text-soft, #45454f); }
+/* 펼침 표시(▸)를 남긴다 — display:flex 로 두면 표시가 사라져 누를 수 있는 줄로 보이지 않았다 */
+.brick-co-privacy summary { cursor: pointer; display: list-item; padding: 6px 0; font-weight: 600; }
+.brick-co-privacy dl { display: grid; grid-template-columns: 90px 1fr; gap: 4px 10px; margin: 6px 0; }
+.brick-co-privacy dd { margin: 0; }
+.brick-co-privacy p { margin: 4px 0 8px; }
 .brick-checkout h2 { font-size: 17px; margin: 26px 0 10px; }
 .brick-co-summary table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
 .brick-co-summary td { padding: 8px 4px; border-bottom: 1px solid var(--color-line, #e7e7ec); }
@@ -131,7 +179,19 @@ ${await gatewayScripts()}${checkoutScript(t)}${addrSearch ? addressSearchScript(
 /* 문제가 있는 칸은 눈으로도 보여야 한다 — aria-invalid 만으로는 스크린리더에만 전해진다 */
 .brick-co-form [aria-invalid="true"] { border-color: var(--color-danger, #c8322f); outline: 2px solid var(--color-danger, #c8322f); outline-offset: 1px; }
 .brick-co-form .brick-buy-msg.is-error { color: var(--color-danger, #c8322f); font-weight: 600; }
-.brick-co-addr { display: grid; grid-template-columns: 130px 1fr; gap: 10px; }
+${/*
+   우편번호 이름표 / 칸 | 검색 단추 / 안내 / 주소(한 줄 전체). 검색 단추가 격자 한 칸을 통째로 차지해
+   높이 100px·폭 500px 짜리 상자로 부풀었다 — 단추는 칸의 높이를 따른다.
+   이 설명은 CSS 주석이 아니라 코드 주석이다: CSS 주석은 손님 화면에 그대로 실려 나가고, 검색을 끈
+   가게의 주문서에 "주소 검색" 이라는 글자가 남았다(스모크가 잡았다).
+ */ ""}
+.brick-co-addr { display: grid; grid-template-columns: 160px auto 1fr; gap: 6px 10px; margin-top: 12px; }
+.brick-co-postcode-label { grid-column: 1 / -1; font-size: 13.5px; color: var(--color-text-soft, #45454f); }
+.brick-co-form .brick-co-postcode { grid-column: 1; width: 100%; margin: 0; }
+.brick-co-addr .brick-addr-btn { grid-column: 2; align-self: stretch; justify-self: start; min-height: 44px; height: auto; margin: 0; padding: 0 18px; white-space: nowrap; }
+.brick-co-addr .brick-addr-msg { grid-column: 1 / -1; margin: 0; }
+.brick-co-addr .brick-addr-msg:empty { display: none; }
+.brick-co-addr > .brick-field { grid-column: 1 / -1; margin-bottom: 0; }
 .brick-co-pay { background: var(--color-bg-soft, #f7f7f9); border: 1px solid var(--color-line, #e7e7ec); border-radius:var(--radius-lg, 10px); padding: 12px 14px; margin: 0; }
 /* 제목(h2)이 바로 위에 있으므로 legend 는 스크린리더에만 남긴다 */
 .brick-co-pay-legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
@@ -158,7 +218,11 @@ ${await gatewayScripts()}${checkoutScript(t)}${addrSearch ? addressSearchScript(
 .brick-co-done dt { color: var(--color-muted, #71717d); }
 .brick-co-done dd { margin: 0; font-weight: 600; }
 .brick-co-back { display: inline-block; padding: 10px 18px; border-radius:var(--radius, 8px); text-decoration: none; }
-@media (max-width: 560px) { .brick-co-addr { grid-template-columns: 1fr; } }
+@media (max-width: 560px) {
+  .brick-co-addr { grid-template-columns: minmax(0, 1fr) auto; }
+  .brick-co-form .brick-co-postcode { grid-column: 1; }
+  .brick-co-addr .brick-addr-btn { grid-column: 2; }
+}
 </style>`;
     },
   };
@@ -211,9 +275,17 @@ const checkoutScript = (t: (k: string) => string) => `
           ' <a href="' + root.dataset.shopBase + '">' + ${JSON.stringify(t("checkout.goShop"))} + '</a></p>';
         return;
       }
+      // 사진 — 무엇을 사는지 이름을 읽지 않고도 보이게 (사이트 안 경로나 http(s) 만)
+      function thumb(u){
+        u = String(u || '');
+        // 브라우저의 해석으로 판단한다 — 문자열 규칙은 "/\\evil" 같은 주소를 잘못 읽는다. http(s) 만 그린다
+        var ok = false; try { ok = /^https?:$/.test(new URL(u, location.href).protocol); } catch (e) { ok = false; }
+        return ok ? '<img src="' + esc(u) + '" alt="" width="52" height="52" loading="lazy" />' : '<span class="brick-co-noimg" aria-hidden="true"></span>';
+      }
       var rows = d.items.map(function(it){
-        return '<tr><td>' + esc(it.productName) + (it.optionName ? ' — ' + esc(it.optionName) : '') +
-               ' × ' + it.quantity + '</td><td>' + fmt(it.lineTotal) + '</td></tr>';
+        return '<tr><td><span class="brick-co-item">' + thumb(it.imageUrl) + '<span>' + esc(it.productName) +
+               '<small>' + (it.optionName ? esc(it.optionName) + ' · ' : '') + ${JSON.stringify(t("checkout.qtyN"))}.replace('{n}', it.quantity) + '</small></span></span></td>' +
+               '<td>' + fmt(it.lineTotal) + '</td></tr>';
       }).join('');
       itemsBox.innerHTML = '<table><tbody>' + rows + '</tbody></table>' + totalsHtml(d);
       form.hidden = false;

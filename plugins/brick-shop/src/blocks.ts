@@ -4,6 +4,7 @@ import { CAPTCHA_WIDGET_CSS, CAPTCHA_WIDGET_JS, STACK_TABLE_CSS, captchaFieldHtm
 import { escapeHtml, won, type Db, type ShopSettings } from "./types.js";
 import { bindI18n, t, moneyFnScript } from "./i18n.js";
 import { reviewSection } from "./reviews-view.js";
+import { DETAIL_EXTRAS_CSS, DETAIL_EXTRAS_SCRIPT, breadcrumbHtml, categoryTrail, purchaseGuideHtml, sectionNavHtml } from "./detail-extras.js";
 import { RELATED_LIMIT, listRelated, type RelatedProduct } from "./related.js";
 import { activeCollections, viewCollection } from "./collections.js";
 import { registerCheckoutView } from "./checkout-view.js";
@@ -349,7 +350,7 @@ export function registerStorefrontBlocks(
 
       const { rows } = await db.execute(sql`
         SELECT id, slug, name, summary, description, image_url, images, price, list_price,
-               stock, status, free_shipping, sub_interval, review_count, rating_sum, inquiry_count, adult_only
+               stock, status, free_shipping, sub_interval, review_count, rating_sum, inquiry_count, adult_only, category_id
         FROM shop_products WHERE slug = ${slug} AND status IN ('selling', 'soldout') LIMIT 1
       `);
       const p = rows[0];
@@ -401,6 +402,9 @@ export function registerStorefrontBlocks(
       `);
       const s = await settings();
       const soldout = p.status === "soldout" || (p.stock !== null && Number(p.stock) <= 0);
+      // 경로는 부가 정보다 — 분류를 못 읽어도 상품은 떠야 한다
+      const trail = await categoryTrail(db, p.category_id ? String(p.category_id) : null).catch(() => []);
+      const shopBase = shopBaseOf(blockCtx);
 
       // 대표 이미지 + 추가 이미지 = 갤러리. 대표가 목록에 이미 있으면 중복을 걷어낸다
       const extra = Array.isArray(p.images) ? (p.images as string[]).map(String) : [];
@@ -423,7 +427,7 @@ export function registerStorefrontBlocks(
       ${options.map((o) => {
         const oSoldout = o.stock !== null && Number(o.stock) <= 0;
         const extra = Number(o.extra_price) > 0 ? ` (+${won(Number(o.extra_price))})` : "";
-        return `<option value="${escapeHtml(o.id)}"${oSoldout ? " disabled" : ""}>${escapeHtml(o.name)}${extra}${oSoldout ? escapeHtml(t("detail.optionSoldout")) : ""}</option>`;
+        return `<option value="${escapeHtml(o.id)}" data-extra="${Number(o.extra_price) || 0}"${oSoldout ? " disabled" : ""}>${escapeHtml(o.name)}${extra}${oSoldout ? escapeHtml(t("detail.optionSoldout")) : ""}</option>`;
       }).join("")}
     </select>
   </label>`
@@ -449,6 +453,7 @@ export function registerStorefrontBlocks(
       });
 
       return `
+${breadcrumbHtml(shopBase, trail, String(p.name ?? ""))}
 <div class="brick-product-detail">
   <div>
     <div class="brick-detail-media">
@@ -495,11 +500,21 @@ export function registerStorefrontBlocks(
       <p>${escapeHtml(t("detail.soldoutNotice"))}</p>
       ${restockForm(String(p.slug), soldoutOptions, !blockCtx.user)}
     </div>` : `
-    <form class="brick-buy-form" data-product="${escapeHtml(p.id)}">
+    <form class="brick-buy-form" data-product="${escapeHtml(p.id)}" data-price="${Number(p.price) || 0}">
       ${optionSelect}
-      <label class="brick-field">${escapeHtml(t("detail.qty"))}
-        <input id="brick-qty" type="number" value="1" min="1" max="999" />
-      </label>
+      ${/*
+         수량 −/+ — 폰에서 숫자 칸 하나로는 키보드를 띄워야 두 개를 산다. 상한은 재고(없으면 999).
+         칸은 그대로 둔다(직접 쳐도 된다). 단추가 칸의 값을 바꾸면 구매 스크립트가 그 값을 읽는다.
+       */ ""}
+      <div class="brick-field">
+        <label for="brick-qty">${escapeHtml(t("detail.qty"))}</label>
+        <div class="brick-qty">
+          <button type="button" data-step="-1" aria-label="${escapeHtml(t("qty.less"))}">−</button>
+          <input id="brick-qty" type="number" inputmode="numeric" value="1" min="1" max="${p.stock === null ? 999 : Math.max(1, Math.min(999, Number(p.stock)))}" />
+          <button type="button" data-step="1" aria-label="${escapeHtml(t("qty.more"))}">+</button>
+        </div>
+      </div>
+      <p class="brick-buy-total">${escapeHtml(t("buy.total"))}<span><strong data-total>${won(Number(p.price))}</strong><span data-total-qty></span></span></p>
       <div class="brick-buy-actions">
         <button type="button" data-act="cart">${escapeHtml(t("detail.cartBtn"))}</button>
         <button type="button" data-act="buy" class="brick-primary">${escapeHtml(t("detail.buyBtn"))}</button>
@@ -532,7 +547,9 @@ export function registerStorefrontBlocks(
     </a>` : ""}
   </div>
 </div>
-<div class="brick-detail-description">${String(p.description ?? "")}</div>
+${sectionNavHtml(reviewCount, Number(p.inquiry_count ?? 0))}
+<div id="brick-pd-desc" class="brick-detail-description">${String(p.description ?? "")}</div>
+${purchaseGuideHtml(s, Boolean(p.free_shipping))}
 ${
   // 상품은 팔지만 일부 옵션이 품절인 경우 — 가장 흔한 상황이다
   !soldout && soldoutOptions.length
@@ -546,7 +563,7 @@ ${relatedHtml}
 <a id="brick-reviews"></a>
 ${reviewSection({ id: String(p.id), reviewCount, ratingAvg, inquiryCount: Number(p.inquiry_count ?? 0) })}
 <script type="application/ld+json">${jsonLd}</script>
-${buyScript(`${shopBaseOf(blockCtx)}/cart`)}${GALLERY_SCRIPT}${restockScript()}${wishButtonScript()}${STOREFRONT_CSS}`;
+${buyScript(`${shopBase}/cart`)}${DETAIL_EXTRAS_SCRIPT()}${GALLERY_SCRIPT}${restockScript()}${wishButtonScript()}${STOREFRONT_CSS}${DETAIL_EXTRAS_CSS}`;
     },
   };
   ctx.registerBlock(productDetailBlock);
@@ -1146,8 +1163,15 @@ a.brick-shop-more:hover{color:var(--color-primary-text, #b63a2e)}
 .brick-field{display:block;margin-bottom:12px;font-size:14px}
 .brick-field select,.brick-field input{display:block;width:100%;max-width:280px;padding:9px;margin-top:4px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 6px);box-sizing:border-box}
 .brick-buy-actions{display:flex;gap:10px;margin-top:18px}
-.brick-buy-actions button{flex:1;padding:14px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 8px);background:var(--color-bg, #ffffff);font-size:15px;cursor:pointer}
+.brick-buy-actions button{flex:1;padding:14px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 8px);background:var(--color-bg, #ffffff);color:var(--color-text, #17171c);font-size:15px;cursor:pointer}
 .brick-buy-actions .brick-primary{background:var(--color-primary,#d0402c);color:var(--color-on-primary, #ffffff);border-color:transparent;font-weight:700}
+/*
+ * 손으로 올렸을 때(hover)도 이 버튼의 색을 정한다. 테마의 기본 버튼 hover 는 배경을 글자색으로,
+ * 글자를 배경색으로 뒤집는데, 위에서 배경만 흰색으로 고정해 두어서 **흰 바탕에 흰 글자** —
+ * 데스크톱에서 장바구니 버튼에 마우스를 올린 모든 손님에게 빈 버튼이 보였다.
+ */
+.brick-buy-actions button:hover{background:var(--color-bg-soft, #f6f6f9);color:var(--color-text, #17171c);border-color:var(--color-line-strong, #c9c9d3)}
+.brick-buy-actions .brick-primary:hover{background:var(--color-primary-hover, var(--color-primary,#d0402c));color:var(--color-on-primary, #ffffff);border-color:transparent}
 /* 정기배송 — 한 번의 구매와 섞이지 않게 선 아래에 따로 선다 */
 .brick-sub-cta{display:flex;flex-direction:column;gap:2px;margin-top:12px;padding:13px 16px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 8px);text-decoration:none;text-align:center}
 .brick-sub-cta strong{font-size:14.5px}
@@ -1163,7 +1187,8 @@ a.brick-shop-more:hover{color:var(--color-primary-text, #b63a2e)}
   .brick-buybar-info strong{font-size:16px;line-height:1.2}
   .brick-buybar-msg{font-size:11.5px;color:var(--color-muted, #6c6c7a);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .brick-buybar button{flex:0 0 auto;min-height:44px;padding:0 14px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 8px);
-    background:var(--color-bg, #ffffff);font-size:14px;cursor:pointer}
+    background:var(--color-bg, #ffffff);color:var(--color-text, #17171c);font-size:14px;cursor:pointer}
+  .brick-buybar button:hover{background:var(--color-bg-soft, #f6f6f9);color:var(--color-text, #17171c)}
   .brick-buybar button.brick-primary{background:var(--color-primary,#d0402c);color:var(--color-on-primary, #ffffff);border-color:transparent;font-weight:700}
   /* 바가 가리는 만큼 아래를 비운다. 테마의 고정 버튼도 위로 올린다 —
      .brick-quick 이 없는 테마에는 아무 일도 일어나지 않는다 */
@@ -1179,6 +1204,37 @@ a.brick-shop-more:hover{color:var(--color-primary-text, #b63a2e)}
 .brick-cart-total dt{color:var(--color-text-soft, #45454f)}
 .brick-cart-total dd{margin:0;text-align:right}
 .brick-cart-total .brick-grand{font-size:20px;font-weight:700;padding-top:10px;border-top:1px solid var(--color-line, #e4e4ea)}
+/* 수량 −/+ — 상품 상세와 장바구니가 같이 쓴다 */
+.brick-qty{display:inline-flex;align-items:stretch;border:1px solid var(--color-line-strong, #c9c9d3);border-radius:var(--radius, 8px);overflow:hidden;margin-top:6px}
+.brick-main .brick-qty button{width:44px;min-height:44px;border:0;border-radius:0;background:var(--color-bg, #ffffff);color:var(--color-text, #17171c);font-size:18px;line-height:1;cursor:pointer;padding:0}
+.brick-main .brick-qty button:hover{background:var(--color-bg-soft, #f6f6f9);color:var(--color-text, #17171c)}
+.brick-main .brick-qty button:disabled{color:var(--color-muted, #6c6c7a);cursor:not-allowed;background:var(--color-bg, #ffffff)}
+.brick-main .brick-qty input{width:64px;border:0;border-left:1px solid var(--color-line, #e4e4ea);border-right:1px solid var(--color-line, #e4e4ea);border-radius:0;text-align:center;font-size:15px;padding:0;-moz-appearance:textfield;appearance:textfield}
+.brick-qty input::-webkit-outer-spin-button,.brick-qty input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+/* 장바구니 — 사진 · 무료배송까지 · 쇼핑 계속하기 */
+.brick-cart-prod{display:flex;align-items:center;gap:14px;color:inherit;text-decoration:none;min-width:0}
+.brick-cart-prod img,.brick-cart-noimg{flex:none;width:64px;height:64px;border-radius:var(--radius, 8px);object-fit:cover;background:var(--color-bg-soft, #f6f6f9);border:1px solid var(--color-line, #e4e4ea)}
+.brick-cart-prod span{min-width:0;font-weight:600;line-height:1.4}
+.brick-cart-prod small{display:block;font-weight:400;color:var(--color-muted, #6c6c7a);margin-top:2px}
+.brick-cart-prod:hover span{text-decoration:underline}
+.brick-main .brick-cart-del{min-height:36px;padding:0 12px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 8px);background:var(--color-bg, #ffffff);color:var(--color-text-soft, #45454f);font-size:13px;cursor:pointer}
+.brick-main .brick-cart-del:hover{background:var(--color-bg-soft, #f6f6f9);color:var(--color-text, #17171c)}
+.brick-free-ship{margin:0 0 16px;padding:14px 16px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius-lg, 10px);background:var(--color-bg, #ffffff)}
+.brick-free-ship p{margin:0;font-size:14px;color:var(--color-text-soft, #45454f)}
+.brick-free-ship strong{color:var(--color-primary-text, #b63a2e)}
+.brick-free-ship.is-done p{color:var(--color-success, #1f7a4d);font-weight:600}
+.brick-free-bar{display:block;height:6px;margin-top:10px;border-radius:999px;background:var(--color-bg-soft, #f6f6f9);overflow:hidden}
+.brick-free-bar i{display:block;height:100%;background:var(--color-primary, #d0402c)}
+.brick-cart-actions a{flex:1;display:flex;align-items:center;justify-content:center;min-height:52px;padding:0 14px;border-radius:var(--radius, 8px);text-decoration:none;font-weight:700}
+.brick-cart-actions .brick-cart-continue{border:1px solid var(--color-line-strong, #c9c9d3);color:var(--color-text, #17171c);background:var(--color-bg, #ffffff);font-weight:600}
+.brick-cart-actions .brick-cart-continue:hover{background:var(--color-bg-soft, #f6f6f9)}
+.brick-cart-total .brick-cart-orders-link{margin:12px 0 0;text-align:center;font-size:13px}
+/* 폰의 접힌 카드 — 상품 칸은 이름표("상품") 없이 한 줄 전체를 왼쪽부터. 사진과 이름이 카드의 제목이다 */
+@media(max-width:640px){
+  .brick-cart-table td.brick-cart-cell-prod::before{content:none}
+  .brick-cart-table td.brick-cart-cell-prod{justify-content:flex-start;text-align:left;padding-top:12px !important;border-bottom:1px solid var(--color-line, #e4e4ea)}
+}
+.brick-cart-total .brick-cart-orders-link a{color:var(--color-muted, #6c6c7a);display:inline-flex;align-items:center;min-height:32px}
 .brick-cart-qty{width:64px;padding:6px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 5px)}
 .brick-detail-rating{display:flex;align-items:center;gap:7px;margin:0 0 10px;font-size:15px}
 .brick-detail-rating a{color:var(--color-muted, #6c6c7a);font-size:13px}
@@ -1379,6 +1435,15 @@ const buyScript = (cartPath: string) => `
           if (res.d.guestToken) localStorage.setItem('brick_shop_guest', res.d.guestToken);
           if (btn.dataset.act === 'buy') { location.href = ${JSON.stringify(cartPath)}; return; }
           say(${JSON.stringify(t("buy.added"))});
+          // 담은 다음 갈 곳 — 안내 한 줄만 있으면 손님은 헤더의 장바구니를 찾아야 한다
+          [msg, barMsg].forEach(function(el){
+            if (!el) return;
+            var a = document.createElement('a');
+            a.href = ${JSON.stringify(cartPath)};
+            a.textContent = ${JSON.stringify(t("buy.viewCart"))};
+            el.appendChild(document.createTextNode(' '));
+            el.appendChild(a);
+          });
         })
         .catch(function(){ say(${JSON.stringify(t("buy.error"))}); });
     });
@@ -1431,31 +1496,70 @@ const cartScript = (shopBase: string) => `
         ' <a href="' + ${JSON.stringify(shopBase)} + '">' + ${JSON.stringify(t("cart.goShop"))} + '</a></p>';
       return;
     }
+    /*
+     * 상품 칸 — 사진과 이름, 누르면 상품으로. 글자만 있으면 손님은 무엇을 담았는지 이름을 읽어야 안다.
+     * 사진 주소는 사이트 안 경로나 http(s) 만 싣는다.
+     */
+    function thumb(u){
+      u = String(u || '');
+      // 브라우저의 해석으로 판단한다 — 문자열 규칙은 "/\\evil" 같은 주소를 잘못 읽는다. http(s) 만 그린다
+      var ok = false; try { ok = /^https?:$/.test(new URL(u, location.href).protocol); } catch (e) { ok = false; }
+      return ok ? '<img src="' + esc(u) + '" alt="" loading="lazy" width="64" height="64" />' : '<span class="brick-cart-noimg" aria-hidden="true"></span>';
+    }
     var rows = d.items.map(function(it){
+      var max = it.stock == null ? 999 : Math.max(1, Math.min(999, Number(it.stock)));
+      var q = Number(it.quantity);
       return '<tr data-item="' + esc(it.id) + '">' +
-        '<td data-label="' + COL_PRODUCT + '">' + esc(it.productName) + (it.optionName ? ' <small>(' + esc(it.optionName) + ')</small>' : '') + '</td>' +
+        '<td class="brick-cart-cell-prod" data-label="' + COL_PRODUCT + '"><a class="brick-cart-prod" href="' + ${JSON.stringify(shopBase)} + '/' + encodeURIComponent(it.slug || '') + '">' + thumb(it.imageUrl) +
+          '<span>' + esc(it.productName) + (it.optionName ? ' <small>' + esc(it.optionName) + '</small>' : '') + '</span></a></td>' +
         '<td data-label="' + COL_UNIT + '">' + fmt(it.unitPrice) + '</td>' +
-        '<td data-label="' + COL_QTY + '"><input class="brick-cart-qty" type="number" min="1" max="999" aria-label="' + COL_QTY + '" value="' + Number(it.quantity) + '" /></td>' +
-        '<td data-label="' + COL_SUM + '">' + fmt(it.lineTotal) + '</td>' +
-        '<td data-label=""><button data-remove>' + ${JSON.stringify(t("common.delete"))} + '</button></td></tr>';
+        '<td data-label="' + COL_QTY + '"><div class="brick-qty">' +
+          '<button type="button" data-step="-1" aria-label="' + ${JSON.stringify(t("qty.less"))} + '"' + (q <= 1 ? ' disabled' : '') + '>−</button>' +
+          '<input class="brick-cart-qty" type="number" inputmode="numeric" min="1" max="' + max + '" aria-label="' + COL_QTY + '" value="' + q + '" />' +
+          '<button type="button" data-step="1" aria-label="' + ${JSON.stringify(t("qty.more"))} + '"' + (q >= max ? ' disabled' : '') + '>+</button>' +
+        '</div></td>' +
+        '<td data-label="' + COL_SUM + '"><strong>' + fmt(it.lineTotal) + '</strong></td>' +
+        '<td data-label=""><button type="button" class="brick-cart-del" data-remove>' + ${JSON.stringify(t("common.delete"))} + '</button></td></tr>';
     }).join('');
 
-    root.innerHTML =
-      '<p class="brick-cart-orders-link"><a href="' + ${JSON.stringify(shopBase)} + '/orders">' + ${JSON.stringify(t("orders.linkFromCart"))} + ' →</a></p>' +
-      '<table class="brick-stack-table"><thead><tr><th>' + COL_PRODUCT + '</th><th>' + COL_UNIT + '</th><th>' + COL_QTY + '</th><th>' + COL_SUM + '</th><th></th></tr></thead>' +
+    /*
+     * 무료배송까지 남은 금액 — 서버가 배송비 규칙 바로 옆에서 센 값이다(쿠폰을 쓴 뒤 금액 기준).
+     * 막대는 이미 담은 만큼의 비율이다. 배송비가 0 이면 "무료배송입니다".
+     */
+    var after = Number(d.subtotal || 0) - Number(d.discount || 0);
+    var remain = Number(d.freeShippingRemaining || 0);
+    var shipNote = remain > 0
+      ? '<div class="brick-free-ship"><p>' + ${JSON.stringify(t("cart.freeRemain"))}.replace('{amount}', '<strong>' + fmt(remain) + '</strong>') + '</p>' +
+        '<span class="brick-free-bar" aria-hidden="true"><i style="width:' + Math.min(100, Math.round(after / (after + remain) * 100)) + '%"></i></span></div>'
+      : (Number(d.shippingFee) === 0 ? '<div class="brick-free-ship is-done"><p>' + ${JSON.stringify(t("cart.freeDone"))} + '</p></div>' : '');
+
+    root.innerHTML = shipNote +
+      '<table class="brick-stack-table brick-cart-table"><thead><tr><th>' + COL_PRODUCT + '</th><th>' + COL_UNIT + '</th><th>' + COL_QTY + '</th><th>' + COL_SUM + '</th><th></th></tr></thead>' +
       '<tbody>' + rows + '</tbody></table>' +
       '<div class="brick-cart-total"><dl>' +
       '<dt>' + ${JSON.stringify(t("cart.subtotal"))} + '</dt><dd>' + fmt(d.subtotal) + '</dd>' +
       (d.discount ? '<dt>' + ${JSON.stringify(t("cart.discount"))} + '</dt><dd>-' + fmt(d.discount) + '</dd>' : '') +
       '<dt>' + ${JSON.stringify(t("cart.shipping"))} + '</dt><dd>' + (d.shippingFee ? fmt(d.shippingFee) : ${JSON.stringify(t("cart.free"))}) + '</dd>' +
       '<dt class="brick-grand">' + ${JSON.stringify(t("cart.grand"))} + '</dt><dd class="brick-grand">' + fmt(d.total) + '</dd>' +
-      '</dl><div class="brick-buy-actions"><a class="brick-primary" href="' + ${JSON.stringify(shopBase)} + '/checkout" ' +
-      'style="flex:1;padding:14px;border-radius:var(--radius, 8px);text-align:center;text-decoration:none">' + ${JSON.stringify(t("cart.order"))} + '</a></div></div>';
+      '</dl><div class="brick-buy-actions brick-cart-actions">' +
+      '<a class="brick-cart-continue" href="' + ${JSON.stringify(shopBase)} + '">' + ${JSON.stringify(t("cart.continue"))} + '</a>' +
+      '<a class="brick-primary" href="' + ${JSON.stringify(shopBase)} + '/checkout">' + ${JSON.stringify(t("cart.order"))} + '</a></div>' +
+      '<p class="brick-cart-orders-link"><a href="' + ${JSON.stringify(shopBase)} + '/orders">' + ${JSON.stringify(t("orders.linkFromCart"))} + ' →</a></p></div>';
 
     root.querySelectorAll('tr[data-item]').forEach(function(tr){
       var id = tr.dataset.item;
-      tr.querySelector('.brick-cart-qty').addEventListener('change', function(e){
-        send('PUT', id, { quantity: Number(e.target.value) });
+      var input = tr.querySelector('.brick-cart-qty');
+      input.addEventListener('change', function(e){
+        send('PUT', id, { quantity: Math.min(Number(input.max) || 999, Math.max(1, Math.floor(Number(e.target.value) || 1))) });
+      });
+      tr.querySelectorAll('[data-step]').forEach(function(b){
+        b.addEventListener('click', function(){
+          var next = Math.min(Number(input.max) || 999, Math.max(1, Number(input.value) + Number(b.dataset.step)));
+          if (next === Number(input.value)) return;
+          input.value = next;
+          tr.querySelectorAll('[data-step]').forEach(function(x){ x.disabled = true; }); // 응답 전 두 번 누름 방지
+          send('PUT', id, { quantity: next });
+        });
       });
       tr.querySelector('[data-remove]').addEventListener('click', function(){ send('DELETE', id); });
     });

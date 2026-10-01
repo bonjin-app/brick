@@ -673,6 +673,53 @@ if [[ "$SAMPLES" != "[]" && -n "$SAMPLES" ]]; then
   contains "사진이 미디어에 함께 들어간다" "$SAMPLES" '"image_url":"/uploads/'
 fi
 
+echo
+echo "── 상품 상세 — 경로 · 수량 단추 · 구매 안내 (카페24 상세와 나란히 놓고 본 빈자리)"
+# 운영자 문구에 태그를 섞어 둔다 — 글자로 나가야 한다(설정값을 HTML 로 싣지 않는다)
+curl -s -b "$CK" -X PUT "$SHOP/admin/settings" -H 'content-type: application/json' \
+  -d '{"bankAccount":"","shippingFee":3000,"freeShippingOver":50000,"returnShippingFee":4500,"pageSize":20,"notifyOrderMail":true,"addressSearch":true,"returnGuide":"반품 주소 — 서울시 테스트로 1 <b>굵게</b>"}' >/dev/null
+bust_cache
+PD="$(sf_render "shop/sample-plate&_=$RANDOM")"
+PD_CAT="$(psql_q "SELECT c.slug AS s FROM shop_products p JOIN shop_categories c ON c.id = p.category_id WHERE p.slug = 'sample-plate'")"
+[[ -n "$PD_CAT" ]] && ok "샘플 상품에 분류가 있다 (경로 단언이 헛돌지 않는다)" || bad "sample-plate 에 분류가 없다"
+contains "경로가 상품의 분류로 올라간다" "$PD" "?category=$PD_CAT\""
+contains "경로의 끝은 지금 상품" "$PD" '<span aria-current="page">세라믹 식기 3종 세트'
+contains "수량 −/+ 단추" "$PD" 'data-step="1"'
+contains "수량 상한은 재고" "$PD" "max=\"$(psql_q "SELECT stock AS s FROM shop_products WHERE slug = 'sample-plate'")\""
+contains "합계를 셀 단가가 폼에" "$PD" "data-price=\"$(psql_q "SELECT price AS s FROM shop_products WHERE slug = 'sample-plate'")\""
+contains "섹션 이동 막대에 구매안내" "$PD" 'href="#brick-pd-guide"'
+contains "구매 안내 — 청약철회 7일" "$PD" "7일 안에"
+contains "구매 안내의 반품 배송비는 설정값" "$PD" "배송비 4,500원을 고객이 부담"
+contains "구매 안내 — 반품이 안 되는 경우(법)" "$PD" "전자상거래법 제17조 제2항"
+contains "운영자 문구가 덧붙는다" "$PD" "반품 주소 — 서울시 테스트로 1"
+absent "운영자 문구의 태그는 글자로 (HTML 로 싣지 않는다)" "$PD" "<b>굵게</b>"
+# 테마의 기본 hover 는 글자를 흰색으로 뒤집는다 — 배경을 정한 버튼은 hover 의 글자색도 정한다
+contains "장바구니 버튼의 hover 글자색" "$PD" ".brick-buy-actions button:hover{background:var(--color-bg-soft, #f6f6f9);color:var(--color-text"
+
+echo "── 장바구니 — 무료배송까지 남은 금액 (배송비를 정하는 규칙 옆에서 센다)"
+PLATE_ID="$(psql_q "SELECT id AS s FROM shop_products WHERE slug = 'sample-plate'")"
+PLATE_PRICE="$(psql_q "SELECT price AS s FROM shop_products WHERE slug = 'sample-plate'")"
+FS_GT="fs$RANDOM$RANDOM"
+curl -s -X POST "$SHOP/cart" -H 'content-type: application/json' \
+  -d "{\"productId\":\"$PLATE_ID\",\"quantity\":1,\"guestToken\":\"$FS_GT\"}" >/dev/null
+check "하나 담으면 기준까지 남은 금액" "$(curl -s "$SHOP/cart?guest=$FS_GT" | jq_get "['freeShippingRemaining']")" "$((50000 - PLATE_PRICE))"
+FS_ITEM="$(curl -s "$SHOP/cart?guest=$FS_GT" | jq_get "['items'][0]['id']")"
+curl -s -X PUT "$SHOP/cart/$FS_ITEM?guest=$FS_GT" -H 'content-type: application/json' -d '{"quantity":2}' >/dev/null
+FS2="$(curl -s "$SHOP/cart?guest=$FS_GT")"
+check "기준을 넘으면 남은 금액 0" "$(echo "$FS2" | jq_get "['freeShippingRemaining']")" "0"
+check "그때 배송비도 0 (남은 금액과 배송비가 같은 규칙)" "$(echo "$FS2" | jq_get "['shippingFee']")" "0"
+contains "장바구니 줄에 사진 주소가 실린다" "$FS2" '"imageUrl":"/uploads/'
+
+echo "── 주문서 — 결제 전 확인과 비회원 개인정보 동의"
+CO_G="$(sf_render "shop/checkout&_=$RANDOM")"
+contains "구매 확인은 필수 (전자상거래법 제8조)" "$CO_G" 'name="agreeOrder" required'
+contains "비회원에게는 개인정보 수집·이용 동의 (필수)" "$CO_G" 'name="agreePrivacy" required'
+contains "수집 항목·목적·보유 기간을 알린다" "$CO_G" "보유 기간"
+CO_M="$(curl -s -b "$CK" "$API/api/render/page?path=shop/checkout&_=$RANDOM" | python3 -c "import sys,json;print(json.load(sys.stdin).get('html',''))")"
+contains "회원 주문서에도 구매 확인" "$CO_M" 'name="agreeOrder" required'
+absent "회원에게는 비회원 동의를 다시 받지 않는다" "$CO_M" 'name="agreePrivacy"'
+# 우편번호 칸과 검색 단추가 한 줄에 선다 — 이름표 안에 칸을 넣으면 단추가 18px 아래로 내려앉았다
+contains "우편번호 이름표는 칸과 따로" "$CO_G" 'for="brick-co-postcode"'
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 # 실측을 남긴다(설정됐을 때만) — README 의 표가 실제와 같은지 CI 가 대조한다.
 # 표의 숫자는 조용히 썩는다: 단언을 더해도 아무도 그 줄을 고치지 않는다.

@@ -544,7 +544,8 @@ const HISTORY_CSS = `
 .brick-point-history .brick-ph-minus { color: var(--color-danger, #c9342f); }
 .brick-point-history .brick-ph-date, .brick-point-history .brick-ph-exp { width: 110px; color: var(--color-muted, #71717d); font-size: 13px; }
 .brick-ph-empty { padding: 36px; text-align: center; color: var(--color-muted, #999); }
-.brick-ph-more { display: block; margin: 16px auto 0; padding: 9px 20px; border: 1px solid var(--color-line, #e7e7ec); border-radius:var(--radius, 8px); background: var(--color-bg, #ffffff); cursor: pointer; font: inherit; }
+.brick-ph-more { display: block; margin: 16px auto 0; padding: 9px 20px; border: 1px solid var(--color-line, #e7e7ec); border-radius:var(--radius, 8px); background: var(--color-bg, #ffffff); color: var(--color-text, #17171c); cursor: pointer; font: inherit; }
+.brick-ph-more:hover{background:var(--color-bg-soft, #f6f6f9);color:var(--color-text, #17171c)}
 /* 목록 표는 폰에서 카드로 접는다 — 맨 뒤에 와야 위의 너비 규칙을 덮는다 */
 ${STACK_TABLE_CSS}
 </style>`;

@@ -304,6 +304,7 @@ export default definePlugin(async (ctx) => {
       subtotal: q.subtotal,
       discount: q.discount,
       shippingFee: q.shippingFee,
+      freeShippingRemaining: q.freeShippingRemaining,
       total: q.total,
       couponCode: q.couponCode,
       couponError: q.couponError,
@@ -2888,6 +2889,8 @@ export default definePlugin(async (ctx) => {
       // 0 = 자동 취소하지 않는다. 상한은 실수로 붙잡힌 재고가 수년 묶이지 않게 한다
       unpaidCancelMinutes: Math.min(10080, Math.max(0, Math.floor(Number(b.unpaidCancelMinutes ?? DEFAULT_SETTINGS.unpaidCancelMinutes)) || 0)),
       depositDays: Math.min(30, Math.max(0, Math.floor(Number(b.depositDays ?? DEFAULT_SETTINGS.depositDays)) || 0)),
+      deliveryGuide: String(b.deliveryGuide ?? "").slice(0, 2000),
+      returnGuide: String(b.returnGuide ?? "").slice(0, 2000),
     };
     await ctx.settings.set("settings", next);
     await ctx.cache.invalidateTag("pages");

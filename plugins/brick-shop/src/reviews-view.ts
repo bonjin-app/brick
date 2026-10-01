@@ -121,8 +121,10 @@ const REVIEW_CSS = `
 .brick-secret-label{display:flex;gap:6px;align-items:center;font-size:14px;color:var(--color-text-soft, #45454f);margin-top:10px}
 .brick-row-actions{margin-top:10px;display:flex;gap:8px}
 /* 내 후기·문의를 지우는 버튼 — 손가락으로 누른다. 글자 크기는 그대로 두고 영역만 44px */
-.brick-row-actions button{min-height:44px;padding:0 14px;font-size:13px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 6px);background:var(--color-bg, #ffffff);cursor:pointer}
-.brick-pd-more{display:block;width:100%;padding:13px;margin-top:16px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 8px);background:var(--color-bg, #ffffff);cursor:pointer}
+.brick-row-actions button{min-height:44px;padding:0 14px;font-size:13px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 6px);background:var(--color-bg, #ffffff);color:var(--color-text, #17171c);cursor:pointer}
+.brick-row-actions button:hover{background:var(--color-bg-soft, #f6f6f9);color:var(--color-text, #17171c)}
+.brick-pd-more{display:block;width:100%;padding:13px;margin-top:16px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 8px);background:var(--color-bg, #ffffff);color:var(--color-text, #17171c);cursor:pointer}
+.brick-pd-more:hover{background:var(--color-bg-soft, #f6f6f9);color:var(--color-text, #17171c)}
 .brick-gallery{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
 .brick-gallery button{padding:0;border:2px solid transparent;border-radius:var(--radius, 8px);overflow:hidden;background:none;cursor:pointer;line-height:0}
 .brick-gallery button.is-on{border-color:var(--color-primary,#d0402c)}

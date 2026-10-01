@@ -179,5 +179,38 @@
     return { checked: paths.length * themes.length, count, problems, skipped: skippedTotal };
   };
 
+  /**
+   * 요소 하나의 **지금 상태** 대비 — 손으로 올린(hover) 상태를 재려고 둔다.
+   *
+   * 위의 순회는 가만히 있는 화면만 본다. 그런데 hover 는 자바스크립트로 흉내 낼 수 없어서
+   * (`:hover` 는 진짜 포인터만 켠다) 상품 상세의 장바구니 버튼이 **올리면 흰 바탕에 흰 글자**가
+   * 되는 것을 아무도 몰랐다 — 테마의 기본 hover 가 글자를 흰색으로 뒤집는데 플러그인이 배경만
+   * 흰색으로 고정해 두었다. 헤드리스 브라우저가 요소마다 포인터를 올리고 이것을 부른다.
+   * 돌려주는 값: { ratio, need } (그림 위 글자는 null — 재지 않는다).
+   */
+  window.brickContrastOf = (el) => {
+    const doc = el.ownerDocument, view = doc.defaultView;
+    const s = view.getComputedStyle(el);
+    const fg = parse(s.color);
+    if (!fg) return null;
+    let n = el, acc = null, bg = null;
+    while (n && n !== doc.documentElement) {
+      const cs = view.getComputedStyle(n);
+      if (cs.backgroundImage && cs.backgroundImage !== "none") return null;
+      const c = parse(cs.backgroundColor);
+      if (c && (c[3] === undefined || c[3] > 0)) {
+        acc = acc ? over(acc, c) : c;
+        if ((c[3] === undefined ? 1 : c[3]) >= 0.999) { bg = acc.slice(0, 3); break; }
+      }
+      n = n.parentElement;
+    }
+    if (!bg) {
+      const root = parse(view.getComputedStyle(doc.documentElement).backgroundColor) || [255, 255, 255, 1];
+      bg = acc ? over(acc, root).slice(0, 3) : root.slice(0, 3);
+    }
+    const size = parseFloat(s.fontSize), bold = Number(s.fontWeight) >= 700;
+    return { ratio: +ratio(over(fg, bg), bg).toFixed(2), need: size >= 24 || (size >= 18.66 && bold) ? 3 : 4.5 };
+  };
+
   console.log("brickContrastAudit() 준비됨 — 예: await brickContrastAudit(['/', '/board/free'])");
 })();

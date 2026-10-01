@@ -50,6 +50,8 @@ export interface Quote {
   /** 포인트로 결제한 금액 (brick-point가 설치된 경우) */
   pointUsed: number;
   shippingFee: number;
+  /** 무료배송까지 남은 금액 (배송비가 없거나 기준이 없으면 0) */
+  freeShippingRemaining: number;
   /**
    * 지역별 추가 배송비 (제주·도서산간).
    *
@@ -131,7 +133,7 @@ export async function quote(
     return {
       lines: [], subtotal: 0, discount: 0, couponDiscount: 0, couponId: null,
       couponRequiresIssue: false, gradeDiscount: 0,
-      gradeName: null, pointUsed: 0, shippingFee: 0,
+      gradeName: null, pointUsed: 0, shippingFee: 0, freeShippingRemaining: 0,
       zoneFee: 0, zoneName: null, total: 0,
       couponCode: null, hasUnavailable: false,
     };
@@ -259,6 +261,14 @@ export async function quote(
   const discount = couponDiscount + gradeDiscount;
 
   const shippingFee = payable.length ? calcShipping(payable, subtotal - discount, settings) : 0;
+  /*
+   * 무료배송까지 남은 금액 — 장바구니가 "12,000원 더 담으면 무료배송" 을 말한다.
+   * 배송비를 정하는 규칙(할인 뒤 금액 ≥ 기준) 바로 옆에서 센다. 화면이 따로 빼면 쿠폰을 쓴 손님에게
+   * "무료배송" 이라 하고 배송비를 받는다.
+   */
+  const freeShippingRemaining = shippingFee > 0 && settings.freeShippingOver > 0
+    ? Math.max(0, settings.freeShippingOver - (subtotal - discount))
+    : 0;
 
   // 지역별 추가 배송비 (제주·도서산간).
   //
@@ -292,6 +302,7 @@ export async function quote(
     gradeName: gradeDiscount > 0 || opts.grade ? (opts.grade?.name ?? null) : null,
     pointUsed,
     shippingFee,
+    freeShippingRemaining,
     zoneFee,
     zoneName,
     total: subtotal - discount - pointUsed + shippingFee + zoneFee,
