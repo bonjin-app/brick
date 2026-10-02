@@ -895,7 +895,8 @@ a.brick-card:hover { border-color: var(--color-text); color: inherit; }
 }
 .brick-slides { list-style: none; margin: 0; padding: 0; position: relative; height: var(--slider-h, 420px); }
 .brick-slider.is-auto .brick-slides { height: auto; }
-.brick-slide { position: absolute; inset: 0; opacity: 0; visibility: hidden; transition: opacity .5s ease, visibility .5s ease; }
+/* 칸 사이 여백은 0 — 테마의 목록 기본값(li 위아래 4px)이 슬라이드에도 먹어 사진 위아래에 회색 띠가 떴다 */
+.brick-slide { margin: 0; position: absolute; inset: 0; opacity: 0; visibility: hidden; transition: opacity .5s ease, visibility .5s ease; }
 .brick-slider.is-auto .brick-slide { position: relative; display: none; }
 .brick-slider.is-auto .brick-slide.is-on { display: block; }
 .brick-slide.is-on { opacity: 1; visibility: visible; }
@@ -1156,3 +1157,22 @@ a.brick-card:hover { border-color: var(--color-text); color: inherit; }
 .brick-home-steps { margin-top: 32px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); }
 .brick-home-steps h3 { margin-top: 0; }
 .brick-home-steps p { margin-bottom: 0; font-size: 15px; }
+
+/* ═══ 마감 (2026-10) — 스토어프런트와 같은 손질을 이 테마에도 (이 테마는 스토어프런트를 불러오지 않는다) ═══ */
+/* 퀵메뉴 — 장바구니는 머리에 있다. "맨 위로" 하나만, 한 화면 넘게 내렸을 때만(레이아웃 스크립트가 is-on) */
+.brick-quick {
+  top: auto; bottom: 24px; right: 20px; transform: translateY(12px);
+  opacity: 0; visibility: hidden; transition: opacity var(--brick-t), transform var(--brick-t), visibility var(--brick-t);
+}
+.brick-quick.is-on { opacity: 1; visibility: visible; transform: none; }
+.brick-quick a:not(.brick-quick-top) { display: none; }
+.brick-quick .brick-quick-top { width: 48px; min-height: 48px; padding: 0; }
+.brick-quick .brick-quick-top span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.brick-quick .brick-quick-top .brick-ico { transform: rotate(-90deg); width: 20px; height: 20px; }
+/* 배너가 첫 블록이면 메뉴 띠에 붙인다 — 사이에 흰 틈이 뜨면 배너가 떠 보인다 */
+.brick-page > .brick-slider.is-full:first-child { margin-top: -1.5rem; }
+@media (min-width: 768px) { .brick-page > .brick-slider.is-full:first-child { margin-top: -2rem; } }
+/* 화면 폭 배너의 글자는 본문 폭에 맞춘다 — 화면 끝에 붙으면 넓은 모니터에서 로고·상품과 줄이 어긋난다 */
+.brick-slider.is-full .brick-slide-caption { padding-inline: max(var(--brick-pad-x), calc((100% - var(--content-width)) / 2 + var(--brick-pad-x))); }
+/* 검색 — 안내 문구가 "검색어를 입력하시" 에서 잘렸다 */
+@media (min-width: 1024px) { .brick-header-search input { width: 190px; } }

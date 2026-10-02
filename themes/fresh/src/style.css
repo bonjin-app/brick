@@ -43,7 +43,7 @@
 .brick-main .brick-badge-soldout { background: rgba(31, 42, 34, .78); }
 
 /* 분류 바로가기 — 둥근 알약, 지금 보는 분류는 초록 */
-.brick-page > .brick-category-list { gap: 8px; margin-block: 28px 8px; }
+.brick-page > .brick-category-list { gap: 8px; margin-block: 28px 24px; }
 .brick-page > .brick-category-list .brick-cat { padding: 10px 18px; border-radius: 999px; background: var(--color-bg); font-weight: 600; }
 .brick-page > .brick-category-list .brick-cat:hover { border-color: var(--color-primary); color: var(--color-primary-text); }
 .brick-page > .brick-category-list .brick-cat.is-on { background: var(--color-primary); border-color: var(--color-primary); color: var(--color-on-primary); }

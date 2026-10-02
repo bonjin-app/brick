@@ -11,6 +11,7 @@
  *   - "undefined" · "NaN" · "[object Object]" 가 화면에 찍힌 곳
  *   - 가로 스크롤 상자에 숨은 조작 요소 (모바일만 — 보이지 않는 버튼은 없는 버튼이다)
  *   - 꺾인 단추 (짧은 단추 글자가 두 줄 이상으로 선 것 — "검/색")
+ *   - 머리 밖으로 넘친 요소 (머리의 칸이 본문 위에 겹친 것 — 블라섬의 폰 검색 줄)
  *
  * 사용법:
  *   1. 사이트를 브라우저로 연다 (관리 화면을 보려면 로그인한 상태로)
@@ -120,6 +121,32 @@
       }
       if (tops.size > 1) issues.push(`꺾인 단추 "${text}" (${tops.size}줄)`);
     });
+    /*
+     * 머리 밖으로 넘친 요소 — 머리의 칸이 머리 상자 아래로 삐져나와 본문 위에 겹친 것.
+     *
+     * 블라섬 테마가 머리 높이를 92px 로 묶어 두었는데, 폰에서는 검색이 다음 줄로 내려가 그 줄이
+     * 머리 밖으로 넘쳐 배너 위에 그려졌다. 넘침 검사(가로)도 대비 검사도 못 잡는다 — 사진을 보고 알았다.
+     * 펼침 메뉴·서랍처럼 일부러 띄운 것(absolute·fixed 와 그 안쪽)은 뺀다.
+     */
+    const head = doc.querySelector(".brick-header");
+    if (head) {
+      const hb = head.getBoundingClientRect().bottom;
+      const floating = (el) => {
+        for (let n = el; n && n !== head; n = n.parentElement) {
+          const p = v.getComputedStyle(n).position;
+          if (p === "absolute" || p === "fixed") return true;
+        }
+        return false;
+      };
+      for (const el of head.querySelectorAll("a, button, input, form, nav, div")) {
+        const r = el.getBoundingClientRect();
+        if (!r.width || !r.height || v.getComputedStyle(el).visibility === "hidden") continue;
+        if (r.bottom > hb + 2 && !floating(el)) {
+          issues.push(`머리 밖으로 넘친 요소 ${el.tagName.toLowerCase()}.${String(el.className).split(" ")[0]} (${Math.round(r.bottom - hb)}px)`);
+          break;
+        }
+      }
+    }
     if (/undefined|NaN|\[object Object\]/.test(doc.body.innerText || "")) issues.push("undefined/NaN 문자열 노출");
     return [...new Set(issues)].slice(0, 12);
   };

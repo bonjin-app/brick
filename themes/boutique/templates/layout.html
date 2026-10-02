@@ -187,6 +187,7 @@
         </div>
 
         <nav class="brick-footer-col brick-footer-nav" aria-label="{{ t.header.menu }}">
+          <span class="brick-footer-h">{{ t.footer.links }}</span>
           {{#each menu}}<a href="{{ url }}">{{ label }}</a>{{/each}}
         </nav>
         <a class="brick-totop col-span-2 justify-self-start md:col-span-1 md:justify-self-auto" href="#brick-content">
@@ -255,6 +256,19 @@
           if (e.key === "Escape") setOpen(false);
         });
       }
+    })();
+
+    // 맨 위로 — 한 화면 넘게 내렸을 때만 보인다(첫 화면의 배너·상품을 덮지 않는다)
+    (function () {
+      var quick = document.querySelector(".brick-quick");
+      if (!quick) return;
+      var on = false;
+      var check = function () {
+        var next = window.scrollY > window.innerHeight * 0.8;
+        if (next !== on) { on = next; quick.classList.toggle("is-on", on); }
+      };
+      window.addEventListener("scroll", check, { passive: true });
+      check();
     })();
 
     // 띠배너 — 닫은 것을 기억한다. 문구가 바뀌면 키가 달라져 다시 보인다.

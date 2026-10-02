@@ -247,6 +247,32 @@ done
 for TH in storefront fresh blossom mono; do
   contains "$TH: 폰에서는 배너의 폰 높이를 쓴다" "$(cat "$ROOT/themes/$TH/assets/style.css")" ".brick-slider .brick-slides{height:var(--slider-h-sm"
 done
+echo "── 쇼핑몰 마감 — 머리의 계정 자리 · 푸터 바로가기 · 스크롤 뒤에만 나오는 맨 위로"
+for TH in storefront fresh blossom mono; do
+  curl -s -o /dev/null -b "$CK" -X POST "$API/api/themes/$TH/activate"
+  H="$(render "")"
+  # 유틸 띠의 글자 링크는 작아 손님이 찾지 못했다 — 머리 오른쪽 끝에 아이콘으로
+  contains "$TH: 머리에 로그인 아이콘" "$H" 'class="brick-act-account" href="/login"'
+  contains "$TH: 푸터 바로가기 제목" "$H" 'class="brick-footer-h">바로가기<'
+  contains "$TH: 맨 위로는 한 화면 넘게 내렸을 때만" "$H" 'quick.classList.toggle("is-on", on)'
+done
+curl -s -o /dev/null -b "$CK" -X POST "$API/api/themes/boutique/activate"
+contains "boutique: 맨 위로는 내렸을 때만" "$(render "")" 'quick.classList.toggle("is-on", on)'
+# 배너 슬라이드(li)에 테마의 목록 기본값(위아래 4px)이 먹어 사진 위아래에 회색 띠가 떴다 — 다섯 벌 모두 같은 줄이었다
+slide_margin_zero() { /usr/bin/python3 -c "
+import re, sys
+css = open(sys.argv[1]).read()
+rules = re.findall(r'\.brick-slide\{([^}]*)\}', css)
+print(any('position:absolute' in r and 'margin:0' in r for r in rules))" "$1"; }
+for TH in storefront default editorial corporate boutique; do
+  check "$TH: 배너 슬라이드의 여백은 0" "$(slide_margin_zero "$ROOT/themes/$TH/assets/style.css")" "True"
+done
+# 블라섬은 머리 높이를 92px 로 묶어 폰에서 내려간 검색 줄이 배너 위에 겹쳤다 — 좁은 화면에서는 푼다
+# 바탕(스토어프런트)에도 auto 가 있으므로 "있다" 로는 헛통과한다 — 92px 보다 **뒤에** 와야 이긴다
+check "blossom: 좁은 화면에서는 머리 높이를 풀었다 (92px 뒤에서)" "$(/usr/bin/python3 -c "
+import sys
+css = open(sys.argv[1]).read()
+print(css.rfind('--brick-header-h:auto') > css.rfind('--brick-header-h:92px') > 0)" "$ROOT/themes/blossom/assets/style.css")" "True"
 curl -s -o /dev/null -b "$CK" -X POST "$API/api/themes/fresh/activate"
 contains "fresh: 초록 포인트" "$(curl -s "$API/api/render/page?path=&_=$RANDOM")" "#2e7d4f"
 curl -s -o /dev/null -b "$CK" -X POST "$API/api/themes/blossom/activate"

@@ -16,11 +16,14 @@
 .brick-topbar { background: var(--color-primary-soft); border-bottom: 0; }
 .brick-topbar .brick-util a, .brick-topbar .brick-util .brick-util-cta { color: var(--color-primary-text); }
 .brick-masthead { --brick-header-h: 92px; border-bottom: 0; }
+/* 좁은 화면에서는 검색이 다음 줄로 내려가므로 높이를 고정하지 않는다 — 92px 로 묶어 두었더니
+   내려간 검색 줄이 머리 밖으로 넘쳐 폰에서 배너 위에 겹쳐 그려졌다 */
+@media (max-width: 1023.98px) { .brick-masthead { --brick-header-h: auto; } }
 
 @media (min-width: 768px) {
   /* 세 칸 격자: 검색 | 로고 | 장바구니 */
   .brick-masthead-inner { display: grid !important; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
-  .brick-masthead-inner .brick-header-search { grid-column: 1; grid-row: 1; max-width: 300px; }
+  .brick-masthead-inner .brick-header-search { grid-column: 1; grid-row: 1; max-width: 300px; margin-inline: 0; }
   .brick-masthead-inner .brick-logo { grid-column: 2; grid-row: 1; }
   .brick-masthead-inner .brick-actions { grid-column: 3; grid-row: 1; justify-self: end; }
   .brick-catbar .brick-nav-cat { justify-content: center; }

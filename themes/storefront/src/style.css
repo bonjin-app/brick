@@ -871,7 +871,8 @@ a.brick-card:hover { border-color: var(--color-text); color: inherit; }
 }
 .brick-slides { list-style: none; margin: 0; padding: 0; position: relative; height: var(--slider-h, 420px); }
 .brick-slider.is-auto .brick-slides { height: auto; }
-.brick-slide { position: absolute; inset: 0; opacity: 0; visibility: hidden; transition: opacity .5s ease, visibility .5s ease; }
+/* 칸 사이 여백은 0 — 테마의 목록 기본값(li 위아래 4px)이 슬라이드에도 먹어 사진 위아래에 회색 띠가 떴다 */
+.brick-slide { margin: 0; position: absolute; inset: 0; opacity: 0; visibility: hidden; transition: opacity .5s ease, visibility .5s ease; }
 .brick-slider.is-auto .brick-slide { position: relative; display: none; }
 .brick-slider.is-auto .brick-slide.is-on { display: block; }
 .brick-slide.is-on { opacity: 1; visibility: visible; }
@@ -1180,3 +1181,110 @@ a.brick-card:hover { border-color: var(--color-text); color: inherit; }
 .brick-home-steps { margin-top: 32px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); }
 .brick-home-steps h3 { margin-top: 0; }
 .brick-home-steps p { margin-bottom: 0; font-size: 15px; }
+
+/* ═══════════════════════════════════════════════════════════════════
+ * 쇼핑몰 마감 — "디자인이 별로" 를 받고 다시 본 것 (2026-10)
+ *
+ * 이 테마는 잡지 지면을 본떠 굵은 검은 괘선(2px)으로 구획했다. 쇼핑몰 화면에서는 그것이
+ * 오래된 게시판처럼 읽혔다 — 카테고리 띠 밑, 페이지 제목 밑, 표 위, 푸터 위의 겹괘선.
+ * 요즘 국내 쇼핑몰(카페24 최신 스킨·29CM·무신사)은 선을 거의 쓰지 않고 여백·옅은 바탕·
+ * 사진으로 구획한다. 아래가 그 마감이다 — 앞의 규칙을 지우지 않고 뒤에서 덮는다(업종 테마는
+ * 이 파일을 불러온 뒤 자기 인상을 다시 덮으므로 그대로 이긴다).
+ * ═══════════════════════════════════════════════════════════════════ */
+
+/* 머리 — 로고 | 검색(가운데) | 계정·장바구니(오른쪽 끝).
+   검색이 늘어난 뒤 남는 폭이 장바구니 오른쪽에 빈칸으로 남아, 아이콘이 검색창에 붙어 있었다 */
+.brick-topbar { background: var(--color-bg); border-bottom: 0; }
+.brick-masthead { border-bottom: 0; }
+.brick-masthead-inner .brick-header-search { flex: 1 1 auto; max-width: 560px; margin-inline: auto; }
+.brick-header-search input { background: var(--color-bg-soft); border-color: transparent; height: 46px; }
+.brick-header-search input:hover { border-color: var(--color-line); }
+.brick-actions { gap: 4px; }
+.brick-actions a { color: var(--color-text); min-width: 58px; font-weight: 500; font-size: 12px; }
+.brick-actions .brick-ico { width: 23px; height: 23px; }
+.brick-catbar { border-top: 1px solid var(--color-line); border-bottom: 1px solid var(--color-line); }
+.brick-nav-cat a { font-size: 15.5px; font-weight: 600; padding-block: 14px; }
+.brick-nav-cat a.is-current::after { bottom: -1px; height: 2px; }
+
+/* 페이지 제목 — 굵은 괘선을 걷고 크기를 한 단계 낮춘다(상품보다 제목이 크면 진열대가 아니라 공지문이다) */
+:where(.brick-page > h1) { font-size: clamp(26px, 3vw, 34px); letter-spacing: -0.02em; padding-bottom: 0; margin-bottom: 28px; border-bottom: 0; }
+:where(.brick-main table) { border-top: 1px solid var(--color-line-strong); }
+.brick-hero { border-top: 1px solid var(--color-line); }
+.brick-stats { border-top: 1px solid var(--color-line); }
+.brick-cta { border-top: 1px solid var(--color-line); border-bottom: 1px solid var(--color-line); }
+blockquote { border-left-color: var(--color-line-strong); }
+
+/* 분류 바로가기 — 회색 상자 대신 둥근 칩 */
+.brick-main .brick-category-list { gap: 8px; }
+/* 칩 줄과 다음 진열 제목 사이 — 업종 테마가 제목 위 여백을 없애도 붙어 보이지 않게 */
+.brick-page > .brick-category-list { margin-bottom: 28px; }
+.brick-main .brick-category-list .brick-cat {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 16px;
+  border: 1px solid var(--color-line); border-radius: 999px; background: var(--color-bg);
+  color: var(--color-text-soft); font-size: 14px; font-weight: 500; text-decoration: none;
+}
+.brick-main .brick-category-list .brick-cat:hover { border-color: var(--color-text); color: var(--color-text); }
+.brick-main .brick-category-list .brick-cat.is-on { background: var(--color-text); border-color: var(--color-text); color: var(--color-bg); }
+:where(.brick-main .brick-category-list .brick-cat span) { font-size: 12px; opacity: 0.6; }
+
+/* 홈의 혜택 줄 · 후기 — 세로 괘선 대신 옅은 바탕의 카드 */
+.brick-features .brick-grid { gap: 14px; }
+.brick-features .brick-card {
+  border: 0; border-radius: var(--radius-lg); background: var(--color-bg-soft);
+  padding: 26px 24px; margin: 0;
+}
+.brick-features .brick-card .brick-card-icon { border: 0; background: var(--color-bg); width: 46px; height: 46px; }
+.brick-features .brick-grid, .brick-testimonials .brick-grid { border-top: 0; gap: 14px; }
+.brick-features .brick-card:last-child { margin-right: 0; }
+.brick-quote, .brick-quote:last-child {
+  border: 0; margin: 0; border-radius: var(--radius-lg); background: var(--color-bg-soft); padding: 26px 26px 24px;
+}
+.brick-quote::before { font-size: 40px; color: var(--color-muted); }
+.brick-quote blockquote { font-size: 16px; }
+@media (max-width: 720px) { .brick-quote, .brick-quote:last-child { border-bottom: 0; padding-right: 26px; } }
+
+/* 퀵메뉴 — 장바구니는 머리에 있다. 둥근 "맨 위로" 하나만, 한 화면 넘게 내렸을 때만(레이아웃 스크립트가 is-on) */
+.brick-quick {
+  top: auto; bottom: 24px; right: 20px; transform: translateY(12px);
+  border: 1px solid var(--color-line); border-radius: 999px; box-shadow: var(--shadow-md);
+  opacity: 0; visibility: hidden; transition: opacity var(--brick-t), transform var(--brick-t), visibility var(--brick-t);
+}
+.brick-quick.is-on { opacity: 1; visibility: visible; transform: none; }
+.brick-quick a:not(.brick-quick-top) { display: none; }
+.brick-quick .brick-quick-top { width: 48px; min-height: 48px; padding: 0; }
+.brick-quick .brick-quick-top span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.brick-quick .brick-quick-top .brick-ico { transform: rotate(-90deg); width: 20px; height: 20px; }
+
+/* 푸터 — 겹괘선을 걷고 옅은 바탕으로 마감한다. 칸: 가게 소개 | 바로가기 | 고객센터 */
+.brick-footer { border-top: 0; background: var(--color-bg-soft); margin-top: clamp(40px, 6vw, 72px); }
+.brick-footer::before { content: none; }
+.brick-footer-inner { padding-top: 48px; padding-bottom: 40px; }
+.brick-footer .brick-footer-cols { border-bottom-color: var(--color-line); gap: 28px 48px; }
+@media (min-width: 768px) {
+  .brick-footer .brick-footer-cols { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr); }
+  .brick-footer .brick-footer-about { grid-column: 1; grid-row: 1; }
+  .brick-footer .brick-footer-nav { grid-column: 2; grid-row: 1; }
+  .brick-footer .brick-footer-cs { grid-column: 3; grid-row: 1; }
+}
+.brick-footer .brick-totop { display: none; }
+.brick-footer-logo { font-size: 20px; letter-spacing: -0.5px; }
+.brick-footer-about p { margin-top: 10px; }
+.brick-footer-h { font-size: 13px; font-weight: 700; color: var(--color-text); margin-bottom: 4px; }
+.brick-footer-nav a { text-transform: none; letter-spacing: 0; font-size: 14px; color: var(--color-text-soft); min-height: 28px; display: inline-flex; align-items: center; }
+.brick-footer-credit { padding-top: 6px; }
+
+/* 상품 카드 — 사진 모서리를 둥글게, 이름은 두 줄까지 */
+.brick-main .brick-product-thumb { border-radius: var(--radius-lg); }
+.brick-main .brick-product-name { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.brick-main .brick-tag { border-radius: var(--radius); }
+
+@media (max-width: 1023.98px) {
+  /* 좁은 화면 — 검색이 아래 줄로 내려가므로 계정·장바구니를 첫 줄 오른쪽 끝으로 */
+  .brick-masthead-inner .brick-actions { margin-left: auto; }
+  .brick-masthead-inner .brick-header-search { margin-inline: 0; max-width: none; }
+}
+@media (max-width: 767.98px) {
+  .brick-actions a { min-width: 44px; padding: 6px 4px; }
+  .brick-quick { right: 14px; bottom: 16px; }
+  .brick-footer-inner { padding-top: 36px; }
+}

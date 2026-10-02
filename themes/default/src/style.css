@@ -1006,7 +1006,8 @@ a.brick-card:hover {
 }
 .brick-slides { list-style: none; margin: 0; padding: 0; position: relative; height: var(--slider-h, 420px); }
 .brick-slider.is-auto .brick-slides { height: auto; }
-.brick-slide { position: absolute; inset: 0; opacity: 0; visibility: hidden; transition: opacity .5s ease, visibility .5s ease; }
+/* 칸 사이 여백은 0 — 테마의 목록 기본값(li 위아래 4px)이 슬라이드에도 먹어 사진 위아래에 회색 띠가 떴다 */
+.brick-slide { margin: 0; position: absolute; inset: 0; opacity: 0; visibility: hidden; transition: opacity .5s ease, visibility .5s ease; }
 .brick-slider.is-auto .brick-slide { position: relative; display: none; }
 .brick-slider.is-auto .brick-slide.is-on { display: block; }
 .brick-slide.is-on { opacity: 1; visibility: visible; }
