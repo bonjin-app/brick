@@ -6,6 +6,7 @@ import type { BrickDb } from "@brick/database";
 import { siteSettings } from "@brick/database";
 import type { ThemeManifest } from "@brick/shared";
 import { renderTemplate } from "@brick/theme-sdk";
+import { THEME_DARK_TOKENS, THEME_TOKENS } from "@brick/core";
 import { DB } from "../../runtime.module.js";
 import { renderBuiltinLayout } from "./builtin-layout.js";
 
@@ -266,8 +267,8 @@ export class ThemesService {
    * 저장 시점과 렌더 시점이 떨어져 있어(ZIP 재사용·백업 복원) 신뢰 경계로 둔다.
    */
   tokensToCss(tokens: Record<string, string>): string {
-    const light: string[] = [];
-    const dark: string[] = [];
+    const light = new Map<string, string>();
+    const dark = new Map<string, string>();
     for (const [rawKey, rawVal] of Object.entries(tokens)) {
       const key = String(rawKey).trim();
       const val = String(rawVal ?? "").trim();
@@ -275,11 +276,19 @@ export class ThemesService {
       if (!/^[A-Za-z][A-Za-z0-9-]{0,63}$/.test(key)) continue;
       if (!val || val.length > 200 || /[;{}<>\\]|\/\*|@|url\s*\(/i.test(val)) continue;
       const isDark = key.startsWith("dark-") && key.length > 5;
-      (isDark ? dark : light).push(`--${isDark ? key.slice(5) : key}: ${val};`);
+      (isDark ? dark : light).set(isDark ? key.slice(5) : key, val);
     }
-    const css = [`:root { ${light.join(" ")} }`];
-    if (dark.length) {
-      const decls = dark.join(" ");
+    /*
+     * 계약 토큰 중 테마가 주지 않은 것(또는 위생 처리에 걸러진 것)은 코어 기본값으로 채운다 — 남이 만든 테마가
+     * 하나를 빠뜨려도 확장 화면이 투명한 배경·상속된 글자색으로 무너지지 않는다. 테마가 준 값은 언제나 이긴다.
+     * 다크는 테마가 다크 팔레트를 하나라도 줄 때만 채운다(주지 않은 테마는 라이트 고정이다).
+     */
+    for (const [k, v] of Object.entries(THEME_TOKENS)) if (!light.has(k)) light.set(k, v);
+    if (dark.size) for (const [k, v] of Object.entries(THEME_DARK_TOKENS)) if (!dark.has(k)) dark.set(k, v);
+    const decl = (m: Map<string, string>) => [...m].map(([k, v]) => `--${k}: ${v};`).join(" ");
+    const css = [`:root { ${decl(light)} }`];
+    if (dark.size) {
+      const decls = decl(dark);
       // OS 다크 + 사용자가 라이트를 고르지 않았을 때
       css.push(`@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { ${decls} } }`);
       // 사용자가 토글로 다크를 골랐을 때 (OS 가 라이트여도 이긴다)

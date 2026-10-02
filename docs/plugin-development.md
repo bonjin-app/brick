@@ -384,6 +384,33 @@ ctx.registerDashboardPanel({
 필터로 선언해야 주소에서 읽습니다(선언하지 않은 쿼리는 버립니다).
 돈을 세는 판은 리포트와 **같은 함수**를 쓰세요. 두 화면의 매출이 다르면 아무도 믿지 않습니다.
 
+## 화면의 CSS — 자기 것을 함께 내고, 값은 테마 토큰으로
+
+블록이 그리는 HTML 의 CSS 는 **블록이 함께 냅니다**(`<style>` 를 HTML 에 붙여서). Tailwind
+유틸리티 클래스에 기대지 마세요 — 서버는 빌드하지 않으므로, 나중에 설치된 확장의 클래스는
+테마의 Tailwind 산출물에 없습니다. 남이 만든 테마가 Tailwind 를 안 쓸 수도 있습니다.
+
+```ts
+render: async () => `<div class="my-plugin-card">…</div>
+<style>
+.my-plugin-card{padding:16px;border:1px solid var(--color-line);border-radius:var(--radius-lg);
+  background:var(--color-bg);color:var(--color-text)}
+</style>`,
+```
+
+- **색·모서리·그림자·글꼴은 테마 토큰으로.** 쓸 수 있는 이름은 [테마 개발 가이드의 계약 토큰](theme-development.md#계약-토큰--빠뜨려도-코어가-채웁니다)
+  입니다. 테마가 빠뜨려도 코어가 채우므로 폴백은 없어도 됩니다(달아 두면 테마 CSS 가 아예 없을 때의
+  마지막 방어선이 됩니다). 계약에 없는 토큰 모양의 이름은 `check-theme-contract.mjs` 가 오타로 잡습니다.
+- **같은 블록을 여러 번 놓아도 괜찮습니다.** 페이지를 조립할 때 내용이 완전히 같은 `<style>` 은 첫 것만
+  남깁니다 — 블록이 "이미 냈는지" 를 기억할 필요가 없습니다. 반대로, 인스턴스마다 다른 값은 CSS 를 바꾸지
+  말고 `style="--my-cols:3"` 처럼 **변수로** 넘기세요(CSS 가 같아야 하나로 합쳐집니다).
+- **클래스 이름은 자기 접두어로.** 테마의 기본값은 `:where()` 로 특이도 0 이라 블록 클래스가 이깁니다.
+  테마가 일부러 블록을 다시 그릴 때는 `.brick-main .my-plugin-card` 처럼 겨냥합니다.
+- **모서리**는 `var(--radius)`·`var(--radius-lg)`(`check-radius-tokens`), **primary 위의 글자**는
+  `var(--color-on-primary)`(`check-on-primary`), **배경을 정한 버튼은 hover 의 글자색도**(`check-button-hover`).
+- **움직임은 동작 줄이기에서 끕니다** — `@media (prefers-reduced-motion: reduce)` 로 애니메이션을 `none` 으로.
+  화면 위에 붙는(sticky) 요소는 `top: var(--brick-sticky-top, 0px)` 로 테마의 붙은 머리 아래에 둡니다.
+
 ## 구조
 
 ```

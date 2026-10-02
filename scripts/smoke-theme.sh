@@ -185,6 +185,8 @@ cat > "$ROOT/themes/$TEST_THEME/brick.theme.json" <<'JSON'
     "evil": "red; } body { display: none } .x {",
     "evil-comment": "red /* eaten",
     "evil-import": "@import url(http://evil.test/x.css)",
+    "color-line": "red; } .y {",
+    "dark-color-bg": "#000000",
     "bad key!": "blue",
     "color-text": "#111"
   }
@@ -201,6 +203,18 @@ absent "주석을 여는 값도 버린다" "$INJ" "/* eaten"
 absent "@import 도 버린다" "$INJ" "@import"
 absent "이상한 키는 버린다" "$INJ" "bad key"
 contains "정상 토큰은 남는다" "$INJ" "--color-text: #111"
+# 토큰은 테마에서만 왔다 — 남이 만든 테마가 하나를 빠뜨리면 확장 화면이 각자의 폴백으로(같은 토큰에 다섯 가지 색) 그려졌다.
+# 빠진 계약 토큰은 코어 기본값(packages/core/src/theme-tokens.ts)으로 채운다. 이 시험 테마는 토큰을 셋만 준다
+contains "빠진 계약 토큰은 코어 기본값으로" "$INJ" "--color-muted: #6a6a78;"
+contains "위생 처리에 걸러진 토큰도 빈자리로 쳐서 채운다" "$INJ" "--color-line: #e4e4ea;"
+contains "테마가 준 값이 이긴다" "$INJ" "--color-bg: #fff;"
+absent "테마가 준 값을 기본값이 덮지 않는다" "$INJ" "--color-bg: #ffffff;"
+# 다크 바탕만 주고 글자색을 빠뜨리면 어두운 바탕에 어두운 글자(#111)가 남는다 — 다크 팔레트를 하나라도 주면 다크 색을 채운다
+check "다크를 조금만 줘도 다크 글자색이 채워진다" "$(echo "$INJ" | python3 -c "
+import sys, re
+m = re.search(r':root\[data-theme=\"dark\"\] \{([^}]*)\}', sys.stdin.read())
+d = m.group(1) if m else ''
+print('--color-bg: #000000;' in d and '--color-text: #ececf1;' in d and '#101116' not in d)")" "True"
 curl -s -b "$CK" -X POST "$API/api/themes/default/activate" -o /dev/null
 rm -rf "$ROOT/themes/$TEST_THEME"; TEST_THEME=""
 

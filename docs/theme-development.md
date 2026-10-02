@@ -78,6 +78,28 @@ my-theme/
 식별자만, 값에는 `;` `{` `}` `<` `>` `\` `/*` `@` `url(` 을 쓸 수 없습니다
 (200자 이내). 통과하지 못한 토큰은 조용히 버려집니다.
 
+### 계약 토큰 — 빠뜨려도 코어가 채웁니다
+
+확장(쇼핑몰·게시판·고객센터)과 코어 블록이 기대해도 되는 토큰은 정해져 있습니다
+(`packages/core/src/theme-tokens.ts`):
+
+| 묶음 | 토큰 |
+|---|---|
+| 색 | `color-primary` `-hover` `-soft` `-text`, `color-on-primary`, `color-bg` `-soft` `-sunken`, `color-text` `-soft`, `color-muted`, `color-line` `-strong`, `color-danger` `-success` `-warning` |
+| 그 밖 | `shadow-sm` `-md`, `font-body` `font-mono`, `radius` `radius-lg`, `content-width` |
+
+**테마가 주지 않은 계약 토큰은 렌더가 기본 테마의 값으로 채웁니다**(위생 검사에 걸려
+버려진 것도 빈자리로 칩니다). 그래서 `color-primary` 하나만 바꾼 테마도 확장 화면이
+무너지지 않습니다. 다크는 `dark-` 토큰을 **하나라도** 주면 빠진 다크 **색**을 채웁니다 —
+다크 바탕만 주고 글자색을 빠뜨리면 어두운 바탕에 어두운 글자가 남기 때문입니다.
+다크 그림자는 채우지 않습니다(라이트 그림자가 그대로 남아도 읽힙니다).
+
+예전에는 토큰이 테마에서만 와서, 하나를 빠뜨리면 확장마다 적어 둔 폴백으로 그려졌습니다 —
+같은 `--color-muted` 의 폴백이 다섯 가지였고 그중 `#999` 는 흰 바탕에서 대비 기준 미달이었습니다.
+동봉 테마 여덟 벌은 계약 토큰을 전부 스스로 정합니다(기본값에 기대면 그 테마의 인상이 기본 테마
+색으로 조용히 섞입니다). `scripts/check-theme-contract.mjs` 가 이것과, 확장이 계약에 없는
+토큰 이름(오타)을 쓰지 않는지를 지킵니다.
+
 ## 템플릿 문법
 
 의도적으로 최소화되어 있습니다. **로직이 필요하면 테마가 아니라 블록(플러그인)으로 만드세요.**
@@ -188,6 +210,32 @@ page.html 슬롯은 추가로 `title`(페이지 제목), `{{{ blocksHtml }}}`(�
 ```
 
 `scripts/check-theme-defaults.mjs` 가 이 규칙을 지킵니다.
+
+## 움직임 — 숨기는 것은 스크립트가 켤 때만
+
+동봉 테마는 스크롤하면 카드가 떠오르고, 넓은 화면에서 카테고리 띠가 머리에 붙습니다.
+직접 만드는 테마에서 같은 것을 하려면 이 계약을 따르세요.
+
+| 이름 | 뜻 |
+|---|---|
+| `html.brick-motion` | 떠오르기를 켰다는 표시. **스크립트가** 붙입니다 — 동작 줄이기(`prefers-reduced-motion: reduce`)를 켠 손님, IntersectionObserver 가 없는 브라우저에서는 붙이지 마세요 |
+| `.brick-reveal` / `.is-in` | 떠오를 요소 / 화면에 들어온 요소. 숨기는 규칙은 반드시 `.brick-motion .brick-reveal` 처럼 **표시 아래에서만** 씁니다 — 스크립트가 돌지 않으면 아무것도 숨지 않습니다 |
+| `--brick-i` | 같은 줄 형제 순번(늦게 나오는 정도) |
+| `--brick-sticky-top` | 머리에서 **화면 위에 붙어 있는 부분의 높이**. 머리를 붙이는 테마는 이 값을 `<html>` 에 알려 주세요 — 상품 상세의 섹션 이동 막대가 그 아래에 붙습니다(알리지 않으면 0, 화면 맨 위) |
+
+푸는 가드는 숨기는 규칙과 특이도가 같으므로 **뒤에** 둡니다. 인쇄도 함께 겁니다 —
+아직 떠오르지 않은 카드가 종이에 빈칸으로 나가지 않게:
+
+```css
+.brick-motion .brick-reveal { opacity: 0; transform: translateY(18px); transition: opacity .6s, transform .7s; }
+.brick-motion .brick-reveal.is-in { opacity: 1; transform: none; }
+@media print, (prefers-reduced-motion: reduce) {
+  .brick-motion .brick-reveal { opacity: 1; transform: none; transition: none; }
+}
+```
+
+화면 넘김(`@view-transition { navigation: auto; }`)은 `@media (prefers-reduced-motion: no-preference)`
+안에 두세요. 레퍼런스는 `themes/storefront/templates/layout.html` 의 마지막 스크립트입니다.
 
 ## 최소 layout.html
 

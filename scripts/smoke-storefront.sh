@@ -465,6 +465,15 @@ contains "상품 격자의 칸은 내용 최소 폭에 밀리지 않는다 (minm
 contains "폰의 두 칸도 마찬가지" "$SC" "grid-template-columns:repeat(2,minmax(0,1fr))"
 contains "가격 줄은 줄바꿈될 수 있다" "$SC" ".brick-product-price{margin-top:5px;display:flex;flex-wrap:wrap"
 contains "\"전체보기\" 는 폰에서 누를 수 있는 높이 (44px)" "$SC" "a.brick-shop-more{flex:none;display:inline-flex;align-items:center;min-height:44px"
+# 블록은 어느 테마에서든 깨지지 않게 자기 CSS 를 함께 낸다 — 그래서 같은 블록을 여럿 놓으면 같은 CSS 가 여럿 실렸다
+# (쇼핑몰 홈의 진열 셋이 같은 21.8KB 를 세 번, HTML 의 35%). 페이지를 조립하는 곳에서 완전히 같은 것만 거른다
+check "진열 다섯 섹션의 CSS 는 한 번만" "$(echo "$SC" | grep -o '[.]brick-adult-mark{' | wc -l | tr -d ' ')" "1"
+# 선택자만 세면 같은 CSS 안의 모바일 규칙(@media … :where(.brick-promos){…})까지 센다 — 첫 선언까지 붙여 센다
+check "기획전 둘의 CSS 도 한 번만 (지워지지는 않는다)" "$(echo "$SC" | grep -o ':where(.brick-promos){display:grid' | wc -l | tr -d ' ')" "1"
+check "페이지에 같은 <style> 이 두 번 나오지 않는다" "$(echo "$SC" | python3 -c "
+import sys, re, collections
+st = re.findall(r'<style[^>]*>(.*?)</style>', sys.stdin.read(), re.S)
+print(sum(n - 1 for n in collections.Counter(s.strip() for s in st).values()))")" "0"
 
 echo
 echo "── 상품 목록 페이지 나누기 (limit 를 넘는 상품에 닿을 수 있는가)"

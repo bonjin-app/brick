@@ -19,6 +19,7 @@ import { NotificationsService } from "../notifications/notifications.service.js"
 import { bypassesMaintenance } from "../site/maintenance-mode.js";
 import { MaintenanceModeService } from "../site/maintenance-mode.service.js";
 import { DB, CACHE } from "../../runtime.module.js";
+import { dedupeStyles } from "./dedupe-styles.js";
 
 /** 여는 태그 뒤에 속성을 넣을 수 없는 요소 — 표시를 달지 않고 상자로 감싼다 */
 const NO_MARK_TAGS = new Set([
@@ -564,7 +565,8 @@ export class PageRenderService {
   ): Promise<string> {
     const parts: string[] = [];
     for (const [i, node] of (nodes ?? []).entries()) parts.push(await this.renderOne(node, ctx, marks, [i]));
-    return parts.join("\n");
+    // 같은 블록을 여러 번 놓으면 같은 CSS 가 여러 번 나온다 — 트리 전체를 다 그린 뒤 한 번만 거른다
+    return dedupeStyles(parts.join("\n"));
   }
 
   private async renderOne(
