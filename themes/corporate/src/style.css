@@ -1288,3 +1288,34 @@ html { scroll-padding-top: calc(var(--brick-header-h) + 12px); }
 .brick-footer-policy a { display: inline-flex; align-items: center; min-height: 32px; color: var(--color-text-soft); text-decoration: none; }
 .brick-footer-policy a:hover { color: var(--color-text); text-decoration: underline; }
 .brick-footer-policy a[href="/privacy"] { font-weight: 700; color: var(--color-text); }
+
+/* ═══ 움직임 (2026-10) — 부드럽게, 그러나 손님의 길을 막지 않게 ═══════════════════════
+ * 원칙 셋: ① 운영체제의 "동작 줄이기" 를 켠 손님에게는 아무것도 움직이지 않는다(아래 reduce 규칙 · 스크립트가 켜지 않는다).
+ * ② 스크립트가 없거나 실패하면 모든 것이 처음부터 보인다 — 숨기는 규칙은 스크립트가 <html> 에 brick-motion 을 붙였을 때만.
+ * ③ 한 리듬 — 끝이 부드럽게 멈추는 곡선 하나와 짧은 시간들. 화려하게 튀는 것은 쓰지 않는다. */
+:root {
+  --brick-ease: cubic-bezier(.22, .61, .36, 1);
+  /* 스크립트가 채우는 값의 기본 — 형제 순번(떠오르기 지연) · 위에 붙은 띠의 높이 */
+  --brick-i: 0;
+  --brick-sticky-top: 0px;
+}
+
+/* 스크롤하면 살며시 떠오른다 — 상품 카드·진열 제목·배너·후기. 같은 줄의 형제는 조금씩 늦게(--brick-i) */
+.brick-motion .brick-reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity .6s var(--brick-ease), transform .7s var(--brick-ease);
+  transition-delay: calc(var(--brick-i, 0) * 70ms);
+}
+.brick-motion .brick-reveal.is-in { opacity: 1; transform: none; }
+
+/* 화면 사이 — 지원하는 브라우저에서는 페이지가 바뀔 때 살며시 겹쳐 넘어간다(머리는 그 자리에 둔다) */
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition { navigation: auto; }
+  ::view-transition-old(root), ::view-transition-new(root) { animation-duration: .22s; animation-timing-function: var(--brick-ease); }
+  .brick-header { view-transition-name: brick-header; }
+}
+/* 동작 줄이기 · 인쇄 — 아직 떠오르지 않은 카드가 투명한 채로 남지 않게 */
+@media print, (prefers-reduced-motion: reduce) {
+  .brick-motion .brick-reveal { opacity: 1; transform: none; transition: none; }
+}

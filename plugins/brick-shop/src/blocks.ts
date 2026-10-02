@@ -1438,6 +1438,15 @@ const buyScript = (cartPath: string) => `
           if (res.d.guestToken) localStorage.setItem('brick_shop_guest', res.d.guestToken);
           if (btn.dataset.act === 'buy') { location.href = ${JSON.stringify(cartPath)}; return; }
           say(${JSON.stringify(t("buy.added"))});
+          /*
+           * 머리의 장바구니 아이콘이 한 번 톡 튄다 — "어디에 담겼는지" 를 눈이 따라간다.
+           * 테마마다 아이콘 모양이 달라 CSS 대신 Web Animations 로 부른다(테마가 몰라도 된다). 동작 줄이기면 건너뛴다.
+           */
+          var cartIco = document.querySelector('.brick-header a[href$="/cart"] .brick-ico');
+          if (cartIco && cartIco.animate && !(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) {
+            cartIco.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.32) rotate(-8deg)' }, { transform: 'scale(1)' }],
+              { duration: 460, easing: 'cubic-bezier(.22,.61,.36,1)' });
+          }
           // 담은 다음 갈 곳 — 안내 한 줄만 있으면 손님은 헤더의 장바구니를 찾아야 한다
           [msg, barMsg].forEach(function(el){
             if (!el) return;

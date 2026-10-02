@@ -180,6 +180,9 @@ const FAQ_CSS = `
 .brick-faq-rate button{min-height:40px;padding:4px 14px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius-lg, 20px);background:var(--color-bg, #ffffff);color:var(--color-text, #17171c);font-size:13px;cursor:pointer}
 .brick-faq-rate button:hover{background:var(--color-bg-soft, #f6f6f9);color:var(--color-text, #17171c)}
 .brick-faq-thanks{color:var(--color-primary,#d0402c);font-style:normal}
+.brick-faq-item[open] .brick-faq-answer{animation:brick-faq-in .3s cubic-bezier(.22,.61,.36,1)}
+@keyframes brick-faq-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){.brick-faq-item[open] .brick-faq-answer{animation:none}}
 </style>`;
 
 const HELP_CSS = `

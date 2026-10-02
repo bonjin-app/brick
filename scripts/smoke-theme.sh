@@ -280,6 +280,29 @@ contains "blossom: 가운데 로고(세 칸 격자)" "$(curl -s "$API/themes/blo
 curl -s -o /dev/null -b "$CK" -X POST "$API/api/themes/mono/activate"
 contains "mono: 세로로 긴 상품 사진" "$(curl -s "$API/themes/mono/assets/style.css")" "aspect-ratio:3/4"
 contains "mono: 모서리 없음" "$(curl -s "$API/api/render/page?path=&_=$RANDOM")" "--radius: 0px"
+echo "── 움직임 — 떠오르기 · 카테고리 띠 붙이기 · 화면 넘김 (동작 줄이기를 켠 손님에게는 없다)"
+# 숨기는 규칙과 푸는 가드는 특이도가 같다 — 가드가 **뒤에** 와야 이긴다. "있다" 만 보면 순서가 뒤집혀도 헛통과한다
+motion_guard_after() { /usr/bin/python3 -c "
+import sys
+css = open(sys.argv[1]).read()
+hide = css.find('.brick-motion .brick-reveal{opacity:0')
+guard = css.find('@media print,(prefers-reduced-motion:reduce){.brick-motion .brick-reveal{opacity:1')
+print(0 < hide < guard)" "$1"; }
+for TH in storefront boutique default editorial corporate fresh blossom mono; do
+  curl -s -o /dev/null -b "$CK" -X POST "$API/api/themes/$TH/activate"
+  H="$(render "")"
+  CSS="$(cat "$ROOT/themes/$TH/assets/style.css")"
+  check "$TH: 숨기는 규칙 뒤에 동작 줄이기·인쇄 가드" "$(motion_guard_after "$ROOT/themes/$TH/assets/style.css")" "True"
+  contains "$TH: 화면 넘김(View Transitions)은 동작 줄이기가 아닐 때만" "$CSS" "@media (prefers-reduced-motion:no-preference){@view-transition{navigation:auto}"
+  # 클래스를 붙이는 쪽이 먼저 본다 — 붙이지 않으면 숨기는 규칙도 걸리지 않아 모든 것이 처음부터 보인다
+  contains "$TH: 떠오르기는 동작 줄이기·IntersectionObserver 를 먼저 본다" "$H" 'if (!reduce && "IntersectionObserver" in window)'
+  contains "$TH: 떠오르기 표시는 문서에" "$H" 'document.documentElement.classList.add("brick-motion")'
+done
+for TH in storefront boutique fresh blossom mono; do
+  curl -s -o /dev/null -b "$CK" -X POST "$API/api/themes/$TH/activate"
+  contains "$TH: 카테고리 띠를 머리에 붙인다 (넓은 화면)" "$(render "")" 'head.classList.toggle("is-pinned", wide.matches && window.scrollY > lift + 2)'
+  contains "$TH: 붙는 머리 규칙" "$(cat "$ROOT/themes/$TH/assets/style.css")" ".brick-header.is-pinnable{z-index:40;position:sticky}"
+done
 check "기본 테마로 복귀" "$(code -b "$CK" -X POST "$API/api/themes/default/activate")" "201"
 absent "복귀 후 제호 레이아웃이 남지 않는다 (렌더 캐시 키에 테마 스탬프)" "$(render "")" 'class="brick-masthead'
 

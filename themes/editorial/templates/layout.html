@@ -255,5 +255,68 @@
       });
     })();
   </script>
+  <script>
+    /*
+     * 움직임 — 스크롤하면 떠오르기 · 카테고리 띠 붙이기.
+     * 운영체제의 "동작 줄이기" 를 켠 손님, IntersectionObserver 가 없는 브라우저에서는 아무것도 하지 않는다 —
+     * 그러면 숨기는 규칙(.brick-motion .brick-reveal)도 걸리지 않아 모든 것이 처음부터 보인다.
+     */
+    (function () {
+      var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      if (!reduce && "IntersectionObserver" in window) {
+        var sel = ".brick-main .brick-product-card, .brick-main .brick-shop-head, .brick-main .brick-promo, " +
+                  ".brick-main .brick-features .brick-card, .brick-main .brick-quote, .brick-main .brick-rh-card, " +
+                  ".brick-main .brick-latest-posts, .brick-main .brick-help-cta";
+        var els = document.querySelectorAll(sel);
+        if (els.length) {
+          var io = new IntersectionObserver(function (entries) {
+            entries.forEach(function (e) {
+              if (!e.isIntersecting) return;
+              e.target.classList.add("is-in");
+              io.unobserve(e.target);
+            });
+          }, { rootMargin: "0px 0px -6% 0px" });
+          Array.prototype.forEach.call(els, function (el) {
+            // 같은 줄의 형제끼리 조금씩 늦게 — 여섯째부터는 같이(긴 목록이 끝없이 늦어지지 않게)
+            var i = Array.prototype.indexOf.call(el.parentElement.children, el);
+            el.style.setProperty("--brick-i", String(Math.min(i % 8, 6)));
+            el.classList.add("brick-reveal");
+            io.observe(el);
+          });
+          document.documentElement.classList.add("brick-motion");
+        }
+      }
+
+      // 카테고리 띠 붙이기(넓은 화면) — 머리를 sticky 로 두고 top 을 "띠만 남는 만큼" 음수로 잡는다
+      var head = document.querySelector(".brick-header");
+      var bar = head && head.querySelector(".brick-catbar");
+      if (!head || !bar || !window.matchMedia) return;
+      var wide = window.matchMedia("(min-width: 768px)");
+      var lift = 0;
+      var measure = function () {
+        var root = document.documentElement;
+        if (!wide.matches) {
+          head.classList.remove("is-pinnable", "is-pinned");
+          head.style.top = "";
+          root.style.removeProperty("--brick-sticky-top");
+          return;
+        }
+        lift = head.offsetHeight - bar.offsetHeight;
+        head.classList.add("is-pinnable");
+        head.style.top = -lift + "px";
+        // 상품 상세의 바로가기 막대처럼 따로 붙는 것은 띠 아래에 붙는다
+        root.style.setProperty("--brick-sticky-top", bar.offsetHeight + "px");
+        onScroll();
+      };
+      var onScroll = function () {
+        head.classList.toggle("is-pinned", wide.matches && window.scrollY > lift + 2);
+      };
+      measure();
+      window.addEventListener("scroll", onScroll, { passive: true });
+      window.addEventListener("resize", measure);
+      if ("ResizeObserver" in window) new ResizeObserver(measure).observe(head);
+    })();
+  </script>
 </body>
 </html>

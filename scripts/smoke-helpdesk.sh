@@ -288,6 +288,9 @@ FAQ_HTML="$(curl -s -X POST "$API/api/blocks/render" -H 'content-type: applicati
 contains "FAQ 서버 렌더 (검색엔진이 읽는다)" "$FAQ_HTML" "회원 탈퇴는 어떻게 하나요"
 contains "답변도 함께 렌더" "$FAQ_HTML" "내 정보 화면에서"
 contains "JS 없이 접히는 details 사용" "$FAQ_HTML" "<details"
+# 펼친 답이 툭 끊겨 나타났다 — 살며시 내려오되, 동작 줄이기를 켠 손님에게는 그대로
+contains "펼친 답이 살며시 나타난다" "$FAQ_HTML" ".brick-faq-item[open] .brick-faq-answer{animation:brick-faq-in"
+contains "동작 줄이기면 애니메이션 없음" "$FAQ_HTML" "@media (prefers-reduced-motion: reduce){.brick-faq-item[open] .brick-faq-answer{animation:none}}"
 TK_HTML="$(curl -s -X POST "$API/api/blocks/render" -H 'content-type: application/json' \
   -d '{"name":"brick-helpdesk/tickets","props":{}}' | render_html)"
 absent "문의 블록은 내용을 서버 렌더하지 않음 (캐시 유출 방지)" "$TK_HTML" "비회원이 남긴 내용"

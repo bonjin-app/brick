@@ -150,11 +150,15 @@ export const DETAIL_EXTRAS_CSS = `<style>
 .brick-buy-total strong{font-size:22px;color:var(--color-text, #17171c);font-variant-numeric:tabular-nums}
 .brick-buy-total span{color:var(--color-muted, #6c6c7a);font-size:13px;margin-left:6px}
 .brick-buy-msg a{margin-left:8px;font-weight:600;color:var(--color-primary-text, #b63a2e)}
-.brick-pd-jump{position:sticky;top:0;z-index:5;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin:48px 0 0;background:var(--color-bg, #ffffff);border-bottom:1px solid var(--color-line-strong, #c9c9d3)}
+.brick-pd-jump{position:sticky;top:var(--brick-sticky-top, 0px);transition:top .2s ease;z-index:5;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin:48px 0 0;background:var(--color-bg, #ffffff);border-bottom:1px solid var(--color-line-strong, #c9c9d3)}
 .brick-pd-jump a{display:flex;align-items:center;justify-content:center;gap:6px;min-height:56px;font-size:16px;font-weight:600;color:var(--color-text-soft, #45454f);text-decoration:none;border-bottom:2px solid transparent;margin-bottom:-1px}
 .brick-pd-jump a:hover{color:var(--color-text, #17171c);border-bottom-color:var(--color-text, #17171c)}
 .brick-pd-jump a span{font-weight:500;color:var(--color-muted, #6c6c7a)}
-#brick-pd-desc,#brick-pd-guide,#brick-reviews{scroll-margin-top:64px}
+#brick-pd-desc,#brick-pd-guide,#brick-reviews{scroll-margin-top:calc(var(--brick-sticky-top, 0px) + 64px)}
+/* 안내 줄이 바뀔 때 살며시 — 장바구니에 담았습니다 */
+.brick-buy-msg:not(:empty){animation:brick-msg-in .3s cubic-bezier(.22,.61,.36,1)}
+@keyframes brick-msg-in{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){.brick-buy-msg:not(:empty){animation:none}}
 .brick-pd-guide{margin:48px 0;padding:28px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius-lg, 12px);background:var(--color-bg-soft, #f6f6f9)}
 .brick-pd-guide h2{margin:0 0 18px;font-size:20px}
 .brick-pd-guide h3{margin:0 0 10px;font-size:16.5px}

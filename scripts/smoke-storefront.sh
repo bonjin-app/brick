@@ -695,6 +695,11 @@ contains "운영자 문구가 덧붙는다" "$PD" "반품 주소 — 서울시 �
 absent "운영자 문구의 태그는 글자로 (HTML 로 싣지 않는다)" "$PD" "<b>굵게</b>"
 # 테마의 기본 hover 는 글자를 흰색으로 뒤집는다 — 배경을 정한 버튼은 hover 의 글자색도 정한다
 contains "장바구니 버튼의 hover 글자색" "$PD" ".brick-buy-actions button:hover{background:var(--color-bg-soft, #f6f6f9);color:var(--color-text"
+# 넓은 화면에서 카테고리 띠가 머리에 붙는다 — 바로가기 막대가 top:0 이면 띠 밑에 깔려 가려진다. 테마가 띠 높이를 변수로 알린다
+contains "바로가기 막대는 카테고리 띠 아래에 붙는다" "$PD" ".brick-pd-jump{position:sticky;top:var(--brick-sticky-top, 0px)"
+contains "섹션으로 뛸 때도 띠만큼 비운다" "$PD" "scroll-margin-top:calc(var(--brick-sticky-top, 0px) + 64px)"
+contains "담으면 머리의 장바구니 아이콘이 튄다 — 동작 줄이기면 건너뛴다" "$PD" "cartIco.animate && !(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)"
+contains "담았다는 안내가 살며시" "$PD" ".brick-buy-msg:not(:empty){animation:brick-msg-in"
 
 echo "── 장바구니 — 무료배송까지 남은 금액 (배송비를 정하는 규칙 옆에서 센다)"
 PLATE_ID="$(psql_q "SELECT id AS s FROM shop_products WHERE slug = 'sample-plate'")"
