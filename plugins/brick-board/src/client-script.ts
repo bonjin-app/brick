@@ -450,8 +450,35 @@ ${CAPTCHA_WIDGET_JS}
 })();
 </script>`;
 
-/** 게시판 화면 스타일 — 테마가 빌드를 타지 않으므로 블록이 함께 낸다 */
-export const BOARD_CSS = `
+/**
+ * 위젯 스타일 — 최근 게시물 · 최신글 모아보기 · 게시판 목록 카드가 쓰는 것만.
+ *
+ * 홈의 최신글 블록 하나가 게시판 CSS 전체(목록·상세·댓글·글쓰기·에디터·캡차, 21.7KB)를 싣고 있었다 —
+ * 쓰는 클래스는 열 몇 개뿐인데. 따로 떼어 둔다. 게시판 화면은 둘 다 싣고, 같은 페이지에 위젯과 화면이
+ * 함께 있으면 같은 `<style>` 은 페이지 조립(dedupeStyles)이 하나로 합친다 — 그래서 **별개의 `<style>`** 이다.
+ */
+export const BOARD_WIDGET_CSS = `
+<style>
+.brick-board-empty{padding:36px;text-align:center;color:var(--color-muted, #6c6c7a)}
+.brick-cmt{color:var(--color-primary,#d0402c);font-size:12.5px;margin-left:4px;font-weight:600}
+.brick-board-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:18px 0}
+.brick-board-card{display:block;padding:18px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius-lg, 10px);text-decoration:none;color:inherit}
+.brick-board-card strong{display:block;font-size:16px}
+.brick-board-count{color:var(--color-muted, #6c6c7a);font-size:12.5px}
+.brick-board-card p{margin:8px 0 0;color:var(--color-text-soft, #45454f);font-size:13.5px}
+.brick-latest-posts{list-style:none;padding:0;margin:10px 0}
+.brick-latest-posts li{display:flex;align-items:baseline;gap:6px;padding:8px 0;border-bottom:1px solid var(--color-line, #e4e4ea)}
+.brick-latest-posts li:last-child{border-bottom:0;padding-bottom:0}
+/* 빈 목록 — 글 줄의 가로 배치·마지막 줄 여백(아래 0)을 물려받아 글자가 상자 아래 구석에 붙었다. 가운데에 고르게 */
+.brick-latest-posts li.brick-board-empty{display:block;padding:22px 12px;margin:0;text-align:center;font-size:13.5px;border-bottom:0}
+.brick-latest-posts a:hover{color:var(--color-primary-text, #b63a2e)}
+.brick-latest-posts a{padding:6px 0;color:inherit;text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.brick-latest-posts time{color:var(--color-muted, #6c6c7a);font-size:12.5px}
+.brick-widget-title{font-size:16px;margin:0 0 4px}
+</style>`;
+
+/** 게시판 화면(목록·상세·댓글·글쓰기) 스타일 */
+const BOARD_PAGE_CSS = `
 <style>
 .brick-board{margin:20px 0}
 .brick-board-head{display:flex;align-items:baseline;gap:10px;padding-bottom:6px}
@@ -477,14 +504,12 @@ export const BOARD_CSS = `
 .brick-c-view{width:56px;color:var(--color-muted, #6c6c7a);font-size:13px;text-align:center}
 .brick-cat{display:inline-block;padding:1px 7px;margin-right:5px;background:var(--color-line, #e4e4ea);border-radius:var(--radius-lg, 10px);font-size:11.5px;color:var(--color-text-soft, #45454f)}
 .brick-reply-mark{color:var(--color-muted, #6c6c7a);margin-right:4px;margin-left:calc((var(--d,1) - 1) * 14px)}
-.brick-cmt{color:var(--color-primary,#d0402c);font-size:12.5px;margin-left:4px;font-weight:600}
 .brick-clip,.brick-lock{font-size:12px;margin-left:3px}
 .brick-board-search{display:flex;gap:6px;margin-top:22px;align-items:center;flex-wrap:wrap;justify-content:center}
 .brick-board-search select,.brick-board-search input{padding:8px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 6px)}
 .brick-board-search button{padding:8px 16px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 6px);background:var(--color-bg, #ffffff);color:var(--color-text, #17171c);cursor:pointer}
 .brick-board-search button:hover{background:var(--color-bg-soft, #f6f6f9);color:var(--color-text, #17171c)}
 .brick-write-btn{margin-left:auto;padding:9px 20px;background:var(--color-primary,#d0402c);color:var(--color-on-primary, #ffffff);border-radius:var(--radius, 6px);text-decoration:none;font-weight:600;font-size:14px}
-.brick-board-empty{padding:36px;text-align:center;color:var(--color-muted, #6c6c7a)}
 .brick-pager{display:flex;gap:4px;justify-content:center;margin:20px 0;font-size:14px;align-items:center}
 .brick-pager a,.brick-pager strong,.brick-pager span{padding:6px 11px;border-radius:var(--radius, 6px);text-decoration:none;color:inherit}
 .brick-pager a{border:1px solid var(--color-line, #e4e4ea)}
@@ -562,12 +587,6 @@ export const BOARD_CSS = `
 /* 캡차 */
 ${CAPTCHA_WIDGET_CSS}
 
-/* 카드 · 위젯 */
-.brick-board-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:18px 0}
-.brick-board-card{display:block;padding:18px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius-lg, 10px);text-decoration:none;color:inherit}
-.brick-board-card strong{display:block;font-size:16px}
-.brick-board-count{color:var(--color-muted, #6c6c7a);font-size:12.5px}
-.brick-board-card p{margin:8px 0 0;color:var(--color-text-soft, #45454f);font-size:13.5px}
 /* ── 작성자 아바타 · 프로필 카드 ─────────────────── */
 .brick-author{display:inline-flex;align-items:center;gap:7px;position:relative}
 .brick-avatar{display:inline-grid;place-items:center;border-radius:50%;object-fit:cover;flex:0 0 auto;font-weight:700;color:#fff;
@@ -642,15 +661,6 @@ ${CAPTCHA_WIDGET_CSS}
 .brick-draft-note{font-size:13px;color:var(--color-success, #11795a);margin:6px 0 0}
 .brick-draft-note button{font:inherit;font-size:12.5px;margin-left:6px;padding:2px 8px;border-radius:var(--radius, 6px);border:1px solid var(--color-line, #e4e4ea);background:var(--color-bg, #fff);color:var(--color-text-soft, #45454f);cursor:pointer}
 @media print{.brick-share,.brick-post-nav,.brick-comments,.brick-post-foot,.brick-files{display:none!important}}
-.brick-latest-posts{list-style:none;padding:0;margin:10px 0}
-.brick-latest-posts li{display:flex;align-items:baseline;gap:6px;padding:8px 0;border-bottom:1px solid var(--color-line, #e4e4ea)}
-.brick-latest-posts li:last-child{border-bottom:0;padding-bottom:0}
-/* 빈 목록 — 글 줄의 가로 배치·마지막 줄 여백(아래 0)을 물려받아 글자가 상자 아래 구석에 붙었다. 가운데에 고르게 */
-.brick-latest-posts li.brick-board-empty{display:block;padding:22px 12px;margin:0;text-align:center;font-size:13.5px;border-bottom:0}
-.brick-latest-posts a:hover{color:var(--color-primary-text, #b63a2e)}
-.brick-latest-posts a{padding:6px 0;color:inherit;text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.brick-latest-posts time{color:var(--color-muted, #6c6c7a);font-size:12.5px}
-.brick-widget-title{font-size:16px;margin:0 0 4px}
 @media(max-width:640px){
   /* 좁은 화면의 표 목록은 줄로 쌓는다: 제목 한 줄, 그 아래 글쓴이 · 날짜 · 조회 — 열을 숨기지 않는다 */
   .brick-board-table thead{display:none}
@@ -667,3 +677,6 @@ ${CAPTCHA_WIDGET_CSS}
   .brick-board-head h1,.brick-board-head h2{font-size:20px}
 }
 </style>`;
+
+/** 게시판 화면 스타일 — 테마가 빌드를 타지 않으므로 블록이 함께 낸다 */
+export const BOARD_CSS = `${BOARD_WIDGET_CSS}${BOARD_PAGE_CSS}`;

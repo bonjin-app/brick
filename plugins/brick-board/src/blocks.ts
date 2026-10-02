@@ -2,7 +2,7 @@ import { dateScript, STACK_TABLE_CSS } from "@brick/plugin-sdk";
 import { sql } from "drizzle-orm";
 import type { PluginContext } from "@brick/plugin-sdk";
 import { effectiveReadRole, escapeHtml, hasRole, shortDate, PUBLIC_POST_SQL, type BoardRow, type Db } from "./types.js";
-import { BOARD_CSS, boardScript } from "./client-script.js";
+import { BOARD_CSS, BOARD_WIDGET_CSS, boardScript } from "./client-script.js";
 import { renderDetail, renderList, renderWrite, resolveView } from "./views.js";
 import { bindI18n, t } from "./i18n.js";
 import { boardActor, certBlock, selectBoard } from "./access.js";
@@ -193,7 +193,7 @@ export function registerBoardBlocks(pluginCtx: PluginContext, db: Db): void {
       `);
       // 읽을 수 없는 게시판(그룹 권한 포함)은 목록에서 감춘다
       const visible = rows.filter((b) => hasRole(ctx.user, effectiveReadRole(b.read_role, b.group_read_role)));
-      if (!visible.length) return `<p class="brick-board-empty">${escapeHtml(t("cards.empty"))}</p>${BOARD_CSS}`;
+      if (!visible.length) return `<p class="brick-board-empty">${escapeHtml(t("cards.empty"))}</p>${BOARD_WIDGET_CSS}`;
 
       const items = visible
         .map(
@@ -204,7 +204,7 @@ export function registerBoardBlocks(pluginCtx: PluginContext, db: Db): void {
   </a>`,
         )
         .join("\n");
-      return `<nav class="brick-board-cards">\n${items}\n</nav>${BOARD_CSS}`;
+      return `<nav class="brick-board-cards">\n${items}\n</nav>${BOARD_WIDGET_CSS}`;
     },
   });
 
@@ -241,7 +241,7 @@ export function registerBoardBlocks(pluginCtx: PluginContext, db: Db): void {
        */
       const heading = props.title ? `<h3 class="brick-widget-title">${escapeHtml(String(props.title))}</h3>` : "";
       if (!rows.length) {
-        return `${heading}<p class="brick-board-empty">${escapeHtml(t("latest.empty"))}</p>${BOARD_CSS}`;
+        return `${heading}<p class="brick-board-empty">${escapeHtml(t("latest.empty"))}</p>${BOARD_WIDGET_CSS}`;
       }
 
       const items = rows
@@ -253,7 +253,7 @@ export function registerBoardBlocks(pluginCtx: PluginContext, db: Db): void {
     </li>`,
         )
         .join("\n");
-      return `${heading}<ul class="brick-latest-posts">\n${items}\n</ul>${BOARD_CSS}`;
+      return `${heading}<ul class="brick-latest-posts">\n${items}\n</ul>${BOARD_WIDGET_CSS}`;
     },
   });
 
@@ -301,7 +301,7 @@ export function registerBoardBlocks(pluginCtx: PluginContext, db: Db): void {
           AND coalesce(g.read_role, 'guest') = 'guest' AND b.cert_required = '' ${slugFilter}
         ORDER BY b.sort_order, b.title
       `);
-      if (!boards.length) return `<p class="brick-board-empty">${escapeHtml(t("list.emptyBoards"))}</p>${BOARD_CSS}`;
+      if (!boards.length) return `<p class="brick-board-empty">${escapeHtml(t("list.emptyBoards"))}</p>${BOARD_WIDGET_CSS}`;
 
       // 적어준 순서를 지킨다 — 관리자가 notice 를 먼저 적었으면 먼저 나와야 한다
       const ordered = wanted.length
@@ -362,7 +362,7 @@ ${items}
 
       return `<div class="brick-latest-grid" style="--brick-latest-cols:${columns}">
 ${cards}
-</div>${BOARD_CSS}${LATEST_MULTI_CSS}`;
+</div>${BOARD_WIDGET_CSS}${LATEST_MULTI_CSS}`;
     },
   });
   /**

@@ -388,6 +388,13 @@ absent "회원 전용 게시판은 제외" "$MULTI" "회원게시판"
 contains "글 제목 표시" "$MULTI" "공개글입니다"
 absent "비밀글 제목 미노출" "$MULTI" "비밀글입니다"
 contains "더보기 링크" "$MULTI" "더보기"
+# 홈의 최신글 상자 하나가 게시판 CSS 전체(목록·상세·댓글·글쓰기·에디터·캡차, 21.7KB)를 싣고 있었다 — 위젯이 쓰는 것만
+contains "위젯 스타일은 싣는다" "$MULTI" ".brick-latest-posts li{display:flex"
+absent "게시판 화면의 댓글 스타일은 싣지 않는다" "$MULTI" ".brick-comment-form"
+absent "글쓰기 에디터 스타일도" "$MULTI" ".brick-editor-body"
+check "최신글 모아보기의 CSS 는 4KB 아래" "$(echo "$MULTI" | python3 -c "
+import sys, re
+print(sum(len(s) for s in re.findall(r'<style[^>]*>(.*?)</style>', sys.stdin.read(), re.S)) < 4000)")" "True"
 EMPTY="$(curl -s -X POST "$API/api/blocks/render" -H 'content-type: application/json' \
   -d '{"name":"brick-board/latest-multi","props":{"boards":"nonexistent"}}' | render_html)"
 contains "없는 게시판은 안내" "$EMPTY" "표시할 게시판이 없습니다"
