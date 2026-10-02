@@ -347,6 +347,13 @@ export class SiteController {
     @Body() body: { items: MenuItem[] },
     @Req() req: FastifyRequest,
   ) {
+    /*
+     * 그리는 자리는 머리와 푸터 둘뿐이다. 아무 이름이나 받으면 오타("foter")로 저장해도 "저장했습니다" 가 나오고
+     * 화면에는 아무것도 바뀌지 않는다 — 운영자는 무엇이 틀렸는지 알 길이 없다.
+     */
+    if (location !== "header" && location !== "footer") {
+      throw new BadRequestException(msg("err.menuLocation"));
+    }
     const items = this.validateItems(body?.items ?? [], 0);
     const [existing] = await this.db.select().from(menus).where(eq(menus.location, location)).limit(1);
     if (existing) {

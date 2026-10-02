@@ -153,8 +153,8 @@ check "공지사항 쓰기는 manager (아무나 쓰면 공지가 아니다)" \
   "$(psql_q "SELECT write_role FROM board_boards WHERE slug='notice'")" "manager"
 check "자유게시판 쓰기는 member" \
   "$(psql_q "SELECT write_role FROM board_boards WHERE slug='free'")" "member"
-check "페이지 3개 (홈·소개·게시판)" "$(psql_q "SELECT count(*) FROM pages")" "3"
-check "전부 공개 상태" "$(psql_q "SELECT count(*) FROM pages WHERE status='published'")" "3"
+check "페이지 5개 (홈·소개·게시판·이용약관·개인정보처리방침)" "$(psql_q "SELECT count(*) FROM pages")" "5"
+check "전부 공개 상태" "$(psql_q "SELECT count(*) FROM pages WHERE status='published'")" "5"
 
 echo "── 홈이 실제로 렌더된다 (블록 이름이 틀리면 조용히 주석이 된다)"
 HOME_HTML="$(curl -s "$API/api/render/page?path=")"
@@ -211,7 +211,9 @@ for item in menu['items']:
     url = item['url']
     if not url.startswith('/'): continue
     try:
-        req = urllib.request.Request('$API/api/render/page?path=' + url.lstrip('/'))
+        # 질의(?sort=…)는 경로가 아니다 — 경로에 붙이면 "shop?sort=recent" 라는 페이지를 찾는다
+        path, _, query = url.lstrip('/').partition('?')
+        req = urllib.request.Request('$API/api/render/page?path=' + path + ('&' + query if query else ''))
         with urllib.request.urlopen(req) as r:
             body = json.loads(r.read())
             if body.get('status') != 200:
@@ -247,13 +249,14 @@ contains "설치 성공" "$R" '"ok":true'
 contains "쇼핑몰 플러그인 활성화" "$R" "플러그인 brick-shop"
 contains "쇼핑몰 공지에 예시 글 둘 (홈의 공지 위젯이 비지 않는다)" "$R" "예시 글 2개"
 check "게시판은 공지 하나" "$(psql_q "SELECT count(*) FROM board_boards")" "1"
-check "페이지 5개 (홈·소개·이용안내·게시판·쇼핑몰)" "$(psql_q "SELECT count(*) FROM pages")" "5"
+check "페이지 7개 (홈·소개·이용안내·게시판·쇼핑몰·이용약관·개인정보처리방침)" "$(psql_q "SELECT count(*) FROM pages")" "7"
 HOME_HTML="$(curl -s "$API/api/render/page?path=")"
 contains "상품 목록 블록이 렌더됨 (상품이 없어도 깨지지 않는다)" "$HOME_HTML" "달빛상점"
 absent "깨진 블록이 없다" "$HOME_HTML" "unknown block"
 MENU="$(curl -s "$API/api/menus/header")"
 contains "상품 링크" "$MENU" '"url":"/shop"'
-contains "이용 안내 링크" "$MENU" '"url":"/guide"'
+# 이용 안내는 푸터 메뉴로 옮겼다(머리 메뉴는 신상품·베스트·고객센터 — 손님이 가장 많이 누르는 길)
+contains "이용 안내 링크 (푸터)" "$(curl -s "$API/api/menus/footer")" '"url":"/guide"'
 check "쇼핑몰 메뉴도 전부 렌더된다" "$(verify_menu_links "$MENU")" "끊어진 링크: 없음"
 SHOP_PAGE="$(curl -s "$API/api/render/page?path=shop")"
 # 쇼핑몰을 골랐으면 쇼핑몰 테마가 켜져 있어야 한다 — 테마를 만들어 두고 고르지 않으면 의미가 없다
@@ -321,7 +324,52 @@ contains "/shop/orders/<번호> 가 상세를 그린다" "$(curl -s "$API/api/re
 contains "상세에 취소·반품 신청 자리" "$(curl -s "$API/api/render/page?path=shop/orders/20990101-000001")" "brick-ret-slot"
 contains "/shop/event 가 기획전 목록을 그린다" "$(curl -s "$API/api/render/page?path=shop/event")" "기획전"
 GUIDE="$(curl -s "$API/api/render/page?path=guide")"
-contains "교환·반품 안내가 있다 (표시 의무의 출발점)" "$GUIDE" "교환과 반품"
+contains "교환·반품 안내가 있다 (표시 의무의 출발점)" "$GUIDE" "교환·반품 안내"
+
+echo "── 쇼핑몰 기본 기능이 처음부터 붙어 있다 (카페24 기본 스킨에서 손님이 찾는 것)"
+# 고객센터(FAQ·1:1 문의)·적립금 — 게시판·쇼핑몰만 켜 두면 머리의 고객센터 자리와 적립금이 비었다
+check "고객센터 확장이 켜진다" "$(psql_q "SELECT is_active FROM installed_plugins WHERE name='brick-helpdesk'")" "true"
+check "적립금 확장이 켜진다" "$(psql_q "SELECT is_active FROM installed_plugins WHERE name='brick-point'")" "true"
+HOME2="$(html_of "$API/api/render/page?path=&_=$RANDOM")"
+contains "맨 위 띠에 주문조회 (비회원은 주문번호로 찾는다)" "$HOME2" '<a href="/shop/orders">주문조회</a>'
+contains "맨 위 띠에 고객센터" "$HOME2" '<a href="/help">고객센터</a>'
+contains "푸터에 약관과 정책 줄" "$HOME2" 'class="brick-footer-policy"'
+contains "푸터에 개인정보처리방침 (법이 공개를 요구한다)" "$HOME2" '<a href="/privacy">개인정보처리방침</a>'
+contains "푸터에 이용약관" "$HOME2" '<a href="/terms">이용약관</a>'
+# 지어낸 후기(이름·문장)가 홈에 박혀 있었다 — 그대로 열면 거짓 후기다
+absent "지어낸 후기가 없다" "$HOME2" "김민수"
+absent "후기가 아직 없으면 후기 칸을 그리지 않는다 (지어내서 채우지 않는다)" "$HOME2" 'class="brick-review-highlights"'
+MENU2="$(curl -s "$API/api/menus/header")"
+contains "상품 아래에 분류가 하위 메뉴로" "$MENU2" '"url":"/shop?category=kitchen"'
+contains "머리 메뉴에 고객센터" "$MENU2" '"url":"/help"'
+FOOT="$(curl -s "$API/api/menus/footer")"
+contains "푸터 메뉴가 만들어진다" "$FOOT" '"url":"/privacy"'
+check "푸터 메뉴도 전부 렌더된다" "$(verify_menu_links "$FOOT")" "끊어진 링크: 없음"
+# 이용약관 화면 — 관리자 → 약관의 그 행을 그린다(본문을 페이지에 다시 적으면 개정할 때 한쪽만 바뀐다)
+TERMS="$(html_of "$API/api/render/page?path=terms&_=$RANDOM")"
+contains "이용약관 화면이 지금 시행 중인 약관을 그린다" "$TERMS" "제1조 (목적)"
+contains "시행일과 판을 적는다" "$TERMS" "제1판"
+contains "조항 제목은 굵게 (긴 약관에서 조항을 눈으로 찾는다)" "$TERMS" '<strong class="brick-agreement-article">제1조 (목적)</strong>'
+psql_q "INSERT INTO agreements (id, kind, version, title, body, is_required) VALUES (gen_random_uuid(), 'terms', 2, '이용약관', E'개정된 약관입니다.\n\n제1조 (목적) 개정', true)" >/dev/null
+TERMS2="$(html_of "$API/api/render/page?path=terms&_=$RANDOM")"
+contains "약관을 개정하면 화면이 그대로 따라간다" "$TERMS2" "개정된 약관입니다."
+contains "새 판 번호" "$TERMS2" "제2판"
+PRIV="$(html_of "$API/api/render/page?path=privacy&_=$RANDOM")"
+contains "처리방침 초안 — 보유 기간(전자상거래법)" "$PRIV" "5년 (전자상거래법)"
+contains "처리방침 초안 — 보호책임자 칸" "$PRIV" "개인정보 보호책임자"
+contains "처리방침은 고쳐 쓸 초안이라고 적는다" "$PRIV" "이 문서는 초안입니다"
+# 고객센터 — FAQ 를 먼저, 없으면 1:1 문의로
+HELP="$(html_of "$API/api/render/page?path=help&_=$RANDOM")"
+contains "고객센터 화면에 FAQ 예시" "$HELP" "배송은 얼마나 걸리나요? (예시)"
+contains "FAQ 분류 탭" "$HELP" ">교환·반품 <span>2</span>"
+contains "답이 없으면 1:1 문의로" "$HELP" 'href="/support"'
+# 확장이 켜질 때 만드는 기본 분류가 예시를 다른 분류에 넣은 뒤 "자주 묻는 질문 0" 으로 남았다 — 빈 탭은 내지 않는다
+absent "질문이 없는 분류는 탭에 내지 않는다" "$HELP" ' <span>0</span></a>'
+check "FAQ 예시 일곱" "$(psql_q "SELECT count(*) FROM help_faqs")" "7"
+# 이용 안내의 배송비는 설정에서 — 글자로 적어 두었더니 "3만원 이상 무료" 인데 설정은 5만원이었다
+GUIDE="$(html_of "$API/api/render/page?path=guide&_=$RANDOM")"
+contains "이용 안내의 무료배송 기준 = 설정값" "$GUIDE" "50,000원 이상 구매하시면 무료"
+absent "글자로 박힌 다른 기준이 없다" "$GUIDE" "3만원 이상"
 
 echo "── 상품을 등록하면 홈에 바로 나온다 (연결이 이미 되어 있다)"
 curl -s -c "$CK" -X POST "$API/api/auth/login" -H 'content-type: application/json' \
@@ -332,6 +380,16 @@ contains "홈에 첫 상품이 나온다" "$(curl -s "$API/api/render/page?path=
 contains "/shop 목록에도 나온다" "$(curl -s "$API/api/render/page?path=shop")" "첫 상품"
 contains "/shop/first 상세도 그려진다 (storefront 라우팅)" \
   "$(curl -s "$API/api/render/page?path=shop/first")" "brick-buy-form"
+# 손님이 남긴 후기가 생기면 홈의 후기 칸이 나타난다 — 지어내지 않고 실제 후기를
+FIRST_ID="$(psql_q "SELECT id FROM shop_products WHERE slug = 'first'")"
+psql_q "INSERT INTO shop_reviews (id, product_id, author_name, rating, content) VALUES (gen_random_uuid(), '$FIRST_ID', '실제손님', 5, '정말 좋아요 진짜 후기')" >/dev/null
+HOME3="$(html_of "$API/api/render/page?path=&_=$RANDOM")"
+contains "실제 후기가 홈에 나온다" "$HOME3" "정말 좋아요 진짜 후기"
+contains "후기를 누르면 그 상품의 후기로" "$HOME3" 'href="/shop/first#brick-reviews"'
+psql_q "INSERT INTO shop_reviews (id, product_id, author_name, rating, content) VALUES (gen_random_uuid(), '$FIRST_ID', '불만손님', 2, '별로였던 후기')" >/dev/null
+absent "별점 낮은 후기는 베스트에 싣지 않는다" "$(html_of "$API/api/render/page?path=&_=$RANDOM")" "별로였던 후기"
+# 메뉴 자리는 머리·푸터 둘뿐 — 오타로 저장해도 "저장했습니다" 가 나오면 운영자는 왜 안 보이는지 모른다
+check "모르는 메뉴 자리는 400" "$(code -b "$CK" -X PUT "$API/api/menus/foter" -H 'content-type: application/json' -d '{"items":[]}')" "400"
 
 
 echo "══ 확장 파일이 사라졌다 돌아오면 ══"
@@ -381,7 +439,7 @@ R="$(fresh_install company "본진테크")"
 contains "설치 성공" "$R" '"ok":true'
 check "회사 스타터가 corporate 테마를 켠다" "$(curl -s "$API/api/themes" | python3 -c "import sys,json;print(json.load(sys.stdin).get('active',''))")" "corporate"
 contains "헬프데스크 활성화" "$R" "플러그인 brick-helpdesk"
-check "페이지 5개 (홈·소개·서비스·문의·게시판)" "$(psql_q "SELECT count(*) FROM pages")" "5"
+check "페이지 7개 (홈·소개·서비스·문의·게시판·이용약관·개인정보처리방침)" "$(psql_q "SELECT count(*) FROM pages")" "7"
 contains "회사 공지에 예시 글 둘" "$R" "예시 글 2개"
 CO_HOME="$(curl -s "$API/api/render/page?path=&_=$RANDOM" | python3 -c "import sys,json;print(json.load(sys.stdin).get('html',''))")"
 contains "회사 소개 칸에 사진 (예시 그림)" "$CO_HOME" 'alt="작업 공간"'

@@ -3190,6 +3190,8 @@ export default definePlugin(async (ctx) => {
    * 남의 값이 새어 나간다).
    */
   ctx.registerHeaderAction({ label: "장바구니", path: "/shop/cart", order: 10, icon: "cart" });
+  // 맨 위 띠의 "주문조회" — 비회원은 주문번호로 찾는다(주문 화면이 비회원에게는 조회 칸을 준다)
+  ctx.registerHeaderAction({ label: "주문조회", path: "/shop/orders", order: 20, place: "util" });
 
   // 대시보드 판 — 주문 흐름 · 매출 추이 · 최근 주문 (dashboard.ts)
   registerShopDashboard(ctx, db);

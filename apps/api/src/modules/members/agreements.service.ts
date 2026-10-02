@@ -67,6 +67,21 @@ export class AgreementsService {
   }
 
   /**
+   * 한 종류의 지금 시행 중인 판 — 공개 약관 화면(core/agreement 블록)이 그린다.
+   * 가입 화면과 같은 행을 읽는다: 화면마다 따로 적어 두면 개정할 때 한쪽만 바뀐다.
+   */
+  async activeOf(kind: string): Promise<{ title: string; body: string; version: number; effectiveAt: string } | null> {
+    const { rows } = await this.db.execute(sql`
+      SELECT title, body, version, effective_at FROM agreements
+      WHERE kind = ${kind} AND effective_at <= now()
+      ORDER BY version DESC LIMIT 1
+    `);
+    const r = rows[0];
+    if (!r) return null;
+    return { title: String(r.title), body: String(r.body), version: Number(r.version), effectiveAt: new Date(String(r.effective_at)).toISOString() };
+  }
+
+  /**
    * 가입 시 받은 동의를 검증하고 기록한다.
    *
    * 두 가지를 막는다:

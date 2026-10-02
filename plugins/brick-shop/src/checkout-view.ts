@@ -159,7 +159,7 @@ ${/*
 .brick-co-item img, .brick-co-noimg { flex: none; width: 52px; height: 52px; border-radius: var(--radius, 8px); object-fit: cover; background: var(--color-bg-soft, #f7f7f9); border: 1px solid var(--color-line, #e7e7ec); }
 .brick-co-item small { display: block; color: var(--color-muted, #71717d); font-size: 12.5px; margin-top: 2px; }
 .brick-co-agree { margin-top: 22px; padding: 14px 16px; border: 1px solid var(--color-line, #e7e7ec); border-radius: var(--radius-lg, 10px); background: var(--color-bg-soft, #f7f7f9); }
-.brick-co-check { display: flex; align-items: flex-start; gap: 9px; min-height: 40px; padding: 6px 0; font-size: 14px; cursor: pointer; }
+.brick-co-check { display: flex; align-items: flex-start; gap: 9px; min-height: 40px; padding: 6px 0; font-size: 15px; cursor: pointer; }
 .brick-co-check input { margin-top: 3px; flex: none; }
 .brick-co-privacy { font-size: 13px; color: var(--color-text-soft, #45454f); }
 /* 펼침 표시(▸)를 남긴다 — display:flex 로 두면 표시가 사라져 누를 수 있는 줄로 보이지 않았다 */
@@ -167,15 +167,16 @@ ${/*
 .brick-co-privacy dl { display: grid; grid-template-columns: 90px 1fr; gap: 4px 10px; margin: 6px 0; }
 .brick-co-privacy dd { margin: 0; }
 .brick-co-privacy p { margin: 4px 0 8px; }
-.brick-checkout h2 { font-size: 17px; margin: 26px 0 10px; }
-.brick-co-summary table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+.brick-checkout h2 { font-size: 19px; margin: 28px 0 10px; }
+.brick-co-summary table { width: 100%; border-collapse: collapse; font-size: 15.5px; }
 .brick-co-summary td { padding: 8px 4px; border-bottom: 1px solid var(--color-line, #e7e7ec); }
 .brick-co-summary td:last-child { text-align: right; white-space: nowrap; }
-.brick-co-totals { margin: 10px 0 0; font-size: 14.5px; }
+.brick-co-totals { margin: 10px 0 0; font-size: 15.5px; }
 .brick-co-totals div { display: flex; justify-content: space-between; padding: 3px 0; }
 .brick-co-totals .brick-grand { font-weight: 700; font-size: 16px; border-top: 1px solid var(--color-line, #e7e7ec); padding-top: 8px; margin-top: 6px; }
-.brick-co-form .brick-field { display: block; margin-top: 12px; font-size: 13.5px; color: var(--color-text-soft, #45454f); }
-.brick-co-form .brick-field input { display: block; width: 100%; margin-top: 5px; }
+.brick-co-form .brick-field { display: block; margin-top: 14px; font-size: 14.5px; color: var(--color-text-soft, #45454f); }
+/* 16px — 그보다 작으면 iOS 사파리가 칸을 누를 때 화면을 확대한다 */
+.brick-co-form .brick-field input, .brick-co-form .brick-co-postcode { display: block; width: 100%; margin-top: 6px; font-size: 16px; }
 /* 문제가 있는 칸은 눈으로도 보여야 한다 — aria-invalid 만으로는 스크린리더에만 전해진다 */
 .brick-co-form [aria-invalid="true"] { border-color: var(--color-danger, #c8322f); outline: 2px solid var(--color-danger, #c8322f); outline-offset: 1px; }
 .brick-co-form .brick-buy-msg.is-error { color: var(--color-danger, #c8322f); font-weight: 600; }
@@ -186,7 +187,7 @@ ${/*
    가게의 주문서에 "주소 검색" 이라는 글자가 남았다(스모크가 잡았다).
  */ ""}
 .brick-co-addr { display: grid; grid-template-columns: 160px auto 1fr; gap: 6px 10px; margin-top: 12px; }
-.brick-co-postcode-label { grid-column: 1 / -1; font-size: 13.5px; color: var(--color-text-soft, #45454f); }
+.brick-co-postcode-label { grid-column: 1 / -1; font-size: 14.5px; color: var(--color-text-soft, #45454f); }
 .brick-co-form .brick-co-postcode { grid-column: 1; width: 100%; margin: 0; }
 .brick-co-addr .brick-addr-btn { grid-column: 2; align-self: stretch; justify-self: start; min-height: 44px; height: auto; margin: 0; padding: 0 18px; white-space: nowrap; }
 .brick-co-addr .brick-addr-msg { grid-column: 1 / -1; margin: 0; }

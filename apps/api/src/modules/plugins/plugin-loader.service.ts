@@ -546,9 +546,10 @@ export class PluginLoaderService implements OnModuleInit {
       .map((s) => ({ label: this.trCatalog(s.plugin, s.title), path: `/${s.path}` }));
   }
 
-  headerActionsFor(loggedIn: boolean): Array<{ label: string; url: string; icon: string | null }> {
+  headerActionsFor(loggedIn: boolean, place: "masthead" | "util" = "masthead"): Array<{ label: string; url: string; icon: string | null }> {
     return this.headerActions
       .filter((a) => !a.requiresLogin || loggedIn)
+      .filter((a) => (a.place === "util" ? "util" : "masthead") === place)
       .slice()
       .sort((a, b) => (a.order ?? 100) - (b.order ?? 100))
       .map((a) => ({

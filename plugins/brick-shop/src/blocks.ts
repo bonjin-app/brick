@@ -16,6 +16,7 @@ import { registerCardsView } from "./cards-view.js";
 import { registerSubscriptionsView } from "./subscriptions-view.js";
 import { registerSubscribeView, intervalLabel } from "./subscribe-view.js";
 import { registerAddressesView } from "./addresses-view.js";
+import { registerHomeBlocks } from "./home-blocks.js";
 
 /**
  * 스토어프론트 블록.
@@ -832,6 +833,8 @@ ${cartScript(shopBaseOf(blockCtx))}${STOREFRONT_CSS}`,
   const { subsBlock } = registerSubscriptionsView(ctx, t);
   const { subscribeBlock } = registerSubscribeView(ctx, db, settings, t);
   const { addressesBlock } = registerAddressesView(ctx, settings, t);
+  // 홈의 진짜 후기 모음 · 이용 안내의 구매 안내 (home-blocks.ts)
+  registerHomeBlocks(ctx, db, settings);
 
   /*
    * 화면 선언 — 쇼핑몰과 그 안의 회원 화면들.
@@ -1079,7 +1082,7 @@ p.brick-restock-msg.is-error{color:var(--color-danger,#c9342f)}
 @media (prefers-reduced-motion: reduce){.brick-product-thumb img{transition:none}.brick-product-card:hover .brick-product-thumb img{transform:none}}
 .brick-shop-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin:8px 0 0}
 .brick-shop-head .brick-shop-heading{margin:0}
-.brick-shop-sub{margin:4px 0 0;font-size:14px;color:var(--color-muted, #6c6c7a)}
+.brick-shop-sub{margin:4px 0 0;font-size:15px;color:var(--color-muted, #6c6c7a)}
 a.brick-shop-more{flex:none;display:inline-flex;align-items:center;min-height:44px;font-size:13.5px;font-weight:600;color:var(--color-text-soft, #45454f);text-decoration:none;white-space:nowrap}
 a.brick-shop-more:hover{color:var(--color-primary-text, #b63a2e)}
 .brick-noimg{display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--color-muted, #6c6c7a);font-size:12.5px}
@@ -1104,18 +1107,18 @@ a.brick-shop-more:hover{color:var(--color-primary-text, #b63a2e)}
 .brick-filter-toggle::before{content:"✓";display:inline-grid;place-items:center;width:14px;height:14px;margin-right:7px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 3px);font-size:10px;line-height:1;color:transparent}
 .brick-filter-toggle.is-on::before{border-color:currentColor;color:currentColor}
 .brick-tags{position:absolute;top:8px;left:8px;display:flex;flex-wrap:wrap;gap:4px;z-index:1}
-.brick-tag{display:inline-flex;align-items:center;height:20px;padding:0 7px;font-size:11px;font-weight:700;letter-spacing:.02em;border-radius:var(--radius, 3px);color:#fff;background:#111318}
+.brick-tag{display:inline-flex;align-items:center;height:22px;padding:0 8px;font-size:12px;font-weight:700;letter-spacing:.02em;border-radius:var(--radius, 3px);color:#fff;background:#111318}
 .brick-tag-new{background:#1f7a4d}
 .brick-tag-best{background:#8a3ab0}
 .brick-tag-sale{background:#c8322f}
 .brick-badge-soldout{position:absolute;top:8px;left:8px;padding:4px 10px;border-radius:999px;background:rgba(20,20,28,.82);color:#fff;font-size:12px;font-weight:700;line-height:1.4}
 .brick-product-card.is-soldout .brick-product-thumb img{opacity:.55}
 .brick-product-card.is-soldout .brick-product-name{color:var(--color-muted, #6c6c7a)}
-.brick-product-name{margin-top:9px;font-size:14px;line-height:1.45}
-.brick-product-price{margin-top:4px;display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 6px;font-size:15px;font-weight:700}
+.brick-product-name{margin-top:10px;font-size:15.5px;line-height:1.45}
+.brick-product-price{margin-top:5px;display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 6px;font-size:17px;font-weight:700}
 .brick-product-price del{color:var(--color-muted, #6c6c7a);font-size:13px;font-weight:400}
 .brick-discount{color:var(--color-primary,#d0402c);font-weight:700}
-.brick-shop-heading{margin:8px 0 0;font-size:22px}
+.brick-shop-heading{margin:8px 0 0;font-size:26px}
 .brick-shop-empty{padding:40px;text-align:center;color:var(--color-muted, #6c6c7a)}
 .brick-category-list{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}
 .brick-category-list a{padding:7px 14px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius-lg, 20px);text-decoration:none;color:inherit;font-size:14px}
@@ -1146,20 +1149,20 @@ a.brick-shop-more:hover{color:var(--color-primary-text, #b63a2e)}
 @media(max-width:640px){.brick-product-detail{grid-template-columns:1fr;gap:20px}}
 .brick-detail-media{aspect-ratio:1;background:var(--color-bg-soft, #f6f6f9);border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius-lg, 14px);overflow:hidden;display:flex;align-items:center;justify-content:center}
 .brick-detail-media img{width:100%;height:100%;object-fit:cover}
-.brick-detail-info h1{margin:0 0 8px;font-size:26px;line-height:1.3}
-.brick-detail-summary{color:var(--color-text-soft, #45454f);margin:0 0 16px}
-.brick-detail-price{display:flex;align-items:baseline;gap:8px;font-size:26px;margin-bottom:18px}
-.brick-detail-price del{color:var(--color-muted, #6c6c7a);font-size:16px}
+.brick-detail-info h1{margin:0 0 10px;font-size:30px;line-height:1.3}
+.brick-detail-summary{color:var(--color-text-soft, #45454f);margin:0 0 16px;font-size:16.5px}
+.brick-detail-price{display:flex;align-items:baseline;gap:8px;font-size:30px;margin-bottom:20px}
+.brick-detail-price del{color:var(--color-muted, #6c6c7a);font-size:17px}
 /*
  * 상품 정보는 **줄이 있는 표**로 읽는다 — 한국 쇼핑몰의 관례다(카페24·메이크샵
  * 계열이 모두 이 모양이다). 라벨 칸을 고정 폭으로 두어 값이 세로로 정렬되고,
  * 줄마다 가는 선을 넣어 배송비와 재고가 서로 다른 항목임이 한눈에 보인다.
  * 예전에는 라벨 폭이 내용에 따라 움직이는 격자여서 값이 들쭉날쭉했다.
  */
-.brick-detail-meta{display:grid;grid-template-columns:88px 1fr;font-size:13.5px;margin:0 0 20px;border-top:1px solid var(--color-line, #e4e4ea)}
+.brick-detail-meta{display:grid;grid-template-columns:96px 1fr;font-size:15px;margin:0 0 20px;border-top:1px solid var(--color-line, #e4e4ea)}
 .brick-detail-meta dt{color:var(--color-muted, #6c6c7a);padding:9px 0;border-bottom:1px solid var(--color-line, #e4e4ea)}
 .brick-detail-meta dd{margin:0;padding:9px 0;border-bottom:1px solid var(--color-line, #e4e4ea)}
-@media(max-width:480px){.brick-detail-meta{grid-template-columns:76px 1fr;font-size:13px}}
+@media(max-width:480px){.brick-detail-meta{grid-template-columns:84px 1fr;font-size:14.5px}}
 .brick-field{display:block;margin-bottom:12px;font-size:14px}
 .brick-field select,.brick-field input{display:block;width:100%;max-width:280px;padding:9px;margin-top:4px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 6px);box-sizing:border-box}
 .brick-buy-actions{display:flex;gap:10px;margin-top:18px}
@@ -1214,13 +1217,13 @@ a.brick-shop-more:hover{color:var(--color-primary-text, #b63a2e)}
 /* 장바구니 — 사진 · 무료배송까지 · 쇼핑 계속하기 */
 .brick-cart-prod{display:flex;align-items:center;gap:14px;color:inherit;text-decoration:none;min-width:0}
 .brick-cart-prod img,.brick-cart-noimg{flex:none;width:64px;height:64px;border-radius:var(--radius, 8px);object-fit:cover;background:var(--color-bg-soft, #f6f6f9);border:1px solid var(--color-line, #e4e4ea)}
-.brick-cart-prod span{min-width:0;font-weight:600;line-height:1.4}
+.brick-cart-prod span{min-width:0;font-weight:600;line-height:1.4;font-size:15.5px}
 .brick-cart-prod small{display:block;font-weight:400;color:var(--color-muted, #6c6c7a);margin-top:2px}
 .brick-cart-prod:hover span{text-decoration:underline}
 .brick-main .brick-cart-del{min-height:36px;padding:0 12px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 8px);background:var(--color-bg, #ffffff);color:var(--color-text-soft, #45454f);font-size:13px;cursor:pointer}
 .brick-main .brick-cart-del:hover{background:var(--color-bg-soft, #f6f6f9);color:var(--color-text, #17171c)}
 .brick-free-ship{margin:0 0 16px;padding:14px 16px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius-lg, 10px);background:var(--color-bg, #ffffff)}
-.brick-free-ship p{margin:0;font-size:14px;color:var(--color-text-soft, #45454f)}
+.brick-free-ship p{margin:0;font-size:15px;color:var(--color-text-soft, #45454f)}
 .brick-free-ship strong{color:var(--color-primary-text, #b63a2e)}
 .brick-free-ship.is-done p{color:var(--color-success, #1f7a4d);font-weight:600}
 .brick-free-bar{display:block;height:6px;margin-top:10px;border-radius:999px;background:var(--color-bg-soft, #f6f6f9);overflow:hidden}

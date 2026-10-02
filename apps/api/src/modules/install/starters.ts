@@ -58,6 +58,13 @@ export interface StarterDefinition {
  * 유형은 셋이면 충분하다. 선택지가 많을수록 고르다 지친다 — 설치 화면에서
  * 필요한 것은 "대충 이 방향"이고, 세부는 나중에 바꾼다.
  */
+/** 쇼핑몰 샘플 분류 — 샘플 상품과 머리 메뉴의 하위 항목이 함께 쓴다(한 곳에 둔다: 이름이 갈라지면 메뉴가 빈 분류를 가리킨다) */
+const SHOP_CATEGORIES = [
+  { slug: "kitchen", name: "주방·다이닝" },
+  { slug: "living", name: "리빙·패브릭" },
+  { slug: "fragrance", name: "향·캔들" },
+] as const;
+
 export const STARTERS: StarterDefinition[] = [
   {
     code: "community",
@@ -70,8 +77,12 @@ export const STARTERS: StarterDefinition[] = [
     code: "shop",
     label: "쇼핑몰",
     description: "상품 목록·장바구니·공지사항을 갖춘 판매 사이트",
-    plugins: ["brick-board", "brick-shop"],
-    creates: ["홈 (배너 · 분류 · 신상품 · 기획전 · 베스트 · 후기 · 공지)", "샘플 상품 8개 · 분류 3개", "소개 · 이용 안내 페이지", "공지사항 게시판", "쇼핑몰 메뉴"],
+    /*
+     * 쇼핑몰의 기본 기능 — 카페24 기본 스킨에서 손님이 당연히 찾는 것: 고객센터(FAQ·1:1 문의)와 적립금.
+     * 게시판·쇼핑몰만 켜 두면 머리의 "고객센터" 자리와 적립금이 비어, 운영자가 확장을 하나씩 찾아 켜야 했다.
+     */
+    plugins: ["brick-board", "brick-shop", "brick-helpdesk", "brick-point"],
+    creates: ["홈 (배너 · 분류 · 신상품 · 기획전 · 베스트 · 진짜 후기 · 최근 본 상품 · 공지)", "샘플 상품 8개 · 분류 3개", "소개 · 이용 안내 · 이용약관 · 개인정보처리방침 페이지", "공지사항 게시판", "고객센터 (FAQ 예시 · 1:1 문의) · 적립금", "쇼핑몰 메뉴 · 푸터 메뉴"],
     theme: "storefront",
     designs: [
       { theme: "storefront", label: "스토어프런트", description: "종합몰 — 3단 헤더와 넓은 상품 격자", colors: ["#111318", "#ffffff", "#111318"] },
@@ -207,8 +218,19 @@ export async function applyStarter(code: string, ctx: SeedContext): Promise<{ ap
     ctx.log(`스타터: 예시 글 생성 실패 — ${String(err)}`);
   }
 
+  // ── 3-3. 고객센터 FAQ 예시 ──
+  // 고객센터 화면이 "등록된 FAQ 가 없습니다" 로 열리면 고장 난 것처럼 보인다 — 배송·교환·결제·회원 넷을 넣는다
+  if (starter.plugins.includes("brick-helpdesk")) {
+    try {
+      const n = await seedSampleFaqs(ctx, starter.code);
+      if (n) applied.push(`FAQ 예시 ${n}개`);
+    } catch (err) {
+      ctx.log(`스타터: FAQ 예시 생성 실패 — ${String(err)}`);
+    }
+  }
+
   // ── 4. 페이지 ──
-  for (const p of starterPages(starter.code, ctx.siteName, images)) {
+  for (const p of [...starterPages(starter.code, ctx.siteName, images), ...policyPages(starter.code, ctx.siteName)]) {
     try {
       await ctx.db.execute(sql`
         INSERT INTO pages (id, slug, title, blocks, plain_text, status, seo, published_at)
@@ -271,7 +293,128 @@ export async function applyStarter(code: string, ctx: SeedContext): Promise<{ ap
     }
   }
 
+  // ── 7. 푸터 메뉴 ──
+  // 이용약관 · 개인정보처리방침은 머리 메뉴에 올리지 않지만 **어느 화면에서나 닿아야 한다**(처리방침은 법이 공개를 요구한다)
+  const footer = starterFooterMenu(starter.code);
+  if (footer.length) {
+    try {
+      const { rows: existing } = await ctx.db.execute(sql`SELECT 1 FROM menus WHERE location = 'footer' LIMIT 1`);
+      if (!existing.length) {
+        await ctx.db.execute(sql`
+          INSERT INTO menus (id, location, items)
+          VALUES (${uuidv7()}, 'footer', ${JSON.stringify(footer)}::jsonb)
+        `);
+        applied.push(`푸터 메뉴 (${footer.length}개 항목)`);
+      }
+    } catch (err) {
+      ctx.log(`스타터: 푸터 메뉴 생성 실패 — ${String(err)}`);
+    }
+  }
+
   return { applied };
+}
+
+/** 푸터 메뉴 — 약관과 정책, 그리고 손님이 아래에서 찾는 길(이용 안내·고객센터) */
+function starterFooterMenu(code: string): MenuEntry[] {
+  if (code !== "community" && code !== "shop" && code !== "company") return [];
+  return [
+    { label: "이용약관", url: "/terms" },
+    { label: "개인정보처리방침", url: "/privacy" },
+    ...(code === "shop" ? [{ label: "이용 안내", url: "/guide" }, { label: "고객센터", url: "/help" }] : []),
+    ...(code === "company" ? [{ label: "문의하기", url: "/support" }] : []),
+  ];
+}
+
+/**
+ * 이용약관 · 개인정보처리방침 화면.
+ *
+ * 이용약관은 가입 화면에서만 읽을 수 있었고, **개인정보처리방침은 어디에도 없었다** — 개인정보보호법 제30조는
+ * 처리방침을 정해 홈페이지에 공개하라고 정한다. 이용약관 화면은 관리자 → 약관의 그 행을 그린다(core/agreement —
+ * 개정하면 그대로 따라간다). 처리방침은 고쳐 쓸 초안이다: 이 시스템이 실제로 받는 항목(회원·주문·문의·접속 기록)과
+ * 법정 보관 기간을 채워 두고, 가게만 아는 것([ ] 칸)은 운영자가 채운다. 법률 자문을 대신하지 않는다고 본문에 적는다.
+ */
+function policyPages(code: string, siteName: string): Array<{ slug: string; title: string; blocks: Node[]; plainText: string }> {
+  if (code !== "community" && code !== "shop" && code !== "company") return [];
+  const shop = code === "shop";
+  const sec = (title: string, ...lines: string[]) => `<h2>${title}</h2>${lines.map((l) => `<p>${l}</p>`).join("")}`;
+  const html = [
+    `<p><strong>※ 이 문서는 초안입니다.</strong> [ ] 칸을 채우고 실제로 받는 항목에 맞게 고쳐 쓰세요(관리자 → 페이지 → 개인정보처리방침). 법률 자문을 대신하지 않습니다.</p>`,
+    `<p>${siteName}(이하 "사이트")는 개인정보 보호법에 따라 이용자의 개인정보를 보호하고 관련 고충을 신속하게 처리하기 위해 다음과 같이 개인정보 처리방침을 둡니다.</p>`,
+    sec("1. 처리하는 개인정보의 항목",
+      "회원가입: (필수) 이메일, 비밀번호(암호화하여 저장), 닉네임 · (선택) 연락처, 생일, 프로필 사진",
+      ...(shop ? ["주문·배송: 주문자 이름·연락처·이메일, 받는 분 이름·연락처·주소, 배송 요청사항 · 결제는 결제대행사가 처리하며 사이트는 카드번호를 저장하지 않습니다"] : []),
+      "문의: 이름, 이메일, 문의 내용",
+      "자동 수집: 접속 기록, 쿠키(로그인 유지" + (shop ? "·장바구니" : "") + ")"),
+    sec("2. 처리 목적",
+      "회원 식별과 서비스 제공, 문의 응대, 부정 이용 방지" + (shop ? ", 주문 처리·배송·교환/반품·대금 결제와 환불" : "")),
+    sec("3. 보유 및 이용 기간",
+      "회원 탈퇴 시 지체 없이 파기합니다. 다만 관계 법령에 따라 보존해야 하는 정보는 그 기간 동안 보관한 뒤 파기합니다.",
+      ...(shop ? ["계약 또는 청약철회 등에 관한 기록 · 대금결제 및 재화 등의 공급에 관한 기록: 5년 (전자상거래법)", "소비자의 불만 또는 분쟁처리에 관한 기록: 3년 (전자상거래법)"] : []),
+      "웹사이트 방문 기록(로그인 기록): 3개월 (통신비밀보호법)"),
+    sec("4. 개인정보의 제3자 제공",
+      "이용자의 동의가 있거나 법령에 근거가 있는 경우를 제외하고 개인정보를 제3자에게 제공하지 않습니다. [제공하는 곳이 있다면 받는 자·목적·항목·보유 기간을 적으세요]"),
+    sec("5. 개인정보 처리의 위탁",
+      shop ? "[예: 결제대행 — ○○페이먼츠(결제 처리) · 배송 — ○○택배(상품 배송) · 문자·알림톡 발송 — ○○(주문 안내)]" : "[위탁하는 업무가 있다면 수탁자와 업무 내용을 적으세요]"),
+    sec("6. 파기 절차 및 방법",
+      "보유 기간이 끝나거나 처리 목적을 이룬 개인정보는 지체 없이 파기합니다. 전자 파일은 복구할 수 없는 방법으로 지우고, 종이 문서는 분쇄하거나 소각합니다."),
+    sec("7. 정보주체의 권리와 행사 방법",
+      "이용자는 언제든지 개인정보의 열람·정정·삭제·처리정지를 요구할 수 있습니다. 마이페이지에서 직접 하거나 아래 개인정보 보호책임자에게 요청하면 지체 없이 처리합니다. 회원 탈퇴는 마이페이지에서 할 수 있습니다."),
+    sec("8. 안전성 확보 조치",
+      "비밀번호의 암호화 저장, 관리자 접근 권한의 최소화, 접속 기록의 보관, 보안 업데이트 적용"),
+    sec("9. 쿠키의 설치·운영 및 거부",
+      "로그인 상태 유지" + (shop ? "와 장바구니" : "") + "를 위해 쿠키를 씁니다. 브라우저 설정에서 쿠키를 거부할 수 있으나, 그 경우 로그인이 필요한 서비스를 이용하기 어려울 수 있습니다."),
+    sec("10. 개인정보 보호책임자",
+      "이름: [ ] · 연락처: [ ] · 이메일: [ ]",
+      "개인정보 침해에 대한 신고·상담은 개인정보침해신고센터(privacy.kisa.or.kr, 국번 없이 118)에도 할 수 있습니다."),
+    sec("11. 시행일", "이 처리방침은 [ ]년 [ ]월 [ ]일부터 적용됩니다."),
+  ].join("");
+  return [
+    { slug: "terms", title: "이용약관", blocks: [{ block: "core/agreement", props: { kind: "terms" } }], plainText: "이용약관" },
+    { slug: "privacy", title: "개인정보처리방침", blocks: [{ block: "core/rich-text", props: { html } }], plainText: "개인정보처리방침 개인정보 처리방침" },
+  ];
+}
+
+/** 고객센터 FAQ 예시 — 손님이 가장 많이 묻는 넷. 질문에 (예시) 를 달아 지울 것을 찾기 쉽게 한다 */
+async function seedSampleFaqs(ctx: SeedContext, code: string): Promise<number> {
+  const { rows: existing } = await ctx.db.execute(sql`SELECT 1 FROM help_faqs LIMIT 1`);
+  if (existing.length) return 0;
+  const shop = code === "shop";
+  const groups: Array<{ slug: string; name: string; items: Array<[string, string]> }> = [
+    ...(shop ? [
+      { slug: "delivery", name: "배송", items: [
+        ["배송은 얼마나 걸리나요? (예시)", "결제 확인 후 보통 1~3일 안에 받으실 수 있습니다. 주말·공휴일은 제외됩니다. 배송비는 상품 상세의 구매안내를 확인해 주세요."],
+        ["주문한 상품이 어디쯤 왔는지 알 수 있나요? (예시)", "발송되면 주문 내역에 운송장 번호가 표시됩니다. 비회원은 맨 위의 주문조회에서 주문번호로 찾을 수 있습니다."],
+      ] as Array<[string, string]> },
+      { slug: "return", name: "교환·반품", items: [
+        ["교환·반품은 언제까지 신청할 수 있나요? (예시)", "상품을 받은 날부터 7일 안에 주문 내역에서 신청할 수 있습니다."],
+        ["반품 배송비는 누가 내나요? (예시)", "단순 변심은 손님이, 상품 불량·오배송은 저희가 부담합니다. 금액은 구매안내에 적혀 있습니다."],
+      ] as Array<[string, string]> },
+      { slug: "payment", name: "결제", items: [
+        ["무통장입금은 언제까지 해야 하나요? (예시)", "주문 완료 화면과 안내 메일에 적힌 입금 기한까지 입금해 주세요. 기한이 지나면 주문이 자동으로 취소됩니다."],
+      ] as Array<[string, string]> },
+    ] : []),
+    { slug: "member", name: "회원", items: [
+      ["비밀번호를 잊어버렸어요. (예시)", "로그인 화면의 '비밀번호를 잊으셨나요?' 를 누르면 가입한 이메일로 재설정 링크를 보내 드립니다."],
+      ["회원 탈퇴는 어떻게 하나요? (예시)", "마이페이지에서 탈퇴할 수 있습니다. 법령에 따라 보관해야 하는 거래 기록을 빼고 개인정보는 지체 없이 파기합니다."],
+    ] },
+  ];
+  let n = 0;
+  for (const [gi, g] of groups.entries()) {
+    const catId = uuidv7();
+    await ctx.db.execute(sql`
+      INSERT INTO help_faq_categories (id, name, slug, sort_order) VALUES (${catId}, ${g.name}, ${g.slug}, ${gi})
+      ON CONFLICT (slug) DO NOTHING
+    `);
+    const { rows: cat } = await ctx.db.execute(sql`SELECT id FROM help_faq_categories WHERE slug = ${g.slug} LIMIT 1`);
+    for (const [ii, [q, a]] of g.items.entries()) {
+      await ctx.db.execute(sql`
+        INSERT INTO help_faqs (id, category_id, question, answer, sort_order)
+        VALUES (${uuidv7()}, ${String(cat[0]?.id ?? catId)}::uuid, ${q}, ${`<p>${a}</p>`}, ${ii})
+      `);
+      n++;
+    }
+  }
+  return n;
 }
 
 // ════════════════════════════════════════════════════
@@ -464,14 +607,13 @@ function starterPages(code: string, siteName: string, img: SampleImages = {}): A
               "안전한 결제 | 카드·계좌이체·간편결제를 지원합니다. | | shield",
               "7일 내 교환·반품 | 받아보시고 마음에 들지 않으면 보내주세요. | | check",
             ]),
-            { block: "core/testimonials", props: {
-              title: "먼저 써 본 분들의 이야기",
-              items: [
-                "포장이 꼼꼼하고 배송이 빨랐어요. 재구매 의사 있습니다. | 김민수 | 서울",
-                "문의에 답이 빨라서 믿고 살 수 있었어요. | 이서연 | 부산",
-                "사진보다 실물이 더 좋았습니다. | 박지훈 | 대구",
-              ].join("\n"),
-            } },
+            /*
+             * 후기 — **손님이 실제로 남긴 것만.** 예전에는 지어낸 이름과 문장(core/testimonials 예시)이었고,
+             * 그대로 문을 열면 거짓 후기가 된다(표시광고법). 후기가 아직 없으면 이 자리는 그려지지 않는다.
+             */
+            { block: "brick-shop/review-highlights", props: { title: "REVIEW", subtitle: "손님이 직접 남긴 후기", limit: 4 } },
+            // 최근 본 상품 — 본 것이 있을 때만 그려진다
+            { block: "brick-shop/recent-views", props: { limit: 6 } },
             { block: "brick-board/latest-posts",
               props: { board: "notice", limit: 5, title: "공지사항" } },
           ],
@@ -490,15 +632,15 @@ function starterPages(code: string, siteName: string, img: SampleImages = {}): A
                 text: "아래 내용은 예시입니다. 실제 배송·교환 정책으로 바꿔주세요 — 전자상거래법상 표시 의무가 있는 항목입니다.",
               },
             },
-            faq("주문과 배송", [
-              "배송은 얼마나 걸리나요? | 주문 후 2~3일 안에 받으실 수 있습니다. 주말과 공휴일은 제외됩니다.",
-              "배송비는 얼마인가요? | 3만원 이상 주문은 무료, 그 미만은 3,000원입니다.",
+            /*
+             * 배송비·무료배송 기준·반품 배송비는 **설정에서 그린다** — 글자로 적어 두었더니 "3만원 이상 무료" 라고
+             * 쓰여 있는데 설정은 5만원이었다. 상품 상세의 구매 안내와 같은 블록이다.
+             */
+            { block: "brick-shop/purchase-guide", props: {} },
+            faq("주문과 결제", [
               "주문을 취소할 수 있나요? | 상품이 발송되기 전까지는 주문 내역에서 바로 취소할 수 있습니다.",
-            ]),
-            faq("교환과 반품", [
-              "언제까지 신청할 수 있나요? | 상품을 받은 날부터 7일 이내입니다.",
-              "배송비는 누가 내나요? | 단순 변심은 왕복 배송비를 손님이, 상품 하자나 오배송은 저희가 부담합니다.",
-              "어디서 신청하나요? | 주문 내역에서 해당 상품의 교환·반품 신청 버튼을 누르시면 됩니다.",
+              "비회원도 주문을 조회할 수 있나요? | 맨 위의 주문조회에서 주문번호로 찾을 수 있습니다.",
+              "교환·반품은 어디서 신청하나요? | 주문 내역에서 해당 상품의 교환·반품 신청 버튼을 누르시면 됩니다.",
             ]),
           ],
           plainText: "이용 안내 주문 배송 교환 반품 배송비",
@@ -612,11 +754,14 @@ function starterMenu(code: string): MenuEntry[] {
             { label: "전체 상품", url: "/shop" },
             { label: "새로 나온 상품", url: "/shop?sort=recent" },
             { label: "인기 상품", url: "/shop?sort=popular" },
+            // 샘플 분류 — 분류를 지우면 이 줄도 관리자 → 메뉴에서 지운다
+            ...SHOP_CATEGORIES.map((c) => ({ label: c.name, url: `/shop?category=${c.slug}` })),
           ],
         },
+        { label: "신상품", url: "/shop?sort=recent" },
+        { label: "베스트", url: "/shop?sort=popular" },
         { label: "공지사항", url: "/board/notice" },
-        { label: "이용 안내", url: "/guide" },
-        { label: "소개", url: "/about" },
+        { label: "고객센터", url: "/help" },
       ];
     case "company":
       return [
@@ -644,11 +789,7 @@ async function seedShopSamples(ctx: SeedContext, images: SampleImages): Promise<
   if (existing.length) return 0; // 이미 상품이 있으면 건드리지 않는다
 
   // 분류 — 홈의 분류 바로가기와 상품 목록의 왼쪽 레일이 이것을 쓴다
-  const categories = [
-    { slug: "kitchen", name: "주방·다이닝" },
-    { slug: "living", name: "리빙·패브릭" },
-    { slug: "fragrance", name: "향·캔들" },
-  ];
+  const categories = SHOP_CATEGORIES;
   const categoryId: Record<string, string> = {};
   for (const [i, c] of categories.entries()) {
     const id = uuidv7();

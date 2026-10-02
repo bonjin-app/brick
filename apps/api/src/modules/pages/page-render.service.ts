@@ -288,7 +288,7 @@ export class PageRenderService {
     /** 배치 편집기 — 저장하지 않은 초안을 그리고, 블록마다 위치를 표시한다 */
     editing: { draft: PageDraft } | null = null,
   ): Promise<RenderedPage> {
-    const [site, rawNav] = await Promise.all([this.siteInfo(), this.menu("header")]);
+    const [site, rawNav, footerNav] = await Promise.all([this.siteInfo(), this.menu("header"), this.menu("footer")]);
     const nav = markCurrent(rawNav, path);
     // 블록 렌더 중에 플러그인이 ctx.t 를 부른다 — 언어 캐시를 갱신해 둔다
     await this.loader.refreshLocale();
@@ -334,6 +334,14 @@ export class PageRenderService {
        * 배지를 따로 두려면 테마 계약을 늘려야 하는데, 알림 하나 때문에 다섯
        * 테마가 같이 바뀌어야 하는 구조가 되면 다음 것은 더 어려워진다.
        */
+      /*
+       * 맨 위 띠의 글자 링크(주문조회 · 고객센터) — 플러그인이 place: "util" 로 등록한 것.
+       * 푸터 메뉴 — 이용약관 · 개인정보 처리방침처럼 머리 메뉴에 올리지 않는 길. 템플릿 엔진의
+       * #if 는 빈 배열도 참으로 보므로 있는지를 따로 준다.
+       */
+      utilLinks: this.loader.headerActionsFor(Boolean(user), "util"),
+      footerMenu: footerNav,
+      hasFooterMenu: footerNav.length > 0,
       headerActions: [
         ...this.loader.headerActionsFor(Boolean(user)),
         ...(user

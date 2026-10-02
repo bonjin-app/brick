@@ -151,6 +151,8 @@
             <button type="submit">{{ t.header.logout }}</button>
           </form>
           {{/if}}
+          {{!-- 플러그인이 맨 위 띠에 둔 글자 링크(주문조회 · 고객센터) --}}
+          {{#each utilLinks}}<a href="{{ url }}">{{ label }}</a>{{/each}}
         </div>
       </div>
     </div>
@@ -211,6 +213,8 @@
       </div>
       {{/if}}
 
+      {{!-- 약관과 정책(푸터 메뉴) — 개인정보 처리방침은 다른 링크와 구별되게 그린다(개인정보보호법 시행령 제31조) --}}
+      {{#if hasFooterMenu}}<nav class="brick-footer-policy" aria-label="{{ t.footer.policies }}">{{#each footerMenu}}<a href="{{ url }}">{{ label }}</a>{{/each}}</nav>{{/if}}
       <div class="brick-footer-credit">
         Powered by <a href="https://github.com/bonjin-app/brick">Brick</a>
       </div>

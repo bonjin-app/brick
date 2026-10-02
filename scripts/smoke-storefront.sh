@@ -463,7 +463,7 @@ absent "기획전 — 끼워 넣은 CSS 가 새지 않는다" "$SC" "background:
 # 두 칸(각 165px 남짓)을 밀어냈다. 브라우저 점검(ui-audit)으로 찾았고, 여기서는 원인이 된 규칙을 못박는다
 contains "상품 격자의 칸은 내용 최소 폭에 밀리지 않는다 (minmax(0,1fr))" "$SC" "grid-template-columns:repeat(var(--brick-cols,4),minmax(0,1fr))"
 contains "폰의 두 칸도 마찬가지" "$SC" "grid-template-columns:repeat(2,minmax(0,1fr))"
-contains "가격 줄은 줄바꿈될 수 있다" "$SC" ".brick-product-price{margin-top:4px;display:flex;flex-wrap:wrap"
+contains "가격 줄은 줄바꿈될 수 있다" "$SC" ".brick-product-price{margin-top:5px;display:flex;flex-wrap:wrap"
 contains "\"전체보기\" 는 폰에서 누를 수 있는 높이 (44px)" "$SC" "a.brick-shop-more{flex:none;display:inline-flex;align-items:center;min-height:44px"
 
 echo

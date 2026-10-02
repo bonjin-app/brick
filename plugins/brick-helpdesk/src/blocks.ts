@@ -18,7 +18,7 @@ export function registerHelpdeskBlocks(
 ): void {
   bindI18n(ctx);
   // ── FAQ ───────────────────────────────────────────
-  ctx.registerBlock({
+  const faqBlock: Parameters<PluginContext["registerBlock"]>[0] = {
     name: "faq",
     displayName: "FAQ",
     propsSchema: {
@@ -40,11 +40,16 @@ export function registerHelpdeskBlocks(
         listCategories(db),
       ]);
 
+      /*
+       * 질문이 하나도 없는 분류는 탭에 내지 않는다 — 확장이 켜질 때 만드는 기본 분류("자주 묻는 질문")가
+       * 예시 FAQ 를 다른 분류에 넣은 뒤 "자주 묻는 질문 0" 으로 남았다. 눌러 봐야 비어 있는 탭은 없는 편이 낫다.
+       */
+      const shown = cats.filter((c) => Number(c.faq_count) > 0 || category === String(c.slug));
       const tabs =
-        props.showTabs !== false && cats.length > 1
+        props.showTabs !== false && shown.length > 1
           ? `<nav class="brick-faq-tabs">
     <a href="?"${!category ? ' class="is-on"' : ""}>${escapeHtml(t("faq.all"))}</a>
-    ${cats
+    ${shown
       .map(
         (c) =>
           `<a href="?category=${encodeURIComponent(String(c.slug))}"${
@@ -94,6 +99,28 @@ ${items}
   </div>
 </div>${FAQ_CSS}${FAQ_SCRIPT}`;
     },
+  };
+  ctx.registerBlock(faqBlock);
+
+  /*
+   * 고객센터 — 자주 묻는 질문 + "원하는 답이 없으면 1:1 문의".
+   *
+   * FAQ 는 블록만 있고 **닿는 화면이 없었다** — 운영자가 페이지를 만들어 올려야 존재했다. 쇼핑몰 머리의
+   * "고객센터" 자리(맨 위 띠)가 가리킬 곳이 필요하다. 손님이 FAQ 를 먼저 보고 그래도 모르면 문의하는
+   * 순서다(문의가 줄어든다 — FAQ 를 두는 이유다).
+   */
+  ctx.registerBlock({
+    name: "help-center",
+    displayName: "고객센터",
+    render: async (props, blockCtx) => {
+      const faq = await faqBlock.render({ ...props, showSearch: true, showTabs: true }, blockCtx);
+      return `${faq}
+<aside class="brick-help-cta">
+  <div><strong>${escapeHtml(t("help.ctaTitle"))}</strong><span>${escapeHtml(t("help.ctaBody"))}</span></div>
+  <a class="brick-btn brick-btn-primary" href="/support">${escapeHtml(t("help.ctaButton"))}</a>
+</aside>
+<style>.brick-help-cta{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-top:32px;padding:22px 24px;border-radius:var(--radius-lg, 12px);background:var(--color-bg-soft, #f6f6f9)}.brick-help-cta strong{display:block;font-size:16px;color:var(--color-text, #17171c)}.brick-help-cta span{display:block;margin-top:4px;font-size:14px;color:var(--color-text-soft, #45454f)}</style>`;
+    },
   });
 
   // ── 1:1 문의 ──────────────────────────────────────
@@ -129,6 +156,7 @@ ${items}
    * 없는 사이트에는 이 선언이 화면을 준다. 어느 쪽이든 주소는 하나다.
    */
   ctx.registerScreen({ path: "support", title: "1:1 문의", block: "tickets", memberMenu: true, order: 40 });
+  ctx.registerScreen({ path: "help", title: "고객센터", block: "help-center" });
 }
 
 /* ── FAQ 스타일 ────────────────────────────────────── */

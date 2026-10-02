@@ -1,6 +1,7 @@
 import { Injectable, OnModuleInit } from "@nestjs/common";
 import { CORE_CATALOGS, makeTranslator, type BlockRenderContext } from "@brick/core";
 import { PluginLoaderService } from "../plugins/plugin-loader.service.js";
+import { AgreementsService } from "../members/agreements.service.js";
 import { SearchService } from "../search/search.service.js";
 import { NotificationsService } from "../notifications/notifications.service.js";
 import { IdentityService, safeNext } from "../identity/identity.service.js";
@@ -26,6 +27,7 @@ export class CoreBlocksService implements OnModuleInit {
     private readonly search: SearchService,
     private readonly notifications: NotificationsService,
     private readonly identity: IdentityService,
+    private readonly agreements: AgreementsService,
   ) {}
 
   onModuleInit(): void {
@@ -264,6 +266,43 @@ ${eyebrow ? `  <span class="brick-eyebrow"${ed(ctx, "eyebrow")}>${esc(eyebrow)}<
         if (!items) return "";
         const heading = String(props.title ?? "").trim();
         return `<section class="brick-faq">${heading ? `<h2>${esc(heading)}</h2>` : ""}${items}</section>`;
+      },
+    });
+
+    /**
+     * 약관 본문 — 지금 시행 중인 판을 그대로 보여준다(이용약관 화면).
+     *
+     * 이용약관은 가입 화면에서 동의를 받는데, **가입하지 않은 손님이 읽을 곳이 없었다** — 푸터에
+     * 걸 화면이 없었다. 본문을 페이지에 다시 적으면 약관을 개정할 때 한쪽만 바뀌므로, 관리자 → 약관의
+     * 그 행을 읽는다. 시행일과 판을 함께 적는다(개정 전 판으로 분쟁이 날 때 어느 판인지가 중요하다).
+     */
+    b.set("core/agreement", {
+      name: "core/agreement",
+      displayName: "약관 본문",
+      propsSchema: {
+        type: "object",
+        properties: {
+          kind: { type: "string", title: "종류 (terms · privacy · marketing · third_party)", default: "terms" },
+        },
+      },
+      render: async (props) => {
+        const t = makeTranslator({ locale: this.loader.siteLocale, catalogs: CORE_CATALOGS });
+        const kind = ["terms", "privacy", "marketing", "third_party"].includes(String(props.kind)) ? String(props.kind) : "terms";
+        const a = await this.agreements.activeOf(kind).catch(() => null);
+        if (!a) return `<p class="brick-agreement-none">${esc(t("agreement.none"))}</p>`;
+        // 빈 줄은 문단, 한 줄 넘김은 줄바꿈 — 관리자가 적은 글자 그대로(HTML 로 싣지 않는다)
+        // "제1조 (목적)" 처럼 조항으로 시작하는 문단은 첫 줄을 조항 제목으로 굵게 — 긴 약관에서 조항을 눈으로 찾는다
+        const paras = a.body.split(/\n{2,}/).map((p) => {
+          const [first, ...rest] = p.split("\n");
+          const head = /^제\s*\d+\s*조/.test(first.trim());
+          const body = head ? rest : [first, ...rest];
+          return `<p>${head ? `<strong class="brick-agreement-article">${esc(first)}</strong>${body.length ? "<br />" : ""}` : ""}${body.map((l) => esc(l)).join("<br />")}</p>`;
+        }).join("");
+        return `<article class="brick-agreement">
+  <p class="brick-agreement-meta">${esc(t("agreement.meta", { date: a.effectiveAt.slice(0, 10), version: a.version }))}</p>
+  <div class="brick-agreement-body">${paras}</div>
+</article>
+<style>.brick-agreement-meta{font-size:13.5px;color:var(--color-muted, #6c6c7a);margin:0 0 20px}.brick-agreement-body p{line-height:1.85;margin:0 0 16px;color:var(--color-text-soft, #45454f)}.brick-agreement-article{color:var(--color-text, #17171c);font-size:1.05em}.brick-agreement-none{color:var(--color-muted, #6c6c7a)}</style>`;
       },
     });
 

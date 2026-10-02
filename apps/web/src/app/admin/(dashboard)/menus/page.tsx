@@ -35,6 +35,11 @@ const btn: React.CSSProperties = {
 export default function AdminMenusPage() {
   const t = useAdminT();
   const [items, setItems] = useState<MenuItem[]>([]);
+  /*
+   * 어느 메뉴인가 — 머리(카테고리 띠) 또는 푸터(이용약관 · 개인정보처리방침 같은 아래 줄).
+   * 푸터 메뉴는 처음부터 API 로 저장할 수 있었고(menus/:location) 렌더도 읽는데, 이 화면이 머리만 열었다.
+   */
+  const [location, setLocation] = useState<"header" | "footer">("header");
   // 성공/실패를 함께 들고 다닌다 — 전에는 문구 앞 두 글자로 판별해서, 번역을 고치면 색이 뒤집혔다
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
   /** 어느 항목의 선택기를 열었나 (null 이면 닫힘) */
@@ -43,8 +48,8 @@ export default function AdminMenusPage() {
   const [childPickerFor, setChildPickerFor] = useState<string | null>(null);
 
   const reload = useCallback(() => {
-    fetch("/api/menus/header").then((r) => r.json()).then((d) => setItems(d.items ?? []));
-  }, []);
+    fetch(`/api/menus/${location}`).then((r) => r.json()).then((d) => setItems(d.items ?? []));
+  }, [location]);
   useEffect(reload, [reload]);
 
   function update(i: number, patch: Partial<MenuItem>) {
@@ -103,7 +108,7 @@ export default function AdminMenusPage() {
   }
 
   async function save() {
-    const res = await fetch("/api/menus/header", {
+    const res = await fetch(`/api/menus/${location}`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ items }),
@@ -123,6 +128,16 @@ export default function AdminMenusPage() {
       <p style={{ color: "var(--color-text-soft)", fontSize: 14, marginTop: -8 }}>
         {t("menus.guide")}
       </p>
+      <div className="brick-x-tabs" role="tablist" aria-label={t("menus.title")}>
+        {(["header", "footer"] as const).map((loc) => (
+          <button key={loc} type="button" role="tab" aria-selected={location === loc}
+            className={"brick-x-tab" + (location === loc ? " is-on" : "")}
+            onClick={() => { setMessage(null); setPickerFor(null); setChildPickerFor(null); setLocation(loc); }}>
+            {t(loc === "header" ? "menus.header" : "menus.footer")}
+          </button>
+        ))}
+      </div>
+      {location === "footer" ? <p style={{ color: "var(--color-text-soft)", fontSize: 13.5, margin: "0 0 12px" }}>{t("menus.footerGuide")}</p> : null}
 
       <div style={{ background: "var(--color-bg)", borderRadius: 8, padding: 16, maxWidth: 860 }}>
         {items.map((it, i) => (

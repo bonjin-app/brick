@@ -1176,3 +1176,9 @@ a.brick-card:hover { border-color: var(--color-text); color: inherit; }
 .brick-slider.is-full .brick-slide-caption { padding-inline: max(var(--brick-pad-x), calc((100% - var(--content-width)) / 2 + var(--brick-pad-x))); }
 /* 검색 — 안내 문구가 "검색어를 입력하시" 에서 잘렸다 */
 @media (min-width: 1024px) { .brick-header-search input { width: 190px; } }
+
+/* 약관과 정책(푸터 메뉴) — 개인정보 처리방침은 다른 링크와 구별되게(굵게) 그린다(개인정보보호법 시행령 제31조) */
+.brick-footer-policy { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 18px; margin: 0 0 14px; font-size: 13.5px; }
+.brick-footer-policy a { display: inline-flex; align-items: center; min-height: 32px; color: var(--color-text-soft); text-decoration: none; }
+.brick-footer-policy a:hover { color: var(--color-text); text-decoration: underline; }
+.brick-footer-policy a[href="/privacy"] { font-weight: 700; color: var(--color-text); }

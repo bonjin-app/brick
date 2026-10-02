@@ -137,5 +137,9 @@
   "비밀번호를 여러 번 틀렸습니다. 잠시 뒤 다시 시도해주세요.": "Too many wrong passwords. Please try again in a little while.",
   "1:1 문의 — 답변 등록": "Inquiry — answered",
   "문의한 사람": "Person who asked",
-  "문의 제목": "Inquiry subject"
+  "문의 제목": "Inquiry subject",
+  "help.ctaTitle": "Didn't find your answer?",
+  "help.ctaBody": "Send us a question and we'll get back to you.",
+  "help.ctaButton": "Ask a question",
+  "고객센터": "Help center"
 }

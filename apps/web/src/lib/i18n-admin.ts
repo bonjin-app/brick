@@ -513,7 +513,10 @@ const KO = {
   "pages.noBlocksFound": "찾는 블록이 없습니다.",
   "pages.inlineHint": "미리보기의 제목·문단은 두 번 눌러 그 자리에서 고칠 수 있습니다 — Enter(여러 줄은 Ctrl+Enter)로 마치고 Esc 로 되돌립니다. 고른 블록의 이름표를 끌어 미리보기 안에서 옮길 수도 있습니다.",
 
-  "menus.title": "메뉴 (헤더)",
+  "menus.title": "메뉴",
+  "menus.header": "머리 메뉴",
+  "menus.footer": "푸터 메뉴",
+  "menus.footerGuide": "화면 맨 아래 줄 — 이용약관 · 개인정보처리방침 · 이용 안내 같은 길. 주소가 /privacy 인 항목은 다른 링크와 구별되게 굵게 그립니다(개인정보보호법 시행령 제31조).",
   "menus.guide": "연결 대상 선택을 누르면 만들어 둔 페이지·게시판·쇼핑몰 화면이 목록으로 나옵니다.",
   "menus.labelPh": "메뉴에 보일 이름",
   "menus.pick": "연결 대상 선택",
@@ -1109,7 +1112,10 @@ const EN: Record<keyof typeof KO, string> = {
   "pages.noBlocksFound": "No matching blocks.",
   "pages.inlineHint": "Double-click a heading or paragraph in the preview to edit it in place — press Enter (Ctrl+Enter for multiple lines) to finish and Esc to undo. You can also drag the selected block's label to move it within the preview.",
 
-  "menus.title": "Menu (header)",
+  "menus.title": "Menu",
+  "menus.header": "Header menu",
+  "menus.footer": "Footer menu",
+  "menus.footerGuide": "The bottom line of every page — terms, privacy policy, guides. An item pointing to /privacy is drawn bold so it stands out.",
   "menus.guide": "Press \"Pick link target\" to choose from your pages, boards and shop screens.",
   "menus.labelPh": "Label shown in the menu",
   "menus.pick": "Pick link target",

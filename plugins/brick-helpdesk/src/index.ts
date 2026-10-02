@@ -514,6 +514,8 @@ export default definePlugin(async (ctx) => {
     },
   });
 
+  // 쇼핑몰 머리의 맨 위 띠 — "로그인 · 회원가입 · 주문조회 · 고객센터" (고객센터 화면은 blocks.ts 의 help)
+  ctx.registerHeaderAction({ label: "고객센터", path: "/help", order: 30, place: "util" });
   ctx.registerAdminResource(TICKET_RESOURCE);
   ctx.registerAdminResource(FAQ_RESOURCE);
   ctx.registerAdminResource(FAQ_CATEGORY_RESOURCE);

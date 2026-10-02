@@ -140,28 +140,28 @@ export const DETAIL_EXTRAS_SCRIPT = () => `
 </script>`;
 
 export const DETAIL_EXTRAS_CSS = `<style>
-.brick-crumbs{display:flex;flex-wrap:wrap;align-items:center;gap:2px;margin:4px 0 18px 0;font-size:13px;color:var(--color-muted, #6c6c7a)}
+.brick-crumbs{display:flex;flex-wrap:wrap;align-items:center;gap:2px;margin:4px 0 18px 0;font-size:14px;color:var(--color-muted, #6c6c7a)}
 /* 누르는 자리 28px 이상 — "홈" 한 글자는 폭이 11px 이라 폰에서 누르기 어려웠다(화면 점검이 잡았다) */
 .brick-crumbs a{color:inherit;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;min-height:28px;min-width:28px;padding:0 6px}
 .brick-crumbs a:first-child{margin-left:-6px}
 .brick-crumbs a:hover{color:var(--color-text, #17171c);text-decoration:underline}
-.brick-crumbs [aria-current]{color:var(--color-text-soft, #45454f);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:40ch}
-.brick-buy-total{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:18px 0 0;padding-top:14px;border-top:1px solid var(--color-line, #e4e4ea);font-size:14px;color:var(--color-text-soft, #45454f)}
+.brick-crumbs [aria-current]{padding:0 6px;color:var(--color-text-soft, #45454f);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:40ch}
+.brick-buy-total{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:18px 0 0;padding-top:14px;border-top:1px solid var(--color-line, #e4e4ea);font-size:15px;color:var(--color-text-soft, #45454f)}
 .brick-buy-total strong{font-size:22px;color:var(--color-text, #17171c);font-variant-numeric:tabular-nums}
 .brick-buy-total span{color:var(--color-muted, #6c6c7a);font-size:13px;margin-left:6px}
 .brick-buy-msg a{margin-left:8px;font-weight:600;color:var(--color-primary-text, #b63a2e)}
 .brick-pd-jump{position:sticky;top:0;z-index:5;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin:48px 0 0;background:var(--color-bg, #ffffff);border-bottom:1px solid var(--color-line-strong, #c9c9d3)}
-.brick-pd-jump a{display:flex;align-items:center;justify-content:center;gap:6px;min-height:52px;font-size:15px;font-weight:600;color:var(--color-text-soft, #45454f);text-decoration:none;border-bottom:2px solid transparent;margin-bottom:-1px}
+.brick-pd-jump a{display:flex;align-items:center;justify-content:center;gap:6px;min-height:56px;font-size:16px;font-weight:600;color:var(--color-text-soft, #45454f);text-decoration:none;border-bottom:2px solid transparent;margin-bottom:-1px}
 .brick-pd-jump a:hover{color:var(--color-text, #17171c);border-bottom-color:var(--color-text, #17171c)}
 .brick-pd-jump a span{font-weight:500;color:var(--color-muted, #6c6c7a)}
 #brick-pd-desc,#brick-pd-guide,#brick-reviews{scroll-margin-top:64px}
 .brick-pd-guide{margin:48px 0;padding:28px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius-lg, 12px);background:var(--color-bg-soft, #f6f6f9)}
-.brick-pd-guide h2{margin:0 0 18px;font-size:18px}
-.brick-pd-guide h3{margin:0 0 10px;font-size:15px}
+.brick-pd-guide h2{margin:0 0 18px;font-size:20px}
+.brick-pd-guide h3{margin:0 0 10px;font-size:16.5px}
 .brick-guide-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:28px}
-.brick-pd-guide ul{margin:0;padding-left:18px;font-size:14px;line-height:1.75;color:var(--color-text-soft, #45454f)}
+.brick-pd-guide ul{margin:0;padding-left:18px;font-size:15px;line-height:1.75;color:var(--color-text-soft, #45454f)}
 .brick-guide-sub{margin:14px 0 6px;font-size:13.5px;font-weight:600}
-.brick-pd-guide .brick-guide-small{font-size:13px}
+.brick-pd-guide .brick-guide-small{font-size:14px}
 .brick-guide-own{margin:12px 0 0;padding:12px 14px;border-radius:var(--radius, 8px);background:var(--color-bg, #ffffff);font-size:14px;line-height:1.7;white-space:pre-line}
 @media(max-width:640px){
   .brick-guide-grid{grid-template-columns:1fr;gap:20px}

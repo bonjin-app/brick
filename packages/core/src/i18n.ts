@@ -135,6 +135,9 @@ const CORE_KO: MessageCatalog = {
   "footer.cs": "고객센터",
   "footer.toTop": "맨 위로",
   "footer.links": "바로가기",
+  "footer.policies": "약관 및 정책",
+  "agreement.meta": "시행일 {date} · 제{version}판",
+  "agreement.none": "아직 게시된 약관이 없습니다.",
   // 홈 페이지가 아직 없을 때 테마가 그리는 폴백 화면 (설치 직후)
   "home.readyTitle": "설치가 끝났습니다",
   "home.readyBody": "이 화면은 홈 페이지를 아직 만들지 않았을 때만 보입니다. 관리자에서 페이지를 만들고 블록을 올리면 이 자리에 놓입니다.",
@@ -250,6 +253,9 @@ const CORE_EN: MessageCatalog = {
   "footer.cs": "Customer service",
   "footer.toTop": "Back to top",
   "footer.links": "Links",
+  "footer.policies": "Terms and policies",
+  "agreement.meta": "Effective {date} · version {version}",
+  "agreement.none": "No terms have been published yet.",
   "home.readyTitle": "Installation complete",
   "home.readyBody": "This screen only appears while there is no home page yet. Create a page in the admin and it takes this place.",
   "home.readyCta": "Create a home page",
@@ -530,6 +536,8 @@ export const CORE_ERROR_SOURCES = Object.keys(CORE_ERROR_EN);
  * 규칙), 코어 블록은 코드 안에 사는 선언이라 여기서 받는다.
  */
 const CORE_LABEL_EN: MessageCatalog = {
+  "약관 본문": "Agreement text",
+  "종류 (terms · privacy · marketing · third_party)": "Kind (terms · privacy · marketing · third_party)",
   "알림함": "Notifications",
   "본인인증": "Identity verification",
   "표시 개수": "How many to show",
@@ -659,6 +667,7 @@ const CORE_TEMPLATE_KO: MessageCatalog = {
   "err.pluginMigrationLock": "플러그인 마이그레이션 락을 60초 안에 얻지 못했습니다 ({plugin}).",
   "err.unknownAdminScreen": "알 수 없는 관리 화면입니다: {screen}",
   "err.unknownBlock": "알 수 없는 블록입니다: {name}",
+  "err.menuLocation": "메뉴 자리는 header(머리) 또는 footer(푸터)만 쓸 수 있습니다.",
   "err.settingNotEditable": "수정할 수 없는 설정입니다: {key}",
   "err.settingMustBeString": "{key}: 문자열이어야 합니다.",
   "err.settingMustBeBool": "{key}: true/false여야 합니다.",
@@ -723,6 +732,7 @@ const CORE_TEMPLATE_EN: MessageCatalog = {
   "err.pluginMigrationLock": "Could not acquire the plugin migration lock within 60 seconds ({plugin}).",
   "err.unknownAdminScreen": "Unknown admin screen: {screen}",
   "err.unknownBlock": "Unknown block: {name}",
+  "err.menuLocation": "A menu can only be saved to header or footer.",
   "err.settingNotEditable": "That setting cannot be changed: {key}",
   "err.settingMustBeString": "{key}: must be a string.",
   "err.settingMustBeBool": "{key}: must be true or false.",

@@ -1150,5 +1150,9 @@
   "checkout.privacyKeep": "Contract, payment and delivery records are kept for 5 years and complaint records for 3 years as the Electronic Commerce Act requires, then destroyed.",
   "checkout.privacyRefuse": "You may decline, but a guest order cannot be placed without it.",
   "checkout.agreePrivacy": "I agree to the collection and use of my personal information for this guest order (required)",
-  "checkout.agreeOrder": "I have checked the items, prices and shipping fee and agree to the purchase (required)"
+  "checkout.agreeOrder": "I have checked the items, prices and shipping fee and agree to the purchase (required)",
+  "주문조회": "Track order",
+  "베스트 후기": "Review highlights",
+  "부제": "Subtitle",
+  "구매 안내 (배송·교환·반품)": "Purchase guide (shipping, exchanges, returns)"
 }
