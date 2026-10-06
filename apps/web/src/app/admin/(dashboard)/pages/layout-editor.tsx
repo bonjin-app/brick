@@ -16,6 +16,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { useAdminT } from "../../../../lib/i18n-admin";
+import { useModalFocus } from "../../../../lib/use-modal";
 import {
   applyCellEdit, applyMove, applyTextEdit, duplicateAt, flatten, getNode, indentIntoPrevious, insertAt, isPrefix, moveNode, moveSibling,
   outdent, parsePath, pathKey, removeAt, samePath, updateAt, type BlockNode, type Path,
@@ -451,20 +452,20 @@ export function LayoutEditor(props: {
 function BlockPicker(props: { catalog: BlockDef[]; onPick: (name: string) => void; onClose: () => void }) {
   const t = useAdminT();
   const [q, setQ] = useState("");
-  const input = useRef<HTMLInputElement>(null);
-  useEffect(() => { input.current?.focus(); }, []);
+  // 포커스를 안에 가두고(열릴 때 검색 칸으로 · Tab 이 벗어나지 않게) Esc 로 닫고 배경 스크롤을 잠근다 —
+  // 이 모달은 role="dialog" 인데 이 훅이 없어 키보드 사용자가 뒤 화면을 돌아다녔고, CI(모달은 포커스를 가둔다)가 빨갰다
+  const dialogRef = useModalFocus<HTMLDivElement>(props.onClose);
   const needle = q.trim().toLowerCase();
   const list = needle
     ? props.catalog.filter((b) => b.displayName.toLowerCase().includes(needle) || b.name.toLowerCase().includes(needle))
     : props.catalog;
   return (
-    <div role="dialog" aria-modal="true" aria-label={t("pages.addBlock")}
-      onKeyDown={(e) => { if (e.key === "Escape") props.onClose(); }}
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={t("pages.addBlock")}
       style={{ position: "fixed", inset: 0, zIndex: 50, display: "grid", placeItems: "center", padding: 16 }}>
       <div aria-hidden="true" onClick={props.onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.35)" }} />
       <div style={{ position: "relative", width: "min(520px, 100%)", maxHeight: "80vh", overflow: "auto", background: "var(--color-bg)", borderRadius: 10, padding: 16, boxShadow: "0 10px 30px rgba(0,0,0,.2)" }}>
         <div className="flex items-center gap-2" style={{ marginBottom: 8 }}>
-          <input ref={input} value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("pages.searchBlocks")}
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("pages.searchBlocks")}
             aria-label={t("pages.searchBlocks")} style={{ flex: 1, padding: 8 }} />
           <button type="button" onClick={props.onClose} style={{ cursor: "pointer", padding: "8px 12px" }}>{t("common.close")}</button>
         </div>
