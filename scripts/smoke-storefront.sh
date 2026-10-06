@@ -467,6 +467,13 @@ contains "상품 격자의 칸은 내용 최소 폭에 밀리지 않는다 (minm
 contains "폰의 두 칸도 마찬가지" "$SC" "grid-template-columns:repeat(2,minmax(0,1fr))"
 contains "가격 줄은 줄바꿈될 수 있다" "$SC" ".brick-product-price{margin-top:5px;display:flex;flex-wrap:wrap"
 contains "\"전체보기\" 는 폰에서 누를 수 있는 높이 (44px)" "$SC" "a.brick-shop-more{flex:none;display:inline-flex;align-items:center;min-height:44px"
+# 쇼핑몰 CSS 는 화면별 묶음이다 — 홈의 진열 블록 하나가 상세·장바구니·분류 레일·재입고·하단 구매 바 규칙까지(약 22KB,
+# 홈 CSS 의 78%) 싣고 있었다. 진열은 카드 묶음만, 다른 화면의 규칙은 싣지 않는다
+contains "진열 — 카드 묶음은 싣는다" "$SC" ".brick-product-grid{display:grid"
+absent "진열 — 장바구니 규칙은 싣지 않는다" "$SC" ".brick-cart-total{"
+absent "진열 — 상세의 하단 구매 바는 싣지 않는다" "$SC" ".brick-buybar{display:none}"
+absent "진열 — 재입고 폼은 싣지 않는다" "$SC" ".brick-restock-form{"
+absent "진열 — 목록 화면의 분류 레일은 싣지 않는다" "$SC" ".brick-shop-layout{"
 # 블록은 어느 테마에서든 깨지지 않게 자기 CSS 를 함께 낸다 — 그래서 같은 블록을 여럿 놓으면 같은 CSS 가 여럿 실렸다
 # (쇼핑몰 홈의 진열 셋이 같은 21.8KB 를 세 번, HTML 의 35%). 페이지를 조립하는 곳에서 완전히 같은 것만 거른다
 check "진열 다섯 섹션의 CSS 는 한 번만" "$(echo "$SC" | grep -o '[.]brick-adult-mark{' | wc -l | tr -d ' ')" "1"
@@ -700,6 +707,10 @@ contains "수량 −/+ 단추" "$PD" 'data-step="1"'
 contains "수량 상한은 재고" "$PD" "max=\"$(psql_q "SELECT stock AS s FROM shop_products WHERE slug = 'sample-plate'")\""
 contains "합계를 셀 단가가 폼에" "$PD" "data-price=\"$(psql_q "SELECT price AS s FROM shop_products WHERE slug = 'sample-plate'")\""
 contains "섹션 이동 막대에 구매안내" "$PD" 'href="#brick-pd-guide"'
+contains "상세 — 구매 버튼 줄 묶음" "$PD" ".brick-buy-actions button:hover{"
+contains "상세 — 수량 묶음" "$PD" ".brick-qty{"
+contains "상세 — 카드 묶음(관련 상품)" "$PD" ".brick-product-grid{display:grid"
+absent "상세 — 장바구니 표 규칙은 싣지 않는다" "$PD" ".brick-cart-total{"
 contains "구매 안내 — 청약철회 7일" "$PD" "7일 안에"
 contains "구매 안내의 반품 배송비는 설정값" "$PD" "배송비 4,500원을 고객이 부담"
 contains "구매 안내 — 반품이 안 되는 경우(법)" "$PD" "전자상거래법 제17조 제2항"
@@ -742,6 +753,12 @@ m = re.search(r'<nav class=\"brick-cs-links\"[^>]*>(.*?)</nav>', sys.stdin.read(
 print(bool(m) and '<a href=\"/shop/orders\">주문조회</a>' in m.group(1))")" "True"
 curl -s -o /dev/null -b "$CK" -X POST "$API/api/themes/${BEFORE_THEME:-default}/activate"
 CART_SF="$(sf_render "shop/cart&_=$RANDOM")"
+# 장바구니의 버튼 줄(쇼핑 계속하기 · 주문하기)은 상세의 구매 버튼 줄 클래스를 같이 쓴다 — 묶음을 나눌 때 상세 묶음에 있어서
+# 장바구니의 버튼이 스타일을 잃었다(화면 비교로 잡았다). 상세와 장바구니가 같이 싣는 BUY 묶음
+contains "장바구니 — 구매 버튼 줄 묶음(상세와 공용)" "$CART_SF" ".brick-buy-actions button:hover{"
+contains "장바구니 — 수량 묶음(상세와 공용)" "$CART_SF" ".brick-qty{"
+absent "장바구니 — 상품 카드 격자는 싣지 않는다" "$CART_SF" ".brick-product-grid{"
+absent "장바구니 — 상세의 하단 구매 바는 싣지 않는다" "$CART_SF" ".brick-buybar{display:none}"
 contains "장바구니 합계의 괘선이 끊기지 않는다 (가로 간격 0)" "$CART_SF" ".brick-cart-total dl{display:grid;grid-template-columns:1fr auto;gap:8px 0;"
 contains "주문서의 합계 상자는 붙은 카테고리 띠 아래에 붙는다" "$(sf_render "shop/checkout&_=$RANDOM")" "top: calc(var(--brick-sticky-top, 0px) + 16px)"
 FS_ITEM="$(curl -s "$SHOP/cart?guest=$FS_GT" | jq_get "['items'][0]['id']")"

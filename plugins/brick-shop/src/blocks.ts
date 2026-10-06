@@ -47,7 +47,7 @@ export function registerStorefrontBlocks(
   <h1>${escapeHtml(t("adult.gateTitle"))}</h1>
   <p>${escapeHtml(t("adult.gateBody"))}</p>
   ${action}
-</div>${STOREFRONT_CSS}`;
+</div>${SHOP_CARD_CSS}`;
   };
 
   // ── 상품 목록 ─────────────────────────────────────
@@ -254,7 +254,7 @@ export function registerStorefrontBlocks(
 
       if (!rows.length) {
         // 정렬을 바꿨다가 빈 결과가 나오면 되돌릴 수단이 화면에 있어야 한다 — 막대를 함께 낸다
-        return `${props.title ? `<h2 class="brick-shop-heading">${escapeHtml(props.title)}</h2>` : ""}${priceBar}${sortBar}<div class="brick-shop-empty">${escapeHtml(t("list.empty"))}</div>${STOREFRONT_CSS}`;
+        return `${props.title ? `<h2 class="brick-shop-heading">${escapeHtml(props.title)}</h2>` : ""}${priceBar}${sortBar}<div class="brick-shop-empty">${escapeHtml(t("list.empty"))}</div>${SHOP_CARD_CSS}${sortBar || priceBar ? SHOP_LIST_CSS : ""}`;
       }
 
       /*
@@ -327,7 +327,7 @@ export function registerStorefrontBlocks(
       const pager = paged && totalPages > 1 ? renderPager(current, totalPages, (n) => linkWith({ page: n === 1 ? null : String(n) })) : "";
       const totalNote = paged && total > 0 ? `<span class="brick-shop-total">${escapeHtml(t("list.total", { n: total }))}</span>` : "";
 
-      return `${heading}${priceBar}${totalNote}${sortBar}<div class="brick-product-grid" style="--brick-cols:${columns}">${cards}\n</div>${pager}${STOREFRONT_CSS}`;
+      return `${heading}${priceBar}${totalNote}${sortBar}<div class="brick-product-grid" style="--brick-cols:${columns}">${cards}\n</div>${pager}${SHOP_CARD_CSS}${sortBar || priceBar ? SHOP_LIST_CSS : ""}`;
     },
   };
   ctx.registerBlock(productListBlock);
@@ -577,7 +577,7 @@ ${relatedHtml}
 <a id="brick-reviews"></a>
 ${reviewSection({ id: String(p.id), reviewCount, ratingAvg, inquiryCount: Number(p.inquiry_count ?? 0) })}
 <script type="application/ld+json">${jsonLd}</script>
-${buyScript(`${shopBase}/cart`)}${DETAIL_EXTRAS_SCRIPT()}${GALLERY_SCRIPT}${restockScript()}${wishButtonScript()}${STOREFRONT_CSS}${DETAIL_EXTRAS_CSS}`;
+${buyScript(`${shopBase}/cart`)}${DETAIL_EXTRAS_SCRIPT()}${GALLERY_SCRIPT}${restockScript()}${wishButtonScript()}${SHOP_CARD_CSS}${SHOP_DETAIL_CSS}${SHOP_BUY_CSS}${SHOP_QTY_CSS}${DETAIL_EXTRAS_CSS}`;
     },
   };
   ctx.registerBlock(productDetailBlock);
@@ -640,7 +640,7 @@ ${buyScript(`${shopBase}/cart`)}${DETAIL_EXTRAS_SCRIPT()}${GALLERY_SCRIPT}${rest
     ${nav}
   </aside>
   <div class="brick-shop-body">${list}</div>
-</div>`;
+</div>${SHOP_LIST_CSS}`;
       }
       /**
        * 화면마다 제목을 선언한다 — 안 하면 라우터 페이지 제목("쇼핑몰")이
@@ -722,7 +722,7 @@ ${buyScript(`${shopBase}/cart`)}${DETAIL_EXTRAS_SCRIPT()}${GALLERY_SCRIPT}${rest
   async function renderCollectionIndex(): Promise<string> {
     const items = await activeCollections(db);
     if (!items.length) {
-      return `<div class="brick-shop-empty">${escapeHtml(t("collection.empty"))}</div>${STOREFRONT_CSS}`;
+      return `<div class="brick-shop-empty">${escapeHtml(t("collection.empty"))}</div>${SHOP_CARD_CSS}`;
     }
     const cards = items
       .map((c) => `<a class="brick-collection-card" href="/shop/event/${encodeURIComponent(c.slug)}">
@@ -731,13 +731,13 @@ ${buyScript(`${shopBase}/cart`)}${DETAIL_EXTRAS_SCRIPT()}${GALLERY_SCRIPT}${rest
   <span>${escapeHtml(t("collection.products", { n: c.productCount }))}${c.endsAt ? escapeHtml(t("collection.until", { date: shortDateLocalized(c.endsAt) })) : ""}</span>
 </a>`)
       .join("");
-    return `<div class="brick-collection-list"><h1>${escapeHtml(t("collection.index"))}</h1>${cards}</div>${COLLECTION_CSS}${STOREFRONT_CSS}`;
+    return `<div class="brick-collection-list"><h1>${escapeHtml(t("collection.index"))}</h1>${cards}</div>${COLLECTION_CSS}${SHOP_CARD_CSS}`;
   }
 
   /** 기획전 상세 — 종료돼도 404 대신 안내를 보여준다 (공유된 링크로 온 손님) */
   async function renderCollectionPage(slug: string, blockCtx?: BlockRenderContext): Promise<string> {
     const c = await viewCollection(db, slug);
-    if (!c) return `<div class="brick-shop-empty">${escapeHtml(t("collection.notFound"))}</div>${STOREFRONT_CSS}`;
+    if (!c) return `<div class="brick-shop-empty">${escapeHtml(t("collection.notFound"))}</div>${SHOP_CARD_CSS}`;
 
     const notice =
       c.state === "ended" ? `<p class="brick-collection-notice">${escapeHtml(t("collection.ended"))}</p>`
@@ -764,7 +764,7 @@ ${buyScript(`${shopBase}/cart`)}${DETAIL_EXTRAS_SCRIPT()}${GALLERY_SCRIPT}${rest
   ${c.products.length
     ? `<div class="brick-product-grid" style="--brick-cols:4">${cards}</div>`
     : `<p class="brick-shop-empty">${escapeHtml(t("collection.noProducts"))}</p>`}
-</div>${COLLECTION_CSS}${STOREFRONT_CSS}`;
+</div>${COLLECTION_CSS}${SHOP_CARD_CSS}`;
   }
 
   // ── 관련 상품 (독립 블록) ──────────────────────────
@@ -791,7 +791,9 @@ ${buyScript(`${shopBase}/cart`)}${DETAIL_EXTRAS_SCRIPT()}${GALLERY_SCRIPT}${rest
       if (!rows[0]) return "";
       const limit = Number(props.limit ?? RELATED_LIMIT);
       const related = await listRelated(db, String(rows[0].id), limit);
-      return relatedSection(related, props.title ? String(props.title) : undefined);
+      // 상세가 아닌 곳(홈·기획전)에 놓여도 카드가 깨지지 않게 자기 몫의 카드 묶음을 싣는다 — 없으면 아무것도 그리지 않는다
+      const html = relatedSection(related, props.title ? String(props.title) : undefined);
+      return html ? `${html}${SHOP_CARD_CSS}` : "";
     },
   });
 
@@ -819,7 +821,7 @@ ${buyScript(`${shopBase}/cart`)}${DETAIL_EXTRAS_SCRIPT()}${GALLERY_SCRIPT}${rest
           return `<a href="/shop?category=${encodeURIComponent(String(c.slug))}" class="brick-cat${on ? ' is-on" aria-current="page' : ""}">${escapeHtml(c.name)} <span>${Number(c.n)}</span></a>`;
         })
         .join("");
-      return `<nav class="brick-category-list">${all}${items}</nav>${STOREFRONT_CSS}`;
+      return `<nav class="brick-category-list">${all}${items}</nav>${SHOP_CATS_CSS}`;
     },
   };
   ctx.registerBlock(categoryListBlock);
@@ -832,7 +834,7 @@ ${buyScript(`${shopBase}/cart`)}${DETAIL_EXTRAS_SCRIPT()}${GALLERY_SCRIPT}${rest
 <div class="brick-cart" id="brick-cart">
   <p class="brick-cart-loading">${escapeHtml(t("cart.loading"))}</p>
 </div>
-${cartScript(shopBaseOf(blockCtx))}${STOREFRONT_CSS}`,
+${cartScript(shopBaseOf(blockCtx))}${SHOP_BUY_CSS}${SHOP_CART_CSS}${SHOP_QTY_CSS}`,
   };
   ctx.registerBlock(cartBlock);
 
@@ -1022,8 +1024,21 @@ function adultMark(): string {
 
 /* ── 스토어프론트 CSS ────────────────────────────────
    테마가 빌드를 타지 않으므로 블록이 자기 스타일을 함께 낸다.
-   CSS 변수는 테마 토큰을 우선 사용해 테마 디자인과 어울리게 한다. */
-const STOREFRONT_CSS = `
+   CSS 변수는 테마 토큰을 우선 사용해 테마 디자인과 어울리게 한다.
+
+   **쓰는 화면의 묶음만 싣는다.** 한 덩어리(약 22KB)였을 때는 홈의 상품 진열 블록 하나가 상세·장바구니·
+   분류 레일·재입고·하단 구매 바 규칙까지 실었다 — 홈 CSS 의 78%. 묶음은 일곱이고 블록이 필요한 것만 낸다:
+     CARD   상품 카드·격자·뱃지·가격 · 섹션 머리 · 기획전/관련 상품이 같이 쓴다 (진열·목록·기획전·관련 상품)
+     CATS   분류 칩 (분류 목록 블록 — 홈 상단과 목록 화면)
+     LIST   목록 화면의 정렬·가격대·품절 필터 · 분류 왼쪽 레일 (목록 화면만)
+     DETAIL 상세의 사진·정보·구매 버튼·하단 바 · 위시 · 재입고 · 성인 안내 (상세만)
+     BUY    구매 버튼 줄 — 상세와 장바구니(쇼핑 계속하기·주문하기)가 같이 쓴다
+     QTY    수량 −/+ — 상세와 장바구니가 같이 쓴다
+     CART   장바구니 표·합계·무료배송 (장바구니만)
+   같은 페이지에 같은 묶음이 두 번 실려도 페이지를 조립할 때 하나로 합친다(dedupeStyles). 규칙의 순서는 묶음 안에서
+   원래 순서를 지킨다 — 묶음 사이에는 같은 요소를 겨냥한 규칙이 없다(화면 8곳 × 3 너비의 계산된 스타일을 나누기 전후로
+   비교해 확인했다). 새 규칙은 **그 화면에서만 쓰는 묶음**에 넣는다. */
+const SHOP_CARD_CSS = `
 <style>
 .brick-adult-mark{display:inline-flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:50%;
   border:4px solid var(--color-danger, #c8322f);color:var(--color-danger, #c8322f);font-weight:800;font-size:26px;
@@ -1033,14 +1048,6 @@ const STOREFRONT_CSS = `
 .brick-adult-gate p{color:var(--color-text-soft, #45454f);line-height:1.6}
 .brick-adult-gate .brick-primary{display:inline-flex;align-items:center;min-height:44px;padding:0 22px;margin-top:10px;text-decoration:none}
 .brick-adult-minor{font-weight:600;color:var(--color-danger, #c8322f)}
-.brick-wish-line{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0}
-/* 44px — 폰에서 누르는 자리다 */
-.brick-wish-btn{display:inline-flex;align-items:center;gap:7px;min-height:44px;padding:0 16px;cursor:pointer;
-  font:inherit;font-size:14px;border:1px solid var(--color-line-strong, #d5d5dd);border-radius:999px;
-  background:var(--color-bg, #fff);color:var(--color-text, #17171c)}
-.brick-wish-btn[aria-pressed="true"]{border-color:var(--color-danger, #c9342f);color:var(--color-danger, #c9342f)}
-.brick-wish-icon{font-size:16px;line-height:1}
-.brick-wish-msg{font-size:13px;color:var(--color-muted, #71717d)}
 
 /*
  * 운영자가 적은 글자는 **어디서든 줄바꿈될 수 있어야 한다.**
@@ -1056,27 +1063,10 @@ const STOREFRONT_CSS = `
  * 있었고 쇼핑몰만 없었다.
  */
 .brick-product-name,
-.brick-detail-info h1,
-.brick-detail-summary,
 .brick-collection h1,
 .brick-collection-desc,
-.brick-shop-heading,
-.brick-cart-name,
-.brick-buybar-info { word-break: keep-all; overflow-wrap: anywhere; }
-.brick-partial-soldout{margin-top:28px;padding:16px;background:var(--color-bg-soft,#f6f6f9);border-radius:var(--radius-lg, 10px)}
-.brick-partial-soldout>p{margin:0 0 4px;font-weight:600}
-.brick-restock-form{margin-top:12px;display:flex;flex-direction:column;gap:8px;max-width:360px}
-.brick-restock-form button{padding:11px 16px;cursor:pointer;border-radius:var(--radius, 10px);border:1px solid var(--color-primary, #cf4437);background:var(--color-primary, #cf4437);color:var(--color-on-primary, #fff);font-weight:600}
-.brick-restock-form button:hover{background:var(--color-primary-hover, #b63a2e);border-color:var(--color-primary-hover, #b63a2e)}
-/*
- * 성공 색은 테마의 --color-success (--brick-accent 는 어느 테마도 정의하지 않는다).
- * 선택자에 p 를 붙인 이유: 테마가 .brick-main p 에 color 를 주고 있어 본문 글자색을
- * 주고 있어 클래스만으로는 **특이도에서 진다** — 브라우저로 재 보니 "신청되었습니다"
- * 가 초록이 아니라 본문색으로 나오고 있었다.
- */
-p.brick-restock-msg{margin:0;font-size:13px;color:var(--color-success,#11795a)}
-p.brick-restock-msg.is-error{color:var(--color-danger,#c9342f)}
-.brick-restock-note{margin:0;font-size:12px;color:var(--color-muted, #6c6c7a)}
+.brick-shop-heading { word-break: keep-all; overflow-wrap: anywhere; }
+
 .brick-related{margin:48px 0 0}
 .brick-related h2{font-size:19px;margin:0 0 4px;padding-top:24px;border-top:1px solid var(--color-line,#e4e4ea)}
 /*
@@ -1106,19 +1096,6 @@ a.brick-shop-more:hover{color:var(--color-primary-text, #b63a2e)}
     linear-gradient(135deg, transparent 55%, currentColor 55%, currentColor 72%, transparent 72%);
 }
 .brick-shop-total{display:block;margin:12px 0 -4px;font-size:13.5px;color:var(--color-muted, #6c6c7a)}
-.brick-sort{display:flex;flex-wrap:wrap;gap:2px;margin:14px 0 4px;align-items:center}
-.brick-sort a{display:inline-flex;align-items:center;min-height:36px;padding:0 12px;font-size:13.5px;color:var(--color-muted, #6c6c7a);text-decoration:none;border-radius:var(--radius, 3px);transition:color .16s ease,background .16s ease}
-.brick-sort a:hover{color:var(--color-text, #17171c);background:var(--color-bg-soft, #f6f6f9)}
-.brick-sort a.is-on{color:var(--color-text, #17171c);font-weight:700;background:var(--color-bg-soft, #f6f6f9)}
-.brick-filter{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:16px 0 2px;padding-bottom:14px;border-bottom:1px solid var(--color-line, #e4e4ea)}
-.brick-filter-label{font-size:13px;font-weight:700;color:var(--color-muted, #6c6c7a);margin-right:4px}
-.brick-filter a{display:inline-flex;align-items:center;min-height:34px;padding:0 13px;font-size:13.5px;color:var(--color-text-soft, #45454f);text-decoration:none;border:1px solid var(--color-line, #e4e4ea);border-radius:999px;transition:border-color .16s ease,color .16s ease,background .16s ease}
-.brick-filter a:hover{border-color:var(--color-text-soft, #45454f);color:var(--color-text, #17171c)}
-.brick-filter a.is-on{border-color:var(--color-text, #17171c);background:var(--color-text, #17171c);color:var(--color-bg, #ffffff);font-weight:600}
-.brick-filter-toggle{margin-left:10px}
-/* 체크는 항상 자리를 차지한다 (색만 감춘다) — 켜고 끌 때 글자가 밀리지 않게 */
-.brick-filter-toggle::before{content:"✓";display:inline-grid;place-items:center;width:14px;height:14px;margin-right:7px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 3px);font-size:10px;line-height:1;color:transparent}
-.brick-filter-toggle.is-on::before{border-color:currentColor;color:currentColor}
 .brick-tags{position:absolute;top:8px;left:8px;display:flex;flex-wrap:wrap;gap:4px;z-index:1}
 .brick-tag{display:inline-flex;align-items:center;height:22px;padding:0 8px;font-size:12px;font-weight:700;letter-spacing:.02em;border-radius:var(--radius, 3px);color:#fff;background:#111318}
 .brick-tag-new{background:#1f7a4d}
@@ -1133,12 +1110,33 @@ a.brick-shop-more:hover{color:var(--color-primary-text, #b63a2e)}
 .brick-discount{color:var(--color-primary,#d0402c);font-weight:700}
 .brick-shop-heading{margin:8px 0 0;font-size:26px}
 .brick-shop-empty{padding:40px;text-align:center;color:var(--color-muted, #6c6c7a)}
+.brick-card-rating{margin-top:3px;font-size:13px;color:var(--color-muted, #6c6c7a);display:flex;gap:4px;align-items:center}
+.brick-stars{color:var(--color-warning, #96610a);letter-spacing:1px}</style>`;
+
+const SHOP_CATS_CSS = `
+<style>
 .brick-category-list{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}
 .brick-category-list a{padding:7px 14px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius-lg, 20px);text-decoration:none;color:inherit;font-size:14px}
 .brick-category-list a span{color:var(--color-muted, #6c6c7a);font-size:12px}
 .brick-category-list a.is-on{border-color:var(--color-text, #17171c);background:var(--color-text, #17171c);color:var(--color-bg, #ffffff);font-weight:600}
 .brick-category-list a.is-on span{color:inherit;opacity:.7}
+</style>`;
 
+const SHOP_LIST_CSS = `
+<style>
+.brick-sort{display:flex;flex-wrap:wrap;gap:2px;margin:14px 0 4px;align-items:center}
+.brick-sort a{display:inline-flex;align-items:center;min-height:36px;padding:0 12px;font-size:13.5px;color:var(--color-muted, #6c6c7a);text-decoration:none;border-radius:var(--radius, 3px);transition:color .16s ease,background .16s ease}
+.brick-sort a:hover{color:var(--color-text, #17171c);background:var(--color-bg-soft, #f6f6f9)}
+.brick-sort a.is-on{color:var(--color-text, #17171c);font-weight:700;background:var(--color-bg-soft, #f6f6f9)}
+.brick-filter{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:16px 0 2px;padding-bottom:14px;border-bottom:1px solid var(--color-line, #e4e4ea)}
+.brick-filter-label{font-size:13px;font-weight:700;color:var(--color-muted, #6c6c7a);margin-right:4px}
+.brick-filter a{display:inline-flex;align-items:center;min-height:34px;padding:0 13px;font-size:13.5px;color:var(--color-text-soft, #45454f);text-decoration:none;border:1px solid var(--color-line, #e4e4ea);border-radius:999px;transition:border-color .16s ease,color .16s ease,background .16s ease}
+.brick-filter a:hover{border-color:var(--color-text-soft, #45454f);color:var(--color-text, #17171c)}
+.brick-filter a.is-on{border-color:var(--color-text, #17171c);background:var(--color-text, #17171c);color:var(--color-bg, #ffffff);font-weight:600}
+.brick-filter-toggle{margin-left:10px}
+/* 체크는 항상 자리를 차지한다 (색만 감춘다) — 켜고 끌 때 글자가 밀리지 않게 */
+.brick-filter-toggle::before{content:"✓";display:inline-grid;place-items:center;width:14px;height:14px;margin-right:7px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 3px);font-size:10px;line-height:1;color:transparent}
+.brick-filter-toggle.is-on::before{border-color:currentColor;color:currentColor}
 /* ── 목록 화면의 2단: 왼쪽 분류 레일 + 상품 ───────── */
 .brick-shop-layout{display:grid;grid-template-columns:168px minmax(0,1fr);gap:0 34px;align-items:start}
 .brick-shop-body{min-width:0}
@@ -1157,7 +1155,37 @@ a.brick-shop-more:hover{color:var(--color-primary-text, #b63a2e)}
   .brick-shop-rail .brick-category-list a{display:inline-flex;justify-content:flex-start;padding:7px 14px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius-lg, 20px);font-size:14px}
   .brick-shop-rail .brick-category-list a.is-on{border-color:var(--color-text, #17171c);background:var(--color-text, #17171c);color:var(--color-bg, #ffffff)}
   .brick-shop-rail .brick-category-list a.is-on span{color:inherit;opacity:.7}
-}
+}</style>`;
+
+const SHOP_DETAIL_CSS = `
+<style>
+.brick-wish-line{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0}
+/* 44px — 폰에서 누르는 자리다 */
+.brick-wish-btn{display:inline-flex;align-items:center;gap:7px;min-height:44px;padding:0 16px;cursor:pointer;
+  font:inherit;font-size:14px;border:1px solid var(--color-line-strong, #d5d5dd);border-radius:999px;
+  background:var(--color-bg, #fff);color:var(--color-text, #17171c)}
+.brick-wish-btn[aria-pressed="true"]{border-color:var(--color-danger, #c9342f);color:var(--color-danger, #c9342f)}
+.brick-wish-icon{font-size:16px;line-height:1}
+.brick-wish-msg{font-size:13px;color:var(--color-muted, #71717d)}
+/* 운영자가 적은 글자도 어디서든 줄바꿈된다 — 이유는 카드 묶음(SHOP_CARD_CSS)의 같은 규칙에 적었다 */
+.brick-detail-info h1,
+.brick-detail-summary,
+.brick-buybar-info { word-break: keep-all; overflow-wrap: anywhere; }
+
+.brick-partial-soldout{margin-top:28px;padding:16px;background:var(--color-bg-soft,#f6f6f9);border-radius:var(--radius-lg, 10px)}
+.brick-partial-soldout>p{margin:0 0 4px;font-weight:600}
+.brick-restock-form{margin-top:12px;display:flex;flex-direction:column;gap:8px;max-width:360px}
+.brick-restock-form button{padding:11px 16px;cursor:pointer;border-radius:var(--radius, 10px);border:1px solid var(--color-primary, #cf4437);background:var(--color-primary, #cf4437);color:var(--color-on-primary, #fff);font-weight:600}
+.brick-restock-form button:hover{background:var(--color-primary-hover, #b63a2e);border-color:var(--color-primary-hover, #b63a2e)}
+/*
+ * 성공 색은 테마의 --color-success (--brick-accent 는 어느 테마도 정의하지 않는다).
+ * 선택자에 p 를 붙인 이유: 테마가 .brick-main p 에 color 를 주고 있어 본문 글자색을
+ * 주고 있어 클래스만으로는 **특이도에서 진다** — 브라우저로 재 보니 "신청되었습니다"
+ * 가 초록이 아니라 본문색으로 나오고 있었다.
+ */
+p.brick-restock-msg{margin:0;font-size:13px;color:var(--color-success,#11795a)}
+p.brick-restock-msg.is-error{color:var(--color-danger,#c9342f)}
+.brick-restock-note{margin:0;font-size:12px;color:var(--color-muted, #6c6c7a)}
 .brick-product-detail{display:grid;grid-template-columns:1fr 1fr;gap:36px;margin:20px 0}
 @media(max-width:640px){.brick-product-detail{grid-template-columns:1fr;gap:20px}}
 .brick-detail-media{aspect-ratio:1;background:var(--color-bg-soft, #f6f6f9);border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius-lg, 14px);overflow:hidden;display:flex;align-items:center;justify-content:center}
@@ -1178,16 +1206,6 @@ a.brick-shop-more:hover{color:var(--color-primary-text, #b63a2e)}
 @media(max-width:480px){.brick-detail-meta{grid-template-columns:84px 1fr;font-size:14.5px}}
 .brick-field{display:block;margin-bottom:12px;font-size:14px}
 .brick-field select,.brick-field input{display:block;width:100%;max-width:280px;padding:9px;margin-top:4px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 6px);box-sizing:border-box}
-.brick-buy-actions{display:flex;gap:10px;margin-top:18px}
-.brick-buy-actions button{flex:1;padding:14px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 8px);background:var(--color-bg, #ffffff);color:var(--color-text, #17171c);font-size:15px;cursor:pointer}
-.brick-buy-actions .brick-primary{background:var(--color-primary,#d0402c);color:var(--color-on-primary, #ffffff);border-color:transparent;font-weight:700}
-/*
- * 손으로 올렸을 때(hover)도 이 버튼의 색을 정한다. 테마의 기본 버튼 hover 는 배경을 글자색으로,
- * 글자를 배경색으로 뒤집는데, 위에서 배경만 흰색으로 고정해 두어서 **흰 바탕에 흰 글자** —
- * 데스크톱에서 장바구니 버튼에 마우스를 올린 모든 손님에게 빈 버튼이 보였다.
- */
-.brick-buy-actions button:hover{background:var(--color-bg-soft, #f6f6f9);color:var(--color-text, #17171c);border-color:var(--color-line-strong, #c9c9d3)}
-.brick-buy-actions .brick-primary:hover{background:var(--color-primary-hover, var(--color-primary,#d0402c));color:var(--color-on-primary, #ffffff);border-color:transparent}
 /* 정기배송 — 한 번의 구매와 섞이지 않게 선 아래에 따로 선다 */
 .brick-sub-cta{display:flex;flex-direction:column;gap:2px;margin-top:12px;padding:13px 16px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 8px);text-decoration:none;text-align:center}
 .brick-sub-cta strong{font-size:14.5px}
@@ -1213,6 +1231,42 @@ a.brick-shop-more:hover{color:var(--color-primary-text, #b63a2e)}
 }
 .brick-soldout-notice{padding:16px;background:var(--color-line, #e4e4ea);border-radius:var(--radius, 8px);text-align:center;color:var(--color-muted, #6c6c7a)}
 .brick-detail-description{margin:40px 0;line-height:1.8}
+.brick-detail-rating{display:flex;align-items:center;gap:7px;margin:0 0 10px;font-size:15px}
+.brick-detail-rating a{color:var(--color-muted, #6c6c7a);font-size:13px}
+.brick-stars{color:var(--color-warning, #96610a);letter-spacing:1px}
+/* 캡차 위젯 — .brick-restock-form button 뒤에 와야 새로고침 버튼이 작게 남는다 */
+${CAPTCHA_WIDGET_CSS}</style>`;
+
+const SHOP_BUY_CSS = `
+<style>
+/* 상세의 구매 버튼 줄 — 장바구니의 "쇼핑 계속하기 · 주문하기" 줄도 같은 클래스를 같이 쓴다(brick-buy-actions brick-cart-actions) */
+.brick-buy-actions{display:flex;gap:10px;margin-top:18px}
+.brick-buy-actions button{flex:1;padding:14px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 8px);background:var(--color-bg, #ffffff);color:var(--color-text, #17171c);font-size:15px;cursor:pointer}
+.brick-buy-actions .brick-primary{background:var(--color-primary,#d0402c);color:var(--color-on-primary, #ffffff);border-color:transparent;font-weight:700}
+/*
+ * 손으로 올렸을 때(hover)도 이 버튼의 색을 정한다. 테마의 기본 버튼 hover 는 배경을 글자색으로,
+ * 글자를 배경색으로 뒤집는데, 위에서 배경만 흰색으로 고정해 두어서 **흰 바탕에 흰 글자** —
+ * 데스크톱에서 장바구니 버튼에 마우스를 올린 모든 손님에게 빈 버튼이 보였다.
+ */
+.brick-buy-actions button:hover{background:var(--color-bg-soft, #f6f6f9);color:var(--color-text, #17171c);border-color:var(--color-line-strong, #c9c9d3)}
+.brick-buy-actions .brick-primary:hover{background:var(--color-primary-hover, var(--color-primary,#d0402c));color:var(--color-on-primary, #ffffff);border-color:transparent}
+</style>`;
+
+const SHOP_QTY_CSS = `
+<style>
+/* 수량 −/+ — 상품 상세와 장바구니가 같이 쓴다 */
+.brick-qty{display:inline-flex;align-items:stretch;border:1px solid var(--color-line-strong, #c9c9d3);border-radius:var(--radius, 8px);overflow:hidden;margin-top:6px}
+.brick-main .brick-qty button{width:44px;min-height:44px;border:0;border-radius:0;background:var(--color-bg, #ffffff);color:var(--color-text, #17171c);font-size:18px;line-height:1;cursor:pointer;padding:0}
+.brick-main .brick-qty button:hover{background:var(--color-bg-soft, #f6f6f9);color:var(--color-text, #17171c)}
+.brick-main .brick-qty button:disabled{color:var(--color-muted, #6c6c7a);cursor:not-allowed;background:var(--color-bg, #ffffff)}
+.brick-main .brick-qty input{width:64px;border:0;border-left:1px solid var(--color-line, #e4e4ea);border-right:1px solid var(--color-line, #e4e4ea);border-radius:0;text-align:center;font-size:15px;padding:0;-moz-appearance:textfield;appearance:textfield}
+.brick-qty input::-webkit-outer-spin-button,.brick-qty input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}</style>`;
+
+const SHOP_CART_CSS = `
+<style>
+/* 운영자가 적은 글자도 어디서든 줄바꿈된다 — 이유는 카드 묶음(SHOP_CARD_CSS)의 같은 규칙에 적었다 */
+.brick-cart-name { word-break: keep-all; overflow-wrap: anywhere; }
+
 .brick-cart table{width:100%;border-collapse:collapse;font-size:14px}
 .brick-cart th,.brick-cart td{padding:12px 8px;border-bottom:1px solid var(--color-line, #e4e4ea);text-align:left}
 .brick-cart-total{margin-top:20px;padding:20px;background:var(--color-bg-soft, #f6f6f9);border-radius:var(--radius-lg, 10px)}
@@ -1222,13 +1276,6 @@ a.brick-shop-more:hover{color:var(--color-primary-text, #b63a2e)}
 .brick-cart-total .brick-grand{font-size:20px;font-weight:700;padding-top:10px;border-top:1px solid var(--color-line, #e4e4ea)}
 /* 합계 줄의 괘선이 이름과 금액 사이에서 끊겼다(가로 간격) — 간격은 금액 칸의 안쪽 여백으로. 합계의 이름은 본문 색으로 */
 .brick-cart-total dt.brick-grand{color:var(--color-text, #17171c)}
-/* 수량 −/+ — 상품 상세와 장바구니가 같이 쓴다 */
-.brick-qty{display:inline-flex;align-items:stretch;border:1px solid var(--color-line-strong, #c9c9d3);border-radius:var(--radius, 8px);overflow:hidden;margin-top:6px}
-.brick-main .brick-qty button{width:44px;min-height:44px;border:0;border-radius:0;background:var(--color-bg, #ffffff);color:var(--color-text, #17171c);font-size:18px;line-height:1;cursor:pointer;padding:0}
-.brick-main .brick-qty button:hover{background:var(--color-bg-soft, #f6f6f9);color:var(--color-text, #17171c)}
-.brick-main .brick-qty button:disabled{color:var(--color-muted, #6c6c7a);cursor:not-allowed;background:var(--color-bg, #ffffff)}
-.brick-main .brick-qty input{width:64px;border:0;border-left:1px solid var(--color-line, #e4e4ea);border-right:1px solid var(--color-line, #e4e4ea);border-radius:0;text-align:center;font-size:15px;padding:0;-moz-appearance:textfield;appearance:textfield}
-.brick-qty input::-webkit-outer-spin-button,.brick-qty input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 /* 장바구니 — 사진 · 무료배송까지 · 쇼핑 계속하기 */
 .brick-cart-prod{display:flex;align-items:center;gap:14px;color:inherit;text-decoration:none;min-width:0}
 .brick-cart-prod img,.brick-cart-noimg{flex:none;width:64px;height:64px;border-radius:var(--radius, 8px);object-fit:cover;background:var(--color-bg-soft, #f6f6f9);border:1px solid var(--color-line, #e4e4ea)}
@@ -1254,15 +1301,8 @@ a.brick-shop-more:hover{color:var(--color-primary-text, #b63a2e)}
 }
 .brick-cart-total .brick-cart-orders-link a{color:var(--color-muted, #6c6c7a);display:inline-flex;align-items:center;min-height:32px}
 .brick-cart-qty{width:64px;padding:6px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 5px)}
-.brick-detail-rating{display:flex;align-items:center;gap:7px;margin:0 0 10px;font-size:15px}
-.brick-detail-rating a{color:var(--color-muted, #6c6c7a);font-size:13px}
-.brick-card-rating{margin-top:3px;font-size:13px;color:var(--color-muted, #6c6c7a);display:flex;gap:4px;align-items:center}
-.brick-stars{color:var(--color-warning, #96610a);letter-spacing:1px}
-/* 캡차 위젯 — .brick-restock-form button 뒤에 와야 새로고침 버튼이 작게 남는다 */
-${CAPTCHA_WIDGET_CSS}
 /* 목록 표는 폰에서 카드로 접는다 — 맨 뒤에 와야 위의 표 규칙을 덮는다 */
-${STACK_TABLE_CSS}
-</style>`;
+${STACK_TABLE_CSS}</style>`;
 
 /* ── 이미지 갤러리 (썸네일 클릭으로 대표 이미지 교체) ── */
 const GALLERY_SCRIPT = `

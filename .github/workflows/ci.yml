@@ -116,6 +116,9 @@ jobs:
       - name: 테마 토큰 계약 — 동봉 테마는 전부 스스로 정하고, 확장은 계약 안의 토큰만 쓴다
         run: node scripts/check-theme-contract.mjs
 
+      - name: 쇼핑몰 CSS 묶음 — 같은 선택자가 두 묶음에 걸치지 않고 모든 묶음을 어느 블록이 싣는다
+        run: node scripts/check-css-groups.mjs
+
       - name: 자격증명 입력칸은 화면에서 가려진다
         run: node scripts/check-secret-fields.mjs
 
