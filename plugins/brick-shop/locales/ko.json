@@ -541,5 +541,7 @@
   "member.coupons": "쿠폰",
   "member.couponsN": "{n}장",
   "member.grade": "회원 등급",
-  "member.flow": "주문 처리 현황 (최근 3개월)"
+  "member.flow": "주문 처리 현황 (최근 3개월)",
+  "detail.earn": "적립",
+  "detail.earnValue": "구매 시 {n}점"
 }

@@ -1158,5 +1158,7 @@
   "member.coupons": "Coupons",
   "member.couponsN": "{n}",
   "member.grade": "Membership",
-  "member.flow": "Orders (last 3 months)"
+  "member.flow": "Orders (last 3 months)",
+  "detail.earn": "Points",
+  "detail.earnValue": "Earn {n} pts"
 }

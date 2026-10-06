@@ -29,6 +29,8 @@ export interface PointsPort {
     params: { userId: string; refType: string; refId: string; reason: string },
     tx?: Db,
   ): Promise<number>;
+  /** 구매 시 적립 예정액 — 상품 상세의 "적립" 줄. 선택이다(옛 포인트 플러그인에는 없을 수 있다) */
+  previewEarn?(amount: number): Promise<number>;
 }
 
 /** 포인트 원장에서 주문을 가리키는 표지 — brick-point 의 구매 적립(`shop.order.paid` 구독)이 같은 값을 쓴다 */

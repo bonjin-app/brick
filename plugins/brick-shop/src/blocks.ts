@@ -2,13 +2,14 @@ import { sql } from "drizzle-orm";
 import { CAPTCHA_WIDGET_CSS, CAPTCHA_WIDGET_JS, STACK_TABLE_CSS, captchaFieldHtml,
          type BlockRenderContext, type PluginContext, publicUrl } from "@brick/plugin-sdk";
 import { escapeHtml, won, type Db, type ShopSettings } from "./types.js";
-import { bindI18n, t, moneyFnScript } from "./i18n.js";
+import { bindI18n, t, moneyFnScript, localeTag } from "./i18n.js";
 import { reviewSection } from "./reviews-view.js";
 import { DETAIL_EXTRAS_CSS, DETAIL_EXTRAS_SCRIPT, breadcrumbHtml, categoryTrail, purchaseGuideHtml, sectionNavHtml } from "./detail-extras.js";
 import { RELATED_LIMIT, listRelated, type RelatedProduct } from "./related.js";
 import { activeCollections, viewCollection } from "./collections.js";
 import { registerCheckoutView } from "./checkout-view.js";
 import { registerOrdersView } from "./orders-view.js";
+import type { PointsPort } from "./orders.js";
 import { registerWishlistView } from "./wishlist-view.js";
 import { registerCouponsView } from "./coupons-view.js";
 import { registerRestockView } from "./restock-view.js";
@@ -434,6 +435,16 @@ export function registerStorefrontBlocks(
   </label>`
         : "";
 
+      /*
+       * 적립 예정 — 포인트 확장이 켜져 있으면 "구매 시 N점" 을 상세의 정보 줄에 둔다(카페24 상세의 "적립금" 줄).
+       * 쌓이는 것은 알려 줘야 쓴다 — 주문서에서야 처음 보이면 고르는 데 쓰이지 않는다. 포인트가 없거나
+       * 적립률이 0 이면 줄을 내지 않는다. 계산은 포인트 쪽이 한다(적립률을 두 곳에 적지 않는다).
+       */
+      const points = ctx.useService<PointsPort>("points");
+      const earn = points?.previewEarn
+        ? await points.previewEarn(Number(p.price)).catch(() => 0)
+        : 0;
+
       // JSON-LD: 검색엔진에 상품 정보를 구조화해 전달 (커머스 SEO)
       const jsonLd = JSON.stringify({
         "@context": "https://schema.org",
@@ -477,6 +488,8 @@ ${breadcrumbHtml(shopBase, trail, String(p.name ?? ""))}
       <dd>${p.free_shipping ? escapeHtml(t("detail.freeShipping")) : `${won(s.shippingFee)}${s.freeShippingOver > 0 ? escapeHtml(t("detail.freeOver", { amount: won(s.freeShippingOver) })) : ""}`}</dd>
       <dt>${escapeHtml(t("detail.stock"))}</dt>
       <dd>${p.stock === null ? escapeHtml(t("detail.canBuy")) : soldout ? escapeHtml(t("common.soldout")) : escapeHtml(t("detail.stockLeft", { n: Number(p.stock) }))}</dd>
+      ${earn > 0 ? `<dt>${escapeHtml(t("detail.earn"))}</dt>
+      <dd class="brick-detail-earn">${escapeHtml(t("detail.earnValue", { n: earn.toLocaleString(localeTag()) }))}</dd>` : ""}
       ${/*
          정기배송 주기 — 관리자가 상품에 설정한 값이 **상세에 한 글자도 나오지
          않았다.** 정기배송으로 받을 수 있는 상품인지 손님이 알 길이 없었다.

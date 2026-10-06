@@ -297,6 +297,12 @@ echo "── 설정"
 contains "설정 조회" "$(curl -s -b "$ADMIN" "$PT/admin/settings")" '"purchaseRate"'
 printf '{"postPoint":50,"purchaseRate":3,"maxUseRate":30}' > "$TMP/set.json"
 contains "설정 저장" "$(curl -s -b "$ADMIN" -X PUT "$PT/admin/settings" -H 'content-type: application/json' --data-binary "@$TMP/set.json")" '"postPoint":50'
+# 상품 상세의 "적립" 줄 — 쌓이는 것은 고를 때 보여야 쓴다(주문서에서야 처음 보였다). 값은 설정을 따른다(20,000원의 3%)
+contains "상품 상세에 적립 예정 (설정의 적립률)" "$(curl -s "$API/api/render/page?path=shop/item&_=$RANDOM")" "구매 시 600점"
+printf '{"purchaseRate":0}' > "$TMP/rate0.json"
+curl -s -o /dev/null -b "$ADMIN" -X PUT "$PT/admin/settings" -H 'content-type: application/json' --data-binary "@$TMP/rate0.json"
+absent "적립률 0 이면 적립 줄을 내지 않는다" "$(curl -s "$API/api/render/page?path=shop/item&_=$RANDOM")" "brick-detail-earn"
+curl -s -o /dev/null -b "$ADMIN" -X PUT "$PT/admin/settings" -H 'content-type: application/json' --data-binary "@$TMP/set.json"
 printf '{"purchaseRate":999}' > "$TMP/badset.json"
 check "범위 밖 설정 거부" "$(code -b "$ADMIN" -X PUT "$PT/admin/settings" -H 'content-type: application/json' --data-binary "@$TMP/badset.json")" "400"
 # 빠진 값은 **현재 설정**을 유지한다. 예전에는 기본값으로 되돌렸고, 그래서 필드 하나만
