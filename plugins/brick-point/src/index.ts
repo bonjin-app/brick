@@ -444,6 +444,17 @@ export default definePlugin(async (ctx) => {
    * 포인트를 신뢰하지 않는다.
    */
   ctx.registerScreen({ path: "points", title: "내 포인트", block: "my-point-history", memberMenu: true, order: 30 });
+  // 마이페이지 첫머리 — 지금 쓸 수 있는 포인트(누르면 적립·사용 내역)
+  ctx.registerMemberSummary({
+    order: 10,
+    load: async (userId) => ({
+      stats: [{
+        label: t("point.balance"),
+        value: `${(await points.balance(userId)).toLocaleString(localeTag())}${t("point.unit")}`,
+        link: "/points",
+      }],
+    }),
+  });
 
   ctx.registerAdminResource({
     name: "settings",

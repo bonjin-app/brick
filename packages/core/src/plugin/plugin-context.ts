@@ -367,6 +367,12 @@ export interface PluginContext {
   registerDashboardPanel(panel: DashboardPanel): void;
 
   /**
+   * 마이페이지 첫머리의 요약(적립금 · 쿠폰 · 주문 처리 현황)을 등록한다 — `MemberSummary` 참고.
+   * 로그인한 회원 본인에게만 불리고, 한 확장이 실패하거나 늦어도 마이페이지는 뜬다(그 칸만 빠진다).
+   */
+  registerMemberSummary(summary: MemberSummary): void;
+
+  /**
    * 헤더 유틸 영역(로그인·회원가입 옆)에 링크를 놓는다.
    *
    * **쇼핑몰을 켰는데 헤더에 장바구니가 없었다.** 담기는 상품 상세에서
@@ -562,6 +568,27 @@ export interface DashboardPanel {
   /** full — 한 줄을 다 쓴다(기본). half — 넓은 화면에서 둘이 나란히 */
   size?: "full" | "half";
   load(): Promise<DashboardPanelData>;
+}
+
+/**
+ * 마이페이지 첫머리의 요약 — 확장이 **그 손님 자신의** 숫자를 낸다.
+ *
+ * 마이페이지가 설정 화면이었다(약관 · 프로필 · 비밀번호 · 2단계 인증 · 탈퇴가 한 줄로). 카페24·메이크샵의
+ * 마이페이지는 첫머리에 적립금 · 쿠폰 · 주문 처리 현황(입금전 → 배송완료)을 둔다 — 손님이 마이페이지에
+ * 들어오는 가장 흔한 이유가 "내 주문이 어디쯤인가" 다. 코어는 쇼핑몰을 모르므로 확장이 선언하고 코어가 그린다.
+ */
+export interface MemberSummaryData {
+  /** 숫자 칸 — 값은 화면에 그대로 쓰는 문자열("3,200원", "2장"). 문구는 ctx.t 로 */
+  stats?: Array<{ label: string; value: string; link?: string }>;
+  /** 흐름 한 줄 — 단계 이름과 건수(입금대기 → … → 배송완료) */
+  flow?: { title: string; link?: string; steps: Array<{ label: string; value: number; link?: string }> };
+}
+
+export interface MemberSummary {
+  /** 표시 순서. 작을수록 먼저 (기본 100) */
+  order?: number;
+  /** 그 회원의 요약. 낼 것이 없으면 null */
+  load(userId: string): Promise<MemberSummaryData | null>;
 }
 
 /** 연결할 수 있는 주소 하나 */

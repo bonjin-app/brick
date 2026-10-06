@@ -356,6 +356,30 @@ ctx.registerDashboardCard({
 created_at >= (date_trunc('day', now() AT TIME ZONE ${SITE_TZ}) AT TIME ZONE ${SITE_TZ})
 ```
 
+## 마이페이지 첫머리 요약 (registerMemberSummary)
+
+마이페이지 맨 위에는 **그 회원 자신의 숫자**가 놓입니다 — 적립금 · 쿠폰 · 주문 처리 현황.
+코어는 쇼핑몰을 모르므로 확장이 선언하고 코어가 그립니다(대시보드 판과 같은 방식).
+
+```ts
+ctx.registerMemberSummary({
+  order: 20,
+  load: async (userId) => ({
+    // 숫자 칸 — 값은 화면에 그대로 쓰는 문자열
+    stats: [{ label: ctx.t("쿠폰"), value: ctx.t("{n}장", { n: 2 }), link: "/shop/coupons" }],
+    // 흐름 한 줄 — 단계 이름과 건수
+    flow: { title: ctx.t("주문 처리 현황"), link: "/shop/orders",
+            steps: [{ label: ctx.t("입금대기"), value: 0 }, { label: ctx.t("배송중"), value: 1 }] },
+  }),
+});
+```
+
+- `load` 는 **로그인한 회원 본인**에게만 불립니다(`GET /api/member/summary`). 다른 회원의 값을 섞지 않게
+  질의에 `userId` 를 꼭 거세요.
+- 한 확장이 실패하거나 2.5초를 넘기면 그 칸만 빠지고 마이페이지는 뜹니다.
+- 링크는 사이트 안 경로만 남습니다.
+- 끝없이 쌓이는 상태(배송완료)는 기간을 두세요 — 쇼핑몰은 최근 3개월을 셉니다.
+
 ## 사이드바 묶음 (AdminResource.section)
 
 관리 화면을 사이드바의 어느 묶음에 넣을지 정합니다. 운영자가 하는 **일**로 나눕니다 —

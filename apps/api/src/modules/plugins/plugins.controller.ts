@@ -8,7 +8,7 @@ import { siteSettings, type BrickDb } from "@brick/database";
 import type { MailProvider, QueueProvider } from "@brick/core";
 import { SITE_TZ, isRawResponse, rankOf, translateCoreLabel, type PluginUploadedFile } from "@brick/core";
 import { PluginLoaderService } from "./plugin-loader.service.js";
-import { AdminGuard, ManagerGuard } from "../auth/auth.guard.js";
+import { AdminGuard, AuthGuard, ManagerGuard } from "../auth/auth.guard.js";
 import { IdentityService } from "../identity/identity.service.js";
 import { AuthService } from "../auth/auth.service.js";
 import { ExtensionInstallerService } from "../extensions/extension-installer.service.js";
@@ -599,6 +599,16 @@ export class PluginsController {
    * 인증을 요구하지 않는다: 어떤 기능이 있는지는 비밀이 아니고, 내용은 각 화면이
    * 스스로 지킨다. 로그인 화면에서 "가입하면 이런 게 있다"를 보여줄 수도 있다.
    */
+  /**
+   * 마이페이지 첫머리의 요약 — 로그인한 회원 **본인의** 적립금 · 쿠폰 · 주문 처리 현황.
+   * 확장이 registerMemberSummary 로 낸다. 한 확장이 실패해도 나머지는 나간다.
+   */
+  @Get("member/summary")
+  @UseGuards(AuthGuard)
+  async memberSummary(@Req() req: FastifyRequest & { user?: { id: string } }) {
+    return this.loader.collectMemberSummary(req.user!.id);
+  }
+
   @Get("member/menu")
   async memberMenu() {
     await this.loader.refreshLocale();

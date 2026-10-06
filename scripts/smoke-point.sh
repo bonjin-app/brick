@@ -193,6 +193,23 @@ sleep 1
 [[ -n "$RV2" ]] && ok "후기를 지우고 다시 쓴다" || bad "후기 다시 쓰기"
 check "같은 상품의 후기를 다시 써도 또 적립되지 않는다" "$(balance)" "$B1"
 
+echo "── 마이페이지 첫머리 요약 (확장이 낸 그 회원의 숫자)"
+# 마이페이지가 설정 화면이었다 — 손님이 들어오는 가장 흔한 이유("내 주문이 어디쯤인가")에 답하는 줄이 없었다
+check "요약은 로그인한 회원만" "$(curl -s -o /dev/null -w '%{http_code}' "$API/api/member/summary")" "401"
+MS="$(curl -s -b "$MEMBER" "$API/api/member/summary")"
+NOW_BAL="$(balance)"
+NOW_BAL_FMT="$(python3 -c "import sys;print(f'{int(sys.argv[1]):,}')" "$NOW_BAL")"
+contains "포인트 칸 — 지금 잔액 (${NOW_BAL_FMT}점)" "$MS" "\"value\":\"${NOW_BAL_FMT}점\""
+contains "포인트 칸은 내역으로 간다" "$MS" '"link":"/points"'
+contains "쿠폰 칸" "$MS" '"label":"쿠폰"'
+# 흐름의 숫자 = 그 회원 주문의 상태별 건수 (DB) — 입금대기 · 결제완료 · 상품준비중 · 배송중 · 배송완료
+FLOW_DB="$(psql_one "SELECT count(*) FILTER (WHERE o.status = 'pending') || ',' || count(*) FILTER (WHERE o.status = 'paid') || ',' || count(*) FILTER (WHERE o.status = 'preparing') || ',' || count(*) FILTER (WHERE o.status = 'shipped') || ',' || count(*) FILTER (WHERE o.status = 'delivered') AS f FROM shop_orders o JOIN users u ON u.id = o.user_id WHERE u.email = 'member@pt.test'")"
+FLOW_API="$(echo "$MS" | python3 -c "import sys,json;d=json.load(sys.stdin);print(','.join(str(s['value']) for s in d['flows'][0]['steps']))")"
+check "주문 처리 현황 = 그 회원의 상태별 주문 수 ($FLOW_DB)" "$FLOW_API" "$FLOW_DB"
+check "결제완료 칸에 그 주문이 있다 (위 단언이 0 끼리 헛돌지 않는다)" "$(echo "$FLOW_DB" | python3 -c "import sys;print(int(sys.stdin.read().split(',')[1]) >= 1)")" "True"
+check "다른 회원(관리자)의 요약에는 그 주문이 없다" \
+  "$(curl -s -b "$ADMIN" "$API/api/member/summary" | python3 -c "import sys,json;d=json.load(sys.stdin);print(sum(s['value'] for s in d['flows'][0]['steps']))")" "0"
+
 echo "── 환불 시 포인트 복원"
 printf '{"orderNo":"%s","reason":"고객 요청"}' "$ONO" > "$TMP/rf.json"
 contains "전액 환불" "$(curl -s -b "$ADMIN" -X POST "$SH/admin/payments/refund" -H 'content-type: application/json' --data-binary "@$TMP/rf.json")" '"remaining":0'

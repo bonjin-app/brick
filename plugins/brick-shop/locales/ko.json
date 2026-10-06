@@ -537,5 +537,9 @@
   "checkout.privacyKeep": "전자상거래법에 따라 계약·결제·배송 기록은 5년, 소비자 불만·분쟁 처리 기록은 3년 보관한 뒤 파기합니다.",
   "checkout.privacyRefuse": "동의하지 않을 수 있으나, 동의하지 않으면 비회원 주문을 할 수 없습니다.",
   "checkout.agreePrivacy": "비회원 주문을 위한 개인정보 수집·이용에 동의합니다 (필수)",
-  "checkout.agreeOrder": "주문 상품의 상품명·가격·배송비를 확인했으며, 구매에 동의합니다 (필수)"
+  "checkout.agreeOrder": "주문 상품의 상품명·가격·배송비를 확인했으며, 구매에 동의합니다 (필수)",
+  "member.coupons": "쿠폰",
+  "member.couponsN": "{n}장",
+  "member.grade": "회원 등급",
+  "member.flow": "주문 처리 현황 (최근 3개월)"
 }

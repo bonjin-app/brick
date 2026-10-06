@@ -1154,5 +1154,9 @@
   "주문조회": "Track order",
   "베스트 후기": "Review highlights",
   "부제": "Subtitle",
-  "구매 안내 (배송·교환·반품)": "Purchase guide (shipping, exchanges, returns)"
+  "구매 안내 (배송·교환·반품)": "Purchase guide (shipping, exchanges, returns)",
+  "member.coupons": "Coupons",
+  "member.couponsN": "{n}",
+  "member.grade": "Membership",
+  "member.flow": "Orders (last 3 months)"
 }

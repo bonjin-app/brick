@@ -10,7 +10,7 @@ import type { BrickDb } from "@brick/database";
 import { installedPlugins, siteSettings } from "@brick/database";
 import type { PluginManifest } from "@brick/shared";
 import type { PluginContext, PluginInstance, BlockDefinition, PluginRouteHandler, PluginDb, AdminResource, HookBus, CacheProvider, QueueProvider, LockProvider, StorageProvider, MailProvider, CaptchaProvider, PersonalDataEraser, SitemapSource, NotificationEvent, IdentityPurpose,
-  SearchSource, LinkTargetSource, DashboardCard, DashboardPanel, DashboardPanelData, HeaderAction, PluginScreen, Locale, MessageCatalog } from "@brick/core";
+  SearchSource, LinkTargetSource, DashboardCard, DashboardPanel, DashboardPanelData, HeaderAction, MemberSummary, PluginScreen, Locale, MessageCatalog } from "@brick/core";
 import { AVAILABLE_LOCALES, DEFAULT_LOCALE, makeTranslator, normalizeLocale } from "@brick/core";
 import { RateLimitService } from "../auth/rate-limit.service.js";
 import { DB, HOOKS, CACHE, QUEUE, LOCK, STORAGE, MAIL, CAPTCHA, ENV } from "../../runtime.module.js";
@@ -122,6 +122,7 @@ export class PluginLoaderService implements OnModuleInit {
   readonly dashboardCards: Array<DashboardCard & { plugin: string }> = [];
   /** 대시보드 판 — 주문 흐름·매출 막대·최근 목록 (모양은 코어가 그린다) */
   readonly dashboardPanels: Array<DashboardPanel & { plugin: string }> = [];
+  readonly memberSummaries: Array<MemberSummary & { plugin: string }> = [];
   /** 헤더 유틸 영역의 링크 — 테마가 그린다 (쇼핑몰 장바구니, 쪽지함 등) */
   readonly headerActions: Array<HeaderAction & { plugin: string }> = [];
   /** 플러그인이 선언한 알림 종류 — 알림 통로(알림톡 등)의 관리 화면이 읽는다 */
@@ -357,6 +358,9 @@ export class PluginLoaderService implements OnModuleInit {
     }
     for (let i = this.dashboardPanels.length - 1; i >= 0; i--) {
       if (this.dashboardPanels[i].plugin === name) this.dashboardPanels.splice(i, 1);
+    }
+    for (let i = this.memberSummaries.length - 1; i >= 0; i--) {
+      if (this.memberSummaries[i].plugin === name) this.memberSummaries.splice(i, 1);
     }
     for (let i = this.headerActions.length - 1; i >= 0; i--) {
       if (this.headerActions[i].plugin === name) this.headerActions.splice(i, 1);
@@ -637,6 +641,55 @@ export class PluginLoaderService implements OnModuleInit {
     );
   }
 
+  /**
+   * 마이페이지 요약 — 확장들의 숫자 칸과 흐름을 모은다. 하나가 실패하거나 늦어도 나머지는 나간다
+   * (대시보드 판과 같은 격리). 링크는 사이트 안 경로만 남긴다 — 화면이 그대로 href 에 넣는다.
+   */
+  async collectMemberSummary(userId: string, timeoutMs = 2500): Promise<{
+    stats: Array<{ label: string; value: string; link: string | null }>;
+    flows: Array<{ title: string; link: string | null; steps: Array<{ label: string; value: number; link: string | null }> }>;
+  }> {
+    await this.refreshLocale();
+    const inSite = (u: unknown) => (typeof u === "string" && /^\/(?![/\\])/.test(u) ? u : null);
+    const sorted = this.memberSummaries.slice().sort((a, b) => (a.order ?? 100) - (b.order ?? 100));
+    const results = await Promise.all(
+      sorted.map(async (s) => {
+        try {
+          return await Promise.race([
+            s.load(userId),
+            new Promise<never>((_, reject) => {
+              const t = setTimeout(() => reject(new Error(`요약 시간 초과 (${timeoutMs}ms)`)), timeoutMs);
+              t.unref?.();
+            }),
+          ]);
+        } catch (err) {
+          this.logger.error(`member summary "${s.plugin}" 실패: ${String(err)}`);
+          return null;
+        }
+      }),
+    );
+    const stats: Array<{ label: string; value: string; link: string | null }> = [];
+    const flows: Array<{ title: string; link: string | null; steps: Array<{ label: string; value: number; link: string | null }> }> = [];
+    for (const r of results) {
+      if (!r) continue;
+      for (const st of r.stats ?? []) {
+        if (st && typeof st.label === "string" && typeof st.value === "string") {
+          stats.push({ label: st.label, value: st.value, link: inSite(st.link) });
+        }
+      }
+      if (r.flow && typeof r.flow.title === "string" && Array.isArray(r.flow.steps)) {
+        flows.push({
+          title: r.flow.title,
+          link: inSite(r.flow.link),
+          steps: r.flow.steps
+            .filter((x) => x && typeof x.label === "string")
+            .map((x) => ({ label: x.label, value: Math.max(0, Math.floor(Number(x.value) || 0)), link: inSite(x.link) })),
+        });
+      }
+    }
+    return { stats, flows };
+  }
+
   private async loadPluginCatalogs(name: string): Promise<void> {
     const dir = join(this.pluginsDir, name, "locales");
     const catalogs: Partial<Record<Locale, MessageCatalog>> = {};
@@ -793,6 +846,10 @@ export class PluginLoaderService implements OnModuleInit {
       registerDashboardPanel: (panel) => {
         this.dashboardPanels.push({ ...panel, plugin: pluginName });
         this.logger.log(`plugin "${pluginName}" registers dashboard panel "${panel.title}"`);
+      },
+      registerMemberSummary: (summary) => {
+        this.memberSummaries.push({ ...summary, plugin: pluginName });
+        this.logger.log(`plugin "${pluginName}" registers member summary`);
       },
       registerHeaderAction: (action) => {
         this.headerActions.push({ ...action, plugin: pluginName });

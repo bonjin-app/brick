@@ -120,6 +120,14 @@ export default function AccountPage() {
    * 자리가 좁아 늘 쓰는 것만 올라가므로, 나머지가 닿는 곳은 여기여야 한다.
    */
   const [memberMenu, setMemberMenu] = useState<Array<{ label: string; path: string }>>([]);
+  /*
+   * 첫머리 요약 — 확장이 낸 그 회원의 숫자(포인트 · 쿠폰 · 등급)와 흐름(주문 처리 현황).
+   * 마이페이지가 설정 화면이었다: 손님이 들어오는 가장 흔한 이유("내 주문이 어디쯤인가")에 답하는 줄이 없었다.
+   */
+  const [summary, setSummary] = useState<{
+    stats: Array<{ label: string; value: string; link: string | null }>;
+    flows: Array<{ title: string; link: string | null; steps: Array<{ label: string; value: number; link: string | null }> }>;
+  } | null>(null);
   const [gone, setGone] = useState(false);
   /*
    * 본인인증 — 인증 자체는 테마 화면(/identity)에서 한다. 여기는 고정 CSP 라 공급자 SDK 를
@@ -153,6 +161,9 @@ export default function AccountPage() {
       .catch(() => {});
     fetch("/api/member/menu").then((s) => (s.ok ? s.json() : { items: [] }))
       .then((d) => setMemberMenu(d.items ?? []))
+      .catch(() => {});
+    fetch("/api/member/summary").then((s) => (s.ok ? s.json() : null))
+      .then((d) => setSummary(d && Array.isArray(d.stats) && Array.isArray(d.flows) ? d : null))
       .catch(() => {});
     fetch("/api/agreements/pending").then((s) => (s.ok ? s.json() : { items: [] }))
       .then((d) => setPending(d.items ?? []))
@@ -432,18 +443,68 @@ export default function AccountPage() {
             </section>
           )}
 
-          {/* ── 내 활동 (플러그인이 선언한 회원 화면) ── */}
+          {/* ── 첫머리 요약 — 인사 · 숫자 칸 · 흐름 (확장이 낸 것) ── */}
+          <section style={card} aria-labelledby="brick-acc-hello">
+            <h2 id="brick-acc-hello" style={{ ...h2, marginBottom: 4 }}>{t("account.greeting", { name: me.display_name })}</h2>
+            <p style={{ ...small, margin: 0 }}>{me.email}</p>
+            {summary && summary.stats.length > 0 && (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8, marginTop: 16 }}>
+                {summary.stats.map((st) => {
+                  const inner = (
+                    <>
+                      <span style={{ ...small, display: "block" }}>{st.label}</span>
+                      <strong style={{ display: "block", marginTop: 4, fontSize: 19, letterSpacing: "-0.4px", fontVariantNumeric: "tabular-nums" }}>{st.value}</strong>
+                    </>
+                  );
+                  const box: React.CSSProperties = {
+                    display: "block", padding: "12px 14px", borderRadius: 10, background: "var(--color-bg-soft)",
+                    color: "inherit", textDecoration: "none", minHeight: 44,
+                  };
+                  return st.link
+                    ? <a key={st.label} href={st.link} style={box}>{inner}</a>
+                    : <div key={st.label} style={box}>{inner}</div>;
+                })}
+              </div>
+            )}
+            {summary?.flows.map((f) => (
+              <div key={f.title} style={{ marginTop: 18 }}>
+                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+                  <h3 style={{ margin: 0, fontSize: 14.5 }}>{f.title}</h3>
+                  {f.link && (
+                    <a href={f.link} style={{ ...small, color: "var(--color-text-soft)", textDecoration: "none", display: "inline-flex", alignItems: "center", minHeight: 32 }}>
+                      {t("account.viewAll")} →
+                    </a>
+                  )}
+                </div>
+                {/* 단계 사이의 › 는 흐름(입금 → 배송완료)을 읽게 한다. 0 이 아닌 단계만 진하게 */}
+                <ol style={{ listStyle: "none", padding: 0, margin: "8px 0 0", display: "grid", gridTemplateColumns: `repeat(${f.steps.length}, minmax(0, 1fr))`, border: "1px solid var(--color-line)", borderRadius: 10 }}>
+                  {f.steps.map((st, i) => (
+                    <li key={st.label} style={{ position: "relative", textAlign: "center", padding: "12px 4px", borderLeft: i ? "1px solid var(--color-line)" : 0 }}>
+                      <a href={st.link ?? f.link ?? "#"} style={{ color: "inherit", textDecoration: "none", display: "block" }}>
+                        <strong style={{ display: "block", fontSize: 20, fontVariantNumeric: "tabular-nums", color: st.value ? "var(--color-text)" : "var(--color-muted)" }}>{st.value}</strong>
+                        <span style={{ ...small, display: "block", marginTop: 2, wordBreak: "keep-all" }}>{st.label}</span>
+                      </a>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ))}
+          </section>
+
+          {/* ── 내 활동 (플러그인이 선언한 회원 화면) — 칩 줄 대신 누르기 쉬운 칸 ── */}
           {memberMenu.length > 0 && (
             <section style={card}>
               <h2 style={h2}>{t("account.myActivity")}</h2>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 8 }}>
                 {memberMenu.map((m) => (
                   <a key={m.path} href={m.path}
                     style={{
-                      padding: "9px 14px", borderRadius: 8, fontSize: 14, textDecoration: "none",
-                      color: "inherit", border: "1px solid var(--color-line-strong)",
+                      display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6,
+                      minHeight: 46, padding: "0 14px", borderRadius: 10, fontSize: 14.5, textDecoration: "none",
+                      color: "inherit", border: "1px solid var(--color-line)", background: "var(--color-bg)",
                     }}>
-                    {m.label}
+                    <span>{m.label}</span>
+                    <span aria-hidden="true" style={{ color: "var(--color-muted)" }}>›</span>
                   </a>
                 ))}
               </div>

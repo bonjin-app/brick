@@ -55,7 +55,9 @@ const KO = {
   "register.identityDone": "본인인증을 마쳤습니다.",
 
 
-  "account.title": "내 정보",
+  "account.title": "마이페이지",
+  "account.greeting": "{name}님, 반갑습니다",
+  "account.viewAll": "전체 보기",
   "account.myActivity": "내 활동",
   "account.identity": "본인인증",
   "account.identityDone": "인증 완료",
@@ -225,6 +227,8 @@ const EN: Record<keyof typeof KO, string> = {
 
 
   "account.title": "My account",
+  "account.greeting": "Welcome back, {name}",
+  "account.viewAll": "View all",
   "account.myActivity": "My activity",
   "account.identity": "Identity verification",
   "account.identityDone": "Verified",

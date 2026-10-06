@@ -3214,6 +3214,46 @@ export default definePlugin(async (ctx) => {
   // 대시보드 판 — 주문 흐름 · 매출 추이 · 최근 주문 (dashboard.ts)
   registerShopDashboard(ctx, db);
 
+  /*
+   * 마이페이지 첫머리 — 그 회원의 쿠폰 · 등급 · 최근 3개월 주문 처리 현황(카페24 마이페이지의 첫 줄).
+   * 손님이 마이페이지에 들어오는 가장 흔한 이유가 "내 주문이 어디쯤인가" 다. 배송완료는 끝난 상태라
+   * 누적이 끝없이 커지므로 기간(3개월) 안의 것만 센다 — 목록 전체는 주문 내역에서 본다.
+   */
+  ctx.registerMemberSummary({
+    order: 20,
+    load: async (userId) => {
+      const { rows } = await db.execute(sql`
+        SELECT
+          count(*) FILTER (WHERE status = 'pending')   AS pending,
+          count(*) FILTER (WHERE status = 'paid')      AS paid,
+          count(*) FILTER (WHERE status = 'preparing') AS preparing,
+          count(*) FILTER (WHERE status = 'shipped')   AS shipped,
+          count(*) FILTER (WHERE status = 'delivered') AS delivered,
+          (SELECT count(*) FROM shop_user_coupons uc JOIN shop_coupons c ON c.id = uc.coupon_id
+            WHERE uc.user_id = ${userId}::uuid AND uc.used_at IS NULL AND c.is_active = true
+              AND (c.ends_at IS NULL OR c.ends_at >= now())) AS coupons
+        FROM shop_orders
+        WHERE user_id = ${userId}::uuid AND created_at >= now() - interval '3 months'
+      `);
+      const r = rows[0] ?? {};
+      const n = (k: string) => Number(r[k] ?? 0);
+      const grade = await myGrade(db, userId).catch(() => null);
+      const flowSteps: OrderStatus[] = ["pending", "paid", "preparing", "shipped", "delivered"];
+      return {
+        stats: [
+          { label: t("member.coupons"), value: t("member.couponsN", { n: n("coupons") }), link: "/shop/coupons" },
+          // 등급을 쓰지 않는 가게(등급이 하나도 없다)에는 칸을 내지 않는다
+          ...(grade?.grade ? [{ label: t("member.grade"), value: grade.grade.name }] : []),
+        ],
+        flow: {
+          title: t("member.flow"),
+          link: "/shop/orders",
+          steps: flowSteps.map((s) => ({ label: t(STATUS_LABEL[s]), value: n(s), link: "/shop/orders" })),
+        },
+      };
+    },
+  });
+
   // 대시보드 — 운영자가 매일 아침 보는 숫자. "오늘"은 리포트와 같은 사이트 시간대다
   ctx.registerDashboardCard({
     title: "오늘 주문",
