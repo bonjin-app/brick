@@ -17,7 +17,8 @@
     "db:migrate": "pnpm --filter @brick/database migrate",
     "db:studio": "pnpm --filter @brick/database studio",
     "build:themes": "bash scripts/build-themes.sh",
-    "db:dev": "node scripts/dev-db.mjs"
+    "db:dev": "node scripts/dev-db.mjs",
+    "ci:static": "node scripts/ci-static.mjs"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.3.3",

@@ -52,7 +52,13 @@ docker run -d --name brick-pg -e POSTGRES_USER=brick -e POSTGRES_PASSWORD=brick 
 ```bash
 pnpm build          # 전체 빌드 (타입 검사 포함)
 pnpm typecheck
+pnpm ci:static      # CI 의 정적 단계를 같은 순서로 전부 — 푸시 전에 돌린다 (DB·서버 필요 없음)
 ```
+
+**푸시 전에 `pnpm ci:static` 을 돌리세요.** CI 는 단계 하나가 실패하면 그 뒤를 실행하지 않습니다 — 앞쪽 단계 하나가 몇 주 동안
+빨갰는데도 뒤의 정적 검사와 스모크가 한 번도 돌지 않은 적이 있습니다. 이 명령은 `.github/workflows/ci.yml` 을 읽어 `run:` 을
+그대로 돌리므로 목록을 따로 관리할 필요가 없습니다(새 단계를 더하면 저절로 들어옵니다). 푸시한 뒤에는 CI 가 초록인지 확인하세요
+(`gh run list --branch main --limit 3`).
 
 E2E 스모크 테스트 — 실제 PostgreSQL과 실제 서버 프로세스로 검증합니다.
 
@@ -69,7 +75,8 @@ bash scripts/smoke-release.sh   # 배포본 FTP 설치 경로
 ```
 
 CI(GitHub Actions)가 PR마다 전부 실행합니다:
-빌드 → 마이그레이션(멱등성 포함) → 스모크 7종 → `pnpm deploy` 번들 → Docker 이미지 빌드.
+빌드 → 정적 검사(`scripts/check-*.mjs` 와 인라인 검사) → 마이그레이션(멱등성 포함) → 스모크 46종(위는 일부 예시) →
+`pnpm deploy` 번들 → Docker 이미지 빌드. 스모크 전체 목록과 항목 수는 README 의 표가 유일한 출처입니다.
 
 동작을 추가/변경했다면 해당 스모크 스크립트에 검증 항목을 추가해주세요.
 

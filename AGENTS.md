@@ -28,6 +28,7 @@ Brick 은 설치형 오픈소스 CMS 입니다 (Next.js + NestJS/Fastify + Postg
 pnpm install --frozen-lockfile
 pnpm build            # 타입 검사 포함. 종료 코드를 반드시 확인한다 (아래 함정 참고)
 pnpm build:themes     # themes/*/src 를 고쳤다면
+pnpm ci:static        # CI 의 정적 단계(검사 48개)를 같은 순서로 — 푸시 전에. 빌드를 이미 했으면 --skip-build
 pnpm db:dev           # 개발용 임베디드 PostgreSQL
 DATABASE_URL=postgresql://… bash scripts/smoke-board.sh   # 스모크 한 수트
 node scripts/check-doc-counts.mjs                          # 문서 숫자 검사
@@ -56,6 +57,9 @@ node scripts/check-doc-counts.mjs                          # 문서 숫자 검�
 - 고쳤다면 **재현 → 수정 → 역검증**: 새 단언에서 고친 줄만 되돌려 보고 **실패하는지** 본다. 통과하면 그 검사는 아무것도 시험하지 않는 것이다.
 - 스모크·정적 검사를 늘렸다면 `README.md` 의 스모크 표 숫자와 총계를 함께 고친다 (`check-smoke-counts.mjs`, `check-doc-counts.mjs`). 새 정적 검사는 `.github/workflows/ci.yml` 에 연결한다.
 - 기능을 끝냈다면 `docs/roadmap.md` 에 무엇이 문제였고 어떻게 고쳤는지, **하지 않은 것과 이유**를 적는다.
+- **푸시한 뒤에는 CI 가 초록인지 본다** (`gh run list --branch main --limit 3`). CI 는 단계 하나가 실패하면 그 뒤를 실행하지 않는다 —
+  앞쪽 단계(모달 포커스) 하나가 몇 주 빨간 채로, 뒤의 정적 검사·스모크가 한 번도 돌지 않았는데 스무 번 넘게 푸시했다.
+  로컬에서 `check-*.mjs` 만 모아 돌리면 인라인 셸 단계가 빠진다 — 손으로 목록을 만들지 말고 `pnpm ci:static` 을 쓴다.
 - API 로 재현되지 않는 분기(경합·커밋 뒤 실행)는 `scripts/check-plugin-units.mjs` 처럼 가짜 DB 로 직접 부른다.
 
 ## 함정 (실제로 당했다)
