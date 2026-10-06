@@ -32,7 +32,8 @@ cleanup() {
 trap cleanup EXIT
 
 ok()  { PASS=$((PASS+1)); echo "  ✅ $1"; }
-bad() { FAIL=$((FAIL+1)); echo "  ❌ $1"; }
+# CI(GitHub Actions)에서는 실패한 단언을 주석(::error::)으로도 남긴다 — 로그를 못 보는 계정도 어느 단언이 깨졌는지 볼 수 있다
+bad() { FAIL=$((FAIL+1)); echo "  ❌ $1"; [[ -z "${GITHUB_ACTIONS:-}" ]] || { local m="${1//$'\n'/ }"; echo "::error title=${0##*/}::${m:0:400}"; }; }
 check()    { [[ "$2" == "$3" ]] && ok "$1" || bad "$1 (기대 $3, 실제 $2)"; }
 contains() { [[ "$2" == *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 없음: ${2:0:200})"; }
 absent()   { [[ "$2" != *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 가 있음)"; }
