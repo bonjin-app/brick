@@ -796,6 +796,10 @@ a.brick-card:hover { border-color: var(--color-text); color: inherit; }
 }
 .brick-cs-mail:hover { color: var(--color-text); }
 .brick-cs-mail .brick-ico { width: 14px; height: 14px; }
+/* 고객센터 칸의 길(주문조회 · 고객센터) — 전화번호가 아직 없는 가게에서도 칸이 비지 않게. 바로가기와 같은 글자 */
+.brick-cs-links { display: flex; flex-direction: column; gap: 8px; margin-top: 2px; }  /* 바로가기 칸과 같은 줄 간격 */
+.brick-cs-links a { text-transform: uppercase; letter-spacing: 0.05em; font-size: 12.5px; line-height: 1.6; color: var(--color-text-soft); min-height: 28px; display: inline-flex; align-items: center; text-decoration: none; }
+.brick-cs-links a:hover { color: var(--color-text); }
 
 /* 홈 폴백 히어로 — 가운데 정렬 */
 .brick-boutique-hero { background: transparent; border: 0; text-align: center; padding-top: 40px; }
@@ -1254,4 +1258,13 @@ a.brick-card:hover { border-color: var(--color-text); color: inherit; }
 @media (prefers-reduced-motion: reduce) {
   .brick-slider .brick-slide img, .brick-slider .brick-slide.is-on img { transform: none; transition: none; }
   .brick-header.is-pinned .brick-catbar { transition: none; }
+}
+
+/* 머리 링크의 개수 배지 (장바구니에 담긴 수) — 템플릿 스크립트가 넣는다 */
+.brick-actions a, .brick-quick a { position: relative; }
+.brick-count {
+  position: absolute; top: 2px; right: 2px; min-width: 18px; height: 18px; padding: 0 5px;
+  border-radius: 999px; background: var(--color-primary); color: var(--color-on-primary);
+  font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; letter-spacing: 0;
+  font-variant-numeric: tabular-nums; pointer-events: none;
 }

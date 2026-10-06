@@ -357,6 +357,31 @@ const CATALOGS: Record<string, Record<string, string>> = { ko: KO, en: EN };
 /** 페이지 이동 간 재요청을 막는 모듈 캐시 */
 let cachedLocale: string | null = null;
 let cachedSiteName: string | null = null;
+let cachedGuestLinks: Array<{ label: string; url: string }> | null = null;
+
+/**
+ * /api/i18n 한 번 — 언어 · 사이트 이름 · 비회원 링크를 같은 응답에서 읽는다.
+ * 훅마다 따로 부르면 한 화면에서 같은 요청이 둘셋 나간다(로그인 화면이 언어와 이름을 함께 쓴다).
+ */
+let siteInfoRequest: Promise<void> | null = null;
+function loadSiteInfo(): Promise<void> {
+  siteInfoRequest ??= fetch("/api/i18n")
+    .then((r) => r.json())
+    .then((d) => {
+      cachedLocale = d.locale === "en" ? "en" : "ko";
+      cachedSiteName = String(d.siteName ?? "") || null;
+      // 사이트 안 경로만 — 링크로 그대로 쓴다
+      cachedGuestLinks = Array.isArray(d.guestLinks)
+        ? d.guestLinks.filter((l: { label?: unknown; url?: unknown }) =>
+            typeof l?.label === "string" && typeof l?.url === "string" && /^\/(?![/\\])/.test(l.url))
+        : [];
+    })
+    .catch(() => {
+      cachedLocale ??= "ko"; // 언어를 못 받아도 화면은 떠야 한다
+      cachedGuestLinks ??= [];
+    });
+  return siteInfoRequest;
+}
 
 /** 사이트 언어 훅 — 공개·관리 화면이 공유한다 */
 /**
@@ -392,16 +417,7 @@ export function useLocale(): string {
 
   useEffect(() => {
     if (cachedLocale) return;
-    fetch("/api/i18n")
-      .then((r) => r.json())
-      .then((d) => {
-        cachedLocale = d.locale === "en" ? "en" : "ko";
-        cachedSiteName = String(d.siteName ?? "") || null;
-        setLocale(cachedLocale);
-      })
-      .catch(() => {
-        cachedLocale = "ko"; // 언어를 못 받아도 화면은 떠야 한다
-      });
+    void loadSiteInfo().then(() => setLocale(cachedLocale ?? "ko"));
   }, []);
 
   return locale;
@@ -413,17 +429,25 @@ export function useSiteName(): string {
 
   useEffect(() => {
     if (cachedSiteName) { setName(cachedSiteName); return; }
-    fetch("/api/i18n")
-      .then((r) => r.json())
-      .then((d) => {
-        cachedLocale = d.locale === "en" ? "en" : "ko";
-        cachedSiteName = String(d.siteName ?? "") || null;
-        if (cachedSiteName) setName(cachedSiteName);
-      })
-      .catch(() => {}); // 이름을 못 받아도 화면은 떠야 한다
+    void loadSiteInfo().then(() => { if (cachedSiteName) setName(cachedSiteName); });
   }, []);
 
   return name;
+}
+
+/**
+ * 비회원용 링크 훅 — 확장이 맨 위 띠에 등록한 것(쇼핑몰의 주문조회 · 고객센터).
+ * 로그인 화면은 테마 밖이라 그 띠가 없다. 주문만 찾으러 온 비회원이 가장 먼저 찾는 길이다.
+ */
+export function useGuestLinks(): Array<{ label: string; url: string }> {
+  const [links, setLinks] = useState(cachedGuestLinks ?? []);
+
+  useEffect(() => {
+    if (cachedGuestLinks) { setLinks(cachedGuestLinks); return; }
+    void loadSiteInfo().then(() => setLinks(cachedGuestLinks ?? []));
+  }, []);
+
+  return links;
 }
 
 /** 카탈로그 → 번역 함수. 규칙: 요청 언어 → ko → 키 자체 */

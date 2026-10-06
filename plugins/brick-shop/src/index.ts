@@ -324,6 +324,20 @@ export default definePlugin(async (ctx) => {
     };
   });
 
+  /*
+   * 머리의 장바구니 배지 — 모든 페이지가 부르므로 금액 계산(quote) 없이 줄 수만 센다.
+   * 비회원 토큰이 없으면 DB 를 보지 않는다(빈 토큰으로 남의 장바구니를 세지 않는다).
+   */
+  ctx.registerRoute("GET", "/cart/count", async (req) => {
+    const own = owner(req);
+    if (!own.userId && !own.guestToken) return { count: 0 };
+    const where = own.userId ? sql`c.user_id = ${own.userId}::uuid` : sql`c.guest_token = ${own.guestToken}`;
+    const { rows } = await db.execute(sql`
+      SELECT count(*)::int AS n FROM shop_cart_items i JOIN shop_carts c ON c.id = i.cart_id WHERE ${where}
+    `);
+    return { count: Number(rows[0]?.n ?? 0) };
+  });
+
   ctx.registerRoute("POST", "/cart", async (req) => {
     const body = req.body as { productId: string; optionId?: string; quantity?: number; guestToken?: string };
     const own = req.user ? { userId: req.user.id } : { guestToken: body.guestToken || uuidv7().replace(/-/g, "") };
@@ -3189,7 +3203,11 @@ export default definePlugin(async (ctx) => {
    * 요구하지 않는다. 담긴 개수는 여기 담지 않는다(비로그인 렌더가 캐시되므로
    * 남의 값이 새어 나간다).
    */
-  ctx.registerHeaderAction({ label: "장바구니", path: "/shop/cart", order: 10, icon: "cart" });
+  ctx.registerHeaderAction({
+    label: "장바구니", path: "/shop/cart", order: 10, icon: "cart",
+    // 담긴 줄 수 배지 — 비회원은 브라우저에 둔 토큰(brick_shop_guest)으로 센다
+    count: { url: "/api/plugins/brick-shop/cart/count", guestKey: "brick_shop_guest" },
+  });
   // 맨 위 띠의 "주문조회" — 비회원은 주문번호로 찾는다(주문 화면이 비회원에게는 조회 칸을 준다)
   ctx.registerHeaderAction({ label: "주문조회", path: "/shop/orders", order: 20, place: "util" });
 

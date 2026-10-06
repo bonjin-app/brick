@@ -144,10 +144,18 @@ export async function renderList(
     ORDER BY p.thread_created_at DESC, p.thread_path ASC
     LIMIT ${size} OFFSET ${(page - 1) * size}
   `);
+  /*
+   * total 은 쪽나눔용(공지를 뺀 글)이다. 화면의 "N개의 글" 에는 공지를 더한다 — 공지만 있는 게시판이
+   * "0개의 글" 이라고 말하면서 글 둘을 보여 주고 있었다. 공지 목록은 위 다섯 개까지만 가져오므로 그 길이가
+   * 아니라 같은 질의에서 센다(검색 중에는 공지를 섞지 않으므로 더하지 않는다).
+   */
   const { rows: counted } = await db.execute(sql`
-    SELECT count(*) AS n FROM board_posts p WHERE ${filter} AND p.is_notice = false
+    SELECT count(*) FILTER (WHERE ${filter} AND p.is_notice = false) AS n,
+           count(*) FILTER (WHERE p.is_notice = true) AS notices
+    FROM board_posts p WHERE p.board_id = ${board.id}::uuid
   `);
   const total = Number(counted[0]?.n ?? 0);
+  const shownTotal = total + (q ? 0 : Number(counted[0]?.notices ?? 0));
   const totalPages = Math.max(1, Math.ceil(total / size));
 
   /**
@@ -278,7 +286,7 @@ ${!notices.length && !items.length ? `      <tr><td colspan="${showNoticeCol ? 5
   return `<div class="brick-board brick-list-${style}${opts.embedded ? " is-embedded" : ""}">
   <div class="brick-board-head">
     <${H}>${opts.embedded ? `<a href="${base}">${escapeHtml(board.title)}</a>` : escapeHtml(board.title)}</${H}>
-    <span class="brick-board-total">${t("list.total", { n: total })}${q ? escapeHtml(t("list.searchLabel", { q })) : ""}</span>
+    <span class="brick-board-total">${t("list.total", { n: shownTotal })}${q ? escapeHtml(t("list.searchLabel", { q })) : ""}</span>
   </div>
   ${board.description && !q && !opts.embedded ? `<p class="brick-board-desc">${escapeHtml(board.description)}</p>` : ""}
 ${catNav}

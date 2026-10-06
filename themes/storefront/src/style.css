@@ -1236,6 +1236,17 @@ blockquote { border-left-color: var(--color-line-strong); }
 .brick-features .brick-card .brick-card-icon { border: 0; background: var(--color-bg); width: 46px; height: 46px; }
 .brick-features .brick-grid, .brick-testimonials .brick-grid { border-top: 0; gap: 14px; }
 .brick-features .brick-card:last-child { margin-right: 0; }
+/* 폰에서는 카드 셋이 한 장씩 큰 상자로 쌓여 한 화면을 다 먹었다 — 아이콘 옆에 제목·설명을 두는 촘촘한 줄로 */
+@media (max-width: 720px) {
+  .brick-features .brick-grid { gap: 8px; }
+  .brick-features .brick-card {
+    display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 14px; align-items: center;
+    padding: 14px 16px;
+  }
+  .brick-features .brick-card .brick-card-icon { grid-row: 1 / span 2; width: 40px; height: 40px; margin: 0; }
+  .brick-features .brick-card h3 { grid-column: 2; margin: 0 0 2px; font-size: 15.5px; }
+  .brick-features .brick-card p { grid-column: 2; font-size: 13.5px; }
+}
 .brick-quote, .brick-quote:last-child {
   border: 0; margin: 0; border-radius: var(--radius-lg); background: var(--color-bg-soft); padding: 26px 26px 24px;
 }
@@ -1256,7 +1267,8 @@ blockquote { border-left-color: var(--color-line-strong); }
 .brick-quick .brick-quick-top .brick-ico { transform: rotate(-90deg); width: 20px; height: 20px; }
 
 /* 푸터 — 겹괘선을 걷고 옅은 바탕으로 마감한다. 칸: 가게 소개 | 바로가기 | 고객센터 */
-.brick-footer { border-top: 0; background: var(--color-bg-soft); margin-top: clamp(40px, 6vw, 72px); }
+/* 본문 아래 여백(템플릿의 pb-24)과 겹쳐 빈 띠가 168px 이었다 — 바탕색이 있는 푸터는 위 여백이 필요 없다 */
+.brick-footer { border-top: 0; background: var(--color-bg-soft); margin-top: 0; }
 .brick-footer::before { content: none; }
 .brick-footer-inner { padding-top: 48px; padding-bottom: 40px; }
 .brick-footer .brick-footer-cols { border-bottom-color: var(--color-line); gap: 28px 48px; }
@@ -1272,6 +1284,11 @@ blockquote { border-left-color: var(--color-line-strong); }
 .brick-footer-h { font-size: 13px; font-weight: 700; color: var(--color-text); margin-bottom: 4px; }
 .brick-footer-nav a { text-transform: none; letter-spacing: 0; font-size: 14px; color: var(--color-text-soft); min-height: 28px; display: inline-flex; align-items: center; }
 .brick-footer-credit { padding-top: 6px; }
+/* 고객센터 칸 — 전화번호가 없어도 길(주문조회 · 고객센터)이 있으면 그린다. 제목은 다른 칸("바로가기")과 같은 모양 */
+.brick-footer .brick-cs-label { font-size: 13px; font-weight: 700; color: var(--color-text); text-transform: none; letter-spacing: 0; margin-bottom: 4px; }
+.brick-cs-links { display: flex; flex-direction: column; gap: 8px; margin-top: 2px; }  /* 바로가기 칸(.brick-footer-col 의 gap 8px)과 같은 줄 간격 */
+.brick-cs-links a { font-size: 15px; color: var(--color-text-soft); min-height: 28px; display: inline-flex; align-items: center; text-decoration: none; }
+.brick-cs-links a:hover { color: var(--color-text); }
 
 /* 상품 카드 — 사진 모서리를 둥글게, 이름은 두 줄까지 */
 .brick-main .brick-product-thumb { border-radius: var(--radius-lg); }
@@ -1390,3 +1407,12 @@ blockquote { border-left-color: var(--color-line-strong); }
 .brick-faq-item summary::after { transition: transform .3s var(--brick-ease); }
 .brick-faq-item[open] summary::after { transform: rotate(180deg); }
 @media (prefers-reduced-motion: reduce) { .brick-faq-item summary::after { transition: none; } }
+
+/* 머리 링크의 개수 배지 (장바구니에 담긴 수) — 템플릿 스크립트가 넣는다 */
+.brick-actions a, .brick-quick a { position: relative; }
+.brick-count {
+  position: absolute; top: 2px; right: 2px; min-width: 18px; height: 18px; padding: 0 5px;
+  border-radius: 999px; background: var(--color-primary); color: var(--color-on-primary);
+  font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; letter-spacing: 0;
+  font-variant-numeric: tabular-nums; pointer-events: none;
+}

@@ -311,6 +311,8 @@ for TH in storefront boutique default editorial corporate fresh blossom mono; do
   # 클래스를 붙이는 쪽이 먼저 본다 — 붙이지 않으면 숨기는 규칙도 걸리지 않아 모든 것이 처음부터 보인다
   contains "$TH: 떠오르기는 동작 줄이기·IntersectionObserver 를 먼저 본다" "$H" 'if (!reduce && "IntersectionObserver" in window)'
   contains "$TH: 떠오르기 표시는 문서에" "$H" 'document.documentElement.classList.add("brick-motion")'
+  # 검색 결과 화면에서 머리의 검색 칸이 비어 있어 고쳐 찾으려면 처음부터 쳐야 했다
+  contains "$TH: 검색 결과에서 머리 검색 칸에 찾은 말을 남긴다" "$H" 'form.brick-header-search input[name="q"]'
 done
 for TH in storefront boutique fresh blossom mono; do
   curl -s -o /dev/null -b "$CK" -X POST "$API/api/themes/$TH/activate"

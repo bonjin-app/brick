@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import { SocialButtons } from "../../components/SocialButtons";
 import { AuthShell, authButton, authInput, authLabel, authLink } from "../../components/AuthShell";
-import { useT } from "../../lib/i18n";
+import { useGuestLinks, useT } from "../../lib/i18n";
 import { sameOriginPath } from "../../lib/safe-path";
 
 /** 공개 로그인 — 로그인 후 홈으로 이동한다 (관리자 로그인은 /admin/login) */
 export default function LoginPage() {
   const t = useT();
+  const guestLinks = useGuestLinks();
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -122,6 +123,17 @@ export default function LoginPage() {
         {" · "}
         <a href="/forgot-password" style={authLink}>{t("login.forgot")}</a>
       </p>
+      {/* 비회원 주문조회 · 고객센터 — 확장이 등록한 것. 주문만 찾으러 온 비회원이 로그인 화면에서 길을 잃었다 */}
+      {guestLinks.length > 0 && (
+        <p style={{ textAlign: "center", margin: "14px 0 0", paddingTop: 14, borderTop: "1px solid var(--color-line)", fontSize: 13.5 }}>
+          {guestLinks.map((l, i) => (
+            <span key={l.url}>
+              {i > 0 && <span aria-hidden="true" style={{ color: "var(--color-muted)" }}> · </span>}
+              <a href={l.url} style={{ ...authLink, fontWeight: 500, color: "var(--color-text-soft)" }}>{l.label}</a>
+            </span>
+          ))}
+        </p>
+      )}
     </AuthShell>
   );
 }

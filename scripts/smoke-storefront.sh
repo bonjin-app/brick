@@ -168,7 +168,7 @@ sf_render() {
     | python3 -c "import sys,json;print(json.load(sys.stdin).get('html',''))"
 }
 # 담은 다음에 갈 곳이 헤더에 있어야 한다 — 비회원도 담으므로 로그인 전에도
-contains "헤더에 장바구니 링크" "$(sf_render "")" '<a href="/shop/cart"><svg class="brick-ico" aria-hidden="true"><use href="#i-cart"></use></svg><span>장바구니</span></a>'
+contains "헤더에 장바구니 링크" "$(sf_render "")" '<a href="/shop/cart" data-brick-count="/api/plugins/brick-shop/cart/count" data-brick-count-guest="brick_shop_guest"><svg class="brick-ico" aria-hidden="true"><use href="#i-cart"></use></svg><span>장바구니</span></a>'
 
 CART_PAGE="$(sf_render "shop/cart")"
 contains "장바구니의 문서 제목" "$CART_PAGE" "<title>장바구니 —"
@@ -457,6 +457,8 @@ contains "기획전 — 칸 수가 변수로 (나쁜 사진 줄은 버리고 둘
 contains "기획전 — 칸마다 글자 색" "$SC" 'class="brick-promo is-light" href="/shop"'
 contains "기획전 — 위험한 링크 칸은 링크 없이 그린다" "$SC" '<div class="brick-promo">'
 contains "기획전 — 라벨과 제목" "$SC" '<em>GIFT</em><strong>선물</strong>'
+# 흰 글자 칸이 그림을 늦게 불러오는 동안 밝은 회색 위에 있어 읽히지 않았다 — 어두운 바탕을 깐다
+contains "기획전 — 흰 글자 칸은 그림 전에도 어두운 바탕" "$SC" ".brick-promo.is-light{background:#2b2d31}"
 contains "기획전 — 비율에 CSS 를 끼워 넣을 수 없다 (기본 비율로)" "$SC" '--promo-ratio:2/1"'
 absent "기획전 — 끼워 넣은 CSS 가 새지 않는다" "$SC" "background:url(x)"
 # 폰에서 목록이 옆으로 넘쳤다 — 그냥 1fr 은 가격 줄(할인율·판매가·정가, 약 173px)의 최소 폭 아래로 줄지 않아
@@ -584,7 +586,8 @@ contains "눈금이 사람이 읽는 값이다 (미만)" "$FILTER_PAGE" '>10,000
 contains "가운데 구간" "$FILTER_PAGE" '>10,000원 ~ 20,000원 ('
 # 눈금은 상품 값에서 만든다 — 샘플 상품 가격이 바뀌면 마지막 눈금도 바뀐다(3만 원대 샘플이 생겨 한 칸 늘었다).
 # 값이 아니라 "마지막 칸은 위가 열린 구간" 이라는 뜻을 본다
-LAST_BAND="$(echo "$FILTER_PAGE" | grep -o '[0-9,]*원 [^<(]*(' | tail -1)"
+# 숫자가 적어도 하나 — `[0-9,]*` 는 빈 것도 맞아서 "비회원 토큰도 … 않는다(" 같은 글(템플릿 주석)을 마지막 눈금으로 집었다
+LAST_BAND="$(echo "$FILTER_PAGE" | grep -o '[0-9][0-9,]*원 [^<(]*(' | tail -1)"
 [[ "$LAST_BAND" == *"원 이상 ("* ]] && ok "마지막은 열린 구간 (이상) — $LAST_BAND" || bad "마지막은 열린 구간 ($LAST_BAND)"
 absent "홈의 진열 섹션에는 가격 막대가 없다" "$(sf_render "")" 'class="brick-filter"'
 
@@ -704,6 +707,7 @@ contains "운영자 문구가 덧붙는다" "$PD" "반품 주소 — 서울시 �
 absent "운영자 문구의 태그는 글자로 (HTML 로 싣지 않는다)" "$PD" "<b>굵게</b>"
 # 테마의 기본 hover 는 글자를 흰색으로 뒤집는다 — 배경을 정한 버튼은 hover 의 글자색도 정한다
 contains "장바구니 버튼의 hover 글자색" "$PD" ".brick-buy-actions button:hover{background:var(--color-bg-soft, #f6f6f9);color:var(--color-text"
+contains "담으면 머리의 배지를 다시 세게 한다" "$PD" "document.dispatchEvent(new CustomEvent('brick:count-changed'))"
 # 넓은 화면에서 카테고리 띠가 머리에 붙는다 — 바로가기 막대가 top:0 이면 띠 밑에 깔려 가려진다. 테마가 띠 높이를 변수로 알린다
 contains "바로가기 막대는 카테고리 띠 아래에 붙는다" "$PD" ".brick-pd-jump{position:sticky;top:var(--brick-sticky-top, 0px)"
 contains "섹션으로 뛸 때도 띠만큼 비운다" "$PD" "scroll-margin-top:calc(var(--brick-sticky-top, 0px) + 64px)"
@@ -717,6 +721,29 @@ FS_GT="fs$RANDOM$RANDOM"
 curl -s -X POST "$SHOP/cart" -H 'content-type: application/json' \
   -d "{\"productId\":\"$PLATE_ID\",\"quantity\":1,\"guestToken\":\"$FS_GT\"}" >/dev/null
 check "하나 담으면 기준까지 남은 금액" "$(curl -s "$SHOP/cart?guest=$FS_GT" | jq_get "['freeShippingRemaining']")" "$((50000 - PLATE_PRICE))"
+# 머리의 장바구니 배지 — 담아도 머리에 아무 표시가 없었다. 모든 페이지가 부르므로 금액 계산 없이 줄 수만 센다
+check "배지 — 담은 줄 수" "$(curl -s "$SHOP/cart/count?guest=$FS_GT" | jq_get "['count']")" "1"
+check "배지 — 다른 비회원의 장바구니는 0" "$(curl -s "$SHOP/cart/count?guest=other$RANDOM" | jq_get "['count']")" "0"
+check "배지 — 토큰이 없으면 0 (빈 토큰으로 남의 것을 세지 않는다)" "$(curl -s "$SHOP/cart/count" | jq_get "['count']")" "0"
+HOME_SF="$(sf_render "&_=$RANDOM")"
+contains "배지 — 머리의 장바구니 링크가 개수를 줄 곳을 단다" "$HOME_SF" 'data-brick-count="/api/plugins/brick-shop/cart/count" data-brick-count-guest="brick_shop_guest"'
+contains "배지 — 개수가 바뀌면 다시 센다" "$HOME_SF" 'document.addEventListener("brick:count-changed", refresh)'
+absent "배지 — 비회원 렌더에는 회원 표시가 없다 (캐시에 섞이지 않는다)" "$HOME_SF" 'data-brick-member="1"'
+contains "로그인 화면이 받는 비회원 링크에 주문조회" "$(curl -s "$API/api/i18n")" '"url":"/shop/orders"'
+# 쇼핑몰 테마의 푸터 고객센터 칸 — 전화번호를 채우기 전에는 칸이 통째로 비어 푸터가 "가게 이름 · 바로가기" 뿐이었다
+BEFORE_THEME="$(curl -s "$API/api/themes" | jq_get "['active']")"
+curl -s -o /dev/null -b "$CK" -X POST "$API/api/themes/storefront/activate"
+FOOT_SF="$(sf_render "&_=$RANDOM")"
+contains "푸터 고객센터 칸 — 번호가 없어도 제목" "$FOOT_SF" '<span class="brick-cs-label">고객센터</span>'
+contains "푸터 고객센터 칸 — 길 목록" "$FOOT_SF" '<nav class="brick-cs-links" aria-label="고객센터">'
+check "푸터 고객센터 칸 — 그 안에 주문조회" "$(echo "$FOOT_SF" | python3 -c "
+import sys, re
+m = re.search(r'<nav class=\"brick-cs-links\"[^>]*>(.*?)</nav>', sys.stdin.read(), re.S)
+print(bool(m) and '<a href=\"/shop/orders\">주문조회</a>' in m.group(1))")" "True"
+curl -s -o /dev/null -b "$CK" -X POST "$API/api/themes/${BEFORE_THEME:-default}/activate"
+CART_SF="$(sf_render "shop/cart&_=$RANDOM")"
+contains "장바구니 합계의 괘선이 끊기지 않는다 (가로 간격 0)" "$CART_SF" ".brick-cart-total dl{display:grid;grid-template-columns:1fr auto;gap:8px 0;"
+contains "주문서의 합계 상자는 붙은 카테고리 띠 아래에 붙는다" "$(sf_render "shop/checkout&_=$RANDOM")" "top: calc(var(--brick-sticky-top, 0px) + 16px)"
 FS_ITEM="$(curl -s "$SHOP/cart?guest=$FS_GT" | jq_get "['items'][0]['id']")"
 curl -s -X PUT "$SHOP/cart/$FS_ITEM?guest=$FS_GT" -H 'content-type: application/json' -d '{"quantity":2}' >/dev/null
 FS2="$(curl -s "$SHOP/cart?guest=$FS_GT")"

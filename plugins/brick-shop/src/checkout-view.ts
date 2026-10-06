@@ -146,12 +146,13 @@ ${await gatewayScripts()}${checkoutScript(t)}${addrSearch ? addressSearchScript(
 ${/*
    넓은 화면에서는 두 칸 — 왼쪽은 적는 칸, 오른쪽은 주문 상품과 합계(내리는 동안 붙어 있다).
    한 칸 640px 에 두었더니 화면 오른쪽 절반이 비었고, 주소를 적는 동안 얼마를 내는지 보이지 않았다.
+   붙는 자리는 테마가 머리에 붙여 둔 카테고리 띠 아래(--brick-sticky-top) — top:16px 이면 띠 밑에 깔린다.
  */ ""}
 .brick-checkout { max-width: 1080px; }
 @media (min-width: 960px) {
   .brick-checkout { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 48px; align-items: start; }
   .brick-co-form { grid-column: 1; grid-row: 1; }
-  .brick-co-summary { grid-column: 2; grid-row: 1; position: sticky; top: 16px; padding: 22px 22px 18px; border: 1px solid var(--color-line, #e7e7ec); border-radius: var(--radius-lg, 12px); background: var(--color-bg, #fff); }
+  .brick-co-summary { grid-column: 2; grid-row: 1; position: sticky; top: calc(var(--brick-sticky-top, 0px) + 16px); transition: top .2s ease; padding: 22px 22px 18px; border: 1px solid var(--color-line, #e7e7ec); border-radius: var(--radius-lg, 12px); background: var(--color-bg, #fff); }
   .brick-co-summary h2 { margin-top: 0; }
   .brick-co-done { grid-column: 1 / -1; }
 }

@@ -485,6 +485,15 @@ export interface HeaderAction {
    * 비회원은 주문을 찾으려면 주소를 외워야 했다. 띠의 링크는 아이콘 없이 글자로 그린다.
    */
   place?: "masthead" | "util";
+  /**
+   * 아이콘 위의 개수 배지 (선택) — 장바구니에 담긴 수처럼.
+   *
+   * `url` 은 `{ count: number }` 를 돌려주는 GET 경로다. 비회원을 브라우저 저장소의 토큰으로 알아보는
+   * 확장은 그 키 이름을 `guestKey` 로 준다 — 값이 있으면 `?guest=<토큰>` 을 붙여 부른다. 토큰을 쿠키로
+   * 옮기지 않는 이유: 같은 토큰을 비회원 주문 조회에도 쓰므로 모든 요청에 실어 보내지 않는다.
+   * 테마는 링크에 `data-brick-count` 를 달고, 개수가 바뀌면 확장이 `brick:count-changed` 이벤트를 보낸다.
+   */
+  count?: { url: string; guestKey?: string };
 }
 
 /**

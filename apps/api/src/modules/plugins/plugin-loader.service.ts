@@ -546,7 +546,10 @@ export class PluginLoaderService implements OnModuleInit {
       .map((s) => ({ label: this.trCatalog(s.plugin, s.title), path: `/${s.path}` }));
   }
 
-  headerActionsFor(loggedIn: boolean, place: "masthead" | "util" = "masthead"): Array<{ label: string; url: string; icon: string | null }> {
+  headerActionsFor(
+    loggedIn: boolean,
+    place: "masthead" | "util" = "masthead",
+  ): Array<{ label: string; url: string; icon: string | null; countUrl: string; countGuest: string }> {
     return this.headerActions
       .filter((a) => !a.requiresLogin || loggedIn)
       .filter((a) => (a.place === "util" ? "util" : "masthead") === place)
@@ -557,6 +560,12 @@ export class PluginLoaderService implements OnModuleInit {
         url: a.path,
         // 이름만 통과시킨다 — 템플릿이 href="#i-…" 에 넣으므로 식별자 문자만
         icon: a.icon && /^[a-z][a-z0-9-]{0,30}$/.test(a.icon) ? a.icon : null,
+        /*
+         * 개수 배지 — 키는 **언제나** 둔다(빈 문자열이라도). 템플릿의 each 는 항목에 없는 키를 부모 범위에서
+         * 찾으므로, 키가 빠진 링크가 다른 데서 온 값을 집어 들 수 있다. 경로는 사이트 안의 API 만 받는다.
+         */
+        countUrl: a.count && /^\/api\/[A-Za-z0-9/_-]{1,120}$/.test(a.count.url) ? a.count.url : "",
+        countGuest: a.count?.guestKey && /^[A-Za-z0-9_-]{1,40}$/.test(a.count.guestKey) ? a.count.guestKey : "",
       }));
   }
 

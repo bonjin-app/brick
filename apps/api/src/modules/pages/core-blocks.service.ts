@@ -990,6 +990,9 @@ const PROMO_CSS = `<style>
 :where(.brick-promos.is-light) .brick-promo-text{color:#fff;text-shadow:0 1px 12px rgba(0,0,0,.25)}
 .brick-promo.is-dark .brick-promo-text{color:#1b1a18;text-shadow:none}
 .brick-promo.is-light .brick-promo-text{color:#fff;text-shadow:0 1px 12px rgba(0,0,0,.25)}
+/* 흰 글자 칸은 그림이 오기 전(늦게 불러오기)·못 불러왔을 때도 읽히게 어두운 바탕을 깐다 — 밝은 회색 위 흰 글자는 사라졌다 */
+:where(.brick-promos.is-light) .brick-promo,.brick-promo.is-light{background:#2b2d31}
+.brick-promo.is-dark{background:var(--color-bg-sunken,#eee)}
 @media (max-width:720px){:where(.brick-promos){grid-template-columns:1fr}}
 @media (prefers-reduced-motion: reduce){:where(.brick-promo) img{transition:none}}
 </style>`;

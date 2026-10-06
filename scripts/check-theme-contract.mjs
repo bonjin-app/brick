@@ -14,6 +14,7 @@
  *   3. 확장·코어 블록이 쓰는 **토큰 모양의 이름**(color-·radius·shadow-·font-·content-width)은 계약에
  *      있다 — `var(--color-bg-muted, #f6f6f9)` 처럼 폴백을 달면 오타가 영영 드러나지 않는다(폴백만 그려진다).
  *      자기 이름(`--brick-…`, `--promo-cols` 등)은 대상이 아니다.
+ *   4. 확장이 붙이는(sticky) 것의 top 은 `--brick-sticky-top` 을 쓴다 — 테마가 붙여 둔 머리 띠 밑에 깔리지 않게.
  *
  * 사용법: node scripts/check-theme-contract.mjs
  */
@@ -93,6 +94,28 @@ for (const f of files) {
   }
 }
 if (used < 100) bad(`토큰 사용을 거의 찾지 못했다 (${used}) — 검사가 헛돈다`);
+
+/*
+ * 4 — 확장이 붙이는(sticky) 것은 테마가 머리에 붙여 둔 띠 아래에 붙는다.
+ * 넓은 화면에서 쇼핑몰 테마는 카테고리 띠(58px)를 화면 위에 붙이고 그 높이를 --brick-sticky-top 으로 알린다.
+ * 주문서의 합계 상자가 top:16px 로 붙어 있어 띠 밑에 깔렸다 — 상품 상세의 바로가기 막대도 같은 일을 겪었다.
+ */
+const stickyBad = [];
+let stickyCount = 0;
+for (const f of files) {
+  const src = readFileSync(f, "utf8");
+  for (const m of src.matchAll(/position\s*:\s*sticky[^}]*/g)) {
+    stickyCount++;
+    const top = m[0].match(/(?:^|[;{\s])top\s*:\s*([^;}]*)/);
+    if (!top || !top[1].includes("--brick-sticky-top")) {
+      stickyBad.push(`${f.slice(ROOT.length)}: ${m[0].slice(0, 70)}`);
+    }
+  }
+}
+stickyBad.length
+  ? stickyBad.forEach((u) => bad(`붙는 요소의 top 이 테마의 붙은 띠를 모른다 — ${u}`))
+  : ok(`확장·코어 블록의 붙는 요소 ${stickyCount}곳이 모두 --brick-sticky-top 아래`);
+if (stickyCount < 2) bad(`붙는 요소를 거의 찾지 못했다 (${stickyCount}) — 검사가 헛돈다`);
 unknown.length
   ? unknown.slice(0, 20).forEach((u) => bad(`계약에 없는 토큰 ${u}`))
   : ok(`확장·코어 블록의 토큰 사용 ${used}곳이 모두 계약 안`);

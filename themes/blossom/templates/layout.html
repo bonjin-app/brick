@@ -139,7 +139,7 @@
           {{!-- 계정 — 카페24 머리의 "로그인 · 마이페이지" 자리. 유틸 띠의 글자 링크는 작아 손님이 찾지 못했다 --}}
           {{#if guest}}<a class="brick-act-account" href="/login"><svg class="brick-ico" aria-hidden="true"><use href="#i-user"></use></svg><span>{{ t.header.login }}</span></a>{{/if}}
           {{#if user}}<a class="brick-act-account" href="/account"><svg class="brick-ico" aria-hidden="true"><use href="#i-user"></use></svg><span>{{ t.header.account }}</span></a>{{/if}}
-          {{#each headerActions}}<a href="{{ url }}">{{#if icon}}<svg class="brick-ico" aria-hidden="true"><use href="#i-{{ icon }}"></use></svg>{{/if}}<span>{{ label }}</span></a>{{/each}}
+          {{#each headerActions}}<a href="{{ url }}"{{#if countUrl}} data-brick-count="{{ countUrl }}" data-brick-count-guest="{{ countGuest }}"{{#if user}} data-brick-member="1"{{/if}}{{/if}}>{{#if icon}}<svg class="brick-ico" aria-hidden="true"><use href="#i-{{ icon }}"></use></svg>{{/if}}<span>{{ label }}</span></a>{{/each}}
         </nav>
       </div>
     </div>
@@ -162,7 +162,7 @@
     좁은 화면에서는 맨 위로만 남긴다(카페24 모바일과 같다) — 작은 화면을 아이콘으로 덮지 않는다.
   --}}
   <aside class="brick-quick" aria-label="{{ t.header.quick }}">
-    {{#each headerActions}}<a href="{{ url }}">{{#if icon}}<svg class="brick-ico" aria-hidden="true"><use href="#i-{{ icon }}"></use></svg>{{/if}}<span>{{ label }}</span></a>{{/each}}
+    {{#each headerActions}}<a href="{{ url }}"{{#if countUrl}} data-brick-count="{{ countUrl }}" data-brick-count-guest="{{ countGuest }}"{{#if user}} data-brick-member="1"{{/if}}{{/if}}>{{#if icon}}<svg class="brick-ico" aria-hidden="true"><use href="#i-{{ icon }}"></use></svg>{{/if}}<span>{{ label }}</span></a>{{/each}}
     <a class="brick-quick-top" href="#brick-content">
       <svg class="brick-ico" aria-hidden="true"><use href="#i-arrow"></use></svg><span>{{ t.footer.toTop }}</span>
     </a>
@@ -176,9 +176,10 @@
       --}}
       <div class="brick-footer-cols mb-7 grid grid-cols-2 items-start gap-x-10 gap-y-8 border-b border-line pb-8 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
         <div class="brick-footer-col brick-footer-cs col-span-2 md:col-span-1">
-          {{#if site.business.phone}}<span class="brick-cs-label">{{ t.footer.cs }}</span>{{/if}}
+          {{#if footerCs}}<span class="brick-cs-label">{{ t.footer.cs }}</span>{{/if}}
           {{#if site.business.phone}}<a class="brick-cs-tel" href="tel:{{ site.business.phone }}">{{ site.business.phone }}</a>{{/if}}
           {{#if site.business.email}}<a class="brick-cs-mail" href="mailto:{{ site.business.email }}"><svg class="brick-ico" aria-hidden="true"><use href="#i-mail"></use></svg>{{ site.business.email }}</a>{{/if}}
+          {{#if hasUtilLinks}}<nav class="brick-cs-links" aria-label="{{ t.footer.cs }}">{{#each utilLinks}}<a href="{{ url }}">{{ label }}</a>{{/each}}</nav>{{/if}}
         </div>
 
 
@@ -351,6 +352,51 @@
       window.addEventListener("scroll", onScroll, { passive: true });
       window.addEventListener("resize", measure);
       if ("ResizeObserver" in window) new ResizeObserver(measure).observe(head);
+    })();
+  </script>
+  <script>
+    /*
+     * 머리 링크의 개수 배지(장바구니에 담긴 수). 확장이 개수를 줄 경로를 링크에 달아 둔다(data-brick-count) —
+     * 테마는 어느 확장이 무엇을 세는지 모른다. 개수가 바뀌면 확장이 brick:count-changed 를 보낸다.
+     * 비회원 토큰도 로그인도 없으면 부르지 않는다(처음 온 손님마다 요청 하나를 아낀다). 0 이면 그리지 않는다.
+     */
+    (function () {
+      var links = document.querySelectorAll("a[data-brick-count]");
+      if (!links.length || !window.fetch) return;
+      var refresh = function () {
+        var asked = {};
+        Array.prototype.forEach.call(links, function (a) {
+          var url = a.getAttribute("data-brick-count");
+          var key = a.getAttribute("data-brick-count-guest");
+          var tok = null;
+          try { tok = key ? localStorage.getItem(key) : null; } catch (e) {}
+          var draw = function (n) {
+            var b = a.querySelector(".brick-count");
+            if (!n) { if (b) b.parentNode.removeChild(b); return; }
+            if (!b) { b = document.createElement("span"); b.className = "brick-count"; a.appendChild(b); }
+            b.textContent = n > 99 ? "99+" : String(n);
+          };
+          if (key && !tok && !a.hasAttribute("data-brick-member")) { draw(0); return; }
+          if (tok) url += (url.indexOf("?") < 0 ? "?" : "&") + "guest=" + encodeURIComponent(tok);
+          asked[url] = asked[url] || fetch(url, { credentials: "same-origin" })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .catch(function () { return null; });
+          asked[url].then(function (d) { draw(d && Number(d.count) > 0 ? Number(d.count) : 0); });
+        });
+      };
+      refresh();
+      document.addEventListener("brick:count-changed", refresh);
+      // 뒤로 가기로 돌아온 화면(bfcache)은 스크립트가 다시 돌지 않는다 — 그 사이 담은 것을 센다
+      window.addEventListener("pageshow", function (e) { if (e.persisted) refresh(); });
+    })();
+    // 검색 결과 화면에서는 머리의 검색 칸에 찾은 말을 남긴다 — 비어 있으면 고쳐 다시 찾으려고 처음부터 친다
+    (function () {
+      if (location.pathname !== "/search" || !window.URLSearchParams) return;
+      var q = new URLSearchParams(location.search).get("q");
+      if (!q) return;
+      Array.prototype.forEach.call(document.querySelectorAll('form.brick-header-search input[name="q"]'), function (i) {
+        if (!i.value) i.value = q;
+      });
     })();
   </script>
 </body>

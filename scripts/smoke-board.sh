@@ -270,6 +270,8 @@ contains "목록에 분류 내비" "$LIST" "brick-cat-nav"
 # 게시판 CSS 를 위젯용과 화면용으로 나눴다 — 화면은 둘 다 싣는다(목록의 댓글 수·빈 목록은 위젯용에 있다)
 contains "목록 화면은 위젯용 스타일도 싣는다 (댓글 수)" "$LIST" ".brick-cmt{color:"
 contains "목록 화면의 표 스타일" "$LIST" ".brick-board-table{width:100%"
+# 검색 줄의 선택·입력·버튼 높이가 38·44·34px 로 들쭉날쭉했다 — 여백만 정해 테마의 기본값이 칸마다 달리 먹었다
+contains "검색 줄의 세 칸은 같은 높이" "$LIST" ".brick-board-search select,.brick-board-search input,.brick-board-search button{box-sizing:border-box;height:42px"
 DETAIL="$(render_html "board%2Ffree%2F$P1")"
 contains "상세 화면 렌더 (하위 경로 매칭)" "$DETAIL" "brick-post-content"
 contains "상세에 댓글 영역" "$DETAIL" "brick-comments"
@@ -423,6 +425,11 @@ check "비관리자 일괄 작업 차단" "$(code -X POST "$BD/admin/posts/bulk"
 NB="$(curl -s -b "$ADMIN" -X POST "$BD/admin/posts/bulk" -H 'content-type: application/json' -d '{"action":"notice-on","ids":["'"$GP1"'","'"$GP2"'"]}')"
 contains "공지 지정 2건" "$NB" '"affected":2'
 contains "공지가 갤러리 목록에 배지로" "$(render_html "board/gal")" 'brick-list-badge'
+# 글 수가 공지를 세지 않았다 — 공지만 있는 게시판이 "0개의 글" 이라면서 공지 둘을 보여 줬다. 화면의 수 = 그 게시판의 모든 글
+GAL_ALL="$(psql_q "SELECT count(*) AS n FROM board_posts p JOIN board_boards b ON b.id = p.board_id WHERE b.slug = 'gal'")"
+GAL_NOTICE="$(psql_q "SELECT count(*) AS n FROM board_posts p JOIN board_boards b ON b.id = p.board_id WHERE b.slug = 'gal' AND p.is_notice")"
+check "공지가 둘 있다 (아래 단언이 헛돌지 않는다)" "$GAL_NOTICE" "2"
+contains "글 수에 공지도 센다 (${GAL_ALL}개)" "$(render_html "board/gal&_=$RANDOM")" ">${GAL_ALL}개의 글"
 CP="$(curl -s -b "$ADMIN" -X POST "$BD/admin/posts/bulk" -H 'content-type: application/json' -d '{"action":"copy","ids":["'"$GP3"'"],"params":{"board":"'"$FREE_ID"'"}}')"
 contains "복사 1건" "$CP" '"affected":1'
 check "원본은 남아 있다" "$(code "$API/api/render/page?path=board/gal/$GP3")" "200"

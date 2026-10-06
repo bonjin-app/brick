@@ -506,8 +506,10 @@ const BOARD_PAGE_CSS = `
 .brick-reply-mark{color:var(--color-muted, #6c6c7a);margin-right:4px;margin-left:calc((var(--d,1) - 1) * 14px)}
 .brick-clip,.brick-lock{font-size:12px;margin-left:3px}
 .brick-board-search{display:flex;gap:6px;margin-top:22px;align-items:center;flex-wrap:wrap;justify-content:center}
-.brick-board-search select,.brick-board-search input{padding:8px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 6px)}
-.brick-board-search button{padding:8px 16px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 6px);background:var(--color-bg, #ffffff);color:var(--color-text, #17171c);cursor:pointer}
+.brick-board-search select,.brick-board-search input{padding:0 12px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 6px)}
+/* 선택·입력·버튼의 높이를 하나로 — 여백만 정하면 테마의 기본값이 칸마다 달리 먹어 38·44·34px 로 들쭉날쭉했다 */
+.brick-board-search select,.brick-board-search input,.brick-board-search button{box-sizing:border-box;height:42px;margin:0;font-size:14px;line-height:1}
+.brick-board-search button{padding:0 18px;border:1px solid var(--color-line, #e4e4ea);border-radius:var(--radius, 6px);background:var(--color-bg, #ffffff);color:var(--color-text, #17171c);cursor:pointer}
 .brick-board-search button:hover{background:var(--color-bg-soft, #f6f6f9);color:var(--color-text, #17171c)}
 .brick-write-btn{margin-left:auto;padding:9px 20px;background:var(--color-primary,#d0402c);color:var(--color-on-primary, #ffffff);border-radius:var(--radius, 6px);text-decoration:none;font-weight:600;font-size:14px}
 .brick-pager{display:flex;gap:4px;justify-content:center;margin:20px 0;font-size:14px;align-items:center}

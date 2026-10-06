@@ -1203,10 +1203,12 @@ a.brick-shop-more:hover{color:var(--color-primary-text, #b63a2e)}
 .brick-cart table{width:100%;border-collapse:collapse;font-size:14px}
 .brick-cart th,.brick-cart td{padding:12px 8px;border-bottom:1px solid var(--color-line, #e4e4ea);text-align:left}
 .brick-cart-total{margin-top:20px;padding:20px;background:var(--color-bg-soft, #f6f6f9);border-radius:var(--radius-lg, 10px)}
-.brick-cart-total dl{display:grid;grid-template-columns:1fr auto;gap:8px;margin:0}
+.brick-cart-total dl{display:grid;grid-template-columns:1fr auto;gap:8px 0;margin:0}
 .brick-cart-total dt{color:var(--color-text-soft, #45454f)}
-.brick-cart-total dd{margin:0;text-align:right}
+.brick-cart-total dd{margin:0;padding-left:16px;text-align:right}
 .brick-cart-total .brick-grand{font-size:20px;font-weight:700;padding-top:10px;border-top:1px solid var(--color-line, #e4e4ea)}
+/* 합계 줄의 괘선이 이름과 금액 사이에서 끊겼다(가로 간격) — 간격은 금액 칸의 안쪽 여백으로. 합계의 이름은 본문 색으로 */
+.brick-cart-total dt.brick-grand{color:var(--color-text, #17171c)}
 /* 수량 −/+ — 상품 상세와 장바구니가 같이 쓴다 */
 .brick-qty{display:inline-flex;align-items:stretch;border:1px solid var(--color-line-strong, #c9c9d3);border-radius:var(--radius, 8px);overflow:hidden;margin-top:6px}
 .brick-main .brick-qty button{width:44px;min-height:44px;border:0;border-radius:0;background:var(--color-bg, #ffffff);color:var(--color-text, #17171c);font-size:18px;line-height:1;cursor:pointer;padding:0}
@@ -1438,6 +1440,8 @@ const buyScript = (cartPath: string) => `
           if (res.d.guestToken) localStorage.setItem('brick_shop_guest', res.d.guestToken);
           if (btn.dataset.act === 'buy') { location.href = ${JSON.stringify(cartPath)}; return; }
           say(${JSON.stringify(t("buy.added"))});
+          // 머리의 개수 배지를 다시 세게 한다(테마가 듣는다)
+          document.dispatchEvent(new CustomEvent('brick:count-changed'));
           /*
            * 머리의 장바구니 아이콘이 한 번 톡 튄다 — "어디에 담겼는지" 를 눈이 따라간다.
            * 테마마다 아이콘 모양이 달라 CSS 대신 Web Animations 로 부른다(테마가 몰라도 된다). 동작 줄이기면 건너뛴다.
@@ -1581,7 +1585,11 @@ const cartScript = (shopBase: string) => `
     fetch('/api/plugins/brick-shop/cart/' + id + qs, {
       method: method, headers: {'content-type':'application/json'},
       body: body ? JSON.stringify(body) : undefined
-    }).then(load);
+    }).then(function(){
+      // 지우면 머리의 배지도 줄어야 한다
+      document.dispatchEvent(new CustomEvent('brick:count-changed'));
+      load();
+    });
   }
 
   function load(){

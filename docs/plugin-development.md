@@ -63,9 +63,22 @@ ctx.registerHeaderAction({ label: "쪽지함", path: "/memo", requiresLogin: tru
 
 - `label` 은 관리 라벨과 같은 gettext 방식입니다(원문이 번역 키).
 - `requiresLogin` 이면 비로그인 손님에게는 나오지 않습니다.
-- **숫자 배지(장바구니 개수, 안 읽은 쪽지)는 여기 담지 마세요.** 비로그인
-  렌더는 캐시되므로 남의 값이 새어 나갑니다. 배지는 블록이 클라이언트에서
-  채웁니다.
+- **숫자 배지(장바구니 개수)는 라벨에 넣지 말고 `count` 로 주세요.** 비로그인
+  렌더는 캐시되므로 라벨에 숫자를 넣으면 남의 값이 새어 나갑니다. `count` 는
+  **어디서 세는지**만 알려 주고, 숫자는 손님의 브라우저가 가져옵니다:
+
+  ```ts
+  ctx.registerHeaderAction({
+    label: "장바구니", path: "/shop/cart", icon: "cart",
+    // { count: number } 를 주는 GET 경로 · 비회원을 알아보는 브라우저 저장소 키(있으면 ?guest= 로 붙는다)
+    count: { url: "/api/plugins/brick-shop/cart/count", guestKey: "brick_shop_guest" },
+  });
+  ```
+
+  개수가 바뀌는 순간(담기·지우기)에는 `document.dispatchEvent(new CustomEvent("brick:count-changed"))`
+  를 보내세요 — 테마가 듣고 다시 셉니다. 모든 페이지가 부르는 경로이니 가볍게(금액 계산 없이) 만드세요.
+- `place: "util"` 로 등록한 링크(주문조회 · 고객센터)는 맨 위 띠, 쇼핑몰 테마 푸터의 고객센터 칸,
+  **로그인 화면**(테마 밖 — `/api/i18n` 의 `guestLinks`)에 함께 나옵니다.
 - 좁은 화면에서는 기본 테마가 **첫 항목만** 남깁니다 — 헤더가 두 줄이 되면
   안 되므로. 중요한 것에 작은 `order` 를 주세요.
 

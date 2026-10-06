@@ -307,6 +307,7 @@ export class PageRenderService {
      * 다른 사람의 개수가 캐시에 섞이지 않는다(부분 인덱스로 세는 질의다).
      */
     const unreadNotifications = user ? await this.notifications.unreadCount(user.id).catch(() => 0) : 0;
+    const utilLinks = this.loader.headerActionsFor(Boolean(user), "util");
     const themeCommon = {
       // 미리보기 테마 (없으면 활성 테마) — ThemesService.render 가 읽는다
       ...(preview ? { __theme: preview } : {}),
@@ -340,7 +341,13 @@ export class PageRenderService {
        * 푸터 메뉴 — 이용약관 · 개인정보 처리방침처럼 머리 메뉴에 올리지 않는 길. 템플릿 엔진의
        * #if 는 빈 배열도 참으로 보므로 있는지를 따로 준다.
        */
-      utilLinks: this.loader.headerActionsFor(Boolean(user), "util"),
+      utilLinks,
+      /*
+       * 쇼핑몰 푸터의 고객센터 칸 — 전화번호가 아직 없는 가게(사업자정보를 채우기 전)에서는 칸이 통째로 비어
+       * 푸터가 "가게 이름 · 바로가기" 뿐이었다. 지어낸 번호 대신 확장이 등록한 길(주문조회 · 고객센터)을 둔다.
+       */
+      hasUtilLinks: utilLinks.length > 0,
+      footerCs: utilLinks.length > 0 || Boolean(site.business?.phone),
       footerMenu: footerNav,
       hasFooterMenu: footerNav.length > 0,
       headerActions: [
@@ -352,6 +359,9 @@ export class PageRenderService {
                 : t("noti.header"),
               url: "/notifications",
               icon: "bell",
+              // 개수는 라벨에 이미 있다(위 주석) — 배지 키는 비워 둔다(each 가 부모에서 찾지 않게)
+              countUrl: "",
+              countGuest: "",
             }]
           : []),
       ],

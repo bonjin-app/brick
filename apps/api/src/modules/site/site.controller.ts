@@ -31,6 +31,7 @@ import {
   type BusinessInfo,
 } from "./business-info.js";
 import { msg } from "../../common/localized-error.js";
+import { PluginLoaderService } from "../plugins/plugin-loader.service.js";
 
 interface MenuItem {
   label: string;
@@ -108,6 +109,7 @@ export class SiteController {
     @Inject(STORAGE) private readonly storage: StorageProvider,
     private readonly images: ImageService,
     private readonly csp: CspService,
+    private readonly loader: PluginLoaderService,
   ) {}
 
   /** 사이트 언어 — **공개**. 로그인·가입 화면이 첫 페인트에 쓴다 */
@@ -122,6 +124,12 @@ export class SiteController {
     return {
       locale: normalizeLocale(get("site.locale")),
       siteName: String(get("site.name") ?? "Brick"),
+      /*
+       * 비회원이 쓰는 맨 위 띠 링크(쇼핑몰의 주문조회 · 고객센터). 로그인 화면은 테마 밖(Next)이라 띠가 없는데,
+       * 카페24 로그인 화면의 "비회원 주문조회" 처럼 주문만 찾으러 온 손님이 가장 먼저 찾는 길이다.
+       * 확장이 등록한 것을 그대로 준다 — 코어 화면이 쇼핑몰의 경로를 알 필요가 없다.
+       */
+      guestLinks: this.loader.headerActionsFor(false, "util").map((l) => ({ label: l.label, url: l.url })),
     };
   }
 
