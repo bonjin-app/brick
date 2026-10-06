@@ -209,6 +209,14 @@ check "주문 처리 현황 = 그 회원의 상태별 주문 수 ($FLOW_DB)" "$F
 check "결제완료 칸에 그 주문이 있다 (위 단언이 0 끼리 헛돌지 않는다)" "$(echo "$FLOW_DB" | python3 -c "import sys;print(int(sys.stdin.read().split(',')[1]) >= 1)")" "True"
 check "다른 회원(관리자)의 요약에는 그 주문이 없다" \
   "$(curl -s -b "$ADMIN" "$API/api/member/summary" | python3 -c "import sys,json;d=json.load(sys.stdin);print(sum(s['value'] for s in d['flows'][0]['steps']))")" "0"
+# 단계를 누르면 같은 기간 · 그 상태의 주문만 — 숫자를 보고 눌렀는데 전체 주문이 나왔다
+contains "결제완료 단계는 그 상태 · 최근 3개월 목록으로" "$MS" '"link":"/shop/orders?status=paid&period=3m"'
+MO="$(curl -s -b "$MEMBER" "$SH/my/orders?status=paid&period=3m")"
+check "거른 목록은 그 상태만 · 수 = 상태별 건수" "$(echo "$MO" | python3 -c "import sys,json;d=json.load(sys.stdin);print(all(o['status']=='paid' for o in d['items']) and len(d['items'])==d['counts'].get('paid',0)>=1)")" "True"
+check "목록의 상태별 건수 = 마이페이지의 숫자" "$(echo "$MO" | python3 -c "import sys,json;c=json.load(sys.stdin)['counts'];print(','.join(str(c.get(s,0)) for s in ['pending','paid','preparing','shipped','delivered']))")" "$FLOW_API"
+check "다른 상태로 거르면 그 주문은 없다" "$(curl -s -b "$MEMBER" "$SH/my/orders?status=shipped" | python3 -c "import sys,json;print(len(json.load(sys.stdin)['items']))")" "0"
+contains "주문 목록 화면이 상태 탭을 그린다" "$(curl -s "$API/api/render/page?path=shop/orders&_=$RANDOM")" 'brick-o-tabs'
+check "모르는 상태 값은 거르지 않는다 (전체)" "$(curl -s -b "$MEMBER" "$SH/my/orders?status=bogus" | python3 -c "import sys,json;d=json.load(sys.stdin);print(d['status'] is None and len(d['items'])>=1)")" "True"
 
 echo "── 환불 시 포인트 복원"
 printf '{"orderNo":"%s","reason":"고객 요청"}' "$ONO" > "$TMP/rf.json"

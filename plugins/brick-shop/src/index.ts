@@ -564,16 +564,35 @@ export default definePlugin(async (ctx) => {
     };
   });
 
-  /** 내 주문 목록 (회원) */
+  /**
+   * 내 주문 목록 (회원) — `?status=` 로 한 상태만, `?period=3m` 으로 최근 3개월만.
+   *
+   * 마이페이지 첫머리의 "주문 처리 현황(최근 3개월)" 이 단계마다 숫자를 보여 주는데 누르면 전체 주문으로 갔다 —
+   * "배송중 1" 을 눌러 그 하나를 찾으려면 목록을 훑어야 했다. 같은 기간 · 같은 상태로 거르고, 상태별 건수(같은 기간)를
+   * 함께 준다 — 목록 화면의 탭 숫자와 마이페이지의 숫자가 같은 규칙에서 나온다. 모르는 상태 값은 거르지 않는다(전체).
+   */
   ctx.registerRoute("GET", "/my/orders", async (req) => {
     if (!req.user) throw new ShopError(401, "로그인이 필요합니다.");
+    const status = (ORDER_STATUS as readonly string[]).includes(String(req.query.status ?? "")) ? String(req.query.status) : null;
+    const recent = req.query.period === "3m";
+    const inPeriod = recent ? sql`AND o.created_at >= now() - interval '3 months'` : sql``;
     const { rows } = await db.execute(sql`
       SELECT o.order_no, o.status, o.total, o.created_at,
              (SELECT string_agg(i.product_name, ', ') FROM shop_order_items i WHERE i.order_id = o.id) AS items_summary
-      FROM shop_orders o WHERE o.user_id = ${req.user.id}::uuid
+      FROM shop_orders o WHERE o.user_id = ${req.user.id}::uuid ${inPeriod}
+        ${status ? sql`AND o.status = ${status}` : sql``}
       ORDER BY o.created_at DESC LIMIT 50
     `);
-    return { items: rows };
+    const { rows: counted } = await db.execute(sql`
+      SELECT o.status, count(*)::int AS n FROM shop_orders o
+      WHERE o.user_id = ${req.user.id}::uuid ${inPeriod} GROUP BY o.status
+    `);
+    return {
+      items: rows,
+      status,
+      period: recent ? "3m" : null,
+      counts: Object.fromEntries(counted.map((r) => [String(r.status), Number(r.n)])),
+    };
   });
 
   /** 주문 취소 (고객) — 입금대기 상태에서만 */
@@ -3245,10 +3264,11 @@ export default definePlugin(async (ctx) => {
           // 등급을 쓰지 않는 가게(등급이 하나도 없다)에는 칸을 내지 않는다
           ...(grade?.grade ? [{ label: t("member.grade"), value: grade.grade.name }] : []),
         ],
+        // 단계를 누르면 같은 기간(최근 3개월) · 그 상태의 주문만 — 숫자와 목록이 같은 규칙에서 나온다
         flow: {
           title: t("member.flow"),
-          link: "/shop/orders",
-          steps: flowSteps.map((s) => ({ label: t(STATUS_LABEL[s]), value: n(s), link: "/shop/orders" })),
+          link: "/shop/orders?period=3m",
+          steps: flowSteps.map((s) => ({ label: t(STATUS_LABEL[s]), value: n(s), link: `/shop/orders?status=${s}&period=3m` })),
         },
       };
     },

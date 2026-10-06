@@ -1160,5 +1160,9 @@
   "member.grade": "Membership",
   "member.flow": "Orders (last 3 months)",
   "detail.earn": "Points",
-  "detail.earnValue": "Earn {n} pts"
+  "detail.earnValue": "Earn {n} pts",
+  "orders.filterAll": "All",
+  "orders.recent3m": "Showing the last 3 months.",
+  "orders.allPeriod": "Show all",
+  "orders.emptyFiltered": "No orders match."
 }

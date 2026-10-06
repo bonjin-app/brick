@@ -99,6 +99,14 @@ const ORDERS_CSS = `
 .brick-orders table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
 .brick-orders td, .brick-orders th { padding: 10px 8px; border-bottom: 1px solid var(--color-line, #e7e7ec); text-align: left; }
 .brick-orders .brick-o-total { text-align: right; white-space: nowrap; }
+/* 상태 탭 — 숫자는 같은 기간의 건수. 고른 탭은 칠한다 */
+.brick-o-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
+.brick-o-tabs a { display: inline-flex; align-items: center; gap: 5px; min-height: 36px; padding: 0 13px; border: 1px solid var(--color-line, #e7e7ec); border-radius: 999px; font-size: 14px; color: var(--color-text-soft, #45454f); text-decoration: none; background: var(--color-bg, #fff); }
+.brick-o-tabs a span { font-size: 12.5px; color: var(--color-muted, #71717d); font-variant-numeric: tabular-nums; }
+.brick-o-tabs a.is-on { background: var(--color-text, #17171c); border-color: var(--color-text, #17171c); color: var(--color-bg, #fff); }
+.brick-o-tabs a.is-on span { color: inherit; opacity: .75; }
+.brick-o-period { margin: -4px 0 14px; font-size: 13.5px; color: var(--color-muted, #71717d); }
+.brick-o-period a { color: var(--color-text-soft, #45454f); }
 .brick-o-status { display: inline-block; font-size: 12.5px; padding: 3px 9px; border-radius: 999px; background: var(--color-bg-soft, #f7f7f9); border: 1px solid var(--color-line, #e7e7ec); }
 .brick-o-lookup { display: flex; gap: 8px; max-width: 460px; margin-top: 10px; }
 .brick-o-lookup input { flex: 1; }
@@ -163,7 +171,41 @@ const listScript = (t: (k: string) => string, labels: string) => `
   }
 
   if (root.dataset.guest === '1') { guestForm(); return; }
-  fetch('/api/plugins/brick-shop/my/orders')
+  /*
+   * 상태 · 기간 거르기 — 마이페이지의 "주문 처리 현황" 단계를 누르면 ?status=…&period=3m 으로 온다.
+   * 탭의 숫자는 같은 기간의 상태별 건수(서버가 준다). 0 인 상태는 탭을 내지 않는다(고른 것은 0 이어도 남긴다).
+   */
+  var qs = new URLSearchParams(location.search);
+  var want = qs.get('status') || '';
+  var period = qs.get('period') === '3m' ? '3m' : '';
+  var ORDER = ['pending', 'paid', 'preparing', 'shipped', 'delivered', 'cancelled', 'refunded'];
+  function href(s, p){
+    var q = [];
+    if (s) q.push('status=' + encodeURIComponent(s));
+    if (p) q.push('period=' + p);
+    return base + (q.length ? '?' + q.join('&') : '');
+  }
+  function tabs(d){
+    var counts = d.counts || {};
+    var all = 0; Object.keys(counts).forEach(function(k){ all += counts[k]; });
+    var cur = d.status || '';
+    var out = '<nav class="brick-o-tabs" aria-label="' + ${JSON.stringify(t("orders.colStatus"))} + '">' +
+      '<a href="' + href('', period) + '"' + (cur ? '' : ' aria-current="page" class="is-on"') + '>' +
+      ${JSON.stringify(t("orders.filterAll"))} + ' <span>' + all + '</span></a>';
+    ORDER.forEach(function(s){
+      var n = counts[s] || 0;
+      if (!n && s !== cur) return;
+      out += '<a href="' + href(s, period) + '"' + (s === cur ? ' aria-current="page" class="is-on"' : '') + '>' +
+        esc(LABEL[s] || s) + ' <span>' + n + '</span></a>';
+    });
+    out += '</nav>';
+    if (d.period === '3m') {
+      out += '<p class="brick-o-period">' + ${JSON.stringify(t("orders.recent3m"))} +
+        ' <a href="' + href(cur, '') + '">' + ${JSON.stringify(t("orders.allPeriod"))} + '</a></p>';
+    }
+    return out;
+  }
+  fetch('/api/plugins/brick-shop/my/orders' + (want || period ? '?' + href(want, period).split('?')[1] : ''))
     .then(function(r){
       if (r.status === 401) { guestForm(); return null; }
       return r.json();
@@ -171,7 +213,9 @@ const listScript = (t: (k: string) => string, labels: string) => `
     .then(function(d){
       if (!d) return;
       if (!d.items || !d.items.length) {
-        body.innerHTML = '<p class="brick-shop-empty">' + ${JSON.stringify(t("orders.empty"))} + '</p>';
+        // 거른 결과가 비었으면 탭은 남긴다 — "전체" 로 돌아갈 길이 있어야 한다
+        body.innerHTML = (d.status || d.period ? tabs(d) : '') + '<p class="brick-shop-empty">' +
+          (d.status || d.period ? ${JSON.stringify(t("orders.emptyFiltered"))} : ${JSON.stringify(t("orders.empty"))}) + '</p>';
         return;
       }
       /* 칸 이름은 머리글과 접힌 카드의 제목(data-label)에 같이 쓴다 */
@@ -188,7 +232,7 @@ const listScript = (t: (k: string) => string, labels: string) => `
           '<td data-label="' + C_STATUS + '"><span class="brick-o-status">' + esc(LABEL[o.status] || o.status) + '</span></td>' +
         '</tr>';
       }).join('');
-      body.innerHTML = '<table class="brick-stack-table"><thead><tr>' +
+      body.innerHTML = tabs(d) + '<table class="brick-stack-table"><thead><tr>' +
         '<th>' + C_DATE + '</th>' +
         '<th>' + C_ITEMS + '</th>' +
         '<th class="brick-o-total">' + C_TOTAL + '</th>' +
