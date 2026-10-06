@@ -16,6 +16,9 @@ import { deletePosts } from "../plugins/brick-board/dist/posts.js";
 import { LIVE_NOTIFICATIONS_SCRIPT } from "../apps/api/dist/modules/pages/page-render.service.js";
 import { ApiTokensService, API_TOKEN_PATHS, pathOf } from "../apps/api/dist/modules/auth/api-tokens.service.js";
 import { NotificationStreamHub, MAX_PER_USER } from "../apps/api/dist/modules/notifications/notification-stream.js";
+import { splitThemeFrame, FRAME_SLOT } from "../apps/api/dist/modules/pages/theme-frame.js";
+import { renderTemplate } from "../packages/theme-sdk/dist/index.js";
+import { readFileSync, readdirSync, existsSync } from "node:fs";
 
 let bad = 0;
 const eq = (name, got, want) => {
@@ -380,6 +383,49 @@ console.log("── deletePosts");
   eq("커밋 뒤에 파일을 지운다", m.log.files, ["k1", "t1"]);
   eq("커밋 뒤에 알린다", m.log.hooks.length, 2);
   eq("글이 없으면 아무것도 하지 않는다", await deletePosts(fakeDb(), mk().deps, []), 0);
+}
+
+// ── 테마 틀 ─────────────────────────────────────
+// 로그인·가입·마이페이지는 Next 가 그린다 — 테마가 본문 자리만 비운 문서를 그리게 하고 머리·푸터를 잘라 입힌다
+console.log("── 테마 틀 (splitThemeFrame)");
+{
+  const tcount = (h, tag) => [(h.match(new RegExp(`<${tag}\\b`, "gi")) || []).length, (h.match(new RegExp(`</${tag}>`, "gi")) || []).length];
+  const names = readdirSync("themes").filter((n) => existsSync(`themes/${n}/brick.theme.json`)).sort();
+  eq("동봉 테마를 모두 시험한다", names.length >= 8, true);
+  for (const name of names) {
+    const dir = `themes/${name}`;
+    const manifest = JSON.parse(readFileSync(`${dir}/brick.theme.json`, "utf8"));
+    const scope = {
+      locale: "ko", pageTitle: "t", site: { name: "S" }, menu: [], headerActions: [], utilLinks: [], footerMenu: [],
+      title: "", blocksHtml: `<p>${FRAME_SLOT}</p>`, seo: { noindex: true }, guest: true, t: {},
+      themeTokens: "", themeAssets: `/themes/${name}/assets`, themeVersion: "1",
+    };
+    const body = renderTemplate(readFileSync(`${dir}/${manifest.templates.page}`, "utf8"), scope);
+    const html = renderTemplate(readFileSync(`${dir}/${manifest.templates.layout}`, "utf8"), { ...scope, content: body });
+    const f = splitThemeFrame(html);
+    eq(`${name}: 틀을 자른다`, f !== null, true);
+    if (!f) continue;
+    eq(`${name}: 머리 조각에 <header>`, /<header\b/.test(f.before), true);
+    eq(`${name}: 푸터 조각에 <footer>`, /<footer\b/.test(f.after), true);
+    eq(`${name}: 본문 자리는 버린다 (조각에 자리표시가 없다)`, (f.before + f.after).includes(FRAME_SLOT), false);
+    eq(`${name}: 조각에 <main> 이 남지 않는다 (Next 가 자기 것을 그린다)`, /<\/?main\b/i.test(f.before + f.after), false);
+    const bal = ["header", "footer", "div", "nav", "svg"].every((tag) => { const [o, c] = tcount(f.before + f.after, tag); return o === c; });
+    eq(`${name}: 조각의 요소가 균형 잡혀 있다`, bal, true);
+    eq(`${name}: 같은 출처의 스타일시트만`, f.stylesheets.length >= 1 && f.stylesheets.every((h) => h.startsWith("/")), true);
+    eq(`${name}: 건너뛰기 링크가 가리키는 id 를 준다`, f.mainId, "brick-content");
+  }
+  const ok = "<html><head><link rel=\"stylesheet\" href=\"/a.css\"><link rel=\"stylesheet\" href=\"https://cdn.x/b.css\">" +
+    "<link rel=\"stylesheet\" href=\"//cdn.x/c.css\"><link rel=\"icon\" href=\"/i.svg\"><style>:root{--a:1}</style></head>" +
+    "<body><header>H</header><main class=\"m x\" id=\"c\">BODY</main><footer>F</footer><script>1</script></body></html>";
+  const g = splitThemeFrame(ok);
+  eq("스타일시트: 사이트 안 경로만 (바깥 · 프로토콜 상대 · 아이콘은 거른다)", g?.stylesheets, ["/a.css"]);
+  eq("머리의 인라인 스타일을 준다", g?.styles, [":root{--a:1}"]);
+  eq("조각: 머리 / 푸터+스크립트", [g?.before, g?.after], ["<header>H</header>", "<footer>F</footer><script>1</script>"]);
+  eq("main 의 클래스 · id", [g?.mainClass, g?.mainId], ["m x", "c"]);
+  eq("<main> 이 없으면 null (단독으로 뜬다)", splitThemeFrame("<html><head></head><body><div>x</div></body></html>"), null);
+  eq("</main> 이 없으면 null", splitThemeFrame("<html><head></head><body><main>x</body></html>"), null);
+  eq("순서가 뒤집히면 null", splitThemeFrame("<html><head></head><body></main><main></body></html>"), null);
+  eq("<head> 가 없으면 null", splitThemeFrame("<body><main>x</main></body>"), null);
 }
 
 console.log(bad ? `\n${bad}개 실패` : "\n모두 맞습니다.");

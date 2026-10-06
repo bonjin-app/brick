@@ -192,6 +192,19 @@ export class PagesController {
     return result;
   }
 
+  /**
+   * 테마 틀 — Next 가 그리는 화면(로그인 · 가입 · 마이페이지)이 사이트의 머리 · 푸터를 입는다. **공개**다(손님의
+   * 로그인 화면이 쓴다). 로그인한 요청에는 그 사용자의 머리를 주므로 캐시하지 않는다.
+   */
+  @Get("render/frame")
+  async renderFrame(@Req() req: FastifyRequest) {
+    const user = await this.auth.resolveFromRequest(req);
+    const frame = await this.renderer.renderFrame(
+      user ? { id: user.id, role: user.role, displayName: user.displayName, avatarUrl: user.avatarUrl ?? null } : null,
+    );
+    return { frame };
+  }
+
   // ── 관리자 CRUD ──────────────────────────────────
   @Get("pages")
   @UseGuards(AdminGuard)

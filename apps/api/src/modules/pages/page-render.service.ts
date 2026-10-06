@@ -20,6 +20,7 @@ import { bypassesMaintenance } from "../site/maintenance-mode.js";
 import { MaintenanceModeService } from "../site/maintenance-mode.service.js";
 import { DB, CACHE } from "../../runtime.module.js";
 import { dedupeStyles } from "./dedupe-styles.js";
+import { FRAME_PATH, FRAME_SLOT, splitThemeFrame, type ThemeFrame } from "./theme-frame.js";
 
 /** 여는 태그 뒤에 속성을 넣을 수 없는 요소 — 표시를 달지 않고 상자로 감싼다 */
 const NO_MARK_TAGS = new Set([
@@ -191,6 +192,8 @@ export class PageRenderService {
        * **이 값을 공개 경로에서 켜면 임시저장이 통째로 새어 나간다.**
        */
       includeUnpublished?: boolean;
+      /** 테마 틀 — 본문 자리만 비운 문서를 그린다(renderFrame 만 켠다). 공개 경로로는 열리지 않는다 */
+      frame?: boolean;
     } = {},
   ): Promise<RenderedPage> {
     const path = rawPath.replace(/^\/+|\/+$/g, "") || "home";
@@ -229,14 +232,15 @@ export class PageRenderService {
      * 시에는 무효화되지만, 파일을 직접 손보는 것은 감지할 길이 없었다).
      */
     const themeStamp = await this.themes.activeStamp();
-    const cacheKey = `render:page:${themeStamp}:${path}${queryKey}`;
+    // 틀은 키를 따로 쓴다 — 같은 키면 공개 요청(/api/render/page?path=__frame__)이 캐시에 든 틀을 그대로 받아 간다
+    const cacheKey = `render:page:${themeStamp}:${opts.frame ? "frame:" : ""}${path}${queryKey}`;
 
     if (cacheable) {
       const cached = await this.cache.get<RenderedPage>(cacheKey);
       if (cached) return cached;
     }
 
-    const result = await this.compute(path, query, user, preview, opts.includeUnpublished === true);
+    const result = await this.compute(path, query, user, preview, opts.includeUnpublished === true, null, opts.frame === true);
     // 페이지 slug 기준으로 태그를 달아야 무효화가 정확하다 (하위 경로 포함)
     if (cacheable) {
       await this.cache.setWithTags(cacheKey, result, ["pages", `page:${result.slug ?? path}`], 300);
@@ -288,6 +292,8 @@ export class PageRenderService {
     includeUnpublished = false,
     /** 배치 편집기 — 저장하지 않은 초안을 그리고, 블록마다 위치를 표시한다 */
     editing: { draft: PageDraft } | null = null,
+    /** 테마 틀 — 페이지를 찾지 않고 본문 자리만 비운 테마 문서를 그린다 */
+    frame = false,
   ): Promise<RenderedPage> {
     const [site, rawNav, footerNav] = await Promise.all([this.siteInfo(), this.menu("header"), this.menu("footer")]);
     const nav = markCurrent(rawNav, path);
@@ -379,7 +385,7 @@ export class PageRenderService {
     let pathTail = "";
     // 초안은 DB 를 보지 않는다 — 저장된 판이 아니라 편집기의 지금 내용을 그린다
     if (editing) page = { ...editing.draft };
-    else for (let i = segments.length; i >= 1; i--) {
+    else if (!frame) for (let i = segments.length; i >= 1; i--) {
       const candidate = segments.slice(0, i).join("/");
       const [found] = await this.db
         .select()
@@ -398,6 +404,14 @@ export class PageRenderService {
     }
 
     const blockCtx = { path, pathTail, query, user };
+
+    // 틀 — 머리 · 푸터만 쓸 문서. 본문은 Next 화면이 채우므로 자리표시만 둔다(noindex: 이 문서 자체는 색인 대상이 아니다)
+    if (frame && path === FRAME_PATH) {
+      const html = await this.themes.render("page", {
+        ...themeCommon, site, menu: nav, title: "", pageTitle: site.name, blocksHtml: `<p>${FRAME_SLOT}</p>`, seo: { noindex: true },
+      });
+      return { html, status: 200, slug: FRAME_PATH };
+    }
 
     if (!page) {
       // 홈 페이지가 없으면 테마의 home 슬롯으로 폴백 (설치 직후 상태)
@@ -638,6 +652,15 @@ export class PageRenderService {
   async editorText(key: string): Promise<string> {
     const site = await this.siteInfo();
     return escapeHtml(makeTranslator({ locale: site.locale, catalogs: CORE_CATALOGS })(key));
+  }
+
+  /**
+   * 테마 틀(머리 · 푸터) — 로그인한 사용자라면 그 사용자의 머리(마이페이지 · 알림 · 로그아웃)로.
+   * 못 자르면 null 이다 — 호출한 쪽(Next 화면)은 틀 없이 단독으로 뜬다.
+   */
+  async renderFrame(user: RequestUser | null): Promise<ThemeFrame | null> {
+    const page = await this.renderPath(FRAME_PATH, { user, frame: true });
+    return page.status === 200 ? splitThemeFrame(page.html) : null;
   }
 
   /**

@@ -2,6 +2,7 @@
 
 import type { CSSProperties, ReactNode } from "react";
 import { useSiteName, useT } from "../lib/i18n";
+import { useFramed } from "./frame-context";
 
 /**
  * 로그인·가입·비밀번호 화면의 공용 껍데기.
@@ -30,18 +31,24 @@ export function AuthShell({
 }) {
   const siteName = useSiteName();
   const t = useT();
+  /*
+   * 사이트의 머리 · 푸터 안에서는(ThemeFrame) 테마가 이미 `<main>` 과 바탕 · 높이 · 로고를 가졌다 — `<main>` 이
+   * 중첩되지 않게 `<div>` 로, 전체 높이 · 회색 바탕 · 이름 머리글은 거둔다.
+   */
+  const framed = useFramed();
+  const Root = framed ? "div" : "main";
 
   return (
-    <main
+    <Root
       style={{
-        minHeight: "100dvh",
+        minHeight: framed ? undefined : "100dvh",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        justifyContent: "center",
+        justifyContent: framed ? "flex-start" : "center",
         gap: 20,
-        padding: "48px 16px",
-        background: "var(--color-bg-soft)",
+        padding: framed ? "16px 0 40px" : "48px 16px",
+        background: framed ? "transparent" : "var(--color-bg-soft)",
         color: "var(--color-text)",
       }}
     >
@@ -56,7 +63,7 @@ export function AuthShell({
         이름 없는 25px 짜리 표적이 됐다 — 화면 감사 도구가 그 순간을 잡았다.
         사이트가 느리거나 API 가 죽으면 그 상태로 남는다.
       */}
-      <a
+      {!framed && <a
         href="/"
         aria-label={siteName || t("account.backToSite")}
         style={{
@@ -77,7 +84,7 @@ export function AuthShell({
           style={{ width: 9, height: 9, borderRadius: 3, background: "var(--color-primary)" }}
         />
         {siteName || " "}
-      </a>
+      </a>}
 
       <section
         style={{
@@ -109,7 +116,7 @@ export function AuthShell({
           {footer}
         </p>
       ) : null}
-    </main>
+    </Root>
   );
 }
 

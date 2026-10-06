@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { authButton, authInput, authLabel } from "../../components/AuthShell";
 import { useSiteName, useT, useLocaleTag } from "../../lib/i18n";
+import { useFramed } from "../../components/frame-context";
 
 interface Profile {
   email: string;
@@ -57,6 +58,9 @@ interface Session {
 export default function AccountPage() {
   const localeTag = useLocaleTag();
   const t = useT();
+  // 사이트의 머리 · 푸터 안에서는(ThemeFrame) 테마가 `<main>` · 바탕 · 높이를 가졌다 — 단독 화면의 값을 거둔다
+  const framed = useFramed();
+  const Root = framed ? "div" : "main";
   const siteName = useSiteName();
   const [me, setMe] = useState<Profile | null>(null);
   const [newEmail, setNewEmail] = useState("");
@@ -343,9 +347,10 @@ export default function AccountPage() {
   const page: React.CSSProperties = {
     // colorScheme 을 라이트로 못 박으면 다크 화면에 흰 체크박스가 남는다 —
     // 밝기는 루트가 손님의 선택에 따라 정한다
-    minHeight: "100dvh", margin: 0, background: "var(--color-bg-soft)", color: "var(--color-text)",
+    minHeight: framed ? undefined : "100dvh", margin: 0,
+    background: framed ? "transparent" : "var(--color-bg-soft)", color: "var(--color-text)",
     fontFamily: "'Pretendard', 'Apple SD Gothic Neo', sans-serif",
-    padding: "40px 16px 72px", boxSizing: "border-box",
+    padding: framed ? "8px 0 24px" : "40px 16px 72px", boxSizing: "border-box",
   };
   const card: React.CSSProperties = {
     width: "100%", maxWidth: 560, margin: "0 auto 18px", background: "var(--color-bg)",
@@ -358,28 +363,28 @@ export default function AccountPage() {
 
   if (gone) {
     return (
-      <main style={page}>
+      <Root style={page}>
         <div style={{ ...card, textAlign: "center", marginTop: "18vh" }}>
           <p style={{ margin: 0 }}>{t("account.withdrawDone")}</p>
           <p style={{ marginTop: 14 }}><a href="/">{t("account.backToSite")}</a></p>
         </div>
-      </main>
+      </Root>
     );
   }
 
   if (needLogin) {
     return (
-      <main style={page}>
+      <Root style={page}>
         <div style={{ ...card, textAlign: "center", marginTop: "18vh" }}>
           <p style={{ margin: 0 }}>{t("account.loginRequired")}</p>
           <p style={{ marginTop: 14 }}><a href="/login">{t("account.goLogin")}</a></p>
         </div>
-      </main>
+      </Root>
     );
   }
 
   return (
-    <main style={page}>
+    <Root style={page}>
       <header style={{ width: "100%", maxWidth: 560, margin: "0 auto 20px", display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
         <h1 style={{ margin: 0, fontSize: 24, letterSpacing: "-0.5px" }}>{t("account.title")}</h1>
         {/*
@@ -394,12 +399,12 @@ export default function AccountPage() {
           같은 것을 이미 고쳤는데(홈 링크 44px) 마이페이지는 남아 있었다.
           글자 크기는 그대로 두고 누를 자리만 넓힌다.
         */}
-        <a href="/" style={{
+        {!framed && <a href="/" style={{
           fontSize: 13.5, color: "var(--color-primary-text)", textDecoration: "none",
           display: "inline-flex", alignItems: "center", minHeight: 44, padding: "0 4px",
         }}>
           ← {siteName || t("account.backToSite")}
-        </a>
+        </a>}
       </header>
 
       {(notice || error) && (
@@ -893,6 +898,6 @@ export default function AccountPage() {
           </section>
         </>
       )}
-    </main>
+    </Root>
   );
 }

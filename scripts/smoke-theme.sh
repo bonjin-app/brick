@@ -50,6 +50,10 @@ bad() { FAIL=$((FAIL+1)); echo "  ❌ $1"; }
 check()    { [[ "$2" == "$3" ]] && ok "$1" || bad "$1 (기대 $3, 실제 $2)"; }
 contains() { [[ "$2" == *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 없음: ${2:0:200})"; }
 absent()   { [[ "$2" != *"$3"* ]] && ok "$1" || bad "$1 (\"$3\" 가 있음)"; }
+frame_field() { /usr/bin/python3 -c "
+import sys, json
+d = json.load(sys.stdin).get('frame')
+print('NULL' if d is None else (d.get(sys.argv[1]) if sys.argv[1] != 'len' else len(d['before']) + len(d['after'])))" "$1"; }
 code()     { curl -s -o /dev/null -w "%{http_code}" "$@"; }
 count_of() { grep -o "$2" <<< "$1" | wc -l | tr -d ' '; }
 # 공개 페이지 HTML — 렌더 엔드포인트는 JSON 으로 감싸서 준다(웹이 프록시한다)
@@ -198,6 +202,9 @@ printf '<article>{{{ blocksHtml }}}</article>' > "$ROOT/themes/$TEST_THEME/templ
 
 curl -s -b "$CK" -X POST "$API/api/themes/$TEST_THEME/activate" -o /dev/null
 INJ="$(render "")"
+# Next 가 그리는 화면(로그인·가입·마이페이지)이 사이트의 머리·푸터를 입으려면 테마 문서에서 <main> 을 기준으로 자른다.
+# 낯선 모양(여기는 <main> 이 없다)이면 null — 화면은 지금처럼 단독으로 뜬다. 틀은 꾸밈이고 로그인을 막으면 안 된다
+check "<main> 이 없는 테마는 틀이 null (Next 화면은 단독으로 뜬다)" "$(curl -s "$API/api/render/frame" | frame_field len)" "NULL"
 absent "선언을 닫는 값은 버린다" "$INJ" "display: none"
 absent "주석을 여는 값도 버린다" "$INJ" "/* eaten"
 absent "@import 도 버린다" "$INJ" "@import"
@@ -294,6 +301,28 @@ contains "blossom: 가운데 로고(세 칸 격자)" "$(curl -s "$API/themes/blo
 curl -s -o /dev/null -b "$CK" -X POST "$API/api/themes/mono/activate"
 contains "mono: 세로로 긴 상품 사진" "$(curl -s "$API/themes/mono/assets/style.css")" "aspect-ratio:3/4"
 contains "mono: 모서리 없음" "$(curl -s "$API/api/render/page?path=&_=$RANDOM")" "--radius: 0px"
+echo "── 테마 틀 — Next 화면(로그인·가입·마이페이지)에 입힐 머리·푸터"
+for TH in storefront boutique default editorial corporate fresh blossom mono; do
+  curl -s -o /dev/null -b "$CK" -X POST "$API/api/themes/$TH/activate"
+  FR="$(curl -s "$API/api/render/frame")"
+  check "$TH: 틀이 나온다 (머리·푸터 조각이 있다)" "$(echo "$FR" | /usr/bin/python3 -c "
+import sys, json
+f = json.load(sys.stdin)['frame']
+print(f is not None and '<header' in f['before'] and '<footer' in f['after'] and f['mainId'] == 'brick-content')")" "True"
+  contains "$TH: 스타일시트는 사이트 안 경로로 (Next 화면의 CSP 가 바깥 주소를 막는다)" "$FR" "\"/themes/$TH/assets/style.css?v="
+  absent "$TH: 바깥 스타일시트(웹폰트 CDN)는 걸러 낸다" "$FR" "jsdelivr"
+done
+curl -s -o /dev/null -b "$CK" -X POST "$API/api/themes/storefront/activate"
+# 틀을 캐시에 넣은 뒤에도 공개 경로로는 열리지 않는다 — 같은 캐시 키를 썼을 때 /api/render/page?path=__frame__ 이
+# 캐시에 든 틀(본문 자리표시 포함)을 그대로 돌려줬다
+curl -s -o /dev/null "$API/api/render/frame"
+LEAK="$(curl -s "$API/api/render/page?path=__frame__")"
+absent "틀은 공개 경로로 새지 않는다 (본문 자리표시)" "$LEAK" "BRICK_FRAME_SLOT"
+contains "공개 경로의 __frame__ 은 없는 페이지다" "$LEAK" '"status":404'
+check "손님의 틀에는 로그아웃이 없다" "$(curl -s "$API/api/render/frame" | grep -c '로그아웃')" "0"
+contains "로그인한 요청의 틀은 그 사용자의 머리(로그아웃)다" "$(curl -s -b "$CK" "$API/api/render/frame")" "로그아웃"
+check "틀 요청이 손님 캐시에 로그인 머리를 남기지 않는다" "$(curl -s "$API/api/render/frame" | grep -c '로그아웃')" "0"
+
 echo "── 움직임 — 떠오르기 · 카테고리 띠 붙이기 · 화면 넘김 (동작 줄이기를 켠 손님에게는 없다)"
 # 숨기는 규칙과 푸는 가드는 특이도가 같다 — 가드가 **뒤에** 와야 이긴다. "있다" 만 보면 순서가 뒤집혀도 헛통과한다
 motion_guard_after() { /usr/bin/python3 -c "

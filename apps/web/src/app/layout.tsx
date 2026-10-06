@@ -54,6 +54,12 @@ const FALLBACK_TOKENS = `
    meta 만으로는 OS 설정을 따라서, 토글로 다크를 골라도 흰 체크박스가 남는다 */
 :root[data-theme="dark"] { color-scheme: dark; }
 :root[data-theme="light"] { color-scheme: light; }
+/*
+ * 요소 기본 규칙은 \`base\` 레이어에 둔다 — 이 화면에 사이트의 머리 · 푸터가 입혀지면(ThemeFrame) 테마의 스타일시트가
+ * 같은 \`base\` 레이어로 들어와 \`body\` 의 바탕 · 글꼴을 정한다. 레이어 밖에 두면 이 규칙이 항상 이겨서 테마 본문이
+ * 회색 바탕이 된다. 단독 화면(관리 · 설치)에서는 달라지는 것이 없다. 토큰(위)은 레이어 밖이다 — 값이 이겨야 한다.
+ */
+@layer base {
 html, body { background: var(--color-bg-soft); color: var(--color-text); }
 body { margin: 0; font-family: var(--font-body); -webkit-font-smoothing: antialiased; }
 * { box-sizing: border-box; }
@@ -62,6 +68,7 @@ body { margin: 0; font-family: var(--font-body); -webkit-font-smoothing: antiali
 input[type="checkbox"], input[type="radio"] { accent-color: var(--color-primary); width: 16px; height: 16px; }
 input, select, textarea, button { font-family: inherit; }
 input::placeholder, textarea::placeholder { color: var(--color-muted); }
+}
 `;
 
 const THEME_BOOT = `(function(){try{var v=localStorage.getItem("brick-theme");
