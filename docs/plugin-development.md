@@ -447,6 +447,10 @@ render: async () => `<div class="my-plugin-card">…</div>
 - **같은 블록을 여러 번 놓아도 괜찮습니다.** 페이지를 조립할 때 내용이 완전히 같은 `<style>` 은 첫 것만
   남깁니다 — 블록이 "이미 냈는지" 를 기억할 필요가 없습니다. 반대로, 인스턴스마다 다른 값은 CSS 를 바꾸지
   말고 `style="--my-cols:3"` 처럼 **변수로** 넘기세요(CSS 가 같아야 하나로 합쳐집니다).
+  `<script>` 도 같습니다 — `data-brick-once` 속성이 있고 내용이 완전히 같으면 첫 것만 남습니다
+  (`<script data-brick-once="shop-card-heart">`). 다만 첫 스크립트가 도는 시점에는 뒤쪽 블록이 아직 읽히지
+  않았으니, 문서 속 요소를 찾는 일은 `DOMContentLoaded` 뒤에 하세요. 블록 하나만 따로 그릴 때는 속성이 아무 일도
+  하지 않으니 `window.__내전역` 같은 가드로 두 번 붙지 않게 하는 것도 잊지 마세요.
 - **클래스 이름은 자기 접두어로.** 테마의 기본값은 `:where()` 로 특이도 0 이라 블록 클래스가 이깁니다.
   테마가 일부러 블록을 다시 그릴 때는 `.brick-main .my-plugin-card` 처럼 겨냥합니다.
 - **모서리**는 `var(--radius)`·`var(--radius-lg)`(`check-radius-tokens`), **primary 위의 글자**는

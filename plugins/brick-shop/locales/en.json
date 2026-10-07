@@ -1164,5 +1164,7 @@
   "orders.filterAll": "All",
   "orders.recent3m": "Showing the last 3 months.",
   "orders.allPeriod": "Show all",
-  "orders.emptyFiltered": "No orders match."
+  "orders.emptyFiltered": "No orders match.",
+  "wish.cardAdd": "Add {name} to wishlist",
+  "wish.cardRemove": "Remove {name} from wishlist"
 }

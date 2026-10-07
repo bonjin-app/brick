@@ -486,6 +486,39 @@ st = re.findall(r'<style[^>]*>(.*?)</style>', sys.stdin.read(), re.S)
 print(sum(n - 1 for n in collections.Counter(s.strip() for s in st).values()))")" "0"
 
 echo
+echo "── 상품 카드의 찜(♡) 단추 (서버는 목록 화면용 일괄 조회를 갖췄는데 부르는 화면이 없었다)"
+# 단추는 카드(<a>)와 형제다 — <a> 안의 <button> 은 잘못된 HTML 이고 누르면 링크가 따라간다
+contains "카드는 링크 + 찜 단추 한 쌍" "$SC" '</a><button type="button" class="brick-heart" aria-pressed="false"'
+check "카드마다 단추가 하나 (진열 카드 수 = 단추 수)" \
+  "$(echo "$SC" | grep -o 'class="brick-heart"' | wc -l | tr -d ' ')" \
+  "$(echo "$SC" | grep -o '<div class="brick-product-item" data-product=' | wc -l | tr -d ' ')"
+check "링크 안에 <button> 을 넣지 않는다" "$(echo "$SC" | python3 -c "
+import sys, re
+print(len(re.findall(r'<a [^>]*brick-product-card[^>]*>(?:(?!</a>).)*<button', sys.stdin.read(), re.S)))")" "0"
+# 진열 다섯 섹션이 같은 스크립트를 내도 한 번만 남는다 — 데이터는 문서가 다 읽힌 뒤 한 번에 묻는다
+check "찜 스크립트는 페이지에 한 번만" "$(echo "$SC" | grep -o 'data-brick-once="shop-card-heart"' | wc -l | tr -d ' ')" "1"
+echo "$SC" | python3 -c "
+import sys, re
+m = re.search(r'<script data-brick-once=\"shop-card-heart\">(.*?)</script>', sys.stdin.read(), re.S)
+open('$TMP/heart.js', 'w').write(m.group(1) if m else 'syntax error (')"
+node --check "$TMP/heart.js" 2>"$TMP/heart.err" && ok "찜 스크립트는 문법이 맞다" || bad "찜 스크립트 문법 오류: $(head -c 200 "$TMP/heart.err")"
+contains "스크립트는 비회원 토큰을 같은 이름으로 쓴다 (상세의 찜 단추와 같은 목록)" "$(cat "$TMP/heart.js")" "brick_shop_guest"
+contains "하트 조회는 100개씩 (서버 상한)" "$(cat "$TMP/heart.js")" "i += 100"
+# 성인 상품은 목록이 사진을 가린다 — 찜 목록은 사진을 그대로 그리니 단추를 내지 않는다
+psql_q "INSERT INTO shop_products (id, slug, name, description, price, stock, status, adult_only, sort_order) VALUES (gen_random_uuid(), 'heart-adult', '하트 성인 시험', '', 1000, 5, 'selling', true, 0)" >/dev/null
+HEART_LIST="$(sf_render "shop&_=$RANDOM")"
+contains "(전제) 성인 상품이 목록에 있다" "$HEART_LIST" 'href="/shop/heart-adult"'
+check "성인 상품 카드에는 찜 단추가 없다" "$(echo "$HEART_LIST" | python3 -c "
+import sys, re
+h = sys.stdin.read()
+for m in re.finditer(r'<div class=\"brick-product-item\" data-product=\"[^\"]*\">(.*?)</a>(.*?)</div>', h, re.S):
+    if 'heart-adult' in m.group(1):
+        print('heart' if 'brick-heart' in m.group(2) else 'none'); break
+else:
+    print('card-not-found')")" "none"
+psql_q "DELETE FROM shop_products WHERE slug = 'heart-adult'" >/dev/null
+
+echo
 echo "── 상품 목록 페이지 나누기 (limit 를 넘는 상품에 닿을 수 있는가)"
 # 상품을 limit 보다 많이 만든다 — 전에는 25번째 상품부터 사이트에 있어도 볼 방법이 없었다
 node -e "

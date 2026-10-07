@@ -302,7 +302,7 @@
       var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
       if (!reduce && "IntersectionObserver" in window) {
-        var sel = ".brick-main .brick-product-card, .brick-main .brick-shop-head, .brick-main .brick-promo, " +
+        var sel = ".brick-main .brick-product-item, .brick-main .brick-shop-head, .brick-main .brick-promo, " +
                   ".brick-main .brick-features .brick-card, .brick-main .brick-quote, .brick-main .brick-rh-card, " +
                   ".brick-main .brick-latest-posts, .brick-main .brick-help-cta";
         var els = document.querySelectorAll(sel);

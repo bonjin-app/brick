@@ -243,7 +243,7 @@ export function registerStorefrontBlocks(
       const { rows } = await db.execute(sql`
         -- 목록은 **썸네일**을 쓴다. 대표 사진(원본)을 64~300px 칸에 그리면 상품 24개가
         -- 깔린 첫 화면이 수 MB 가 된다. 썸네일이 없으면(외부 URL·GIF·SVG) 원본을 쓴다.
-        SELECT p.slug, p.name, p.price, p.list_price, coalesce(p.thumb_url, p.image_url) AS image_url, p.status, p.stock,
+        SELECT p.id, p.slug, p.name, p.price, p.list_price, coalesce(p.thumb_url, p.image_url) AS image_url, p.status, p.stock,
                p.review_count, p.rating_sum, p.created_at, p.sold_count, p.adult_only
         FROM shop_products p
         LEFT JOIN shop_categories c ON c.id = p.category_id
@@ -291,7 +291,7 @@ export function registerStorefrontBlocks(
               isNew ? `<span class="brick-tag brick-tag-new">${escapeHtml(t("card.new"))}</span>` : "",
               discount ? `<span class="brick-tag brick-tag-sale">${discount}%</span>` : "",
             ].filter(Boolean).join("");
-        return `
+        const card = `
   <a class="brick-product-card${soldout ? " is-soldout" : ""}" href="/shop/${encodeURIComponent(String(p.slug))}">
     <div class="brick-product-thumb">
       ${p.adult_only ? adultMark() : p.image_url ? `<img src="${escapeHtml(p.image_url)}" alt="${escapeHtml(p.name)}" loading="lazy" />` : `<span class="brick-noimg">${escapeHtml(t("common.noImage"))}</span>`}
@@ -306,6 +306,7 @@ export function registerStorefrontBlocks(
       ${discount ? `<del>${won(Number(p.list_price))}</del>` : ""}
     </div>
   </a>`;
+        return productItem(card, String(p.id), String(p.name), Boolean(p.adult_only));
       }).join("");
 
       /*
@@ -327,7 +328,7 @@ export function registerStorefrontBlocks(
       const pager = paged && totalPages > 1 ? renderPager(current, totalPages, (n) => linkWith({ page: n === 1 ? null : String(n) })) : "";
       const totalNote = paged && total > 0 ? `<span class="brick-shop-total">${escapeHtml(t("list.total", { n: total }))}</span>` : "";
 
-      return `${heading}${priceBar}${totalNote}${sortBar}<div class="brick-product-grid" style="--brick-cols:${columns}">${cards}\n</div>${pager}${SHOP_CARD_CSS}${sortBar || priceBar ? SHOP_LIST_CSS : ""}`;
+      return `${heading}${priceBar}${totalNote}${sortBar}<div class="brick-product-grid" style="--brick-cols:${columns}">${cards}\n</div>${pager}${SHOP_CARD_CSS}${sortBar || priceBar ? SHOP_LIST_CSS : ""}${cardWishScript()}`;
     },
   };
   ctx.registerBlock(productListBlock);
@@ -744,7 +745,7 @@ ${buyScript(`${shopBase}/cart`)}${DETAIL_EXTRAS_SCRIPT()}${GALLERY_SCRIPT}${rest
       : c.state === "upcoming" ? `<p class="brick-collection-notice">${escapeHtml(t("collection.upcoming"))}</p>`
       : "";
     const cards = c.products
-      .map((p) => `<a class="brick-product-card" href="/shop/${encodeURIComponent(p.slug)}">
+      .map((p) => productItem(`<a class="brick-product-card" href="/shop/${encodeURIComponent(p.slug)}">
   <span class="brick-product-thumb">${
     p.adultOnly ? adultMark() : p.imageUrl
       ? `<img src="${escapeHtml(p.imageUrl)}" alt="${escapeHtml(p.name)}" loading="lazy" />`
@@ -754,7 +755,7 @@ ${buyScript(`${shopBase}/cart`)}${DETAIL_EXTRAS_SCRIPT()}${GALLERY_SCRIPT}${rest
   <span class="brick-product-price">${
     p.listPrice && p.listPrice > p.price ? `<del>${won(p.listPrice)}</del> ` : ""
   }<strong>${won(p.price)}</strong></span>
-</a>`)
+</a>`, p.id, p.name, p.adultOnly))
       .join("");
     blockCtx?.setSeo?.({ title: c.title, description: c.description ?? undefined, ownHeading: true });
     return `<div class="brick-collection">
@@ -764,7 +765,7 @@ ${buyScript(`${shopBase}/cart`)}${DETAIL_EXTRAS_SCRIPT()}${GALLERY_SCRIPT}${rest
   ${c.products.length
     ? `<div class="brick-product-grid" style="--brick-cols:4">${cards}</div>`
     : `<p class="brick-shop-empty">${escapeHtml(t("collection.noProducts"))}</p>`}
-</div>${COLLECTION_CSS}${SHOP_CARD_CSS}`;
+</div>${COLLECTION_CSS}${SHOP_CARD_CSS}${c.products.length ? cardWishScript() : ""}`;
   }
 
   // ── 관련 상품 (독립 블록) ──────────────────────────
@@ -892,17 +893,17 @@ function relatedSection(items: RelatedProduct[], title?: string): string {
         r.listPrice && r.listPrice > r.price
           ? `<del>${won(r.listPrice)}</del> `
           : "";
-      return `<a class="brick-product-card" href="${href}">
+      return productItem(`<a class="brick-product-card" href="${href}">
   <span class="brick-product-thumb">${thumb}${soldout}</span>
   <span class="brick-product-name">${escapeHtml(r.name)}</span>
   <span class="brick-product-price">${list}<strong>${won(r.price)}</strong></span>
-</a>`;
+</a>`, r.id, r.name, r.adultOnly);
     })
     .join("");
   return `<section class="brick-related">
   <h2>${escapeHtml(heading)}</h2>
   <div class="brick-product-grid" style="--brick-cols:4">${cards}</div>
-</section>`;
+</section>${cardWishScript()}`;
 }
 
 /**
@@ -1013,6 +1014,25 @@ const COLLECTION_CSS = `
 </style>`;
 
 /**
+ * 상품 카드의 찜(♡) 단추.
+ *
+ * 카드(<a>)와 **형제**로 둔다 — <a> 안에 <button> 을 넣으면 잘못된 HTML 이고(눌러도 링크가 따라가고, 키보드 · 스크린리더가 둘을
+ * 구별하지 못한다), 그래서 카드를 div.brick-product-item 으로 감싼다. 상태(담겼는지)는 서버 렌더에 넣지 않는다 — 손님용 목록은
+ * 캐시되고, 담은 것은 손님마다 다르다. 항상 "담기" 로 그려 두고 스크립트가 한 번에 물어 채운다(SHOP_CARD_SCRIPT).
+ */
+function wishHeart(name: string): string {
+  return `<button type="button" class="brick-heart" aria-pressed="false" data-name="${escapeHtml(name)}" aria-label="${escapeHtml(t("wish.cardAdd", { name }))}"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 20s-7-4.6-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.4-7 10-7 10z"/></svg></button>`;
+}
+
+/**
+ * 카드 하나 = 링크(<a>) + 찜 단추. **성인 상품에는 단추를 내지 않는다** — 목록이 사진을 19 표시로 가렸는데 찜 목록은 사진을
+ * 그대로 그린다(상세는 본인인증 뒤에만 열리므로 거기서만 담을 수 있다).
+ */
+function productItem(card: string, id: string, name: string, adultOnly: boolean): string {
+  return `<div class="brick-product-item" data-product="${escapeHtml(id)}">${card}${adultOnly ? "" : wishHeart(name)}</div>`;
+}
+
+/**
  * 성인 상품의 목록 사진 자리 — **누가 보든** 사진 대신 19 표시다.
  *
  * 목록은 비로그인 화면이 캐시되고 여러 블록(목록·관련 상품·기획전)이 같은 카드를 그린다.
@@ -1111,7 +1131,22 @@ a.brick-shop-more:hover{color:var(--color-primary-text, #b63a2e)}
 .brick-shop-heading{margin:8px 0 0;font-size:26px}
 .brick-shop-empty{padding:40px;text-align:center;color:var(--color-muted, #6c6c7a)}
 .brick-card-rating{margin-top:3px;font-size:13px;color:var(--color-muted, #6c6c7a);display:flex;gap:4px;align-items:center}
-.brick-stars{color:var(--color-warning, #96610a);letter-spacing:1px}</style>`;
+.brick-stars{color:var(--color-warning, #96610a);letter-spacing:1px}
+/* 찜(♡) 단추 — 카드(<a>)와 형제다. 보이는 원은 34px, ::after 가 누를 자리를 44px 로 넓힌다. 담기면 위험색 채움 */
+.brick-product-item{position:relative;min-width:0}
+.brick-heart{position:absolute;top:9px;right:9px;z-index:2;width:34px;height:34px;margin:0;padding:0;display:grid;place-items:center;border:0;border-radius:50%;background:rgba(255,255,255,.94);color:#45454f;box-shadow:0 1px 6px rgba(0,0,0,.16);cursor:pointer;transition:transform .2s cubic-bezier(.22,.61,.36,1)}
+.brick-heart::after{content:"";position:absolute;inset:-5px}
+.brick-heart svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.brick-heart:hover,.brick-heart:focus-visible{background:#fff;color:#17171c;transform:scale(1.08)}
+.brick-heart:focus-visible{outline:2px solid var(--color-primary, #2563eb);outline-offset:2px}
+.brick-heart[aria-pressed="true"],.brick-heart[aria-pressed="true"]:hover{background:#fff;color:#c9342f}
+.brick-heart[aria-pressed="true"] svg{fill:currentColor}
+.brick-heart:disabled{cursor:progress}
+.brick-heart.is-pop svg{animation:brick-heart-pop .38s cubic-bezier(.22,.61,.36,1)}
+@keyframes brick-heart-pop{0%{transform:scale(.7)}55%{transform:scale(1.28)}100%{transform:scale(1)}}
+@media (prefers-reduced-motion: reduce){.brick-heart{transition:none}.brick-heart:hover,.brick-heart:focus-visible{transform:none}.brick-heart.is-pop svg{animation:none}}
+.brick-heart-live{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+</style>`;
 
 const SHOP_CATS_CSS = `
 <style>
@@ -1412,6 +1447,90 @@ function shopBaseOf(blockCtx?: { path?: string; pathTail?: string }): string {
  * 비회원도 담을 수 있다(서버가 게스트 토큰을 발급한다) — 로그인부터 요구하면
  * 대부분 거기서 끝난다. 서버가 새 토큰을 주면 보관해서 다음에도 같은 목록을 본다.
  */
+/**
+ * 상품 카드의 찜(♡) 단추 — 담긴 상태를 한 번에 묻고, 누르면 담고 뺀다.
+ *
+ * 서버는 처음부터 목록 화면용 일괄 조회(GET /wishlist/check?ids= — 100개까지)를 갖추고 있었는데 그것을 부르는 화면이 없었다.
+ * 상세의 찜 단추(wishButtonScript)와 같은 API · 같은 비회원 토큰(brick_shop_guest)을 쓴다.
+ *
+ * 홈에는 진열 블록이 여럿이니 블록마다 이 스크립트를 낸다. 페이지를 조립하는 곳이 data-brick-once 가 같은 것을 한 번만 남기고
+ * (dedupeStyles), 그래도 겹쳐 실리는 경우(블록 하나만 따로 그릴 때)를 위해 window.__brickHeart 로 한 번만 붙는다.
+ * 스크립트가 문서 중간에서 돌면 뒤쪽 카드는 아직 없으니 하트 조회는 문서가 다 읽힌 뒤에 한다. 클릭은 문서에 위임한다.
+ */
+const cardWishScript = () => `
+<script data-brick-once="shop-card-heart">
+(function(){
+  function later(f){ if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', f); else f(); }
+  if (window.__brickHeart) { later(window.__brickHeart); return; }
+  var API = '/api/plugins/brick-shop/wishlist';
+  var ADD = ${JSON.stringify(t("wish.cardAdd", { name: "{name}" }))};
+  var REMOVE = ${JSON.stringify(t("wish.cardRemove", { name: "{name}" }))};
+  var ADDED = ${JSON.stringify(t("wish.added"))}, REMOVED = ${JSON.stringify(t("wish.removed"))}, FAIL = ${JSON.stringify(t("wish.addFail"))};
+  function token(){ try { return localStorage.getItem('brick_shop_guest'); } catch (e) { return null; } }
+  function guestQs(){ var g = token(); return g ? 'guest=' + encodeURIComponent(g) : ''; }
+  var live = null;
+  // 눌렀을 때 스크린리더에도 결과를 알린다 — 하트 색이 바뀌는 것은 눈으로만 보인다
+  function say(text){
+    if (!live) { live = document.createElement('p'); live.setAttribute('role', 'status'); live.className = 'brick-heart-live'; document.body.appendChild(live); }
+    live.textContent = '';
+    setTimeout(function(){ live.textContent = text; }, 30);
+  }
+  function paint(btn, on){
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    btn.setAttribute('aria-label', (on ? REMOVE : ADD).replace('{name}', btn.getAttribute('data-name') || ''));
+  }
+  function sync(){
+    var todo = [].slice.call(document.querySelectorAll('.brick-heart:not([data-sync])'));
+    if (!todo.length || !window.fetch) return;
+    todo.forEach(function(b){ b.setAttribute('data-sync', '1'); });
+    var ids = todo.map(function(b){ return b.parentNode.getAttribute('data-product'); });
+    for (var i = 0; i < ids.length; i += 100) (function(chunk){
+      var q = guestQs();
+      fetch(API + '/check?' + (q ? q + '&' : '') + 'ids=' + encodeURIComponent(chunk.join(',')))
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(d){
+          if (!d || !d.ids) return;
+          todo.forEach(function(b){
+            var id = b.parentNode.getAttribute('data-product');
+            if (chunk.indexOf(id) >= 0) paint(b, d.ids.indexOf(id) >= 0);
+          });
+        })
+        .catch(function(){ /* 모르면 담기로 둔다 */ });
+    })(ids.slice(i, i + 100));
+  }
+  function toggle(btn){
+    if (btn.disabled) return;
+    var id = btn.parentNode.getAttribute('data-product');
+    var on = btn.getAttribute('aria-pressed') === 'true';
+    btn.disabled = true;
+    var q = guestQs();
+    var req = on
+      ? fetch(API + '/' + encodeURIComponent(id) + (q ? '?' + q : ''), { method: 'DELETE' })
+      : fetch(API, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ productId: id, guestToken: token() }) });
+    req.then(function(r){ return r.ok ? r.json().catch(function(){ return {}; }) : null; })
+      .then(function(d){
+        btn.disabled = false;
+        if (!d) { say(FAIL); return; }
+        // 서버가 비회원에게 새 토큰을 주면 보관한다 — 안 하면 다음 화면에서 남의 목록처럼 빈다
+        if (d.guestToken) { try { localStorage.setItem('brick_shop_guest', d.guestToken); } catch (e) {} }
+        paint(btn, !on);
+        if (!on) { btn.classList.add('is-pop'); setTimeout(function(){ btn.classList.remove('is-pop'); }, 400); }
+        say(on ? REMOVED : ADDED);
+        document.dispatchEvent(new CustomEvent('brick:wish-changed', { detail: { productId: id, on: !on } }));
+      })
+      .catch(function(){ btn.disabled = false; say(FAIL); });
+  }
+  document.addEventListener('click', function(e){
+    var b = e.target && e.target.closest && e.target.closest('.brick-heart');
+    if (!b) return;
+    e.preventDefault();
+    toggle(b);
+  });
+  window.__brickHeart = sync;
+  later(sync);
+})();
+</script>`;
+
 const wishButtonScript = () => `
 <script>
 (function(){

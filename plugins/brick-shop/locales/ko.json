@@ -547,5 +547,7 @@
   "orders.filterAll": "전체",
   "orders.recent3m": "최근 3개월 주문입니다.",
   "orders.allPeriod": "전체 기간 보기",
-  "orders.emptyFiltered": "이 조건의 주문이 없습니다."
+  "orders.emptyFiltered": "이 조건의 주문이 없습니다.",
+  "wish.cardAdd": "{name} 위시리스트에 담기",
+  "wish.cardRemove": "{name} 위시리스트에서 빼기"
 }

@@ -11,14 +11,26 @@
  *   순서는 같은 특이도끼리의 승패에만 쓰인다 — 그 사이에 같은 선택자를 같은 특이도로 덮는 다른 CSS 가
  *   끼어 있을 때만 결과가 달라진다(블록 CSS 는 자기 클래스만 쓰므로 실제로는 없다).
  * - `<script>` 와 주석 안은 건드리지 않는다 — 스크립트가 문자열로 만드는 `<style>` 은 HTML 이 아니다.
+ *   단 하나, `data-brick-once` 속성이 있는 `<script>` 는 내용이 완전히 같으면 첫 것만 남긴다(블록마다 같은 스크립트를
+ *   내는 확장 — 진열 블록마다 찜 단추 스크립트가 실리던 것). 이런 스크립트는 문서가 다 읽힌 뒤에 일하도록 써야 한다 —
+ *   첫 것이 도는 시점에는 뒤쪽 블록이 아직 없다.
  * - 속성까지 같아야 같은 것이다(`media` 가 다르면 다른 CSS 다).
  */
 const SEGMENT = /<script\b[\s\S]*?<\/script\s*>|<!--[\s\S]*?-->|<style\b([^>]*)>([\s\S]*?)<\/style\s*>/gi;
 
+const ONCE_SCRIPT = /^<script\b[^>]*\sdata-brick-once\b/i;
+
 export function dedupeStyles(html: string): string {
   const seen = new Set<string>();
   return html.replace(SEGMENT, (whole: string, attrs: string | undefined, css: string | undefined) => {
-    if (css === undefined) return whole; // 스크립트·주석
+    if (css === undefined) {
+      // 스크립트·주석 — 한 번만 내라고 표시한 스크립트만 거른다
+      if (!ONCE_SCRIPT.test(whole)) return whole;
+      const once = `script\u0000${whole.trim()}`;
+      if (seen.has(once)) return "";
+      seen.add(once);
+      return whole;
+    }
     const key = `${attrs ?? ""}\u0000${css.trim()}`;
     if (seen.has(key)) return "";
     seen.add(key);

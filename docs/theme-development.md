@@ -261,6 +261,11 @@ page.html 슬롯은 추가로 `title`(페이지 제목), `{{{ blocksHtml }}}`(�
 화면 넘김(`@view-transition { navigation: auto; }`)은 `@media (prefers-reduced-motion: no-preference)`
 안에 두세요. 레퍼런스는 `themes/storefront/templates/layout.html` 의 마지막 스크립트입니다.
 
+**상품 카드는 `div.brick-product-item` 이 감쌉니다.** 안에 카드 링크(`a.brick-product-card`)와 찜(♡) 단추
+(`button.brick-heart`)가 형제로 있습니다(`<a>` 안에 `<button>` 은 잘못된 HTML 이라 누르면 링크가 따라갑니다).
+떠오르게 할 요소는 카드가 아니라 **`.brick-product-item`** 으로 잡으세요 — 카드만 떠오르면 단추가 먼저 보입니다.
+카드의 hover·품절 규칙은 그대로 `a.brick-product-card` 에 겁니다. 성인 상품 카드에는 단추가 없습니다.
+
 ## 최소 layout.html
 
 ```html
