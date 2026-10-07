@@ -137,7 +137,7 @@ jobs:
           echo "${{ steps.build.outputs.digest }}" > "/tmp/digests/${{ matrix.arch }}"
       # 올리는 쪽과 아래 manifest 작업의 내려받는 쪽(download-artifact)은 한 짝이다 — **같이 올린다**(dependabot 그룹 artifact-pair).
       # 이 경로는 태그를 달 때만 돌아 CI 가 시험하지 못하므로, 둘을 한 번에 올리고 릴리스에서 확인한다.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: digest-${{ matrix.arch }}
           path: /tmp/digests/*
@@ -154,7 +154,7 @@ jobs:
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
       VERSION: ${{ needs.image.outputs.version }}
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: digest-*
           merge-multiple: true
