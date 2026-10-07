@@ -38,10 +38,10 @@ jobs:
       - uses: actions/checkout@v7
 
       # 버전을 지정하지 않는다 — package.json 의 packageManager 가 유일한 출처다.
-      # 양쪽에 적으면 action-setup@v4 가 "Multiple versions of pnpm specified" 로 거부한다.
-      - uses: pnpm/action-setup@v4
+      # 양쪽에 적으면 action-setup 이 "Multiple versions of pnpm specified" 로 거부한다(v4 에서 확인한 동작).
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
@@ -405,9 +405,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       # 버전을 지정하지 않는다 — package.json 의 packageManager 가 유일한 출처다.
-      # 양쪽에 적으면 action-setup@v4 가 "Multiple versions of pnpm specified" 로 거부한다.
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      # 양쪽에 적으면 action-setup 이 "Multiple versions of pnpm specified" 로 거부한다(v4 에서 확인한 동작).
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
@@ -420,7 +420,7 @@ jobs:
           DATABASE_URL: postgresql://brick:brick@localhost:5432/brick
 
       - name: 배포본 업로드 (아티팩트)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: brick-release
           path: dist-release/*.tar.gz
@@ -434,9 +434,9 @@ jobs:
     # 통과시킨다 — 사용자의 첫 5분이 실제로 동작하는지 보는 유일한 방법이다.
     steps:
       - uses: actions/checkout@v7
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
       - name: 이미지 빌드
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/Dockerfile
@@ -499,9 +499,9 @@ jobs:
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
       - name: 이미지 빌드 (arm64)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/Dockerfile

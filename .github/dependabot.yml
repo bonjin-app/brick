@@ -27,6 +27,11 @@ updates:
     labels: ["dependencies"]
     commit-message:
       prefix: "ci"
+    groups:
+      # 아티팩트를 올리는 쪽과 내려받는 쪽은 한 짝이다(릴리스 워크플로가 도커 이미지의 digest 를 넘긴다). 따로 올리면 한쪽만
+      # 새 버전이 되고, 그 경로는 태그를 달 때만 돌아 CI 가 시험하지 못한다 — 한 PR 로 같이 받는다
+      artifact-pair:
+        patterns: ["actions/upload-artifact", "actions/download-artifact"]
 
   - package-ecosystem: docker
     directory: "/docker"
