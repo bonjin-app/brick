@@ -17,12 +17,12 @@ overrides:
   postcss: ">=8.5.26"
   # Next 의 이미지 최적화용 선택 의존성. Brick 은 next/image 를 쓰지 않아 호출되지
   # 않지만, 설치본에 취약한 libvips 가 들어가는 것 자체를 피한다
-  sharp: ">=0.35.4"
+  sharp: ">=0.35.5"
   # drizzle-kit 이 끌고 오는 개발 전용 번들러
   esbuild: ">=0.28.2"
   # @nestjs/platform-fastify 11.2.3 이 fastify 5.11.3 을 고정한다 — trustProxy hop-count 아래에서
   # X-Forwarded-* 스푸핑(GHSA)과 스키마 검증 우회 두 건. Brick 은 BRICK_TRUST_PROXY 를 쓰므로 해당된다.
-  fastify: ">=5.12.1"
+  fastify: ">=5.12.5"
   # 상한(<메이저)을 함께 적는다 — `>=` 만 쓰면 pnpm 이 최신 메이저까지 끌어올린다.
   # 취약점을 막는 것과 메이저 업그레이드는 다른 일이고, 뒤엣것은 따로 해야 한다
   # (실제로 한 번에 next 16 · nodemailer 10 · js-yaml 5 로 올라갔다).
@@ -46,3 +46,7 @@ overrides:
   # 1.x 와 5.x 가 함께 설치돼 있어 메이저별로 적는다
   "brace-expansion@1": ">=1.1.21 <2"
   "brace-expansion@5": ">=5.0.12 <6"
+  # shell-quote 1.8.4~1.10 — 인용 처리의 명령 주입(critical). drizzle-kit 의 개발 도구(gel)가 끌고 온다.
+  "shell-quote": ">=1.11.0 <2"
+  # source-map-js 1.2.1 — 소스맵 처리(high). Tailwind CLI(테마 CSS 컴파일)의 개발 도구 체인이 끌고 온다.
+  "source-map-js": ">=1.2.2 <2"
