@@ -104,13 +104,24 @@ fi
 # 뒤)에서는 그 자리에서 멈춘다.
 echo "── 스텁 포트를 남이 쥐고 있을 때"
 BUSY_PORT=$((PG_PORT + 20))
-node -e 'require("net").createServer().listen(Number(process.argv[1]), "127.0.0.1", () => setInterval(() => {}, 1e9))' \
-  "$BUSY_PORT" > "$TMP/busy.log" 2>&1 &
-BUSY_PID=$!
-for i in $(seq 1 20); do [[ -n "$(pids_on_port "$BUSY_PORT")" ]] && break; sleep 0.3; done
+# 이 번호대(42xxx)는 리눅스의 임시 포트 범위(32768~60999)다 — CI 러너의 연결이 우연히 그 포트를 쥐고 있으면 "남이 쥔
+# 포트" 를 만들지 못해 이 시험이 깨진다(맥은 49152 부터라 로컬에서는 절대 겪지 않는다). 뜨지 못하면 다른 포트로 다시 시도한다
+BUSY_PID=""
+for attempt in 1 2 3 4 5 6; do
+  node -e 'require("net").createServer().listen(Number(process.argv[1]), "127.0.0.1", () => setInterval(() => {}, 1e9))' \
+    "$BUSY_PORT" > "$TMP/busy.log" 2>&1 &
+  BUSY_PID=$!
+  for i in $(seq 1 20); do [[ -n "$(pids_on_port "$BUSY_PORT")" ]] && break; sleep 0.3; done
+  kill -0 "$BUSY_PID" 2>/dev/null && [[ -n "$(pids_on_port "$BUSY_PORT")" ]] && break
+  kill "$BUSY_PID" 2>/dev/null || true
+  BUSY_PORT=$((BUSY_PORT + 10))
+done
 SHIFT_INFO="$(start_stub scripts/pg-stub.mjs "$BUSY_PORT" "$TMP/shift.log" --out "$TMP/shift.jsonl")" \
   || SHIFT_INFO="실패"
-check "막힌 포트를 만나면 옆으로 비킨다" "${SHIFT_INFO%% *}" "$((BUSY_PORT + 1))"
+# 옆 포트도 우연히 쥐어져 있을 수 있다 — start_stub 은 다섯 칸까지 비키므로, 막힌 포트에는 붙지 않고 가까운 옆에 붙으면 된다
+SHIFTED="${SHIFT_INFO%% *}"
+check "막힌 포트를 만나면 옆으로 비킨다 (:$BUSY_PORT 이 아니라 그 옆 다섯 칸 안)" \
+  "$([[ "$SHIFTED" =~ ^[0-9]+$ ]] && (( SHIFTED > BUSY_PORT && SHIFTED <= BUSY_PORT + 4 )) && echo yes || echo "$SHIFT_INFO")" "yes"
 kill -0 "$BUSY_PID" 2>/dev/null && ok "남의 프로세스를 죽이지 않는다" \
   || bad "남의 프로세스를 죽였다 (포트를 쥐었다는 이유로 kill 하면 안 된다)"
 kill "${SHIFT_INFO#* }" 2>/dev/null || true
@@ -121,7 +132,7 @@ kill "${SHIFT_INFO#* }" 2>/dev/null || true
 restart_stub scripts/pg-stub.mjs "$BUSY_PORT" "$TMP/pin.log" --out "$TMP/pin.jsonl" >/dev/null 2>&1 \
   && bad "고정 포트에 못 붙었는데 성공했다고 한다" \
   || ok "고정 포트를 못 되찾으면 멈춘다"
-check "옆 포트에 몰래 되살아나지 않는다" "$(pids_on_port "$((BUSY_PORT + 1))" | grep -c . || true)" "0"
+check "옆 포트에 몰래 되살아나지 않는다" "$({ for k in 1 2 3 4; do pids_on_port "$((BUSY_PORT + k))"; done; } | grep -c . || true)" "0"
 kill "$BUSY_PID" 2>/dev/null || true
 wait "$BUSY_PID" 2>/dev/null || true
 

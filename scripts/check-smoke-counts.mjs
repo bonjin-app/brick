@@ -52,15 +52,22 @@ if (actual.size === 0) {
 }
 
 let fail = 0;
+/*
+ * CI(GitHub Actions)에서는 어긋난 줄을 주석(::error::)으로도 남긴다 — 저장소 관리자가 아니면 단계 로그를 내려받을 수 없어
+ * (403) "표가 실측과 다르다" 는 것만 알고 어느 수트인지는 알 수 없었다.
+ */
+const annotate = (msg) => { if (process.env.GITHUB_ACTIONS) console.log(`::error title=README 스모크 표::${msg}`); };
 for (const [suite, { pass, fail: failed }] of [...actual].sort()) {
   const want = claimed.get(suite);
   if (want === undefined) {
     console.log(`  ❌ ${suite}: 돌았는데 README 표에 행이 없습니다`);
+    annotate(`${suite}: 돌았는데 README 표에 행이 없습니다`);
     fail++;
   } else if (failed > 0) {
     console.log(`  ·  ${suite}: 실패가 있어 개수는 비교하지 않습니다 (${pass} 통과 / ${failed} 실패)`);
   } else if (want !== pass) {
     console.log(`  ❌ ${suite}: README ${want} · 실측 ${pass}`);
+    annotate(`${suite}: README ${want} · 실측 ${pass}`);
     fail++;
   } else {
     console.log(`  ✅ ${suite}: ${pass}`);
