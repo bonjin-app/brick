@@ -22,7 +22,7 @@
  */
 import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
-import { isUniqueViolation } from "@brick/plugin-sdk";
+import { isUniqueViolation, publicUrl } from "@brick/plugin-sdk";
 import type { Db } from "./types.js";
 import { ShopError } from "./types.js";
 import { t } from "./i18n.js";
@@ -263,6 +263,22 @@ export async function cashReceiptStatusFor(
   return { available: true };
 }
 
+/**
+ * 이 주문의 주인(또는 관리자)인가 — 현금영수증과 세금계산서 요청이 **같은 규칙**을 쓴다.
+ *
+ * 회원 주문은 그 회원만, 비회원 주문은 조회 토큰이 일치하고 그 주문에 회원이 없을 때만(청약철회와 같은 규칙).
+ * 두 곳에 따로 적으면 한쪽만 비회원을 받게 된다 — 세금계산서가 그랬다(회원 주문만 요청할 수 있었다).
+ */
+export function mayActOnOrder(
+  order: { user_id?: unknown; guest_token?: unknown },
+  who: { userId: string | null; isManager: boolean; guestToken?: string | null },
+): boolean {
+  if (who.isManager) return true;
+  if (who.userId && String(order.user_id ?? "") === who.userId) return true;
+  const token = String(who.guestToken ?? "");
+  return Boolean(token && !order.user_id && String(order.guest_token ?? "") === token);
+}
+
 export async function requestCashReceipt(
   db: Db,
   params: {
@@ -309,15 +325,7 @@ export async function requestCashReceipt(
   const order = rows[0];
   // 남의 주문이 존재하는지 알려주지 않는다 (주문번호는 순차적이다)
   if (!order) throw new ShopError(404, "주문을 찾을 수 없습니다.");
-  if (!params.isManager) {
-    const isOwner = Boolean(params.userId && String(order.user_id ?? "") === params.userId);
-    // 비회원 주문 — 토큰이 일치하고 그 주문에 회원이 없을 때만 (청약철회와 같은 규칙)
-    const token = String(params.guestToken ?? "");
-    const isGuestOwner = Boolean(token && !order.user_id && String(order.guest_token ?? "") === token);
-    if (!isOwner && !isGuestOwner) {
-      throw new ShopError(404, "주문을 찾을 수 없습니다.");
-    }
-  }
+  if (!mayActOnOrder(order, params)) throw new ShopError(404, "주문을 찾을 수 없습니다.");
 
   if (!order.paid_at) {
     throw new ShopError(400, "결제가 확인된 뒤에 발급할 수 있습니다.");
@@ -583,6 +591,8 @@ export async function requestTaxInvoice(
     orderNo: string;
     userId: string | null;
     isManager: boolean;
+    /** 비회원 주문 조회 토큰 — 무통장 + 비회원이 사업자 구매의 흔한 모양이다 */
+    guestToken?: string | null;
     body: Record<string, unknown>;
     isValidBusinessNo: (v: string) => boolean;
   },
@@ -603,15 +613,11 @@ export async function requestTaxInvoice(
   }
 
   const { rows } = await db.execute(sql`
-    SELECT id, user_id, paid_at FROM shop_orders WHERE order_no = ${params.orderNo} LIMIT 1
+    SELECT id, user_id, guest_token, paid_at FROM shop_orders WHERE order_no = ${params.orderNo} LIMIT 1
   `);
   const order = rows[0];
-  if (!order) throw new ShopError(404, "주문을 찾을 수 없습니다.");
-  if (!params.isManager) {
-    if (!params.userId || String(order.user_id ?? "") !== params.userId) {
-      throw new ShopError(404, "주문을 찾을 수 없습니다.");
-    }
-  }
+  // 남의 주문이 존재하는지 알려주지 않는다
+  if (!order || !mayActOnOrder(order, params)) throw new ShopError(404, "주문을 찾을 수 없습니다.");
   if (!order.paid_at) throw new ShopError(400, "결제가 확인된 뒤에 요청할 수 있습니다.");
 
   const orderId = String(order.id);
@@ -649,6 +655,42 @@ export async function requestTaxInvoice(
     supplyAmount: amounts.supplyAmount,
     vatAmount: amounts.vatAmount,
   };
+}
+
+/**
+ * 이 주문에 세금계산서를 요청할 수 있는가 — **화면이 폼을 낼지 정하는 데 쓴다**(현금영수증과 같은 이유: 규칙을 화면에 다시
+ * 적으면 갈라진다). 요청한 것이 있으면 그 상태를, 거부된 뒤라면 사유와 함께 다시 요청할 수 있음을 알린다.
+ */
+export async function taxInvoiceStatusFor(
+  db: Db,
+  order: { id: string; paid_at?: unknown },
+): Promise<{
+  available: boolean;
+  reason?: string;
+  current?: { status: "requested" | "issued"; companyName: string; businessNo: string; invoiceNo: string | null; invoiceUrl: string | null };
+  rejectedReason?: string;
+}> {
+  const { rows } = await db.execute(sql`
+    SELECT status, company_name, business_no, invoice_no, invoice_url, reject_reason
+    FROM shop_tax_invoices WHERE order_id = ${order.id}::uuid ORDER BY requested_at DESC LIMIT 1
+  `);
+  const row = rows[0];
+  if (row && (row.status === "requested" || row.status === "issued")) {
+    return {
+      available: false,
+      current: {
+        status: row.status as "requested" | "issued",
+        companyName: String(row.company_name),
+        businessNo: String(row.business_no),
+        invoiceNo: row.invoice_no ? String(row.invoice_no) : null,
+        // 운영자가 적은 주소 — 링크로 내기 전에 공용 주소 규칙을 지나게 한다
+        invoiceUrl: publicUrl(row.invoice_url) ?? null,
+      },
+    };
+  }
+  if (!order.paid_at) return { available: false, reason: "결제가 확인된 뒤에 요청할 수 있습니다." };
+  if ((await receivableAmount(db, order.id)) <= 0) return { available: false, reason: "전액 환불된 주문입니다." };
+  return { available: true, ...(row?.status === "rejected" && row.reject_reason ? { rejectedReason: String(row.reject_reason) } : {}) };
 }
 
 export async function updateTaxInvoice(

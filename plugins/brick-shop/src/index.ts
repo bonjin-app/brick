@@ -49,6 +49,7 @@ import {
 import {
   RECEIPT_KINDS, RECEIPT_KIND_LABEL, VAT_PERIODS, cancelCashReceipt,
   cashReceiptStatusFor,
+  taxInvoiceStatusFor,
   listCashReceiptGateways, listCashReceipts, listTaxInvoices, markCashReceiptIssued,
   requestCashReceipt, requestTaxInvoice, updateTaxInvoice, vatReport,
 } from "./tax.js";
@@ -526,6 +527,8 @@ export default definePlugin(async (ctx) => {
     const cashReceipt = await cashReceiptStatusFor(db, {
       id: String(order.id), payment_method: order.payment_method, paid_at: order.paid_at,
     });
+    // 세금계산서 — 사업자 구매. 무통장 + 비회원 이 가장 흔한 모양이라 조회 토큰으로도 요청한다
+    const taxInvoice = await taxInvoiceStatusFor(db, { id: String(order.id), paid_at: order.paid_at });
     /*
      * 지금 결제할 수 있는 주문인가 — **서버가 판단한다.**
      *
@@ -554,6 +557,7 @@ export default definePlugin(async (ctx) => {
         },
       } : {}),
       cashReceipt,
+      taxInvoice,
       payable,
       // 결제창에 뜨는 이름 — 주문번호만 보내면 손님은 무엇을 사는지 알 수 없다
       orderName: items[0]
@@ -2349,6 +2353,7 @@ export default definePlugin(async (ctx) => {
       orderNo: req.params.orderNo,
       userId: req.user?.id ?? null,
       isManager: isManager(req),
+      guestToken: req.query.token ?? null,
       body: (req.body ?? {}) as Record<string, unknown>,
       isValidBusinessNo,
     });

@@ -131,6 +131,9 @@ const ORDERS_CSS = `
 .brick-receipt-form input[name=identifier] { width: 100%; max-width: 420px; }
 .brick-receipt-note { font-size: 13px; color: var(--color-muted, #71717d); margin: 8px 0; }
 .brick-receipt-msg { margin-left: 10px; font-size: 13.5px; color: var(--color-danger, #c9342f); }
+.brick-taxinv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px 14px; margin: 10px 0 12px; }
+.brick-taxinv-field { display: grid; gap: 4px; font-size: 13.5px; }
+.brick-taxinv-field input { width: 100%; }
 .brick-receipt-done { padding: 14px; background: var(--color-bg-soft, #f7f7f9); border-radius:var(--radius-lg, 10px); margin-top: 14px; }
 .brick-ret-mine { margin-top: 22px; }
 .brick-ret-mine h3 { font-size: 15px; margin: 0 0 8px; }
@@ -422,6 +425,73 @@ const detailScript = (t: (k: string, p?: Record<string, string | number>) => str
     });
   }
 
+  /**
+   * 세금계산서 — 사업자 구매. 신청 가능 여부와 이미 낸 요청의 상태는 서버가 판단해 준다(taxInvoice).
+   * 비회원도 주문 조회 토큰으로 요청한다(무통장 + 비회원이 사업자 구매의 흔한 모양이다).
+   */
+  function renderTaxInvoiceSection(orderNo, info){
+    var slot = document.getElementById('brick-taxinv-slot');
+    if (!slot || !info) return;
+
+    if (info.current) {
+      var c = info.current;
+      var line = c.status === 'issued' ? ${JSON.stringify(t("taxinv.issued"))} : ${JSON.stringify(t("taxinv.pending"))};
+      slot.innerHTML = '<p class="brick-receipt-done" role="status">' + esc(line) + ' · ' + esc(c.companyName) + ' ' + esc(c.businessNo) +
+        (c.invoiceNo ? ' · ' + ${JSON.stringify(t("taxinv.invoiceNo"))} + ' ' + esc(c.invoiceNo) : '') +
+        (c.invoiceUrl ? ' · <a href="' + esc(c.invoiceUrl) + '" target="_blank" rel="noopener">' + ${JSON.stringify(t("taxinv.view"))} + '</a>' : '') +
+        '</p>';
+      return;
+    }
+    if (!info.available) return;
+
+    var q = (function(){ var g = guestToken(); return g ? ('?token=' + encodeURIComponent(g)) : ''; })();
+    var FIELDS = [
+      ['businessNo', ${JSON.stringify(t("taxinv.businessNo"))}, true, 'text', 'off'],
+      ['companyName', ${JSON.stringify(t("taxinv.companyName"))}, true, 'text', 'organization'],
+      ['ceoName', ${JSON.stringify(t("taxinv.ceoName"))}, true, 'text', 'off'],
+      ['businessType', ${JSON.stringify(t("taxinv.businessType"))}, false, 'text', 'off'],
+      ['businessItem', ${JSON.stringify(t("taxinv.businessItem"))}, false, 'text', 'off'],
+      ['address', ${JSON.stringify(t("taxinv.address"))}, false, 'text', 'street-address'],
+      ['contactName', ${JSON.stringify(t("taxinv.contactName"))}, false, 'text', 'name'],
+      ['contactEmail', ${JSON.stringify(t("taxinv.contactEmail"))}, true, 'email', 'email'],
+      ['contactPhone', ${JSON.stringify(t("taxinv.contactPhone"))}, false, 'tel', 'tel']
+    ];
+    var grid = FIELDS.map(function(f){
+      var id = 'brick-ti-' + f[0];
+      return '<label for="' + id + '" class="brick-taxinv-field"><span>' + esc(f[1]) + (f[2] ? ' <b aria-hidden="true">*</b>' : '') + '</span>' +
+        '<input id="' + id + '" name="' + f[0] + '" type="' + f[3] + '" maxlength="200" autocomplete="' + f[4] + '"' + (f[2] ? ' required' : '') + ' /></label>';
+    }).join('');
+    slot.innerHTML =
+      '<details class="brick-receipt"><summary>' + ${JSON.stringify(t("taxinv.request"))} + '</summary>' +
+      (info.rejectedReason ? '<p class="brick-receipt-msg" role="status">' + esc(${JSON.stringify(t("taxinv.rejected", { reason: "__R__" }))}.replace('__R__', info.rejectedReason)) + '</p>' : '') +
+      '<p class="brick-receipt-note">' + ${JSON.stringify(t("taxinv.notice"))} + '</p>' +
+      '<form class="brick-taxinv-form"><div class="brick-taxinv-grid">' + grid + '</div>' +
+      '<button type="submit" class="brick-primary">' + ${JSON.stringify(t("taxinv.submit"))} + '</button>' +
+      '<span class="brick-receipt-msg" role="status"></span>' +
+      '<p class="brick-receipt-note">' + ${JSON.stringify(t("taxinv.legal"))} + '</p>' +
+      '</form></details>';
+
+    var form = slot.querySelector('.brick-taxinv-form');
+    var msg = form.querySelector('.brick-receipt-msg');
+    form.addEventListener('submit', function(e){
+      e.preventDefault();
+      var btn = form.querySelector('button[type=submit]');
+      var body = {};
+      FIELDS.forEach(function(f){ body[f[0]] = form.querySelector('[name=' + f[0] + ']').value; });
+      btn.disabled = true;
+      msg.textContent = ${JSON.stringify(t("taxinv.submitting"))};
+      fetch('/api/plugins/brick-shop/orders/' + encodeURIComponent(orderNo) + '/tax-invoice' + q, {
+        method: 'POST', headers: {'content-type':'application/json'}, body: JSON.stringify(body)
+      }).then(function(r){ return r.json().then(function(d){ return {ok:r.ok, d:d}; }); })
+        .then(function(res){
+          btn.disabled = false;
+          if (!res.ok) { msg.textContent = res.d.message || ${JSON.stringify(t("taxinv.fail"))}; return; }
+          slot.innerHTML = '<p class="brick-receipt-done" role="status">' + esc(${JSON.stringify(t("taxinv.pending"))}) + '</p>';
+        })
+        .catch(function(){ btn.disabled = false; msg.textContent = ${JSON.stringify(t("taxinv.fail"))}; });
+    });
+  }
+
   /*
    * notice 는 **다시 그린 뒤에도 남아야 하는 말**이다. 신청 접수번호나 철회
    * 완료를 slot 에 써 놓고 다시 그리면 그 말이 같이 지워진다 — 화면은 바뀌는데
@@ -634,7 +704,8 @@ const detailScript = (t: (k: string, p?: Record<string, string | number>) => str
       '</dl>' +
       (history ? '<h3>' + ${JSON.stringify(t("orders.history"))} + '</h3><ul class="brick-o-history">' + history + '</ul>' : '') +
       '<div id="brick-ret-slot"></div>' +
-      '<div id="brick-receipt-slot"></div>';
+      '<div id="brick-receipt-slot"></div>' +
+      '<div id="brick-taxinv-slot"></div>';
     /*
      * 결제 다시 하기 — **서버가 된다고 한 주문에만** 낸다(d.payable).
      *
@@ -666,6 +737,8 @@ const detailScript = (t: (k: string, p?: Record<string, string | number>) => str
     // 현금영수증 신청 — 부가가치세법 제32조의2 도 손님의 권리다.
     // 발급 라우트는 처음부터 있었는데 신청할 자리가 없었다.
     renderReceiptSection(o.order_no, d.cashReceipt);
+    // 세금계산서 요청 — 요청 라우트와 관리 화면은 있었는데 손님이 요청할 자리가 없었다
+    renderTaxInvoiceSection(o.order_no, d.taxInvoice);
     if (returnNote) {
       var note = document.createElement('p');
       note.className = 'brick-o-payagain is-error';

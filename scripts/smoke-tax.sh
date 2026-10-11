@@ -537,6 +537,37 @@ check "토큰이 없으면 404 (남의 주문을 알려주지 않는다)" \
   "$(code -X POST "$SHOP/orders/$O_GUEST/cash-receipt" -H 'content-type: application/json' \
       -d '{"kind":"income_deduction","identifier":"01033334444"}')" "404"
 
+echo "── 손님이 세금계산서를 요청한다 (요청 라우트와 관리 화면은 있는데 손님이 요청할 자리가 없었다)"
+# 사업자 구매는 무통장 + 비회원이 흔하다 — 현금영수증처럼 조회 토큰으로도 된다(전에는 회원 주문만)
+GTI_BODY='{"businessNo":"104-81-45690","companyName":"비회원상사","ceoName":"김대표","contactEmail":"guest-tax@bonjin.test"}'
+contains "주문 상세가 요청할 수 있다고 알려준다 (화면이 폼을 낼지 서버가 정한다)" \
+  "$(curl -s "$SHOP/orders/$O_GUEST?token=$G_TOKEN")" '"taxInvoice":{"available":true}'
+check "토큰이 없으면 404 (남의 주문을 알려주지 않는다)" \
+  "$(code -X POST "$SHOP/orders/$O_GUEST/tax-invoice" -H 'content-type: application/json' -d "$GTI_BODY")" "404"
+check "다른 사람의 토큰도 404" \
+  "$(code -X POST "$SHOP/orders/$O_GUEST/tax-invoice?token=not-the-token" -H 'content-type: application/json' -d "$GTI_BODY")" "404"
+contains "비회원이 토큰으로 요청한다" \
+  "$(curl -s -X POST "$SHOP/orders/$O_GUEST/tax-invoice?token=$G_TOKEN" -H 'content-type: application/json' -d "$GTI_BODY")" '"status":"requested"'
+GTI_ID="$(psql_q "SELECT id FROM shop_tax_invoices WHERE order_id=(SELECT id FROM shop_orders WHERE order_no='$O_GUEST')")"
+contains "요청한 뒤에는 폼 대신 상태를 알려준다" \
+  "$(curl -s "$SHOP/orders/$O_GUEST?token=$G_TOKEN")" '"taxInvoice":{"available":false,"current":{"status":"requested","companyName":"비회원상사"'
+# 거부되면 사유와 함께 다시 요청할 수 있다 (한 주문에 하나는 거부된 것을 뺀다)
+curl -s -b "$CK" -X PUT "$SHOP/admin/tax-invoices/$GTI_ID" -H 'content-type: application/json' \
+  -d '{"status":"rejected","reason":"대표자명이 사업자등록증과 다릅니다"}' >/dev/null
+REJ="$(curl -s "$SHOP/orders/$O_GUEST?token=$G_TOKEN")"
+contains "거부되면 사유를 알려주고 다시 요청할 수 있다" "$REJ" '"taxInvoice":{"available":true,"rejectedReason":"대표자명이 사업자등록증과 다릅니다"}'
+contains "고쳐서 다시 요청한다" \
+  "$(curl -s -X POST "$SHOP/orders/$O_GUEST/tax-invoice?token=$G_TOKEN" -H 'content-type: application/json' -d "${GTI_BODY/김대표/박대표}")" '"status":"requested"'
+# 발급되면 번호와 링크를 알려준다 — 운영자가 적은 주소는 공용 주소 규칙을 지난 것만(javascript: 는 링크가 되지 않는다)
+DONE="$(curl -s -b "$B1" "$SHOP/orders/$O_TI")"
+contains "발급된 계산서의 번호를 알려준다" "$DONE" '"invoiceNo":"20260828-0001"'
+contains "링크도 알려준다" "$DONE" '"invoiceUrl":"https://hometax.test/i/1"'
+psql_q "UPDATE shop_tax_invoices SET invoice_url='javascript:alert(1)' WHERE id='$TIID'" >/dev/null
+contains "위험한 주소는 링크로 내지 않는다" "$(curl -s -b "$B1" "$SHOP/orders/$O_TI")" '"invoiceUrl":null'
+# 결제 전 주문에는 폼을 내밀지 않는다
+O_UNPAID="$(mkorder "$B1" "$P_TAX" 1)"
+contains "결제 전에는 요청할 수 없다고 알려준다" "$(curl -s -b "$B1" "$SHOP/orders/$O_UNPAID")" '"taxInvoice":{"available":false,"reason":"결제가 확인된 뒤에 요청할 수 있습니다."}'
+
 echo
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 # 실측을 남긴다(설정됐을 때만) — README 의 표가 실제와 같은지 CI 가 대조한다.
