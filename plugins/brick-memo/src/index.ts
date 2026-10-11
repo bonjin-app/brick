@@ -521,7 +521,11 @@ export default definePlugin(async (ctx) => {
    * 했다. 회원 전용이므로 비로그인 손님에게는 나오지 않는다 — 안 읽은 개수는
    * 사용자별 값이라 배지 블록이 클라이언트에서 채운다.
    */
-  ctx.registerHeaderAction({ label: "쪽지함", path: "/memo", order: 20, requiresLogin: true, icon: "message" });
+  // 안 읽은 쪽지 수 배지 — /unread-count 는 "헤더 배지가 자주 호출한다" 고 만들어 놓고 헤더가 부르지 않았다(받은 줄 모르고 지나갔다)
+  ctx.registerHeaderAction({
+    label: "쪽지함", path: "/memo", order: 20, requiresLogin: true, icon: "message",
+    count: { url: "/api/plugins/brick-memo/unread-count" },
+  });
   /*
    * 그 링크가 가리키는 화면을 스스로 선언한다.
    *

@@ -252,8 +252,9 @@ contains "차단 목록 화면" "$(render_as "memo%2Fblocks" "$U1")" 'data-memo-
 
 echo "── 헤더의 쪽지함 링크는 회원에게만 보인다"
 # 비로그인 렌더만 캐시되므로, 회원 전용 링크가 거기 섞이면 캐시로 새어 나간다
-absent   "비로그인 헤더에 쪽지함 없음" "$INBOX_HTML" '<a href="/memo"><svg class="brick-ico" aria-hidden="true"><use href="#i-message"></use></svg><span>쪽지함</span></a>'
-contains "로그인 헤더에 쪽지함" "$LOGGED" '<a href="/memo"><svg class="brick-ico" aria-hidden="true"><use href="#i-message"></use></svg><span>쪽지함</span></a>'
+# 링크의 속성이 바뀌어도(배지 속성이 붙었다) 새는 것을 놓치지 않게 여는 태그의 앞부분만 본다 — 전체 모양을 적어 두면 모양이 바뀔 때 조용히 통과한다
+absent   "비로그인 헤더에 쪽지함 없음" "$INBOX_HTML" '<a href="/memo"'
+contains "로그인 헤더에 쪽지함 (안 읽은 수를 받아 올 곳을 단다)" "$LOGGED" '<a href="/memo" data-brick-count="/api/plugins/brick-memo/unread-count" data-brick-count-guest="" data-brick-member="1"><svg class="brick-ico" aria-hidden="true"><use href="#i-message"></use></svg><span>쪽지함</span></a>'
 contains "쪽지 배지 블록 등록" "$(curl -s "$API/api/blocks")" "brick-memo/unread-badge"
 # 링크가 가리키는 곳에 화면이 있어야 링크가 링크다
 contains "회원 메뉴에도 나온다" "$(curl -s "$API/api/member/menu")" '"path":"/memo"'
@@ -274,6 +275,14 @@ printf '{"sendPoint":-5}' > "$TMP/badset.json"
 check "범위 밖 설정 거부" "$(code -b "$ADMIN" -X PUT "$MM/admin/settings" -H 'content-type: application/json' --data-binary "@$TMP/badset.json")" "400"
 
 echo
+echo "── 머리의 쪽지함에 안 읽은 수 배지 (/unread-count 는 있는데 머리가 부르지 않았다)"
+frame_html() { python3 -c "import sys,json;f=json.load(sys.stdin).get('frame') or {};print(f.get('before','')+f.get('after',''))"; }
+FRAME_M="$(curl -s -b "$U2" "$API/api/render/frame" | frame_html)"
+contains "(전제) 로그인한 머리에 쪽지함이 있다" "$FRAME_M" 'href="/memo"'
+contains "쪽지함 링크가 안 읽은 수를 받아 올 곳을 단다" "$FRAME_M" 'data-brick-count="/api/plugins/brick-memo/unread-count"'
+contains "회원 표시가 붙는다 (비회원 토큰 없이도 부른다)" "$FRAME_M" 'data-brick-member="1"'
+absent "손님 머리에는 쪽지함이 없다" "$(curl -s "$API/api/render/frame" | frame_html)" 'href="/memo"'
+
 echo "결과: ${PASS}개 통과, ${FAIL}개 실패"
 # 실측을 남긴다(설정됐을 때만) — README 의 표가 실제와 같은지 CI 가 대조한다.
 # 표의 숫자는 조용히 썩는다: 단언을 더해도 아무도 그 줄을 고치지 않는다.
