@@ -302,6 +302,15 @@ ${CAPTCHA_WIDGET_JS}
     var postId = postRoot.dataset.post;
     var boardSlug = postRoot.dataset.board;
 
+    // 조회수 — 화면은 서버가 그리고(비회원 화면은 캐시된다) 센다는 것은 브라우저가 알린다. 새로고침은 서버가 30분 한 번으로 거른다
+    try {
+      var seenKey = 'brick_viewed_' + postId;
+      if (!sessionStorage.getItem(seenKey)) {
+        sessionStorage.setItem(seenKey, '1');
+        fetch(API + '/posts/' + postId + '/view', { method: 'POST', keepalive: true }).catch(function () { /* 조회수 하나 때문에 화면을 막지 않는다 */ });
+      }
+    } catch (e) { /* 사생활 보호 모드 — 그냥 부른다 */ fetch(API + '/posts/' + postId + '/view', { method: 'POST', keepalive: true }).catch(function () {}); }
+
     // 추천 / 비추천
     postRoot.querySelectorAll('[data-vote]').forEach(function (btn) {
       btn.addEventListener('click', function () {

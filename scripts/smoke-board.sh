@@ -696,6 +696,29 @@ contains "값도 나온다" "$PXH" "010-9999-8888"
 # 값이 없는 칸까지 그리면 글마다 빈 표가 붙는다
 absent "값 없는 칸은 그리지 않는다" "$PXH" "<dt>지역</dt><dd></dd>"
 
+echo "── 조회수 — 화면으로 읽어도 올라간다 (글 화면이 열린 뒤 브라우저가 알린다)"
+vc() { psql_q "SELECT view_count FROM board_posts WHERE id='$1'"; }
+# 화면을 서버에서 그리는 것만으로는 세지 않는다 — 비회원 화면은 캐시되고 크롤러는 스크립트를 돌리지 않는다
+printf '{"title":"조회수 시험 글","content":"<p>본문</p>","guestName":"손님","guestPassword":"pw12345"}' > "$TMP/vw.json"
+VW="$(curl -s -X POST "$BD/boards/free/posts" -H 'content-type: application/json' --data-binary "@$TMP/vw.json" | jq_get "['id']")"
+[[ -n "$VW" ]] && ok "(전제) 조회수를 시험할 글" || bad "(전제) 조회수를 시험할 글"
+VC0="$(vc "$VW")"
+curl -s "$API/api/render/page?path=board%2Ffree%2F$VW&_=$RANDOM" >/dev/null
+check "글 화면을 그리는 것만으로는 세지 않는다" "$(vc "$VW")" "$VC0"
+contains "화면에 조회수 알림 호출이 들어 있다 (이게 없으면 조회수는 영원히 0)" "$(curl -s "$API/api/render/page?path=board%2Ffree%2F$VW&_=$RANDOM" | python3 -c "import sys,json;print(json.load(sys.stdin).get('html',''))")" "/view'"
+V1="$(curl -s -X POST "$BD/posts/$VW/view")"
+contains "글 화면이 열리면 센다" "$V1" '"counted":true'
+check "조회수가 하나 오른다" "$(( $(vc "$VW") - VC0 ))" "1"
+V2="$(curl -s -X POST "$BD/posts/$VW/view")"
+contains "같은 사람이 새로고침해도 한 번만" "$V2" '"counted":false'
+check "그래서 조회수는 그대로" "$(( $(vc "$VW") - VC0 ))" "1"
+# 글쓴이 본인은 세지 않고, 읽을 수 없는 사람(비회원 → 회원의 비밀글)은 세지 않는다
+VS0="$(vc "$PSEC")"
+contains "글쓴이 본인은 세지 않는다" "$(curl -s -b "$MEMBER" -X POST "$BD/posts/$PSEC/view")" '"counted":false'
+check "읽을 수 없는 사람의 호출은 거절된다" "$(code -X POST "$BD/posts/$PSEC/view")" "403"
+check "그 글의 조회수는 그대로" "$(vc "$PSEC")" "$VS0"
+check "없는 글은 404" "$(code -X POST "$BD/posts/00000000-0000-0000-0000-000000000000/view")" "404"
+
 printf '{"title":"여분 필드 글","content":"<p>고친 본문</p>","guestPassword":"pw12345"}' > "$TMP/pxe.json"
 curl -s -X PUT "$BD/posts/$PX" -H 'content-type: application/json' --data-binary "@$TMP/pxe.json" >/dev/null
 contains "여분 필드를 보내지 않은 수정이 값을 지우지 않는다" "$(curl -s "$BD/posts/$PX")" "010-9999-8888"

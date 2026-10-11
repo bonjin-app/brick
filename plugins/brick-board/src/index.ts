@@ -26,6 +26,8 @@ import { registerBoardBlocks } from "./blocks.js";
 const PUBLIC_POST = sql.raw(PUBLIC_POST_SQL);
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,50}$/;
+/** 같은 사람이 같은 글을 다시 열어도 조회수가 한 번만 오르는 시간 */
+const VIEW_WINDOW_MS = 30 * 60_000;
 
 /**
  * brick-board — 게시판.
@@ -68,6 +70,24 @@ export default definePlugin(async (ctx) => {
     const actor = boardActor(user, await requireBoardRead(boardSlug, user));
     const checkFor: GuestCheckFor = (postId) => guestCheck(req, `post:${postId}`);
     return { actor, readable: await canReadSecret(post, actor, req.query.pw, checkFor, db) };
+  };
+
+  /**
+   * 조회수 — 같은 사람이 같은 글을 30분 안에 다시 열어도 한 번만 센다(그누보드는 세션당 한 번). 글쓴이 본인은 세지 않는다.
+   * 새로고침으로 올리는 숫자는 인기글을 가리지 못한다. 회원은 계정으로, 비회원은 IP 로 한 사람을 가른다.
+   * @returns 이번에 실제로 올렸는가
+   */
+  const countView = async (
+    post: Record<string, unknown>,
+    user: SessionUser | null,
+    ip: string | null,
+  ): Promise<boolean> => {
+    if (user && post.author_id && String(post.author_id) === user.id) return false;
+    const who = user ? `u:${user.id}` : `ip:${ip ?? "?"}`;
+    const { allowed } = await ctx.rateLimit.consume(`view:${String(post.id)}:${who}`, 1, VIEW_WINDOW_MS);
+    if (!allowed) return false;
+    await db.execute(sql`UPDATE board_posts SET view_count = view_count + 1 WHERE id = ${String(post.id)}::uuid`);
+    return true;
   };
 
   // 본인인증을 쓰는 곳 — 관리자 → 본인인증 화면이 목적별로 모은다
@@ -255,9 +275,7 @@ export default definePlugin(async (ctx) => {
     if (!readable) throw new BoardError(403, "비밀글입니다. 작성자만 열람할 수 있습니다.");
 
     // 조회수는 읽기 권한을 통과한 뒤에만 올린다
-    await db.execute(sql`
-      UPDATE board_posts SET view_count = view_count + 1 WHERE id = ${req.params.id}::uuid
-    `);
+    const counted = await countView(post, user, ipOf(req));
 
     const [attachments, comments] = await Promise.all([
       listAttachments(db, String(post.id)),
@@ -290,7 +308,7 @@ export default definePlugin(async (ctx) => {
     const canModify = canModifyPost(post as never, user);
     const can = canModify ? await authorCanChange(db, post, user) : { edit: false, delete: false };
     return {
-      post: { ...safe, view_count: Number(post.view_count) + 1 },
+      post: { ...safe, view_count: Number(post.view_count) + (counted ? 1 : 0) },
       attachments,
       comments: comments.map((c) => {
         const state = commentState(c, post, user, authorOf);
@@ -305,6 +323,25 @@ export default definePlugin(async (ctx) => {
       canEdit: canModify && can.edit,
       canDelete: canModify && can.delete,
     };
+  });
+
+  /**
+   * 조회수 올리기 — 글 화면이 열린 뒤 브라우저가 한 번 부른다.
+   *
+   * 서버 렌더 화면은 글을 API 로 읽지 않고, 비회원 화면은 5분 캐시되므로 렌더 안에서는 셀 수 없다
+   * (전에는 화면으로 아무리 읽어도 조회수가 0 이었다). 스크립트를 돌리지 않는 크롤러가 세지 않는 것은 덤이다.
+   * 글을 읽을 수 있는 사람만 센다 — 글 화면과 같은 관문.
+   */
+  ctx.registerRoute("POST", "/posts/:id/view", async (req) => {
+    const { rows } = await db.execute(sql`
+      SELECT p.id, p.author_id, p.is_secret, p.guest_password, p.thread_id, b.slug AS board_slug
+      FROM board_posts p JOIN board_boards b ON b.id = p.board_id
+      WHERE p.id = ${req.params.id}::uuid LIMIT 1
+    `);
+    if (!rows[0]) throw new BoardError(404, "글을 찾을 수 없습니다.");
+    const { actor, readable } = await readPostAs(req, String(rows[0].board_slug), secretPostRef(rows[0]), userOf(req));
+    if (!readable) throw new BoardError(403, "비밀글입니다. 작성자만 열람할 수 있습니다.");
+    return { counted: await countView(rows[0], actor, ipOf(req)) };
   });
 
   /** 글 수정 */
