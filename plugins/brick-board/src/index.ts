@@ -75,19 +75,21 @@ export default definePlugin(async (ctx) => {
   /**
    * 조회수 — 같은 사람이 같은 글을 30분 안에 다시 열어도 한 번만 센다(그누보드는 세션당 한 번). 글쓴이 본인은 세지 않는다.
    * 새로고침으로 올리는 숫자는 인기글을 가리지 못한다. 회원은 계정으로, 비회원은 IP 로 한 사람을 가른다.
-   * @returns 이번에 실제로 올렸는가
+   * @returns 이번에 실제로 올렸는가, 그리고 지금의 조회수(화면이 방금 연 글에 "조회 0" 을 남겨 두지 않게)
    */
   const countView = async (
     post: Record<string, unknown>,
     user: SessionUser | null,
     ip: string | null,
-  ): Promise<boolean> => {
-    if (user && post.author_id && String(post.author_id) === user.id) return false;
+  ): Promise<{ counted: boolean; viewCount: number }> => {
+    const id = String(post.id);
+    const mine = Boolean(user && post.author_id && String(post.author_id) === user.id);
     const who = user ? `u:${user.id}` : `ip:${ip ?? "?"}`;
-    const { allowed } = await ctx.rateLimit.consume(`view:${String(post.id)}:${who}`, 1, VIEW_WINDOW_MS);
-    if (!allowed) return false;
-    await db.execute(sql`UPDATE board_posts SET view_count = view_count + 1 WHERE id = ${String(post.id)}::uuid`);
-    return true;
+    const allowed = mine ? false : (await ctx.rateLimit.consume(`view:${id}:${who}`, 1, VIEW_WINDOW_MS)).allowed;
+    const { rows } = allowed
+      ? await db.execute(sql`UPDATE board_posts SET view_count = view_count + 1 WHERE id = ${id}::uuid RETURNING view_count`)
+      : await db.execute(sql`SELECT view_count FROM board_posts WHERE id = ${id}::uuid`);
+    return { counted: allowed, viewCount: Number(rows[0]?.view_count ?? 0) };
   };
 
   // 본인인증을 쓰는 곳 — 관리자 → 본인인증 화면이 목적별로 모은다
@@ -275,7 +277,7 @@ export default definePlugin(async (ctx) => {
     if (!readable) throw new BoardError(403, "비밀글입니다. 작성자만 열람할 수 있습니다.");
 
     // 조회수는 읽기 권한을 통과한 뒤에만 올린다
-    const counted = await countView(post, user, ipOf(req));
+    const { viewCount } = await countView(post, user, ipOf(req));
 
     const [attachments, comments] = await Promise.all([
       listAttachments(db, String(post.id)),
@@ -308,7 +310,7 @@ export default definePlugin(async (ctx) => {
     const canModify = canModifyPost(post as never, user);
     const can = canModify ? await authorCanChange(db, post, user) : { edit: false, delete: false };
     return {
-      post: { ...safe, view_count: Number(post.view_count) + (counted ? 1 : 0) },
+      post: { ...safe, view_count: viewCount },
       attachments,
       comments: comments.map((c) => {
         const state = commentState(c, post, user, authorOf);
@@ -341,7 +343,7 @@ export default definePlugin(async (ctx) => {
     if (!rows[0]) throw new BoardError(404, "글을 찾을 수 없습니다.");
     const { actor, readable } = await readPostAs(req, String(rows[0].board_slug), secretPostRef(rows[0]), userOf(req));
     if (!readable) throw new BoardError(403, "비밀글입니다. 작성자만 열람할 수 있습니다.");
-    return { counted: await countView(rows[0], actor, ipOf(req)) };
+    return await countView(rows[0], actor, ipOf(req));
   });
 
   /** 글 수정 */

@@ -526,7 +526,7 @@ ${listedFiles
     <div class="brick-post-meta">
       ${authorChip(post.author_name, post.author_id, post.author_avatar, "md")}
       <time>${fullDate(post.created_at)}</time>
-      <span>${escapeHtml(t("detail.views", { n: Number(post.view_count) }))}</span>
+      <span data-views>${escapeHtml(t("detail.views", { n: Number(post.view_count) }))}</span>
       ${String(post.updated_at) !== String(post.created_at) ? `<span class="brick-edited">${escapeHtml(t("detail.edited"))}</span>` : ""}
     </div>
   </div>

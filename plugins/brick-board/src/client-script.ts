@@ -303,13 +303,20 @@ ${CAPTCHA_WIDGET_JS}
     var boardSlug = postRoot.dataset.board;
 
     // 조회수 — 화면은 서버가 그리고(비회원 화면은 캐시된다) 센다는 것은 브라우저가 알린다. 새로고침은 서버가 30분 한 번으로 거른다
+    // 돌려받은 지금의 조회수로 머리의 숫자를 고친다 — 방금 연 글에 "조회 0" 이 남지 않게
+    function countView() {
+      fetch(API + '/posts/' + postId + '/view', { method: 'POST', keepalive: true })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) {
+          var el = postRoot.querySelector('[data-views]');
+          if (d && el && typeof d.viewCount === 'number') el.textContent = ${JSON.stringify(t("detail.views", { n: "__N__" }))}.replace('__N__', String(d.viewCount));
+        })
+        .catch(function () { /* 조회수 하나 때문에 화면을 막지 않는다 */ });
+    }
     try {
       var seenKey = 'brick_viewed_' + postId;
-      if (!sessionStorage.getItem(seenKey)) {
-        sessionStorage.setItem(seenKey, '1');
-        fetch(API + '/posts/' + postId + '/view', { method: 'POST', keepalive: true }).catch(function () { /* 조회수 하나 때문에 화면을 막지 않는다 */ });
-      }
-    } catch (e) { /* 사생활 보호 모드 — 그냥 부른다 */ fetch(API + '/posts/' + postId + '/view', { method: 'POST', keepalive: true }).catch(function () {}); }
+      if (!sessionStorage.getItem(seenKey)) { sessionStorage.setItem(seenKey, '1'); countView(); }
+    } catch (e) { countView(); /* 사생활 보호 모드 — 그냥 부른다 */ }
 
     // 추천 / 비추천
     postRoot.querySelectorAll('[data-vote]').forEach(function (btn) {

@@ -709,8 +709,11 @@ contains "화면에 조회수 알림 호출이 들어 있다 (이게 없으면 �
 V1="$(curl -s -X POST "$BD/posts/$VW/view")"
 contains "글 화면이 열리면 센다" "$V1" '"counted":true'
 check "조회수가 하나 오른다" "$(( $(vc "$VW") - VC0 ))" "1"
+check "알림이 지금의 조회수를 돌려준다 (화면의 숫자를 고친다)" "$(echo "$V1" | jq_get "['viewCount']")" "$(vc "$VW")"
 V2="$(curl -s -X POST "$BD/posts/$VW/view")"
 contains "같은 사람이 새로고침해도 한 번만" "$V2" '"counted":false'
+check "세지 않아도 지금의 조회수는 알려준다" "$(echo "$V2" | jq_get "['viewCount']")" "$(vc "$VW")"
+contains "화면의 조회수는 알림으로 고칠 수 있게 표시돼 있다" "$(curl -s "$API/api/render/page?path=board%2Ffree%2F$VW&_=$RANDOM" | python3 -c "import sys,json;print(json.load(sys.stdin).get('html',''))")" "<span data-views>"
 check "그래서 조회수는 그대로" "$(( $(vc "$VW") - VC0 ))" "1"
 # 글쓴이 본인은 세지 않고, 읽을 수 없는 사람(비회원 → 회원의 비밀글)은 세지 않는다
 VS0="$(vc "$PSEC")"
