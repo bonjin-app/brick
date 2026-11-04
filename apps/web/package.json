@@ -11,7 +11,7 @@
   "dependencies": {
     "@brick/core": "workspace:*",
     "@brick/shared": "workspace:*",
-    "next": "^15.5.27",
+    "next": "^15.5.28",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },
