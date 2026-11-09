@@ -21,12 +21,12 @@
     "ci:static": "node scripts/ci-static.mjs"
   },
   "devDependencies": {
-    "@tailwindcss/cli": "^4.3.3",
-    "@tailwindcss/postcss": "^4.3.3",
-    "@types/node": "^26.6.4",
+    "@tailwindcss/cli": "^4.3.5",
+    "@tailwindcss/postcss": "^4.3.5",
+    "@types/node": "^26.6.6",
     "embedded-postgres": "18.4.0-beta.17",
-    "tailwindcss": "^4.3.3",
-    "turbo": "^2.11.7",
+    "tailwindcss": "^4.3.5",
+    "turbo": "^2.11.10",
     "typescript": "^5.7.3"
   },
   "pnpm": {
